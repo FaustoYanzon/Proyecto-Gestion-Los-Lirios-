@@ -7,6 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up
+from app.models.finanzas import (
+    ClasificacionEgreso,
+    Egreso,
+    Finca,
+    FormaPago,
+    MonedaTipo,
+    OrigenPago,
+    TipoEgreso,
+)
 from app.models.parcela import Parcela, TipoParcela
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
@@ -43,6 +52,27 @@ router = APIRouter(prefix="/produccion", tags=["Produccion"])
 
 def _get_clasificacion(tarea: str) -> ClasificacionTarea:
     return ClasificacionTarea(CLASIFICACION_POR_TAREA.get(tarea, "general"))
+
+
+def _build_egreso_for_trabajo(registro: RegistroTrabajo, user_id: str, parcela_nombre: str | None) -> Egreso:
+    parts = [registro.tarea, registro.trabajador_nombre]
+    if parcela_nombre:
+        parts.append(parcela_nombre)
+    return Egreso(
+        fecha=registro.fecha,
+        tipo=TipoEgreso.sueldos_personal,
+        clasificacion=ClasificacionEgreso.obreros,
+        descripcion=" | ".join(parts)[:500],
+        monto=registro.monto_total,
+        moneda=MonedaTipo.ars,
+        origen=OrigenPago.no_oficial,
+        finca=Finca.media_agua,
+        forma_pago=FormaPago.efectivo,
+        parcela_id=registro.parcela_id,
+        fuente="trabajo_diario",
+        referencia_id=registro.id,
+        created_by=user_id,
+    )
 
 
 # ── Trabajo diario ─────────────────────────────────────────────────────────────
@@ -90,6 +120,12 @@ async def create_trabajo_masivo(
     current_user: User = Depends(require_encargado_up),
 ) -> list[RegistroTrabajo]:
     clasificacion = _get_clasificacion(carga.tarea)
+    parcela_nombre: str | None = None
+    if carga.parcela_id:
+        p = await db.get(Parcela, carga.parcela_id)
+        if p:
+            parcela_nombre = p.nombre
+
     registros: list[RegistroTrabajo] = []
     for item in carga.trabajadores:
         registro = RegistroTrabajo(
@@ -106,9 +142,13 @@ async def create_trabajo_masivo(
         )
         db.add(registro)
         registros.append(registro)
+
     await db.flush()
     for r in registros:
         await db.refresh(r)
+        egreso = _build_egreso_for_trabajo(r, current_user.id, parcela_nombre)
+        db.add(egreso)
+
     return registros
 
 
@@ -213,6 +253,14 @@ async def create_trabajo(
     db.add(registro)
     await db.flush()
     await db.refresh(registro)
+
+    parcela_nombre: str | None = None
+    if registro.parcela_id:
+        p = await db.get(Parcela, registro.parcela_id)
+        if p:
+            parcela_nombre = p.nombre
+    db.add(_build_egreso_for_trabajo(registro, current_user.id, parcela_nombre))
+
     return registro
 
 
@@ -238,6 +286,26 @@ async def update_trabajo(
 
     await db.flush()
     await db.refresh(registro)
+
+    # Sync linked egreso
+    egreso_res = await db.execute(
+        select(Egreso).where(Egreso.fuente == "trabajo_diario", Egreso.referencia_id == registro_id)
+    )
+    linked = egreso_res.scalar_one_or_none()
+    if linked is not None:
+        parcela_nombre: str | None = None
+        if registro.parcela_id:
+            p = await db.get(Parcela, registro.parcela_id)
+            if p:
+                parcela_nombre = p.nombre
+        parts = [registro.tarea, registro.trabajador_nombre]
+        if parcela_nombre:
+            parts.append(parcela_nombre)
+        linked.fecha = registro.fecha
+        linked.monto = registro.monto_total
+        linked.parcela_id = registro.parcela_id
+        linked.descripcion = " | ".join(parts)[:500]
+
     return registro
 
 
@@ -251,6 +319,14 @@ async def delete_trabajo(
     registro = result.scalar_one_or_none()
     if registro is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+
+    egreso_res = await db.execute(
+        select(Egreso).where(Egreso.fuente == "trabajo_diario", Egreso.referencia_id == registro_id)
+    )
+    linked = egreso_res.scalar_one_or_none()
+    if linked is not None:
+        await db.delete(linked)
+
     await db.delete(registro)
     await db.flush()
 
