@@ -181,12 +181,16 @@ class RegistroRiego(Base):
         nullable=False,
     )
 
+    # 16,000 L/ha/h = 1.6 mm/h
+    MM_POR_HORA: float = 1.6
+
     def __init__(self, **kwargs: Any) -> None:
-        if "duracion_horas" not in kwargs:
-            inicio = kwargs.get("inicio")
-            fin = kwargs.get("fin")
-            if inicio is not None and fin is not None:
-                kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
+        inicio = kwargs.get("inicio")
+        fin = kwargs.get("fin")
+        if "duracion_horas" not in kwargs and inicio is not None and fin is not None:
+            kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
+        if "mm_aplicados" not in kwargs and kwargs.get("duracion_horas") is not None:
+            kwargs["mm_aplicados"] = round(kwargs["duracion_horas"] * 1.6, 2)
         super().__init__(**kwargs)
 
     parcela: Mapped[Parcela] = relationship(

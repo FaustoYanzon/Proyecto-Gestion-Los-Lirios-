@@ -406,6 +406,7 @@ async def update_riego(
         setattr(riego, field, value)
     if "inicio" in update_data or "fin" in update_data:
         riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
+        riego.mm_aplicados = round(riego.duracion_horas * 1.6, 2)
 
     await db.flush()
     await db.refresh(riego)
