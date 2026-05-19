@@ -162,3 +162,40 @@ export const CABEZAL_VALVULAS: Record<string, { descripcion: string; valvulas: s
   '3': { descripcion: 'Parrales 12,13,14,15,16,21', valvulas: ['1', '2', '3', '4'] },
   '4': { descripcion: 'Parrales 8,BV,BN,SYR-RG', valvulas: ['1', '2', '3'] },
 }
+
+export const VALVULAS_POR_PARCELA: Record<string, number> = {
+  'Parral Sult.':       4,
+  'Parral 9':           2,
+  'Parral 4':           2,
+  'Parral 5':           2,
+  'Parral 2':           2,
+  'Parral 10':          3,
+  'Parral 6':           4,
+  'Parral 11':          4,
+  'Parral 7':           4,
+  'Parral 16':          2,
+  'Parral 13':          3,
+  'Parral 15':          2,
+  'Parral 14':          3,
+  'Parral 21':          4,
+  'Parral 12':          3,
+  'Parral 8':           3,
+  'Parral SYR-RG':      3,
+  'Parral Bond. Viejo': 2,
+  'Parral Bond. Nuevo': 2,
+}
+
+export function getValvulasForParcela(parcelaNombre: string): string[] {
+  const max = VALVULAS_POR_PARCELA[parcelaNombre] ?? 4
+  return Array.from({ length: max }, (_, i) => String(i + 1))
+}
+
+export const MM_POR_HORA = 1.6
+
+export function calcMmRiego(inicioISO: string, finISO: string): number | null {
+  const start = new Date(inicioISO)
+  const end = new Date(finISO)
+  const horas = (end.getTime() - start.getTime()) / 3600000
+  if (horas <= 0) return null
+  return Math.round(horas * MM_POR_HORA * 100) / 100
+}

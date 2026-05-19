@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up
@@ -573,29 +573,30 @@ async def estado_actual(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[EstadoActualResponse]:
+    # Subquery: latest cycle date per parcel
     subq = (
         select(
             CicloCampana.parcela_id,
             func.max(CicloCampana.fecha_estado).label("max_fecha"),
         )
-        .join(Parcela, CicloCampana.parcela_id == Parcela.id)
-        .where(Parcela.is_active.is_(True), Parcela.tipo == TipoParcela.parral)
         .group_by(CicloCampana.parcela_id)
         .subquery()
     )
+    # LEFT JOIN so parcels without any cycle still appear
     stmt = (
         select(
-            CicloCampana.id,
-            CicloCampana.parcela_id,
+            Parcela.id.label("parcela_id"),
             Parcela.nombre.label("parcela_nombre"),
+            CicloCampana.id.label("ciclo_id"),
             CicloCampana.anio,
             CicloCampana.estado_fenologico,
             CicloCampana.fecha_estado,
         )
-        .join(Parcela, CicloCampana.parcela_id == Parcela.id)
-        .join(
-            subq,
-            (CicloCampana.parcela_id == subq.c.parcela_id)
+        .where(Parcela.is_active.is_(True), Parcela.tipo == TipoParcela.parral)
+        .outerjoin(subq, Parcela.id == subq.c.parcela_id)
+        .outerjoin(
+            CicloCampana,
+            (CicloCampana.parcela_id == Parcela.id)
             & (CicloCampana.fecha_estado == subq.c.max_fecha),
         )
         .order_by(Parcela.nombre.asc())
@@ -603,7 +604,7 @@ async def estado_actual(
     rows = (await db.execute(stmt)).all()
     return [
         EstadoActualResponse(
-            id=row.id,
+            id=row.ciclo_id,
             parcela_id=row.parcela_id,
             parcela_nombre=row.parcela_nombre,
             anio=row.anio,

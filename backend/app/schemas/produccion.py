@@ -188,9 +188,9 @@ class CicloCampanaResponse(CicloCampanaBase):
 
 
 class EstadoActualResponse(BaseModel):
-    id: str
+    id: str | None = None
     parcela_id: str
     parcela_nombre: str
-    anio: int
-    estado_fenologico: EstadoFenologico
-    fecha_estado: date
+    anio: int | None = None
+    estado_fenologico: EstadoFenologico | None = None
+    fecha_estado: date | None = None

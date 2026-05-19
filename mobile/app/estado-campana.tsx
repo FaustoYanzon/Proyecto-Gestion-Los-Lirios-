@@ -21,40 +21,28 @@ const ESTADOS: EstadoFenologico[] = [
 ]
 
 interface EstadoActual {
-  id: string
+  id: string | null
   parcela_id: string
   parcela_nombre: string
-  anio: number
-  estado_fenologico: EstadoFenologico
-  fecha_estado: string
+  anio: number | null
+  estado_fenologico: EstadoFenologico | null
+  fecha_estado: string | null
 }
 
 // ─── Update Modal ─────────────────────────────────────────────────────────────
 
 function UpdateModal({
-  visible,
-  parcelaId,
-  parcelaNombre,
-  currentEstado,
-  onClose,
-  onUpdated,
+  visible, parcelaId, parcelaNombre, currentEstado, onClose, onUpdated,
 }: {
-  visible: boolean
-  parcelaId: string
-  parcelaNombre: string
-  currentEstado: EstadoFenologico
-  onClose: () => void
-  onUpdated: () => void
+  visible: boolean; parcelaId: string; parcelaNombre: string
+  currentEstado: EstadoFenologico; onClose: () => void; onUpdated: () => void
 }) {
   const [estado, setEstado] = useState<EstadoFenologico>(currentEstado)
   const [observaciones, setObservaciones] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (visible) {
-      setEstado(currentEstado)
-      setObservaciones('')
-    }
+    if (visible) { setEstado(currentEstado); setObservaciones('') }
   }, [visible, currentEstado])
 
   async function handleSave() {
@@ -85,43 +73,48 @@ function UpdateModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>{parcelaNombre}</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#374151" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>{parcelaNombre}</Text>
+            <Text style={styles.modalSubtitle}>Seleccioná el estado fenológico actual</Text>
+          </View>
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={18} color="#374151" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.modalSubtitle}>Seleccioná el estado fenológico actual</Text>
-
-        <ScrollView style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
           {ESTADOS.map((e) => {
             const isSelected = estado === e
+            const color = ESTADO_COLORS[e]
             return (
               <TouchableOpacity
                 key={e}
                 style={[
                   styles.estadoOption,
-                  isSelected && { borderColor: ESTADO_COLORS[e], backgroundColor: `${ESTADO_COLORS[e]}12` },
+                  isSelected && { borderColor: color, backgroundColor: `${color}10` },
                 ]}
                 onPress={() => setEstado(e)}
+                activeOpacity={0.7}
               >
-                <View style={[styles.estadoDot, { backgroundColor: ESTADO_COLORS[e] }]} />
-                <Text style={[styles.estadoLabel, isSelected && { color: ESTADO_COLORS[e], fontWeight: '700' }]}>
+                <View style={[styles.estadoDot, { backgroundColor: color }]} />
+                <Text style={[styles.estadoLabel, isSelected && { color, fontWeight: '700' }]}>
                   {ESTADO_LABELS[e]}
                 </Text>
-                {isSelected && <Ionicons name="checkmark" size={18} color={ESTADO_COLORS[e]} />}
+                {isSelected && (
+                  <View style={[styles.checkCircle, { backgroundColor: color }]}>
+                    <Ionicons name="checkmark" size={12} color="#fff" />
+                  </View>
+                )}
               </TouchableOpacity>
             )
           })}
 
-          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
-            Observaciones (opcional)
-          </Text>
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Observaciones (opcional)</Text>
           <TextInput
             style={styles.textArea}
             value={observaciones}
             onChangeText={setObservaciones}
-            placeholder="Notas adicionales sobre el estado..."
+            placeholder="Notas adicionales..."
             placeholderTextColor="#9ca3af"
             multiline
             numberOfLines={3}
@@ -162,24 +155,14 @@ export default function EstadoCampanaScreen() {
     try {
       const { data } = await api.get<EstadoActual[]>('/produccion/campana/estado-actual/')
       setEstados(data)
-    } catch {
-      /* offline or error */
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
+    } catch { /* offline */ }
+    finally { setLoading(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useEffect(() => { loadData() }, [loadData])
 
-  function onRefresh() {
-    setRefreshing(true)
-    loadData()
-  }
+  function onRefresh() { setRefreshing(true); loadData() }
 
-  // Group by estado for summary
   const summary = ESTADOS.reduce<Record<string, number>>((acc, e) => {
     acc[e] = estados.filter((est) => est.estado_fenologico === e).length
     return acc
@@ -192,7 +175,7 @@ export default function EstadoCampanaScreen() {
           visible={!!selected}
           parcelaId={selected.parcela_id}
           parcelaNombre={selected.parcela_nombre}
-          currentEstado={selected.estado_fenologico}
+          currentEstado={selected.estado_fenologico ?? 'brotacion'}
           onClose={() => setSelected(null)}
           onUpdated={loadData}
         />
@@ -204,31 +187,46 @@ export default function EstadoCampanaScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
       >
         {/* Summary chips */}
-        <View style={styles.summaryRow}>
-          {ESTADOS.filter((e) => (summary[e] ?? 0) > 0).map((e) => (
-            <View
-              key={e}
-              style={[styles.summaryChip, { backgroundColor: `${ESTADO_COLORS[e]}20`, borderColor: ESTADO_COLORS[e] }]}
-            >
-              <Text style={[styles.summaryChipText, { color: ESTADO_COLORS[e] }]}>
-                {ESTADO_LABELS[e]}: {summary[e]}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {ESTADOS.some((e) => (summary[e] ?? 0) > 0) && (
+          <View>
+            <Text style={styles.sectionLabel}>RESUMEN CAMPAÑA</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+              {ESTADOS.filter((e) => (summary[e] ?? 0) > 0).map((e) => {
+                const color = ESTADO_COLORS[e]
+                return (
+                  <View
+                    key={e}
+                    style={[styles.summaryChip, { backgroundColor: `${color}15`, borderColor: `${color}50` }]}
+                  >
+                    <View style={[styles.chipDot, { backgroundColor: color }]} />
+                    <Text style={[styles.summaryChipText, { color }]}>
+                      {ESTADO_LABELS[e]} · {summary[e]}
+                    </Text>
+                  </View>
+                )
+              })}
+            </ScrollView>
+          </View>
+        )}
 
-        <Text style={styles.sectionTitle}>
-          {estados.length} parrales activos
-        </Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.sectionLabel}>PARRALES</Text>
+          <Text style={styles.count}>{estados.length} activos</Text>
+        </View>
 
         {loading ? (
           <ActivityIndicator color="#16a34a" style={{ marginTop: 32 }} />
         ) : estados.length === 0 ? (
-          <Text style={styles.emptyText}>No hay parrales en el sistema</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="leaf-outline" size={40} color="#d1d5db" />
+            <Text style={styles.emptyTitle}>Sin parrales activos</Text>
+            <Text style={styles.emptySub}>No hay parrales activos en el sistema</Text>
+          </View>
         ) : (
           estados.map((item) => {
-            const color = ESTADO_COLORS[item.estado_fenologico]
-            const label = ESTADO_LABELS[item.estado_fenologico]
+            const hasEstado = item.estado_fenologico != null
+            const color = hasEstado ? ESTADO_COLORS[item.estado_fenologico!] : '#d1d5db'
+            const label = hasEstado ? ESTADO_LABELS[item.estado_fenologico!] : 'Sin estado'
 
             return (
               <TouchableOpacity
@@ -237,17 +235,23 @@ export default function EstadoCampanaScreen() {
                 onPress={() => setSelected(item)}
                 activeOpacity={0.8}
               >
-                <View style={styles.cardLeft}>
-                  <View style={[styles.estadoBadge, { backgroundColor: `${color}20` }]}>
-                    <View style={[styles.badgeDot, { backgroundColor: color }]} />
-                    <Text style={[styles.badgeText, { color }]}>{label}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.parcelaNombre}>{item.parcela_nombre}</Text>
+                    <View style={[styles.estadoBadge, { backgroundColor: `${color}15` }]}>
+                      <View style={[styles.badgeDot, { backgroundColor: color }]} />
+                      <Text style={[styles.badgeText, { color }]}>{label}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.parcelaNombre}>{item.parcela_nombre}</Text>
-                  <Text style={styles.ultimaActualizacion}>
-                    Actualizado: {item.fecha_estado}
+                  <Text style={styles.fechaText}>
+                    {item.fecha_estado
+                      ? `Actualizado ${item.fecha_estado.split('-').reverse().join('/')}`
+                      : 'Sin registros — tocá para cargar'}
                   </Text>
                 </View>
-                <Ionicons name="create-outline" size={20} color="#9ca3af" />
+                <View style={styles.editIcon}>
+                  <Ionicons name="create-outline" size={16} color="#9ca3af" />
+                </View>
               </TouchableOpacity>
             )
           })
@@ -258,100 +262,86 @@ export default function EstadoCampanaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 12 },
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  container: { flex: 1, backgroundColor: '#f4f6f8' },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: '#9ca3af',
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  count: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
   summaryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1, marginRight: 8,
   },
-  summaryChipText: { fontSize: 12, fontWeight: '600' },
+  chipDot: { width: 7, height: 7, borderRadius: 4 },
+  summaryChipText: { fontSize: 12, fontWeight: '700' },
   parcelaCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  cardLeft: { flex: 1 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 },
   estadoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
   },
-  badgeDot: { width: 8, height: 8, borderRadius: 4 },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  parcelaNombre: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  ultimaActualizacion: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
-  emptyText: { color: '#9ca3af', textAlign: 'center', paddingVertical: 32 },
-  // Modal styles
-  modalContainer: { flex: 1, backgroundColor: '#f9fafb', padding: 20 },
+  badgeDot: { width: 7, height: 7, borderRadius: 4 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  parcelaNombre: { fontSize: 16, fontWeight: '700', color: '#111827', flex: 1, marginRight: 8 },
+  fechaText: { fontSize: 11, color: '#9ca3af' },
+  editIcon: {
+    width: 32, height: 32, borderRadius: 8, backgroundColor: '#f9fafb',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  emptyState: { alignItems: 'center', paddingVertical: 48 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#6b7280', marginTop: 14 },
+  emptySub: { fontSize: 13, color: '#9ca3af', marginTop: 6, textAlign: 'center', paddingHorizontal: 24 },
+  // Modal
+  modalContainer: { flex: 1, backgroundColor: '#f4f6f8' },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f2f5',
   },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  modalSubtitle: { fontSize: 14, color: '#6b7280', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 2 },
+  modalSubtitle: { fontSize: 13, color: '#6b7280' },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#f3f4f6',
+    justifyContent: 'center', alignItems: 'center',
+  },
   estadoOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
-    marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderRadius: 12, borderWidth: 2,
+    borderColor: '#e8eaed', backgroundColor: '#fff', marginBottom: 8,
   },
   estadoDot: { width: 14, height: 14, borderRadius: 7 },
-  estadoLabel: { flex: 1, fontSize: 16, color: '#374151' },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  textArea: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    padding: 12,
-    fontSize: 15,
-    color: '#111827',
-    minHeight: 80,
-    marginBottom: 16,
+  estadoLabel: { flex: 1, fontSize: 16, color: '#374151', fontWeight: '500' },
+  checkCircle: {
+    width: 22, height: 22, borderRadius: 11,
+    justifyContent: 'center', alignItems: 'center',
   },
-  modalActions: { flexDirection: 'row', gap: 12, paddingTop: 8 },
+  fieldLabel: {
+    fontSize: 11, fontWeight: '700', color: '#6b7280',
+    letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
+  },
+  textArea: {
+    backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
+    borderColor: '#e8eaed', padding: 12, fontSize: 15,
+    color: '#111827', minHeight: 80, marginBottom: 16,
+  },
+  modalActions: { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f2f5' },
   cancelBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, height: 50, borderRadius: 12, borderWidth: 1.5,
+    borderColor: '#e5e7eb', backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
   },
   cancelBtnText: { color: '#374151', fontSize: 15, fontWeight: '600' },
   saveBtn: {
-    flex: 2,
-    height: 50,
-    backgroundColor: '#16a34a',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 2, height: 50, backgroundColor: '#16a34a', borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#16a34a', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
   },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 })

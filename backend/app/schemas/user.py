@@ -31,6 +31,11 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: Annotated[str, Field(min_length=1)]
+    new_password: Annotated[str, Field(min_length=8)]
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str

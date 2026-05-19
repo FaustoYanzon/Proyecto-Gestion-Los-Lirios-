@@ -16,16 +16,9 @@ import type { Parcela, RegistroTrabajo, RegistroRiego, TipoParcela } from '../..
 
 const TIPO_COLORS: Record<TipoParcela, string> = {
   parral: '#16a34a',
-  potrero: '#ca8a04',
+  potrero: '#2563eb',
   pasero: '#ea580c',
-  cabezal: '#2563eb',
-}
-
-const TIPO_BG: Record<TipoParcela, string> = {
-  parral: '#f0fdf4',
-  potrero: '#fefce8',
-  pasero: '#fff7ed',
-  cabezal: '#eff6ff',
+  cabezal: '#0891b2',
 }
 
 const TIPO_LABELS: Record<TipoParcela, string> = {
@@ -35,6 +28,8 @@ const TIPO_LABELS: Record<TipoParcela, string> = {
   cabezal: 'Cabezales',
 }
 
+const TIPO_ORDER: TipoParcela[] = ['parral', 'potrero', 'pasero', 'cabezal']
+
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
   gerencial: 'Gerencial',
@@ -43,11 +38,8 @@ const ROLE_LABELS: Record<string, string> = {
   obrero: 'Obrero',
 }
 
-const TIPO_ORDER: TipoParcela[] = ['parral', 'potrero', 'pasero', 'cabezal']
-
 export default function InicioScreen() {
   const user = useAuthStore((s) => s.user)
-  const logout = useAuthStore((s) => s.logout)
   const router = useRouter()
 
   const [parcelas, setParcelas] = useState<Parcela[]>([])
@@ -80,28 +72,21 @@ export default function InicioScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useEffect(() => { loadData() }, [loadData])
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true)
-    loadData()
-  }, [loadData])
+  const onRefresh = useCallback(() => { setRefreshing(true); loadData() }, [loadData])
 
-  async function handleLogout() {
-    await logout()
-    router.replace('/(auth)/login')
-  }
-
-  // Group parcelas by tipo
   const parcelasPorTipo = TIPO_ORDER.reduce<Record<TipoParcela, Parcela[]>>(
-    (acc, tipo) => {
-      acc[tipo] = parcelas.filter((p) => p.tipo === tipo)
-      return acc
-    },
+    (acc, tipo) => { acc[tipo] = parcelas.filter((p) => p.tipo === tipo); return acc },
     { parral: [], potrero: [], pasero: [], cabezal: [] }
   )
+
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Buenos días'
+    if (h < 18) return 'Buenas tardes'
+    return 'Buenas noches'
+  }
 
   return (
     <ScrollView
@@ -111,23 +96,21 @@ export default function InicioScreen() {
     >
       {offline && (
         <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={14} color="#92400e" />
           <Text style={styles.offlineText}>Sin conexión — datos no disponibles</Text>
         </View>
       )}
 
       {/* Header */}
       <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.welcome}>Bienvenido,</Text>
-          <Text style={styles.userName}>{user?.full_name ?? '—'}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>{greeting()},</Text>
+          <Text style={styles.userName}>{user?.full_name?.split(' ')[0] ?? '—'}</Text>
         </View>
-        <View style={styles.headerRight}>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{ROLE_LABELS[user?.role ?? ''] ?? user?.role}</Text>
-          </View>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-            <Text style={styles.logoutText}>Salir</Text>
-          </TouchableOpacity>
+        <View style={[styles.rolePill, { backgroundColor: '#f0fdf4' }]}>
+          <Text style={[styles.rolePillText, { color: '#166534' }]}>
+            {ROLE_LABELS[user?.role ?? ''] ?? user?.role}
+          </Text>
         </View>
       </View>
 
@@ -135,19 +118,28 @@ export default function InicioScreen() {
       {loading ? (
         <ActivityIndicator color="#16a34a" style={{ marginVertical: 24 }} />
       ) : (
-        <View style={styles.kpiRow}>
-          <View style={[styles.kpiCard, { borderLeftColor: '#16a34a' }]}>
-            <Text style={styles.kpiValue}>{parcelas.length}</Text>
+        <View style={styles.kpiGrid}>
+          <View style={styles.kpiCard}>
+            <View style={[styles.kpiIconBox, { backgroundColor: '#f0fdf4' }]}>
+              <Ionicons name="grid-outline" size={18} color="#16a34a" />
+            </View>
+            <Text style={[styles.kpiValue, { color: '#16a34a' }]}>{parcelas.length}</Text>
             <Text style={styles.kpiLabel}>Parcelas activas</Text>
           </View>
 
-          <View style={[styles.kpiCard, { borderLeftColor: '#2563eb' }]}>
+          <View style={styles.kpiCard}>
+            <View style={[styles.kpiIconBox, { backgroundColor: '#eff6ff' }]}>
+              <Ionicons name="clipboard-outline" size={18} color="#2563eb" />
+            </View>
             <Text style={[styles.kpiValue, { color: '#2563eb' }]}>{tareasHoy.length}</Text>
             <Text style={styles.kpiLabel}>Registros hoy</Text>
           </View>
 
-          <View style={[styles.kpiCard, { borderLeftColor: '#0891b2' }]}>
-            <Text style={[styles.kpiValue, { color: '#0891b2', fontSize: 14 }]}>
+          <View style={styles.kpiCard}>
+            <View style={[styles.kpiIconBox, { backgroundColor: '#f0f9ff' }]}>
+              <Ionicons name="water-outline" size={18} color="#0891b2" />
+            </View>
+            <Text style={[styles.kpiValue, { color: '#0891b2', fontSize: 15 }]}>
               {ultimoRiego ? ultimoRiego.fecha : '—'}
             </Text>
             <Text style={styles.kpiLabel}>Último riego</Text>
@@ -155,23 +147,34 @@ export default function InicioScreen() {
         </View>
       )}
 
-      {/* Acceso rápido */}
-      <TouchableOpacity
-        style={styles.campanaBtn}
-        onPress={() => router.push('/estado-campana')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="leaf-outline" size={18} color="#fff" />
-        <Text style={styles.campanaBtnText}>Ver Estado Fenológico</Text>
-      </TouchableOpacity>
+      {/* Quick actions */}
+      <View style={styles.quickRow}>
+        <TouchableOpacity
+          style={[styles.quickBtn, { backgroundColor: '#16a34a' }]}
+          onPress={() => router.push('/estado-campana')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="leaf-outline" size={17} color="#fff" />
+          <Text style={styles.quickBtnText}>Estado Fenológico</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.quickBtn, { backgroundColor: '#2563eb' }]}
+          onPress={() => router.push('/(tabs)/mapa')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="map-outline" size={17} color="#fff" />
+          <Text style={styles.quickBtnText}>Ver Mapa</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Parcelas por tipo (acordeón) */}
+      {/* Parcelas accordion */}
       {!loading && (
         <View>
-          <Text style={styles.sectionTitle}>Parcelas</Text>
+          <Text style={styles.sectionLabel}>PARCELAS</Text>
           {TIPO_ORDER.filter((tipo) => parcelasPorTipo[tipo].length > 0).map((tipo) => {
             const isOpen = expandedTipo === tipo
             const grupo = parcelasPorTipo[tipo]
+            const color = TIPO_COLORS[tipo]
             return (
               <View key={tipo} style={styles.acordeonCard}>
                 <TouchableOpacity
@@ -180,17 +183,13 @@ export default function InicioScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.acordeonLeft}>
-                    <View style={[styles.tipoDot, { backgroundColor: TIPO_COLORS[tipo] }]} />
+                    <View style={[styles.tipoDot, { backgroundColor: color }]} />
                     <Text style={styles.acordeonTitle}>{TIPO_LABELS[tipo]}</Text>
-                    <View style={[styles.countBadge, { backgroundColor: TIPO_BG[tipo] }]}>
-                      <Text style={[styles.countText, { color: TIPO_COLORS[tipo] }]}>{grupo.length}</Text>
+                    <View style={[styles.countBadge, { backgroundColor: `${color}18` }]}>
+                      <Text style={[styles.countText, { color }]}>{grupo.length}</Text>
                     </View>
                   </View>
-                  <Ionicons
-                    name={isOpen ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color="#9ca3af"
-                  />
+                  <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color="#9ca3af" />
                 </TouchableOpacity>
 
                 {isOpen && (
@@ -198,22 +197,19 @@ export default function InicioScreen() {
                     {grupo.map((p, idx) => (
                       <View
                         key={p.id}
-                        style={[
-                          styles.parcelaRow,
-                          idx < grupo.length - 1 && styles.parcelaRowBorder,
-                        ]}
+                        style={[styles.parcelaRow, idx < grupo.length - 1 && styles.parcelaRowBorder]}
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.parcelaNombre}>{p.nombre}</Text>
                           {p.variedad && (
-                            <Text style={styles.parcelaSub}>Var: {p.variedad}</Text>
+                            <Text style={styles.parcelaSub}>{p.variedad.replace('_', ' ')}</Text>
                           )}
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
                           {p.superficie_ha != null && (
                             <Text style={styles.parcelaHa}>{p.superficie_ha.toFixed(2)} ha</Text>
                           )}
-                          {p.cabezal_riego && (
+                          {p.cabezal_riego && p.cabezal_riego !== 'MANTO' && (
                             <Text style={styles.parcelaCabezal}>Cab. {p.cabezal_riego}</Text>
                           )}
                         </View>
@@ -231,105 +227,58 @@ export default function InicioScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1, backgroundColor: '#f4f6f8' },
   content: { padding: 16, paddingBottom: 32 },
   offlineBanner: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fef3c7', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+    marginBottom: 14, borderWidth: 1, borderColor: '#fbbf24',
   },
-  offlineText: { color: '#92400e', fontSize: 13, textAlign: 'center' },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  welcome: { fontSize: 14, color: '#6b7280' },
-  userName: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  headerRight: { alignItems: 'flex-end', gap: 6 },
-  roleBadge: {
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  roleText: { color: '#166534', fontSize: 12, fontWeight: '600' },
-  logoutBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  logoutText: { color: '#6b7280', fontSize: 12 },
-  kpiRow: { gap: 10, marginBottom: 16 },
+  offlineText: { color: '#92400e', fontSize: 13, fontWeight: '500' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  greeting: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  userName: { fontSize: 24, fontWeight: '800', color: '#111827' },
+  rolePill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  rolePillText: { fontSize: 12, fontWeight: '700' },
+  kpiGrid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   kpiCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  kpiValue: { fontSize: 24, fontWeight: '800', color: '#16a34a' },
-  kpiLabel: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  campanaBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#16a34a',
-    borderRadius: 10,
-    paddingVertical: 14,
-    marginBottom: 20,
+  kpiIconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  kpiValue: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 2 },
+  kpiLabel: { fontSize: 10, color: '#9ca3af', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+  quickRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
+  quickBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, borderRadius: 12, paddingVertical: 13,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
   },
-  campanaBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  quickBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: '#9ca3af',
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  },
   acordeonCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 8,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    backgroundColor: '#fff', borderRadius: 14, marginBottom: 8, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
   acordeonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 14,
   },
   acordeonLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   tipoDot: { width: 10, height: 10, borderRadius: 5 },
   acordeonTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  countText: { fontSize: 12, fontWeight: '700' },
-  acordeonBody: { borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  parcelaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  parcelaRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  countText: { fontSize: 12, fontWeight: '800' },
+  acordeonBody: { borderTopWidth: 1, borderTopColor: '#f4f6f8' },
+  parcelaRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
+  parcelaRowBorder: { borderBottomWidth: 1, borderBottomColor: '#f4f6f8' },
   parcelaNombre: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  parcelaSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  parcelaHa: { fontSize: 13, color: '#374151', fontWeight: '600' },
-  parcelaCabezal: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  parcelaSub: { fontSize: 12, color: '#6b7280', marginTop: 1, textTransform: 'capitalize' },
+  parcelaHa: { fontSize: 13, color: '#374151', fontWeight: '700' },
+  parcelaCabezal: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
 })

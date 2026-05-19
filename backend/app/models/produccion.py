@@ -189,7 +189,7 @@ class RegistroRiego(Base):
         fin = kwargs.get("fin")
         if "duracion_horas" not in kwargs and inicio is not None and fin is not None:
             kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
-        if "mm_aplicados" not in kwargs and kwargs.get("duracion_horas") is not None:
+        if kwargs.get("mm_aplicados") is None and kwargs.get("duracion_horas") is not None:
             kwargs["mm_aplicados"] = round(kwargs["duracion_horas"] * 1.6, 2)
         super().__init__(**kwargs)
 

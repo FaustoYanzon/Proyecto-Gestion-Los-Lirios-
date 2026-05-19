@@ -8,12 +8,20 @@ export default function TabsLayout() {
         tabBarActiveTintColor: '#16a34a',
         tabBarInactiveTintColor: '#9ca3af',
         tabBarStyle: {
-          borderTopColor: '#e5e7eb',
+          borderTopColor: '#f0f2f5',
+          borderTopWidth: 1,
           backgroundColor: '#fff',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 8,
         },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
         headerStyle: { backgroundColor: '#16a34a' },
         headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: 'bold', fontSize: 18 },
+        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
+        headerShadowVisible: false,
       }}
     >
       <Tabs.Screen
@@ -40,6 +48,24 @@ export default function TabsLayout() {
           title: 'Riego',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="water-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="mapa"
+        options={{
+          title: 'Mapa',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="map-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />
