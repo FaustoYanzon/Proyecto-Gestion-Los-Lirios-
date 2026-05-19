@@ -1,0 +1,1308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document id="1eWSh_MXVPwmfnuaPp09tWj6Gx21YxO4z">
+	<name>Los Lirios</name>
+	<gx:CascadingStyle kml:id="__managed_style_18F50085593F3DAE5B90">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff9f3f30</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_2003A629323F3DAE5B94">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff3c8e38</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>00ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_1DF635F9433F3DAE5B94">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_2003A629323F3DAE5B94</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_3A2789D6043F3DAE5B94</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_2A515EC6653F3DAE5B8F">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff007cf5</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_085130DC9E3F3DAE5B8F">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_10ECE2F4393F3DAE5B8F</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_2A515EC6653F3DAE5B8F</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_224BE677FE3F3DAE5B8E">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff636e8d</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_3A2789D6043F3DAE5B94">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff3c8e38</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>00ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_0C25C3A3353F3DAE5B8E">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>fff5a542</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_0E3631F6453F3DAE5B90">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_18F50085593F3DAE5B90</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_27EBC605BE3F3DAE5B90</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_352E9928E33F3DAE5B8E">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff636e8d</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_1DD650022A3F3DAE5B8E">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_224BE677FE3F3DAE5B8E</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_352E9928E33F3DAE5B8E</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_27EBC605BE3F3DAE5B90">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff9f3f30</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_4701E471CA3F3DAE5B8C">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>fff5a542</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_10ECE2F4393F3DAE5B8F">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff007cf5</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_15310E5FE33F3DAE5B8C">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>2.66667</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_35DF15B01E3F3DAE5B8C">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_4701E471CA3F3DAE5B8C</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_0C25C3A3353F3DAE5B8E</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_250F0B771F3F3DAE5B8C">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>4</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_0930CC04CF3F3DAE5B8C">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_15310E5FE33F3DAE5B8C</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_250F0B771F3F3DAE5B8C</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Folder id="0BA6156ED7392FBCFC9F">
+		<name>Cabezales de RIego</name>
+		<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		<Placemark id="09E8993DD8392FBC89E4">
+			<name>Cabezal 4</name>
+			<LookAt>
+				<longitude>-68.39458917663433</longitude>
+				<latitude>-32.02664095232169</latitude>
+				<altitude>547.0900554724948</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>73.1746247339106</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_35DF15B01E3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39474979654457,-32.02671995864732,0 -68.39443923515651,-32.02673019338616,0 -68.39442552624344,-32.02663838288319,0 -68.39474676585267,-32.02663003259498,0 -68.39474979654457,-32.02671995864732,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="00AEAF5DE3392FBA9657">
+			<name>Cabezal 3</name>
+			<LookAt>
+				<longitude>-68.39841740336585</longitude>
+				<latitude>-32.0271202574603</latitude>
+				<altitude>548.0172869151942</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>100.5666881068646</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_35DF15B01E3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39851528169714,-32.02701344146153,0 -68.39853051924301,-32.02726046087066,0 -68.39842835136163,-32.02726401620655,0 -68.39841636214145,-32.02701608988504,0 -68.39851528169714,-32.02701344146153,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="00AE8BFDC0392FBB4AB8">
+			<name>Cabezal 2</name>
+			<LookAt>
+				<longitude>-68.39817101157894</longitude>
+				<latitude>-32.02463442710095</latitude>
+				<altitude>547.0900631200841</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>100.1093245386983</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_35DF15B01E3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39830679244399,-32.02454303573546,0 -68.39831404829646,-32.0247750290068,0 -68.39822179991035,-32.02477854413971,0 -68.39820832540482,-32.02454215708122,0 -68.39830679244399,-32.02454303573546,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="007DA2519E392FBBC226">
+			<name>Cabezal 1</name>
+			<LookAt>
+				<longitude>-68.39797219829074</longitude>
+				<latitude>-32.02266060339657</latitude>
+				<altitude>547.4265028770102</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>218.3672192832819</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_35DF15B01E3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39803094244834,-32.02275446766556,0 -68.39790893677363,-32.02276978993187,0 -68.39788847732889,-32.02255125291612,0 -68.39799256283975,-32.02253974231154,0 -68.39803094244834,-32.02275446766556,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Folder id="0350AB26AC392FBDA7B6">
+			<name>Parrales</name>
+			<open>1</open>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		</Folder>
+	</Folder>
+	<Folder id="0C8FC7D19F392FBE43B6">
+		<name>Parrales</name>
+		<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		<Placemark id="0B34DDDD46392FB6F4F6">
+			<name>Parral 16</name>
+			<LookAt>
+				<longitude>-68.40112442607311</longitude>
+				<latitude>-32.02770120253112</latitude>
+				<altitude>546.0058436262246</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>621.2576113767137</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40245595997905,-32.02803385458982,0 -68.40064198491062,-32.02835561243199,0 -68.40035377514351,-32.02705873331372,0 -68.40217747726044,-32.02678120238595,0 -68.40245595997905,-32.02803385458982,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0AD623B756392FB7EECC">
+			<name>Parral 15</name>
+			<LookAt>
+				<longitude>-68.4007174769813</longitude>
+				<latitude>-32.02879826287853</latitude>
+				<altitude>546.005593065115</altitude>
+				<heading>3.063991550076699</heading>
+				<tilt>9.448650533554057</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>669.1757219762803</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40280436246906,-32.02939398296544,0 -68.400957486176,-32.02970598701765,0 -68.40069319636147,-32.02841369995291,0 -68.40248698459602,-32.02812408033487,0 -68.40280436246906,-32.02939398296544,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="02965F55FF392FB15ED9">
+			<name>Parral 2</name>
+			<LookAt>
+				<longitude>-68.39288393489677</longitude>
+				<latitude>-32.02303026920543</latitude>
+				<altitude>546.2262084377368</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>716.3641553928028</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39410737610581,-32.02427497776359,0 -68.39117386453339,-32.02422276563078,0 -68.39115745571948,-32.02324294127519,0 -68.39405616279819,-32.02330703278753,0 -68.39410737610581,-32.02427497776359,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0B99E526CA392FB7946E">
+			<name>Parral 14</name>
+			<LookAt>
+				<longitude>-68.4007174769813</longitude>
+				<latitude>-32.02879826287853</latitude>
+				<altitude>546.005593065115</altitude>
+				<heading>3.063991550076728</heading>
+				<tilt>9.448650533554172</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>669.1757219762803</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40087684004227,-32.02971532978864,0 -68.39906648860695,-32.03001149157608,0 -68.39883246809077,-32.02870362413599,0 -68.40060408019487,-32.02842465434789,0 -68.40087684004227,-32.02971532978864,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0AD2AE3890392FB5488F">
+			<name>Parral Bond. Nuevo</name>
+			<LookAt>
+				<longitude>-68.39180539879804</longitude>
+				<latitude>-32.02542922771149</latitude>
+				<altitude>547.7513148960593</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>571.9106481318158</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39196577417802,-32.02669321211847,0 -68.39011351619509,-32.0266679494455,0 -68.39017826553334,-32.02555462658724,0 -68.39204205617692,-32.02558094502634,0 -68.39196577417802,-32.02669321211847,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0FE6C91761392FB683F6">
+			<name>Parral 13</name>
+			<LookAt>
+				<longitude>-68.4000887921451</longitude>
+				<latitude>-32.02808839985178</latitude>
+				<altitude>546.2370997110722</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>621.0264380006994</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40058409830885,-32.02836106990005,0 -68.39877257786337,-32.02862648565409,0 -68.3984918818242,-32.02736004661246,0 -68.40030069505724,-32.02707614137316,0 -68.40058409830885,-32.02836106990005,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="06EDC935DC392FB48B16">
+			<name>Parral SYR-RG</name>
+			<LookAt>
+				<longitude>-68.3939593045892</longitude>
+				<latitude>-32.02540201858844</latitude>
+				<altitude>547.349036825494</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>749.698688699209</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39421563679953,-32.02546128782022,0 -68.39432418480567,-32.02666572886317,0 -68.39205903221355,-32.02670556185661,0 -68.39214353000381,-32.02544147827923,0 -68.39421563679953,-32.02546128782022,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0F5F360312392FB40DEE">
+			<name>Parral 8</name>
+			<LookAt>
+				<longitude>-68.39554444683404</longitude>
+				<latitude>-32.02551372078545</latitude>
+				<altitude>545.575539019741</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>751.4721458918212</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39709037107298,-32.0265345605658,0 -68.39438710592832,-32.02646857201193,0 -68.3942964918548,-32.02547083206926,0 -68.39706743694136,-32.02550712426637,0 -68.39709037107298,-32.0265345605658,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0FDACEA8DD392FB347F1">
+			<name>Parral 11</name>
+			<LookAt>
+				<longitude>-68.40039589829135</longitude>
+				<latitude>-32.02484787174102</latitude>
+				<altitude>547.2419024664459</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>749.8057228530524</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40232736695459,-32.02534766432616,0 -68.4013279300095,-32.02534173652139,0 -68.40135157764715,-32.02552635910511,0 -68.39851078218878,-32.02591333561733,0 -68.39840074515303,-32.0245319276045,0 -68.40226680067319,-32.02458458999824,0 -68.40232736695459,-32.02534766432616,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0D7E731578392FB1E601">
+			<name>Parral 7</name>
+			<LookAt>
+				<longitude>-68.39630984880571</longitude>
+				<latitude>-32.02456074177152</latitude>
+				<altitude>546.0054788987453</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>729.8902778927732</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39815706743512,-32.02548120864871,0 -68.39431723377407,-32.02538621165007,0 -68.39423371197105,-32.02444551227419,0 -68.3981053760195,-32.02450955969766,0 -68.39815706743512,-32.02548120864871,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="038A37A6FF392FB2861C">
+			<name>Parral Bond. Viejo</name>
+			<LookAt>
+				<longitude>-68.392249786931</longitude>
+				<latitude>-32.02470162441838</latitude>
+				<altitude>546.5354116125567</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>729.3603452610114</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39209475100013,-32.02437756928435,0 -68.39202350516058,-32.02553934275159,0 -68.39020059658253,-32.02550001257007,0 -68.39020062009827,-32.02437585860722,0 -68.39209475100013,-32.02437756928435,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0AE03C7101392FB01B31">
+			<name>Parral 10</name>
+			<LookAt>
+				<longitude>-68.39947515236729</longitude>
+				<latitude>-32.02373571417958</latitude>
+				<altitude>547.2545855589065</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>715.3356725988124</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.4012230808446,-32.0244892266119,0 -68.39826789909856,-32.02445155577351,0 -68.39819469161792,-32.02336546891613,0 -68.40114055728321,-32.02344075607991,0 -68.4012230808446,-32.0244892266119,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0C8C054947392FB0B7A9">
+			<name>Parral 6</name>
+			<LookAt>
+				<longitude>-68.39606065731391</longitude>
+				<latitude>-32.02338973933801</latitude>
+				<altitude>546.7913355864123</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>715.7989464548155</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39805259588859,-32.02435688403578,0 -68.39421616354697,-32.02428717112779,0 -68.39416088071609,-32.02329552869613,0 -68.39800759711942,-32.02336474681939,0 -68.39805259588859,-32.02435688403578,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="00D7667D67392FAFA2DB">
+			<name>Parral Sult.</name>
+			<LookAt>
+				<longitude>-68.39934183526259</longitude>
+				<latitude>-32.02296335381629</latitude>
+				<altitude>547.8600062708913</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>714.7301809931378</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40113267068982,-32.02335233418788,0 -68.39816514208658,-32.02328961994314,0 -68.39807041971346,-32.02188538350955,0 -68.40103962627491,-32.02194945961202,0 -68.40113267068982,-32.02335233418788,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0E6241EF80392FAEE1AE">
+			<name>Parral 9</name>
+			<LookAt>
+				<longitude>-68.3962238533956</longitude>
+				<latitude>-32.02286918057764</latitude>
+				<altitude>546.8766497663128</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>715.7136065339728</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39789676071905,-32.02329592843281,0 -68.3963461957881,-32.02326868458287,0 -68.39630521609506,-32.02182816541928,0 -68.39783410148554,-32.02185463253137,0 -68.39789676071905,-32.02329592843281,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0FD8D991D439490CE8CC">
+			<name>Parral 4</name>
+			<LookAt>
+				<longitude>-68.39442682401953</longitude>
+				<latitude>-32.02226971641041</latitude>
+				<altitude>546.3905836937106</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>30.00000000027256</gx:fovy>
+				<range>528.9104532748024</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.3949313930801,-32.02181001171337,0 -68.39496977478767,-32.02324053900399,0 -68.39347028645727,-32.02319587640373,0 -68.39339044743292,-32.02180081534033,0 -68.3949313930801,-32.02181001171337,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0B61779F90392FAD4084">
+			<name>Parral 5</name>
+			<LookAt>
+				<longitude>-68.39510319953759</longitude>
+				<latitude>-32.0226267807697</latitude>
+				<altitude>546.0057489834176</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>716.5844816523168</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39624874901303,-32.02325905045525,0 -68.39499271752503,-32.02322843932276,0 -68.3949596844049,-32.02181394927848,0 -68.39617540887603,-32.02183682694098,0 -68.39624874901303,-32.02325905045525,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Folder>
+	<Folder id="0F699D1567393ECEF11C">
+		<name>Paseros</name>
+		<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		<Placemark id="0F922E3399393ECE8AD9">
+			<name>Pasero 2</name>
+			<LookAt>
+				<longitude>-68.39922724753021</longitude>
+				<latitude>-32.02664460318781</latitude>
+				<altitude>548.0237494987415</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>375.7460393136353</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_1DD650022A3F3DAE5B8E</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39875042970883,-32.02725663577954,0 -68.39843693660393,-32.026020766401,0 -68.40023320278324,-32.02572761257471,0 -68.40054861241185,-32.0269823468929,0 -68.39875042970883,-32.02725663577954,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0FE8E6698C392FB8AE49">
+			<name>Pasero 1</name>
+			<LookAt>
+				<longitude>-68.39818032172235</longitude>
+				<latitude>-32.02762644664517</latitude>
+				<altitude>547.8604061382368</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>35</gx:fovy>
+				<range>822.7262515651819</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_1DD650022A3F3DAE5B8E</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.3984284730991,-32.02800913954388,0 -68.39635000304743,-32.0283597576035,0 -68.39608316568201,-32.02688922343788,0 -68.39827402428462,-32.02689703292464,0 -68.3982975433824,-32.02740475939446,0 -68.3984284730991,-32.02800913954388,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0E4FDF8AAB393ED5BF51">
+			<name>Parral 21</name>
+			<LookAt>
+				<longitude>-68.39686881739003</longitude>
+				<latitude>-32.02901345464022</latitude>
+				<altitude>546.5640039951026</altitude>
+				<heading>3.337890680756717e-08</heading>
+				<tilt>0.2947709770360207</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>911.6610180685529</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39885782100126,-32.03003332543955,0 -68.39683673321284,-32.03036663762259,0 -68.39641142687697,-32.02843519663382,0 -68.39843259296411,-32.02808884435424,0 -68.39885782100126,-32.03003332543955,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0B0F71D9E1393ED6DDAE">
+			<name>Potrero 22</name>
+			<LookAt>
+				<longitude>-68.39803752244543</longitude>
+				<latitude>-32.03095388861198</latitude>
+				<altitude>545.3355189334284</altitude>
+				<heading>6.588809697223035e-08</heading>
+				<tilt>0.2947621508401392</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>720.9107196384139</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39941573090174,-32.03245643033934,0 -68.3973905495349,-32.03277116545818,0 -68.39685833934834,-32.0304535368373,0 -68.39891199634951,-32.03015298503568,0 -68.39941573090174,-32.03245643033934,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Folder>
+	<Placemark id="036136170A393EE0485E">
+		<name>Finca</name>
+		<LookAt>
+			<longitude>-68.39848866975561</longitude>
+			<latitude>-32.03131293013796</latitude>
+			<altitude>545.5894522932781</altitude>
+			<heading>-4.173996880897723e-08</heading>
+			<tilt>0.2950965761645848</tilt>
+			<gx:fovy>30.00030224</gx:fovy>
+			<range>7952.238790435951</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_1DF635F9433F3DAE5B94</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-68.39024972191801,-32.02103353983581,0 -68.40075245858213,-32.02112802929084,0 -68.40782074280381,-32.03636257095692,0 -68.38977272146781,-32.03914072169965,0 -68.39024972191801,-32.02103353983581,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Folder id="0A9379499E393EF9EA2B">
+		<name>Potreros</name>
+		<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		<Placemark id="0C55BDDD39393EDEDDFC">
+			<name>Potrero 29</name>
+			<LookAt>
+				<longitude>-68.39761765333525</longitude>
+				<latitude>-32.03677063989662</latitude>
+				<altitude>545.8267688393779</altitude>
+				<heading>3.616404838771745e-08</heading>
+				<tilt>0.2947755045180996</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>1010.836760493839</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39844500062927,-32.03770574319029,0 -68.39633712500303,-32.03805966145525,0 -68.3958046116208,-32.03561235597798,0 -68.39787597149149,-32.03532794721366,0 -68.39844500062927,-32.03770574319029,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="086BBDFEDC393EDE14F0">
+			<name>Potrero 28</name>
+			<LookAt>
+				<longitude>-68.39951630215879</longitude>
+				<latitude>-32.03553252515504</latitude>
+				<altitude>545.7150176522072</altitude>
+				<heading>-2.407458216983417e-09</heading>
+				<tilt>0.2947573228811141</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>617.6932210815721</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40058582629052,-32.0373899440767,0 -68.39852104800998,-32.0376986061738,0 -68.39797734237303,-32.0353024796601,0 -68.40006336477377,-32.0349898772163,0 -68.40058582629052,-32.0373899440767,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0CD1EB62A8393EDBEE40">
+			<name>Potrero 27</name>
+			<LookAt>
+				<longitude>-68.4018007180575</longitude>
+				<latitude>-32.03477038372917</latitude>
+				<altitude>545.0810821610436</altitude>
+				<heading>3.159685885094469e-08</heading>
+				<tilt>0.2947395382108562</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>232.6723640753335</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40248108160087,-32.03709398943122,0 -68.40067846606854,-32.03737929303917,0 -68.40016084881918,-32.03498058545825,0 -68.40194109397427,-32.03472083255929,0 -68.40248108160087,-32.03709398943122,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0E4D93EA1E393EDA83DF">
+			<name>Potrero 26</name>
+			<LookAt>
+				<longitude>-68.39624588979848</longitude>
+				<latitude>-32.03394021901949</latitude>
+				<altitude>545.9095623294442</altitude>
+				<heading>2.810208918935784e-08</heading>
+				<tilt>0.2947677886271702</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>843.2279507236672</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.3978541536312,-32.03525333669057,0 -68.39664272830908,-32.03544741284123,0 -68.39614945850043,-32.03305986982731,0 -68.3972503992503,-32.03291193230296,0 -68.3978541536312,-32.03525333669057,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0A2BE38F0A393ED98B34">
+			<name>Potrero 25</name>
+			<LookAt>
+				<longitude>-68.39836197666371</longitude>
+				<latitude>-32.03358767928586</latitude>
+				<altitude>545.6427018799927</altitude>
+				<heading>4.372681175253413e-08</heading>
+				<tilt>0.2947741530424185</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>980.6281900130853</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.399991744986,-32.03491810935837,0 -68.39796559853427,-32.03522398710427,0 -68.39740227781127,-32.03287663202507,0 -68.39943977995033,-32.03255706515912,0 -68.399991744986,-32.03491810935837,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="04C8C00B2C393ED8A5F4">
+			<name>Potrero 24</name>
+			<LookAt>
+				<longitude>-68.40101363702567</longitude>
+				<latitude>-32.03258865280621</latitude>
+				<altitude>546.8380989861712</altitude>
+				<heading>2.869152052055343e-08</heading>
+				<tilt>0.294784153691853</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>1196.708684165933</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40280449136247,-32.0344639701968,0 -68.40013995912811,-32.03493548526068,0 -68.39955064188467,-32.03250837035566,0 -68.40225694781925,-32.03207054532183,0 -68.40280449136247,-32.0344639701968,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="07BD16974D393ED7E57E">
+			<name>Potrero 23</name>
+			<LookAt>
+				<longitude>-68.40034904180192</longitude>
+				<latitude>-32.03081348569656</latitude>
+				<altitude>546.4954244818956</altitude>
+				<heading>2.762569547221818e-08</heading>
+				<tilt>0.2947650286151872</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>783.2134510182368</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40033544438238,-32.03224484403894,0 -68.3995370210025,-32.03236615017346,0 -68.39903230291853,-32.03011390467214,0 -68.39984580709785,-32.0300083536384,0 -68.40033544438238,-32.03224484403894,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="03E243C2E0393ECD1930">
+			<name>Potrero 1</name>
+			<LookAt>
+				<longitude>-68.39240989073268</longitude>
+				<latitude>-32.02246022183451</latitude>
+				<altitude>546.4340289465281</altitude>
+				<heading>0</heading>
+				<tilt>0</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>784.4248050711758</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39332018592471,-32.02318522239262,0 -68.39115373985454,-32.02308874502869,0 -68.39119270394372,-32.02171974922696,0 -68.39321674856258,-32.02178197459484,0 -68.39332018592471,-32.02318522239262,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="09468C18B8393ED200D3">
+			<name>Potrero 17</name>
+			<LookAt>
+				<longitude>-68.40255639539204</longitude>
+				<latitude>-32.02776075319105</latitude>
+				<altitude>546.3345999750114</altitude>
+				<heading>2.256930455358078e-08</heading>
+				<tilt>0.2947714268212688</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>920.5988566440647</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40434403572279,-32.02913654606827,0 -68.40288907779826,-32.0293738281251,0 -68.40229262045774,-32.02676218417567,0 -68.40321928700658,-32.02662409247883,0 -68.40434403572279,-32.02913654606827,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="0245CEE6E6393ECFF176">
+			<name>Potrero 3</name>
+			<LookAt>
+				<longitude>-68.39339869015954</longitude>
+				<latitude>-32.0248726799416</latitude>
+				<altitude>547.6289265530888</altitude>
+				<heading>-13.54731599376984</heading>
+				<tilt>0.2947498218865294</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>453.3991325062379</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_085130DC9E3F3DAE5B8F</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.39414241119147,-32.02443975083548,0 -68.39420980598861,-32.02539583827042,0 -68.39213161302925,-32.02535262519438,0 -68.39217647358022,-32.02440684112174,0 -68.39414241119147,-32.02443975083548,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark id="09233ADCDD393ED10C1E">
+			<name>Parral 12</name>
+			<LookAt>
+				<longitude>-68.4018673238174</longitude>
+				<latitude>-32.02583822125771</latitude>
+				<altitude>546.5632957443087</altitude>
+				<heading>2.518997806907953e-08</heading>
+				<tilt>0.2947564303705805</tilt>
+				<gx:fovy>30.00030224</gx:fovy>
+				<range>596.3521683398722</range>
+				<altitudeMode>absolute</altitudeMode>
+			</LookAt>
+			<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+			<Polygon>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							-68.40285199814099,-32.02658425828996,0 -68.40057795964881,-32.02696245787335,0 -68.40026310193062,-32.02574004325319,0 -68.40258025168549,-32.02544715024153,0 -68.40285199814099,-32.02658425828996,0 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Folder>
+	<Placemark id="07EC4E7CB43962AE7D78">
+		<name>Cañeria Cabezal 1</name>
+		<LookAt>
+			<longitude>-68.39758173080871</longitude>
+			<latitude>-32.02298361589598</latitude>
+			<altitude>547.8554793974309</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>403.3716749441375</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E3631F6453F3DAE5B90</styleUrl>
+		<LineString>
+			<coordinates>
+				-68.39978632424646,-32.02249692200733,0 -68.39373392846922,-32.02236528868561,0 -68.39382558900725,-32.0238560196311,0 -68.39237818972779,-32.0237992986286,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark id="0A714C7E313962B0DD77">
+		<name>Cañeria Cabezal 2</name>
+		<LookAt>
+			<longitude>-68.39764688170568</longitude>
+			<latitude>-32.02400541498709</latitude>
+			<altitude>547.5948347475284</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>1251.332630522666</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E3631F6453F3DAE5B90</styleUrl>
+		<LineString>
+			<coordinates>
+				-68.39977143612724,-32.02392140102545,0 -68.39435221126288,-32.02382787082498,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark id="0B1ADC385D3962B2F4B0">
+		<name>Cañeria Cabezal 2</name>
+		<LookAt>
+			<longitude>-68.39662318499153</longitude>
+			<latitude>-32.02326530682161</latitude>
+			<altitude>547.5922314917404</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>1402.905508268596</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E3631F6453F3DAE5B90</styleUrl>
+		<LineString>
+			<coordinates>
+				-68.40132041628435,-32.02502261755455,0 -68.39853730926762,-32.02506757823458,0 -68.39454979631842,-32.02501267971675,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark id="0BD8C5EC4A3962B61036">
+		<name>Cañeria Cabezal 4</name>
+		<LookAt>
+			<longitude>-68.39365288406977</longitude>
+			<latitude>-32.0249871887938</latitude>
+			<altitude>547.5731801048777</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>1480.752018527856</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E3631F6453F3DAE5B90</styleUrl>
+		<LineString>
+			<coordinates>
+				-68.39103202439456,-32.02481260003818,0 -68.3938799878499,-32.02485467306138,0 -68.39387995889247,-32.02610672852727,0 -68.39664752024811,-32.02606055269779,0 -68.39134343208781,-32.02614914011933,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark id="09F00146273962B70591">
+		<name>Cañeria Cabezal 3</name>
+		<LookAt>
+			<longitude>-68.39864241647759</longitude>
+			<latitude>-32.02863701007092</latitude>
+			<altitude>547.0535628586496</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>1605.303709256987</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0E3631F6453F3DAE5B90</styleUrl>
+		<LineString>
+			<coordinates>
+				-68.39860595537755,-32.0272567659668,0 -68.3993048941939,-32.02950806976745,0 -68.40222305319132,-32.028975733941,0 -68.39930498868925,-32.02950422772085,0 -68.39887924260871,-32.02811587860339,0 -68.40180896664569,-32.0275403680925,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark id="0A5795D7CD3B4BCB80A0">
+		<name>Marcador sin título</name>
+		<LookAt>
+			<longitude>-68.3910900493243</longitude>
+			<latitude>-32.02140504812121</latitude>
+			<altitude>548.3977111153456</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>30</gx:fovy>
+			<range>638.4767134930736</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_0930CC04CF3F3DAE5B8C</styleUrl>
+		<Point>
+			<coordinates>-68.39022056146847,-32.02099469508882,547.2446506741819</coordinates>
+		</Point>
+	</Placemark>
+</Document>
+</kml>
