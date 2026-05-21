@@ -133,3 +133,45 @@ class FlujoAnualResponse(BaseModel):
     total_ingresos_usd: Decimal
     total_egresos_usd: Decimal
     saldo_total_usd: Decimal
+
+
+# ── Dashboard schemas ─────────────────────────────────────────────────────────
+
+class IngresosPorProducto(BaseModel):
+    producto: str
+    variedad: str | None
+    kg_totales: Decimal
+    monto_ars: Decimal
+    monto_usd: Decimal
+    precio_promedio_kg_ars: Decimal | None
+
+
+class ResumenAnualDashboard(BaseModel):
+    campana: str
+    total_ingresos_ars: Decimal
+    total_egresos_ars: Decimal
+    saldo_ars: Decimal
+    total_ingresos_usd: Decimal
+    total_egresos_usd: Decimal
+    saldo_usd: Decimal
+    ingresos_por_producto: list[IngresosPorProducto]
+
+
+class EgresosMesItem(BaseModel):
+    mes: str
+    mes_key: str
+    tipo: str
+    total: Decimal
+
+
+class EgresosPorMesResponse(BaseModel):
+    campana: str
+    items: list[EgresosMesItem]
+    tipos_presentes: list[str]
+
+
+class CostoPorKgResponse(BaseModel):
+    campana: str
+    total_egresos_ars: Decimal
+    kg_cosechados_total: Decimal | None
+    costo_por_kg_ars: Decimal | None

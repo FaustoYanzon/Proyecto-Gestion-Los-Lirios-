@@ -17,17 +17,23 @@ from app.models.finanzas import (
     ProductoIngreso,
     TipoEgreso,
 )
-from app.models.parcela import VariedadUva
+from app.models.parcela import Parcela, VariedadUva
+from app.models.produccion import CicloCampana
 from app.models.user import User
 from app.schemas.finanzas import (
+    CostoPorKgResponse,
     EgresoCreate,
     EgresoResponse,
     EgresoUpdate,
+    EgresosMesItem,
+    EgresosPorMesResponse,
     FlujoAnualResponse,
     FlujoMensual,
     IngresoCreate,
     IngresoResponse,
     IngresoUpdate,
+    IngresosPorProducto,
+    ResumenAnualDashboard,
     ResumenEgresoPorTipo,
 )
 
@@ -269,6 +275,194 @@ async def delete_ingreso(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingreso not found")
     await db.delete(ingreso)
     await db.flush()
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@router.get("/dashboard/resumen-anual", response_model=ResumenAnualDashboard)
+async def dashboard_resumen_anual(
+    anio_inicio: int = Query(..., ge=2000, le=2100),
+    anio_fin: int = Query(..., ge=2001, le=2101),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> ResumenAnualDashboard:
+    if anio_fin != anio_inicio + 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="anio_fin must equal anio_inicio + 1",
+        )
+    start = date(anio_inicio, 5, 1)
+    end = date(anio_fin, 4, 30)
+
+    ingresos = list(
+        (await db.execute(select(Ingreso).where(Ingreso.fecha >= start, Ingreso.fecha <= end)))
+        .scalars().all()
+    )
+    egresos = list(
+        (await db.execute(select(Egreso).where(Egreso.fecha >= start, Egreso.fecha <= end)))
+        .scalars().all()
+    )
+
+    zero = Decimal("0")
+
+    ing_agg: dict[tuple, dict[str, Decimal]] = {}
+    for i in ingresos:
+        key = (i.producto, i.variedad)
+        if key not in ing_agg:
+            ing_agg[key] = {"monto_ars": zero, "monto_usd": zero, "kg_totales": zero}
+        if i.moneda == MonedaTipo.ars:
+            ing_agg[key]["monto_ars"] += i.monto
+        else:
+            ing_agg[key]["monto_usd"] += i.monto
+        if i.kg_totales is not None:
+            ing_agg[key]["kg_totales"] += i.kg_totales
+
+    total_egresos_ars = sum((e.monto for e in egresos if e.moneda == MonedaTipo.ars), zero)
+    total_egresos_usd = sum((e.monto for e in egresos if e.moneda == MonedaTipo.usd), zero)
+    total_ingresos_ars = sum((i.monto for i in ingresos if i.moneda == MonedaTipo.ars), zero)
+    total_ingresos_usd = sum((i.monto for i in ingresos if i.moneda == MonedaTipo.usd), zero)
+
+    ingresos_por_producto = [
+        IngresosPorProducto(
+            producto=key[0].value if hasattr(key[0], "value") else str(key[0]),
+            variedad=key[1].value if key[1] is not None and hasattr(key[1], "value") else (str(key[1]) if key[1] is not None else None),
+            kg_totales=data["kg_totales"],
+            monto_ars=data["monto_ars"],
+            monto_usd=data["monto_usd"],
+            precio_promedio_kg_ars=data["monto_ars"] / data["kg_totales"] if data["kg_totales"] > 0 else None,
+        )
+        for key, data in ing_agg.items()
+    ]
+
+    return ResumenAnualDashboard(
+        campana=f"{anio_inicio}-{anio_fin}",
+        total_ingresos_ars=total_ingresos_ars,
+        total_egresos_ars=total_egresos_ars,
+        saldo_ars=total_ingresos_ars - total_egresos_ars,
+        total_ingresos_usd=total_ingresos_usd,
+        total_egresos_usd=total_egresos_usd,
+        saldo_usd=total_ingresos_usd - total_egresos_usd,
+        ingresos_por_producto=ingresos_por_producto,
+    )
+
+
+@router.get("/dashboard/egresos-por-mes", response_model=EgresosPorMesResponse)
+async def dashboard_egresos_por_mes(
+    anio_inicio: int = Query(..., ge=2000, le=2100),
+    anio_fin: int = Query(..., ge=2001, le=2101),
+    moneda: MonedaTipo = Query(MonedaTipo.ars),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> EgresosPorMesResponse:
+    if anio_fin != anio_inicio + 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="anio_fin must equal anio_inicio + 1",
+        )
+    start = date(anio_inicio, 5, 1)
+    end = date(anio_fin, 4, 30)
+
+    egresos = list(
+        (await db.execute(
+            select(Egreso).where(Egreso.fecha >= start, Egreso.fecha <= end, Egreso.moneda == moneda)
+        )).scalars().all()
+    )
+
+    campaign_months: list[tuple[int, int]] = []
+    y, m = anio_inicio, 5
+    for _ in range(12):
+        campaign_months.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    agg: dict[tuple[int, int, str], Decimal] = {}
+    for e in egresos:
+        tipo_str = e.tipo.value if hasattr(e.tipo, "value") else str(e.tipo)
+        key = (e.fecha.year, e.fecha.month, tipo_str)
+        agg[key] = agg.get(key, Decimal("0")) + e.monto
+
+    tipos_presentes = sorted({k[2] for k in agg})
+
+    items: list[EgresosMesItem] = []
+    for cy, cm in campaign_months:
+        for (ey, em, tipo_str), total in agg.items():
+            if ey == cy and em == cm:
+                items.append(EgresosMesItem(
+                    mes=f"{_MONTH_NAMES_ES[cm]} {cy}",
+                    mes_key=f"{cy}-{cm:02d}",
+                    tipo=tipo_str,
+                    total=total,
+                ))
+
+    return EgresosPorMesResponse(
+        campana=f"{anio_inicio}-{anio_fin}",
+        items=items,
+        tipos_presentes=tipos_presentes,
+    )
+
+
+@router.get("/dashboard/costo-por-kg", response_model=CostoPorKgResponse)
+async def dashboard_costo_por_kg(
+    anio: int = Query(..., ge=2000, le=2100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> CostoPorKgResponse:
+    start = date(anio, 5, 1)
+    end = date(anio + 1, 4, 30)
+
+    egresos_ars = list(
+        (await db.execute(
+            select(Egreso).where(
+                Egreso.fecha >= start, Egreso.fecha <= end, Egreso.moneda == MonedaTipo.ars
+            )
+        )).scalars().all()
+    )
+    total_egresos_ars = sum((e.monto for e in egresos_ars), Decimal("0"))
+
+    ciclos = list(
+        (await db.execute(
+            select(CicloCampana).where(
+                CicloCampana.anio == anio,
+                CicloCampana.rendimiento_kg_ha.is_not(None),
+            )
+        )).scalars().all()
+    )
+
+    best: dict[str, Decimal] = {}
+    for c in ciclos:
+        if c.parcela_id not in best or c.rendimiento_kg_ha > best[c.parcela_id]:
+            best[c.parcela_id] = c.rendimiento_kg_ha
+
+    kg_cosechados_total: Decimal | None = None
+    if best:
+        parcelas = list(
+            (await db.execute(select(Parcela).where(Parcela.id.in_(list(best.keys()))))).scalars().all()
+        )
+        sup_map = {p.id: p.superficie_ha for p in parcelas}
+        kg_total = Decimal("0")
+        has_data = False
+        for pid, rend in best.items():
+            sup = sup_map.get(pid)
+            if sup is not None:
+                kg_total += rend * Decimal(str(sup))
+                has_data = True
+        if has_data:
+            kg_cosechados_total = kg_total
+
+    costo_por_kg_ars = (
+        total_egresos_ars / kg_cosechados_total
+        if kg_cosechados_total is not None and kg_cosechados_total > 0
+        else None
+    )
+
+    return CostoPorKgResponse(
+        campana=f"{anio}-{anio + 1}",
+        total_egresos_ars=total_egresos_ars,
+        kg_cosechados_total=kg_cosechados_total,
+        costo_por_kg_ars=costo_por_kg_ars,
+    )
 
 
 # ── Flujo anual ────────────────────────────────────────────────────────────────

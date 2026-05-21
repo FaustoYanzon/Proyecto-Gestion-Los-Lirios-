@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../lib/api'
+import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import type { EstadoFenologico } from '../lib/types'
 import { ESTADO_LABELS, ESTADO_COLORS } from '../lib/types'
 
@@ -152,10 +153,13 @@ export default function EstadoCampanaScreen() {
   const [selected, setSelected] = useState<EstadoActual | null>(null)
 
   const loadData = useCallback(async () => {
+    const cached = await getCache<EstadoActual[]>('estados', CACHE_TTL.estados)
+    if (cached) { setEstados(cached); setLoading(false) }
     try {
       const { data } = await api.get<EstadoActual[]>('/produccion/campana/estado-actual/')
       setEstados(data)
-    } catch { /* offline */ }
+      await setCache('estados', data)
+    } catch { /* offline — use cache */ }
     finally { setLoading(false); setRefreshing(false) }
   }, [])
 

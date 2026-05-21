@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
+import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import type { Parcela, RegistroTrabajo, RegistroRiego, TipoParcela } from '../../lib/types'
 
 const TIPO_COLORS: Record<TipoParcela, string> = {
@@ -51,19 +52,31 @@ export default function InicioScreen() {
   const [expandedTipo, setExpandedTipo] = useState<TipoParcela | null>('parral')
 
   const loadData = useCallback(async () => {
+    // Pre-fill from cache for instant offline display
+    const [cachedParcelas, cachedKpis] = await Promise.all([
+      getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas),
+      getCache<{ tareas: RegistroTrabajo[]; riego: RegistroRiego | null }>('kpis', CACHE_TTL.kpis),
+    ])
+    if (cachedParcelas) setParcelas(cachedParcelas)
+    if (cachedKpis) { setTareasHoy(cachedKpis.tareas); setUltimoRiego(cachedKpis.riego) }
+    if (cachedParcelas || cachedKpis) setLoading(false)
+
     try {
       setOffline(false)
       const today = new Date().toISOString().split('T')[0]
-
       const [parcelasRes, trabajosRes, riegosRes] = await Promise.all([
         api.get<Parcela[]>('/parcelas/mapa'),
         api.get<RegistroTrabajo[]>(`/produccion/trabajo/?fecha_desde=${today}&fecha_hasta=${today}&limit=50`),
         api.get<RegistroRiego[]>('/produccion/riego/?limit=1'),
       ])
-
-      setParcelas(parcelasRes.data.filter((p) => p.is_active))
+      const active = parcelasRes.data.filter((p) => p.is_active)
+      setParcelas(active)
       setTareasHoy(trabajosRes.data)
       setUltimoRiego(riegosRes.data[0] ?? null)
+      await Promise.all([
+        setCache('parcelas', active),
+        setCache('kpis', { tareas: trabajosRes.data, riego: riegosRes.data[0] ?? null }),
+      ])
     } catch {
       setOffline(true)
     } finally {
@@ -97,7 +110,9 @@ export default function InicioScreen() {
       {offline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#92400e" />
-          <Text style={styles.offlineText}>Sin conexión — datos no disponibles</Text>
+          <Text style={styles.offlineText}>
+            {parcelas.length > 0 ? 'Sin conexión — datos guardados' : 'Sin conexión — datos no disponibles'}
+          </Text>
         </View>
       )}
 
@@ -151,7 +166,7 @@ export default function InicioScreen() {
       <View style={styles.quickRow}>
         <TouchableOpacity
           style={[styles.quickBtn, { backgroundColor: '#16a34a' }]}
-          onPress={() => router.push('/estado-campana')}
+          onPress={() => router.push('/(tabs)/campana')}
           activeOpacity={0.85}
         >
           <Ionicons name="leaf-outline" size={17} color="#fff" />

@@ -194,3 +194,29 @@ class EstadoActualResponse(BaseModel):
     anio: int | None = None
     estado_fenologico: EstadoFenologico | None = None
     fecha_estado: date | None = None
+
+
+# ── Dashboard schemas ─────────────────────────────────────────────────────────
+
+class RendimientoAnio(BaseModel):
+    anio: int
+    rendimiento_kg_ha: Decimal | None
+    kg_totales: Decimal | None
+
+
+class RendimientoHistoricoParcela(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    variedad: str | None
+    superficie_ha: float | None
+    campanas: list[RendimientoAnio]
+
+
+class EficienciaHidricaParcela(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    variedad: str | None
+    superficie_ha: float | None
+    mm_aplicados_total: float
+    rendimiento_kg_ha: float | None
+    eficiencia_kg_por_mm: float | None

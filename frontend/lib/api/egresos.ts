@@ -150,3 +150,23 @@ export async function getResumenPorTipo(params: EgresosFilter): Promise<ResumenT
   const { data } = await api.get('/finanzas/egresos/resumen/por-tipo', { params })
   return data
 }
+
+export interface EgresosMesItem {
+  mes: string
+  mes_key: string
+  tipo: string
+  total: number
+}
+
+export interface EgresosPorMesResponse {
+  campana: string
+  items: EgresosMesItem[]
+  tipos_presentes: string[]
+}
+
+export async function getEgresosPorMes(anioInicio: number): Promise<EgresosPorMesResponse> {
+  const { data } = await api.get<EgresosPorMesResponse>('/finanzas/dashboard/egresos-por-mes', {
+    params: { anio_inicio: anioInicio, anio_fin: anioInicio + 1, moneda: 'ars' },
+  })
+  return data
+}

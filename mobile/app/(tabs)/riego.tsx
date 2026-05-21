@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
+import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { useAuthStore } from '../../store/authStore'
 import type { Parcela, RegistroRiego, RiegoPayload } from '../../lib/types'
 import { getValvulasForParcela, calcMmRiego } from '../../lib/types'
@@ -354,17 +355,31 @@ export default function RiegoScreen() {
   const mmPreview = calcMmRiego(inicioISO, finISO)
 
   const loadData = useCallback(async () => {
+    const [cachedParcelas, cachedRiegos] = await Promise.all([
+      getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas),
+      getCache<RegistroRiego[]>('riegos', CACHE_TTL.riegos),
+    ])
+    if (cachedParcelas) setParcelas(cachedParcelas.filter(
+      (p) => p.tipo === 'parral' && p.cabezal_riego && p.cabezal_riego !== 'MANTO'
+    ))
+    if (cachedRiegos) setRiegos(cachedRiegos)
+
     try {
       const [parcelasRes, riegosRes] = await Promise.all([
         api.get<Parcela[]>('/parcelas/mapa'),
         api.get<RegistroRiego[]>('/produccion/riego/?limit=10'),
       ])
-      const parrales = parcelasRes.data.filter(
-        (p) => p.is_active && p.tipo === 'parral' && p.cabezal_riego && p.cabezal_riego !== 'MANTO'
+      const active = parcelasRes.data.filter((p) => p.is_active)
+      const parrales = active.filter(
+        (p) => p.tipo === 'parral' && p.cabezal_riego && p.cabezal_riego !== 'MANTO'
       )
       setParcelas(parrales)
       setRiegos(riegosRes.data)
-    } catch { /* offline */ }
+      await Promise.all([
+        setCache('parcelas', active),
+        setCache('riegos', riegosRes.data),
+      ])
+    } catch { /* offline — use cache */ }
     finally { setRefreshing(false) }
   }, [])
 

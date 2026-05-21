@@ -2,7 +2,10 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
+import { ChevronRight } from 'lucide-react'
 import { MONTHS_SHORT, getFlujoAnual, type FlujoRow } from '@/lib/api/flujo'
+import { TIPO_EGRESO_VALUES } from '@/lib/api/egresos'
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -142,6 +145,34 @@ function SaldoRow({
   )
 }
 
+function EgresoRow({
+  num, tipo, label, valores, total, anio,
+}: FlujoRow & { num: number; tipo: string; anio: number }) {
+  const router = useRouter()
+  return (
+    <tr
+      className="border-b border-gray-100 hover:bg-green-50 transition-colors cursor-pointer group"
+      onClick={() => router.push(`/dashboard/finanzas/flujo/desglose/${tipo}?anio=${anio}`)}
+    >
+      <td className="sticky left-0 z-10 bg-white group-hover:bg-green-50 px-3 py-1.5 text-sm text-gray-700 whitespace-nowrap min-w-[180px]">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-mono w-4 text-right flex-shrink-0">{num}</span>
+          <span>{label}</span>
+          <ChevronRight size={12} className="text-gray-300 group-hover:text-green-600 ml-auto flex-shrink-0" />
+        </div>
+      </td>
+      {valores.map((v, i) => (
+        <td key={i} className="px-2 py-1.5 text-right font-mono text-sm text-gray-700 whitespace-nowrap min-w-[105px]">
+          {fmt(v)}
+        </td>
+      ))}
+      <td className="px-2 py-1.5 text-right font-mono text-sm font-semibold text-gray-800 whitespace-nowrap min-w-[115px] border-l border-gray-200">
+        {fmtAlways(total)}
+      </td>
+    </tr>
+  )
+}
+
 function SpacerRow() {
   return (
     <tr className="h-1.5 bg-gray-300">
@@ -251,7 +282,15 @@ export default function FlujoPage() {
                 {/* ── EGRESOS ── */}
                 <SectionHeader label="Egresos" />
 
-                {data.egresoPorTipo.map((row) => <DataRow key={row.label} {...row} />)}
+                {TIPO_EGRESO_VALUES.map((tipo, idx) => (
+                  <EgresoRow
+                    key={tipo}
+                    num={idx + 1}
+                    tipo={tipo}
+                    anio={anio}
+                    {...data.egresoPorTipo[idx]}
+                  />
+                ))}
 
                 <SpacerRow />
                 <TotalRow

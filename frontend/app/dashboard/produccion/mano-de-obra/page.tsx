@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, BarChart, Bar,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Legend, BarChart, Bar,
 } from 'recharts'
 import { DollarSign, Users, Star, TrendingUp } from 'lucide-react'
 import { getTrabajos, getParcelas, TEMPORADA_LABELS } from '@/lib/api/produccion'
@@ -21,6 +21,13 @@ const TEMPORADA_COLORS: Record<string, string> = {
   verano: '#f97316', invierno: '#3b82f6', primavera: '#22c55e',
   otono: '#f59e0b', general: '#94a3b8',
 }
+
+const TEMPORADA_COLORS_AREA: Record<string, string> = {
+  verano: '#f97316', invierno: '#3b82f6', primavera: '#22c55e',
+  otono: '#f59e0b', general: '#94a3b8',
+}
+
+const CLASES = ['verano', 'invierno', 'primavera', 'otono', 'general'] as const
 
 const TEMPORADA_OPTIONS = [
   { value: 'general',   label: 'General' },
@@ -227,21 +234,41 @@ export default function ManoDeObraPage() {
 
   const costoPorHa = costoTotal / TOTAL_HA
 
-  // ── Monthly evolution ────────────────────────────────────────────────────
+  // ── Stacked evolution by temporada ───────────────────────────────────────
 
-  const monthlyData = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const t of filtered) {
-      const key = t.fecha.slice(0, 7)
-      map[key] = (map[key] ?? 0) + Number(t.monto_total)
+  const stackedEvolutionData = useMemo(() => {
+    if (verPor === 'mes') {
+      const map: Record<string, Record<string, number>> = {}
+      for (const t of filtered) {
+        const key = t.fecha.slice(0, 7)
+        if (!map[key]) map[key] = {}
+        map[key][t.clasificacion] = (map[key][t.clasificacion] ?? 0) + Number(t.monto_total)
+      }
+      return Object.entries(map)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, byClase]) => {
+          const m = Number(key.slice(5, 7))
+          return { label: MONTH_NAMES[m - 1], ...byClase }
+        })
+    } else {
+      const map: Record<string, Record<string, number>> = {}
+      for (const t of filtered) {
+        const d = new Date(t.fecha + 'T00:00:00')
+        const day = d.getDay()
+        const monday = new Date(d)
+        monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+        const key = monday.toISOString().split('T')[0]
+        if (!map[key]) map[key] = {}
+        map[key][t.clasificacion] = (map[key][t.clasificacion] ?? 0) + Number(t.monto_total)
+      }
+      return Object.entries(map)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, byClase]) => {
+          const d = new Date(key + 'T00:00:00')
+          return { label: d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }), ...byClase }
+        })
     }
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, monto]) => {
-        const m = Number(key.slice(5, 7))
-        return { mes: MONTH_NAMES[m - 1], monto }
-      })
-  }, [filtered])
+  }, [filtered, verPor])
 
   // ── Temporada distribution ────────────────────────────────────────────────
 
@@ -249,7 +276,7 @@ export default function ManoDeObraPage() {
     const map: Record<string, number> = {}
     for (const t of filtered) map[t.clasificacion] = (map[t.clasificacion] ?? 0) + Number(t.monto_total)
     return TEMPORADA_OPTIONS
-      .map((opt) => ({ name: opt.label, value: map[opt.value] ?? 0, key: opt.value }))
+      .map((opt) => ({ name: opt.label, value: map[opt.value] ?? 0, key: opt.value, fill: TEMPORADA_COLORS[opt.value] ?? '#94a3b8' }))
       .filter((d) => d.value > 0)
   }, [filtered])
 
@@ -277,14 +304,15 @@ export default function ManoDeObraPage() {
       .sort((a, b) => b.costoTotal - a.costoTotal)
   }, [filtered])
 
-  // ── Top 5 eficiencia (workers by total) ──────────────────────────────────
+  // ── Top 10 trabajadores ───────────────────────────────────────────────────
 
-  const top5 = useMemo(() => {
+  const top10Trabajadores = useMemo(() => {
     const map: Record<string, number> = {}
     for (const t of filtered) map[t.trabajador_nombre] = (map[t.trabajador_nombre] ?? 0) + Number(t.monto_total)
     return Object.entries(map)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .reverse()
       .map(([nombre, monto]) => ({ nombre, monto }))
   }, [filtered])
 
@@ -349,8 +377,9 @@ export default function ManoDeObraPage() {
 
           {/* Chart + filter sidebar */}
           <div className="flex gap-5 items-start">
+            <div className="flex-1 space-y-5 min-w-0">
             {/* Evolución de costos */}
-            <div className="flex-1 bg-white rounded-lg border border-gray-200 shadow-sm p-5 min-w-0">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-700">Evolución de Costos</h3>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -368,27 +397,56 @@ export default function ManoDeObraPage() {
               <div style={{ height: 280 }}>
                 {loadingTrabajos ? (
                   <div className="h-full bg-gray-50 animate-pulse rounded" />
-                ) : monthlyData.length === 0 ? (
+                ) : stackedEvolutionData.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-gray-400 text-sm">Sin registros en el período</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={monthlyData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <AreaChart data={stackedEvolutionData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Line
-                        type="monotone"
-                        dataKey="monto"
-                        stroke="#2563eb"
-                        strokeWidth={2.5}
-                        dot={{ r: 4, fill: '#2563eb', strokeWidth: 0 }}
-                        activeDot={{ r: 6 }}
+                      <Tooltip
+                        formatter={(value, name) => [fmtARS(Number(value ?? 0)), TEMPORADA_LABELS[String(name)] ?? String(name)]}
+                        contentStyle={{ fontSize: 12 }}
                       />
-                    </LineChart>
+                      <Legend formatter={(v) => TEMPORADA_LABELS[v] ?? v} />
+                      {CLASES.map((clase) => (
+                        <Area
+                          key={clase}
+                          type="monotone"
+                          dataKey={clase}
+                          stackId="1"
+                          stroke={TEMPORADA_COLORS_AREA[clase]}
+                          fill={TEMPORADA_COLORS_AREA[clase]}
+                          fillOpacity={0.7}
+                          name={clase}
+                        />
+                      ))}
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
               </div>
+            </div>
+
+            {/* Top 10 trabajadores por costo */}
+            {top10Trabajadores.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Top 10 Trabajadores por Costo</h3>
+                <ResponsiveContainer width="100%" height={Math.max(top10Trabajadores.length * 34 + 20, 180)}>
+                  <BarChart
+                    data={top10Trabajadores}
+                    layout="vertical"
+                    margin={{ top: 0, right: 70, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                    <YAxis type="category" dataKey="nombre" tick={{ fontSize: 11, fill: '#374151' }} width={130} />
+                    <Tooltip formatter={(v) => [fmtARS(Number(v ?? 0)), 'Total ARS']} contentStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="monto" fill="#7c3aed" radius={[0, 4, 4, 0]} maxBarSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             </div>
 
             {/* Filter sidebar */}
@@ -443,20 +501,6 @@ export default function ManoDeObraPage() {
                   Aplicar Filtros
                 </button>
 
-                {/* Top 5 eficiencia */}
-                {top5.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-gray-700 mb-2">Top 5 Eficiencia</h4>
-                    <div className="space-y-1.5">
-                      {top5.map((w, i) => (
-                        <div key={w.nombre} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">{i + 1}. {w.nombre}</span>
-                          <span className="font-mono font-semibold text-green-700">{fmtM(w.monto)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -467,7 +511,7 @@ export default function ManoDeObraPage() {
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Costos por Tarea</h3>
               <ResponsiveContainer width="100%" height={Math.min(resumenTareas.length * 34 + 20, 360)}>
                 <BarChart
-                  data={resumenTareas.slice(0, 10).map((t) => ({ tarea: t.tarea, monto: t.costoTotal, clasificacion: t.clasificacion }))}
+                  data={resumenTareas.slice(0, 10).map((t) => ({ tarea: t.tarea, monto: t.costoTotal, fill: TEMPORADA_COLORS[t.clasificacion] ?? '#94a3b8' }))}
                   layout="vertical"
                   margin={{ top: 0, right: 70, left: 0, bottom: 0 }}
                 >
@@ -475,11 +519,7 @@ export default function ManoDeObraPage() {
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                   <YAxis type="category" dataKey="tarea" tick={{ fontSize: 11, fill: '#374151' }} width={120} />
                   <Tooltip formatter={(v) => [fmtARS(Number(v ?? 0)), 'Total ARS']} contentStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="monto" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                    {resumenTareas.slice(0, 10).map((d, i) => (
-                      <Cell key={i} fill={TEMPORADA_COLORS[d.clasificacion] ?? '#94a3b8'} />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="monto" radius={[0, 4, 4, 0]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
               {/* Leyenda temporadas */}
@@ -511,11 +551,7 @@ export default function ManoDeObraPage() {
                         outerRadius={90}
                         dataKey="value"
                         nameKey="name"
-                      >
-                        {temporadaData.map((d, i) => (
-                          <Cell key={i} fill={TEMPORADA_COLORS[d.key] ?? '#94a3b8'} />
-                        ))}
-                      </Pie>
+                      />
                       <Tooltip content={<PieTooltip />} />
                       <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
                     </PieChart>
@@ -536,11 +572,7 @@ export default function ManoDeObraPage() {
                       <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtM} />
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={28}>
-                        {temporadaData.map((d, i) => (
-                          <Cell key={i} fill={TEMPORADA_COLORS[d.key] ?? '#94a3b8'} />
-                        ))}
-                      </Bar>
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={28} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

@@ -32,6 +32,7 @@ from app.schemas.produccion import (
     CicloCampanaCreate,
     CicloCampanaResponse,
     CicloCampanaUpdate,
+    EficienciaHidricaParcela,
     EstadoActualResponse,
     RegistroCargaMasiva,
     RegistroFitosanitarioCreate,
@@ -43,6 +44,8 @@ from app.schemas.produccion import (
     RegistroTrabajoCreate,
     RegistroTrabajoResponse,
     RegistroTrabajoUpdate,
+    RendimientoAnio,
+    RendimientoHistoricoParcela,
     ResumenTarea,
     ResumenTrabajador,
 )
@@ -73,6 +76,136 @@ def _build_egreso_for_trabajo(registro: RegistroTrabajo, user_id: str, parcela_n
         referencia_id=registro.id,
         created_by=user_id,
     )
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@router.get("/dashboard/rendimiento-historico", response_model=list[RendimientoHistoricoParcela])
+async def dashboard_rendimiento_historico(
+    anios: list[int] = Query(default=[]),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[RendimientoHistoricoParcela]:
+    if not anios:
+        today = date.today()
+        current_campaign = today.year if today.month >= 5 else today.year - 1
+        anios = [current_campaign - 2, current_campaign - 1, current_campaign]
+
+    stmt = select(Parcela).where(
+        Parcela.is_active.is_(True),
+        Parcela.tipo == TipoParcela.parral,
+    ).order_by(Parcela.nombre.asc())
+    parcelas = list((await db.execute(stmt)).scalars().all())
+    parcela_ids = [p.id for p in parcelas]
+
+    ciclos = list(
+        (await db.execute(
+            select(CicloCampana).where(
+                CicloCampana.parcela_id.in_(parcela_ids),
+                CicloCampana.anio.in_(anios),
+                CicloCampana.rendimiento_kg_ha.is_not(None),
+            )
+        )).scalars().all()
+    )
+
+    best: dict[tuple[str, int], Decimal] = {}
+    for c in ciclos:
+        key = (c.parcela_id, c.anio)
+        if key not in best or c.rendimiento_kg_ha > best[key]:
+            best[key] = c.rendimiento_kg_ha
+
+    result: list[RendimientoHistoricoParcela] = []
+    for p in parcelas:
+        campanas = [
+            RendimientoAnio(
+                anio=anio,
+                rendimiento_kg_ha=best.get((p.id, anio)),
+                kg_totales=(
+                    best[(p.id, anio)] * Decimal(str(p.superficie_ha))
+                    if (p.id, anio) in best and p.superficie_ha is not None
+                    else None
+                ),
+            )
+            for anio in anios
+        ]
+        if not any(c.rendimiento_kg_ha is not None for c in campanas):
+            continue
+        result.append(RendimientoHistoricoParcela(
+            parcela_id=p.id,
+            parcela_nombre=p.nombre,
+            variedad=p.variedad.value if p.variedad is not None else None,
+            superficie_ha=p.superficie_ha,
+            campanas=campanas,
+        ))
+
+    return result
+
+
+@router.get("/dashboard/eficiencia-hidrica", response_model=list[EficienciaHidricaParcela])
+async def dashboard_eficiencia_hidrica(
+    anio: int = Query(..., ge=2000, le=2100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[EficienciaHidricaParcela]:
+    start = date(anio, 5, 1)
+    end = date(anio + 1, 4, 30)
+
+    parcelas = list(
+        (await db.execute(
+            select(Parcela).where(
+                Parcela.is_active.is_(True),
+                Parcela.tipo == TipoParcela.parral,
+                Parcela.superficie_ha.is_not(None),
+            )
+        )).scalars().all()
+    )
+    parcela_ids = [p.id for p in parcelas]
+
+    riego_rows = (await db.execute(
+        select(RegistroRiego.parcela_id, func.sum(RegistroRiego.mm_aplicados).label("mm_total"))
+        .where(
+            RegistroRiego.parcela_id.in_(parcela_ids),
+            RegistroRiego.fecha >= start,
+            RegistroRiego.fecha <= end,
+            RegistroRiego.mm_aplicados.is_not(None),
+        )
+        .group_by(RegistroRiego.parcela_id)
+    )).all()
+    mm_por_parcela: dict[str, float] = {row.parcela_id: float(row.mm_total) for row in riego_rows}
+
+    ciclos = list(
+        (await db.execute(
+            select(CicloCampana).where(
+                CicloCampana.parcela_id.in_(parcela_ids),
+                CicloCampana.anio == anio,
+                CicloCampana.rendimiento_kg_ha.is_not(None),
+            )
+        )).scalars().all()
+    )
+    best_rend: dict[str, Decimal] = {}
+    for c in ciclos:
+        if c.parcela_id not in best_rend or c.rendimiento_kg_ha > best_rend[c.parcela_id]:
+            best_rend[c.parcela_id] = c.rendimiento_kg_ha
+
+    items: list[EficienciaHidricaParcela] = []
+    for p in parcelas:
+        mm = mm_por_parcela.get(p.id, 0.0)
+        if mm == 0.0:
+            continue
+        rend = best_rend.get(p.id)
+        eficiencia = float(rend) / mm if rend is not None else None
+        items.append(EficienciaHidricaParcela(
+            parcela_id=p.id,
+            parcela_nombre=p.nombre,
+            variedad=p.variedad.value if p.variedad is not None else None,
+            superficie_ha=p.superficie_ha,
+            mm_aplicados_total=mm,
+            rendimiento_kg_ha=float(rend) if rend is not None else None,
+            eficiencia_kg_por_mm=eficiencia,
+        ))
+
+    items.sort(key=lambda x: (x.eficiencia_kg_por_mm is None, -(x.eficiencia_kg_por_mm or 0.0)))
+    return items
 
 
 # ── Trabajo diario ─────────────────────────────────────────────────────────────

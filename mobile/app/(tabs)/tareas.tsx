@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
+import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import type { Parcela, RegistroTrabajo, TrabajadorItem, UnidadMedida } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
 
@@ -539,10 +540,14 @@ export default function TareasScreen() {
   const [refreshing, setRefreshing] = useState(false)
 
   const loadParcelas = useCallback(async () => {
+    const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
+    if (cached) { setParcelas(cached); setLoadingParcelas(false) }
     try {
       const { data } = await api.get<Parcela[]>('/parcelas/mapa')
-      setParcelas(data.filter((p) => p.is_active))
-    } catch { /* offline */ }
+      const active = data.filter((p) => p.is_active)
+      setParcelas(active)
+      await setCache('parcelas', active)
+    } catch { /* offline — use cache */ }
     finally { setLoadingParcelas(false) }
   }, [])
 

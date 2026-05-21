@@ -1,5 +1,6 @@
 from app.models.user import User, UserRole
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
+from app.models.push_token import PushToken
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -24,6 +25,7 @@ from app.models.produccion import (
 )
 
 __all__ = [
+    "PushToken",
     "User",
     "UserRole",
     "Parcela",

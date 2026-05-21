@@ -3,11 +3,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Legend,
 } from 'recharts'
 import { AlertTriangle, TrendingUp } from 'lucide-react'
-import { getEgresos, TIPO_EGRESO_VALUES, TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
+import { getEgresos, getEgresosPorMes, TIPO_EGRESO_VALUES, TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
+import type { TipoEgreso } from '@/lib/api/egresos'
+import { getIngresos } from '@/lib/api/ingresos'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -20,9 +22,6 @@ const FINCA_OPTIONS = [
   { value: 'media_agua', label: 'Media Agua' },
   { value: 'caucete', label: 'Caucete' },
 ]
-const FINCA_LABELS: Record<string, string> = {
-  los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete',
-}
 const ORIGEN_OPTIONS = [
   { value: 'oficial', label: 'Oficial' },
   { value: 'no_oficial', label: 'No Oficial' },
@@ -66,7 +65,7 @@ function KpiCard({ label, value, sub, color }: {
   return (
     <div className={`bg-white rounded-lg border border-gray-200 border-l-4 ${cls.border} shadow-sm p-4`}>
       <p className="text-sm font-medium text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${cls.val}`}>{value}</p>
+      <p className={`text-xl font-bold mt-1 leading-tight truncate ${cls.val}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   )
@@ -154,6 +153,18 @@ export default function FinanceDashboardPage() {
     staleTime: 60_000,
   })
 
+  const { data: ingresos = [] } = useQuery({
+    queryKey: ['finanzas-dash-ingresos', anio],
+    queryFn: () => getIngresos({ fecha_desde: campaignDesde, fecha_hasta: campaignHasta, moneda: 'ars', limit: 1000 }),
+    staleTime: 60_000,
+  })
+
+  const { data: egresosPorMes } = useQuery({
+    queryKey: ['egresos-por-mes', anio],
+    queryFn: () => getEgresosPorMes(anio),
+    staleTime: 60_000,
+  })
+
   // ── Client-side filter ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let data = egresos
@@ -170,6 +181,8 @@ export default function FinanceDashboardPage() {
   const gastoOficial   = useMemo(() => filtered.filter((e) => e.origen === 'oficial').reduce((s, e) => s + Number(e.monto), 0), [filtered])
   const gastoNoOficial = useMemo(() => filtered.filter((e) => e.origen === 'no_oficial').reduce((s, e) => s + Number(e.monto), 0), [filtered])
   const ivaEstimado    = gastoOficial * 0.21
+  const ingresoTotal   = useMemo(() => ingresos.reduce((s, i) => s + Number(i.monto), 0), [ingresos])
+  const saldoARS       = ingresoTotal - gastoTotal
 
   // ── Monthly evolution ────────────────────────────────────────────────────
   const monthlyEvolution = useMemo(() => {
@@ -232,14 +245,46 @@ export default function FinanceDashboardPage() {
     }
   }, [filtered, gastoTotal])
 
-  // ── Distribución por finca ───────────────────────────────────────────────
-  const fincaData = useMemo(() => {
+  // ── Flujo mensual (ingresos vs egresos por mes) ──────────────────────────
+  const flujoMensual = useMemo(() => {
+    const months: Array<{ label: string; key: string; ingresos: number; egresos: number; saldo: number }> = []
+    for (let i = 0; i < 12; i++) {
+      const m = ((4 + i) % 12) + 1
+      const y = m >= 5 ? anio : anio + 1
+      const key = `${y}-${String(m).padStart(2, '0')}`
+      const label = MONTH_NAMES[m - 1]
+      const ing = ingresos.filter((r) => r.fecha.slice(0, 7) === key).reduce((s, r) => s + Number(r.monto), 0)
+      const egr = filtered.filter((r) => r.fecha.slice(0, 7) === key).reduce((s, r) => s + Number(r.monto), 0)
+      months.push({ label, key, ingresos: ing, egresos: egr, saldo: ing - egr })
+    }
+    return months
+  }, [ingresos, filtered, anio])
+
+  // ── Distribución por tipo de egreso ─────────────────────────────────────
+  const tipoData = useMemo(() => {
     const map: Record<string, number> = {}
-    for (const e of filtered) map[e.finca] = (map[e.finca] ?? 0) + Number(e.monto)
+    for (const e of filtered) map[e.tipo] = (map[e.tipo] ?? 0) + Number(e.monto)
     return Object.entries(map)
-      .map(([finca, value]) => ({ name: FINCA_LABELS[finca] ?? finca, value }))
+      .map(([tipo, value]) => ({ name: TIPO_EGRESO_LABELS[tipo as TipoEgreso] ?? tipo, value }))
       .sort((a, b) => b.value - a.value)
+      .map((d, i) => ({ ...d, fill: PIE_COLORS[i % PIE_COLORS.length] }))
   }, [filtered])
+
+  // ── Stacked egresos por tipo por mes (full campaign, unfiltered) ─────────
+  const stackedData = useMemo(() => {
+    if (!egresosPorMes) return []
+    const map: Record<string, Record<string, number | string>> = {}
+    for (const item of egresosPorMes.items) {
+      if (!map[item.mes_key]) {
+        const m = parseInt(item.mes_key.slice(5, 7)) - 1
+        map[item.mes_key] = { _label: MONTH_NAMES[m] }
+      }
+      map[item.mes_key][item.tipo] = Number(item.total)
+    }
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => v)
+  }, [egresosPorMes])
 
   function applyFilters() {
     setApplied({
@@ -269,7 +314,7 @@ export default function FinanceDashboardPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <KpiCard label="Gasto Total" value={fmtARS(gastoTotal)} color="blue" />
           <KpiCard
             label="Gasto Oficial"
@@ -284,6 +329,13 @@ export default function FinanceDashboardPage() {
             color="red"
           />
           <KpiCard label="IVA Estimado" value={fmtARS(ivaEstimado)} sub="21% del oficial" color="purple" />
+          <KpiCard label="Ingresos ARS" value={fmtARS(ingresoTotal)} color="green" />
+          <KpiCard
+            label="Saldo Campaña"
+            value={`${saldoARS >= 0 ? '+' : ''}${fmtARS(saldoARS)}`}
+            color={saldoARS >= 0 ? 'green' : 'red'}
+            sub={ingresoTotal > 0 ? `Margen ${((saldoARS / ingresoTotal) * 100).toFixed(1)}%` : undefined}
+          />
         </div>
 
         {/* Aumentos + Estacionalidad */}
@@ -353,7 +405,73 @@ export default function FinanceDashboardPage() {
           </div>
         </div>
 
-        {/* Evolución de gastos + Finca pie */}
+        {/* Ingresos vs Egresos — ComposedChart */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Ingresos vs Egresos — Campaña {anio}/{anio + 1}</h3>
+          <div style={{ height: 300 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={flujoMensual} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="bars" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
+                <YAxis yAxisId="line" orientation="right" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
+                <Tooltip
+                  formatter={(value, name) => [
+                    fmtARS(Number(value)),
+                    name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Saldo',
+                  ]}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                <Legend formatter={(v) => v === 'ingresos' ? 'Ingresos' : v === 'egresos' ? 'Egresos' : 'Saldo'} />
+                <Bar yAxisId="bars" dataKey="ingresos" fill="#16a34a" radius={[4, 4, 0, 0]} maxBarSize={32} name="ingresos" />
+                <Bar yAxisId="bars" dataKey="egresos" fill="#dc2626" radius={[4, 4, 0, 0]} maxBarSize={32} name="egresos" />
+                <Line yAxisId="line" type="monotone" dataKey="saldo" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} name="saldo" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Egresos por Tipo por Mes — stacked bar (full campaign, unfiltered) */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Egresos por Tipo por Mes — Campaña {anio}/{anio + 1}</h3>
+          {stackedData.length === 0 ? (
+            <div className="flex items-center justify-center h-20 text-gray-400 text-sm">Sin datos</div>
+          ) : (
+            <>
+              <div style={{ height: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stackedData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="_label" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        const label = typeof name === 'string'
+                          ? (TIPO_EGRESO_LABELS[name as TipoEgreso] ?? name)
+                          : String(name)
+                        return [fmtARS(Number(value)), label]
+                      }}
+                      contentStyle={{ fontSize: 12 }}
+                    />
+                    {(egresosPorMes?.tipos_presentes ?? []).map((tipo, i) => (
+                      <Bar key={tipo} dataKey={tipo} stackId="a" fill={PIE_COLORS[i % PIE_COLORS.length]} name={tipo} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-3 mt-3">
+                {(egresosPorMes?.tipos_presentes ?? []).map((tipo, i) => (
+                  <div key={tipo} className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-xs text-gray-600">{TIPO_EGRESO_LABELS[tipo as TipoEgreso] ?? tipo}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Evolución de gastos + Tipo donut */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
@@ -396,23 +514,22 @@ export default function FinanceDashboardPage() {
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Distribución por Finca</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Egresos por Tipo</h3>
             <div style={{ height: 280 }}>
-              {fincaData.length === 0 ? (
+              {tipoData.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-gray-400 text-sm">Sin datos</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={fincaData}
+                      data={tipoData}
                       cx="50%"
                       cy="42%"
+                      innerRadius={50}
                       outerRadius={90}
                       dataKey="value"
                       nameKey="name"
-                    >
-                      {fincaData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                    </Pie>
+                    />
                     <Tooltip content={<PieTooltip />} />
                     <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
                   </PieChart>

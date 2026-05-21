@@ -75,16 +75,17 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
   const [editSuperficie, setEditSuperficie] = useState(String(parcela?.superficie_ha ?? ''))
   const [saving, setSaving] = useState(false)
 
-  const d30 = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]
+  const { fechaDesde, fechaHasta } = useMemo(() => {
+    const now = new Date()
+    const year = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
+    return { fechaDesde: `${year}-05-01`, fechaHasta: now.toISOString().split('T')[0] }
   }, [])
-  const today = new Date().toISOString().split('T')[0]
 
   const { data: trabajos = [], isLoading: loadTrab } = useQuery({
-    queryKey: ['panel-trabajo', parcela?.id],
+    queryKey: ['panel-trabajo', parcela?.id, fechaDesde],
     queryFn: async () => {
       const { data } = await api.get<{ id: string; fecha: string; tarea: string; monto_total: number }[]>(
-        '/produccion/trabajo/', { params: { parcela_id: parcela!.id, fecha_desde: d30, fecha_hasta: today, limit: 500 } }
+        '/produccion/trabajo/', { params: { parcela_id: parcela!.id, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 500 } }
       )
       return data
     },
@@ -93,10 +94,10 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
   })
 
   const { data: riegos = [], isLoading: loadRiego } = useQuery({
-    queryKey: ['panel-riego', parcela?.id],
+    queryKey: ['panel-riego', parcela?.id, fechaDesde],
     queryFn: async () => {
       const { data } = await api.get<{ id: string; inicio: string; mm_aplicados: number }[]>(
-        '/produccion/riego/', { params: { parcela_id: parcela!.id, fecha_desde: d30, fecha_hasta: today, limit: 200 } }
+        '/produccion/riego/', { params: { parcela_id: parcela!.id, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 200 } }
       )
       return data
     },
@@ -215,21 +216,23 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
               </div>
             )}
 
-            {estado && (
+            {estado?.estado_fenologico && (
               <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2">
                 <Sprout size={14} className="text-green-600 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-medium text-green-800">
                     {ESTADO_LABELS[estado.estado_fenologico] ?? estado.estado_fenologico}
                   </p>
-                  <p className="text-xs text-green-500">{estado.fecha_estado.split('-').reverse().join('/')}</p>
+                  {estado.fecha_estado && (
+                    <p className="text-xs text-green-500">{estado.fecha_estado.split('-').reverse().join('/')}</p>
+                  )}
                 </div>
               </div>
             )}
 
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                <Droplets size={13} /> Agua — últimos 30 días
+                <Droplets size={13} /> Agua — campaña actual
               </p>
               {loadRiego ? (
                 <div className="h-7 bg-gray-100 rounded animate-pulse" />
@@ -243,7 +246,7 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
 
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                <ClipboardList size={13} /> Últimas tareas (30 días)
+                <ClipboardList size={13} /> Últimas tareas — campaña actual
               </p>
               {loadTrab ? (
                 <div className="space-y-1.5">
@@ -265,7 +268,7 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
 
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                <DollarSign size={13} /> Costo laboral (30 días)
+                <DollarSign size={13} /> Costo laboral — campaña actual
               </p>
               {loadTrab ? (
                 <div className="h-7 bg-gray-100 rounded animate-pulse" />

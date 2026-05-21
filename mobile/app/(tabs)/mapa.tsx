@@ -227,7 +227,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           )}
           {panel.mmTotal !== null && (
             <View style={[panelStyles.statCard, { borderColor: '#bfdbfe' }]}>
-              <Text style={panelStyles.statLabel}>MM · 30 DÍAS</Text>
+              <Text style={panelStyles.statLabel}>MM · CAMPAÑA</Text>
               <Text style={[panelStyles.statValue, { color: '#1d4ed8' }]}>
                 {panel.mmTotal.toFixed(1)} mm
               </Text>
@@ -269,7 +269,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
         )}
 
         {!panel.loadingExtra && !estadoLabel && panel.tareas.length === 0 && panel.mmTotal === 0 && (
-          <Text style={panelStyles.emptyText}>Sin registros en los últimos 30 días</Text>
+          <Text style={panelStyles.emptyText}>Sin registros en la campaña actual</Text>
         )}
       </ScrollView>
     </View>
@@ -342,10 +342,10 @@ export default function MapaScreen() {
   useEffect(() => { loadData() }, [loadData])
 
   async function fetchPanelExtras(parcelaId: string): Promise<{ mmTotal: number; tareas: { tarea: string; fecha: string }[] }> {
-    const d30 = new Date()
-    d30.setDate(d30.getDate() - 30)
-    const desde = d30.toISOString().split('T')[0]
-    const today = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const year = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
+    const desde = `${year}-05-01`
+    const today = now.toISOString().split('T')[0]
     try {
       const [riegosRes, tareasRes] = await Promise.all([
         api.get<{ mm_aplicados: number | null }[]>('/produccion/riego/', {

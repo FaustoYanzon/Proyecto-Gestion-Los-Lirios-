@@ -150,12 +150,12 @@ export interface CicloCampanaItem {
 }
 
 export interface EstadoActualItem {
-  id: string
+  id: string | null
   parcela_id: string
   parcela_nombre: string
-  anio: number
-  estado_fenologico: string
-  fecha_estado: string
+  anio: number | null
+  estado_fenologico: string | null
+  fecha_estado: string | null
 }
 
 export interface ResumenTrabajadorItem {
@@ -183,6 +183,18 @@ export async function getEstadoActual(): Promise<EstadoActualItem[]> {
   return data
 }
 
+export async function createCicloCampana(payload: {
+  parcela_id: string
+  anio: number
+  estado_fenologico: string
+  fecha_estado: string
+  rendimiento_kg_ha?: number | null
+  observaciones?: string | null
+}): Promise<CicloCampanaItem> {
+  const { data } = await api.post('/produccion/campana/', payload)
+  return data
+}
+
 export async function getResumenPorTrabajador(params?: { fecha_desde?: string; fecha_hasta?: string; parcela_id?: string }): Promise<ResumenTrabajadorItem[]> {
   const { data } = await api.get('/produccion/trabajo/resumen/por-trabajador', { params })
   return data
@@ -207,4 +219,46 @@ export function formatParcelaLabel(nombre: string): string {
   return nombre
     .replace(/^Parral\s+/i, 'P. ')
     .replace(/^Potrero\s+/i, 'P. ')
+}
+
+// ── Dashboard producción ──────────────────────────────────────────────────────
+
+export interface RendimientoAnio {
+  anio: number
+  rendimiento_kg_ha: number | null
+  kg_totales: number | null
+}
+
+export interface RendimientoHistoricoParcela {
+  parcela_id: string
+  parcela_nombre: string
+  variedad: string | null
+  superficie_ha: number | null
+  campanas: RendimientoAnio[]
+}
+
+export interface EficienciaHidricaParcela {
+  parcela_id: string
+  parcela_nombre: string
+  variedad: string | null
+  superficie_ha: number | null
+  mm_aplicados_total: number
+  rendimiento_kg_ha: number | null
+  eficiencia_kg_por_mm: number | null
+}
+
+export async function getRendimientoHistorico(anios: number[]): Promise<RendimientoHistoricoParcela[]> {
+  const params = new URLSearchParams()
+  anios.forEach((a) => params.append('anios', String(a)))
+  const { data } = await api.get<RendimientoHistoricoParcela[]>(
+    `/produccion/dashboard/rendimiento-historico?${params.toString()}`
+  )
+  return data
+}
+
+export async function getEficienciaHidrica(anio: number): Promise<EficienciaHidricaParcela[]> {
+  const { data } = await api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', {
+    params: { anio },
+  })
+  return data
 }

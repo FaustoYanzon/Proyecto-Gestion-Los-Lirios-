@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useAuthStore } from '../store/authStore'
+import { registerForPushNotifications } from '../lib/notifications'
 
 function AuthGuard() {
   const user = useAuthStore((s) => s.user)
@@ -24,10 +25,13 @@ function AuthGuard() {
 
 export default function RootLayout() {
   const initAuth = useAuthStore((s) => s.initAuth)
+  const user = useAuthStore((s) => s.user)
+
+  useEffect(() => { initAuth() }, [])
 
   useEffect(() => {
-    initAuth()
-  }, [])
+    if (user) registerForPushNotifications()
+  }, [user])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
