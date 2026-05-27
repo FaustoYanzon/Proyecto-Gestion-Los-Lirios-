@@ -12,11 +12,12 @@ import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import type { Parcela } from '../../lib/types'
 import { FINCA_FEATURES } from '../../lib/kmlData'
+import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
 const TYPE_COLORS: Record<string, { stroke: string; fill: string }> = {
-  parral:   { stroke: '#15803d', fill: '#22c55e' },
-  potrero:  { stroke: '#1d4ed8', fill: '#3b82f6' },
-  pasero:   { stroke: '#b45309', fill: '#f59e0b' },
+  parral:   { stroke: '#5b21b6', fill: '#7c3aed' },
+  potrero:  { stroke: '#15803d', fill: '#22c55e' },
+  pasero:   { stroke: '#78350f', fill: '#a16207' },
   cabezal:  { stroke: '#0e7490', fill: '#06b6d4' },
   finca:    { stroke: '#15803d', fill: 'transparent' },
   pipeline: { stroke: '#c47e2a', fill: 'transparent' },
@@ -52,7 +53,7 @@ interface ParcelPanel {
   loadingExtra: boolean
 }
 
-function buildMapHTML(parcelas: Parcela[]): string {
+function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData): string {
   const featuresJSON = JSON.stringify(FINCA_FEATURES)
   const parcelasJSON = JSON.stringify(
     parcelas.map((p) => ({
@@ -62,6 +63,13 @@ function buildMapHTML(parcelas: Parcela[]): string {
   )
   const typeColorsJSON = JSON.stringify(TYPE_COLORS)
   const varColorsJSON = JSON.stringify(VAR_COLORS)
+
+  // Serialize each layer; null-safe (empty FeatureCollection → no features rendered)
+  const acequiasJSON = JSON.stringify(layers.acequias)
+  const lineaElectricaJSON = JSON.stringify(layers.lineaElectrica)
+  const caneriasJSON = JSON.stringify(layers.canerias)
+  const valvulasJSON = JSON.stringify(layers.valvulas)
+  const cuadrantesRiegoJSON = JSON.stringify(layers.cuadrantesRiego)
 
   return `<!DOCTYPE html>
 <html>
@@ -73,6 +81,8 @@ function buildMapHTML(parcelas: Parcela[]): string {
 * { margin:0; padding:0; box-sizing:border-box; }
 html,body,#map { width:100%; height:100%; }
 .leaflet-container { font-family: -apple-system, sans-serif; }
+
+/* ── Mode button ──────────────────────────────── */
 #mode-btn {
   position:absolute; top:10px; left:10px; z-index:1000;
   background:#fff; border:1px solid #d1d5db; border-radius:8px;
@@ -80,6 +90,41 @@ html,body,#map { width:100%; height:100%; }
   color:#374151; cursor:pointer; display:flex; align-items:center; gap:5px;
   box-shadow:0 1px 4px rgba(0,0,0,0.12);
 }
+
+/* ── Layer control ────────────────────────────── */
+#layer-btn-wrap {
+  position:absolute; top:10px; right:10px; z-index:1000;
+}
+#layer-toggle-btn {
+  background:#fff; border:1px solid #d1d5db; border-radius:8px;
+  padding:7px 12px; font-size:12px; font-weight:700; color:#374151;
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.12); white-space:nowrap;
+}
+#layer-panel {
+  display:none; position:absolute; top:calc(100% + 6px); right:0;
+  background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding:10px 12px; box-shadow:0 2px 8px rgba(0,0,0,0.15);
+  min-width:164px;
+}
+.lp-title {
+  font-size:10px; font-weight:700; color:#6b7280;
+  text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;
+}
+.lp-row {
+  display:flex; align-items:center; gap:7px;
+  margin-bottom:7px; cursor:pointer;
+}
+.lp-row:last-child { margin-bottom:0; }
+.lp-row input[type=checkbox] {
+  width:14px; height:14px; accent-color:#16a34a; cursor:pointer; flex-shrink:0;
+}
+.lp-line { width:18px; height:3px; border-radius:2px; flex-shrink:0; }
+.lp-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.lp-poly { width:12px; height:12px; border-radius:2px; border:1px solid #6b7280; flex-shrink:0; }
+.lp-lbl  { font-size:12px; color:#374151; }
+
+/* ── Legend ───────────────────────────────────── */
 #legend {
   position:absolute; bottom:20px; left:10px; z-index:1000;
   background:rgba(255,255,255,0.96); border:1px solid #e5e7eb;
@@ -87,15 +132,50 @@ html,body,#map { width:100%; height:100%; }
   box-shadow:0 2px 8px rgba(0,0,0,0.12); min-width:110px;
 }
 .legend-title { font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:7px; }
-.legend-item { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
-.legend-dot { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+.legend-item  { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+.legend-dot   { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
 .legend-label { font-size:12px; color:#374151; }
+.legend-sep   { border-top:1px solid #e5e7eb; margin:6px 0 5px; }
+.legend-item-sm { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
 </style>
 </head>
 <body>
 <div id="map"></div>
+
+<!-- Mode button -->
 <button id="mode-btn" onclick="toggleMode()">&#9632; Por tipo</button>
-<div id="legend"><div class="legend-title" id="legend-title">Tipo</div><div id="legend-items"></div></div>
+
+<!-- Layer control -->
+<div id="layer-btn-wrap">
+  <button id="layer-toggle-btn" onclick="toggleLayerPanel()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7"/>
+      <polyline points="2 17 12 22 22 17"/>
+      <polyline points="2 12 12 17 22 12"/>
+    </svg>
+    Capas
+  </button>
+  <div id="layer-panel">
+    <div class="lp-title">Infraestructura</div>
+    <label class="lp-row"><input type="checkbox" id="cb-acequias" checked onchange="toggleLayer('acequias')"><span class="lp-line" style="background:#38bdf8"></span><span class="lp-lbl">Acequias</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-lineaElectrica" checked onchange="toggleLayer('lineaElectrica')"><span class="lp-line" style="background:#facc15"></span><span class="lp-lbl">Línea eléctrica</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-canerias" checked onchange="toggleLayer('canerias')"><span class="lp-line" style="background:#1e3a8a"></span><span class="lp-lbl">Cañerías</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-valvulas" checked onchange="toggleLayer('valvulas')"><span class="lp-dot" style="background:#1e3a8a"></span><span class="lp-lbl">Válvulas</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-cuadrantesRiego" checked onchange="toggleLayer('cuadrantesRiego')"><span class="lp-poly" style="background:#d1d5db"></span><span class="lp-lbl">Cuadrantes</span></label>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="legend-title" id="legend-title">Tipo</div>
+  <div id="legend-items"></div>
+  <div class="legend-sep"></div>
+  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#38bdf8;flex-shrink:0"></div><span class="legend-label">Acequias</span></div>
+  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#facc15;flex-shrink:0"></div><span class="legend-label">L. eléctrica</span></div>
+  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#1e3a8a;flex-shrink:0"></div><span class="legend-label">Cañerías</span></div>
+  <div class="legend-item-sm"><div style="width:10px;height:10px;border-radius:50%;background:#1e3a8a;flex-shrink:0"></div><span class="legend-label">Válvulas</span></div>
+  <div class="legend-item-sm"><div style="width:12px;height:12px;border-radius:2px;border:1px solid #6b7280;background:#d1d5db;flex-shrink:0"></div><span class="legend-label">Cuadrantes</span></div>
+</div>
 
 <script>
 const FEATURES = ${featuresJSON};
@@ -103,13 +183,24 @@ const PARCELAS = ${parcelasJSON};
 const TYPE_COLORS = ${typeColorsJSON};
 const VAR_COLORS = ${varColorsJSON};
 
+// Infrastructure GeoJSON data
+const GEO_DATA = {
+  acequias:        ${acequiasJSON},
+  lineaElectrica:  ${lineaElectricaJSON},
+  canerias:        ${caneriasJSON},
+  valvulas:        ${valvulasJSON},
+  cuadrantesRiego: ${cuadrantesRiegoJSON},
+};
+
 let colorMode = 'type';
 let selectedName = null;
 const polyMap = {};
+const layerGroups = {};
 
 const map = L.map('map', { center: [-32.027, -68.397], zoom: 15, attributionControl: false });
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
 
+// ── KML parcelas ────────────────────────────────────────────────────────────
 function getStyle(f, selected) {
   const p = PARCELAS.find(p => p.nombre === f.name);
   let stroke, fill;
@@ -121,7 +212,10 @@ function getStyle(f, selected) {
   }
   return {
     color: stroke, weight: selected ? 3 : 1.5,
-    fillColor: fill, fillOpacity: selected ? 0.65 : (f.type === 'finca' ? 0.02 : 0.3),
+    fillColor: fill,
+    fillOpacity: f.type === 'finca' ? 0.02
+      : f.type === 'parral' ? (selected ? 0.3 : 0.15)
+      : (selected ? 0.65 : 0.3),
     dashArray: f.type === 'finca' ? '7,4' : undefined,
   };
 }
@@ -179,8 +273,126 @@ FEATURES.forEach(f => {
   poly.addTo(map);
 });
 
+// ── Coordinate normalisation ────────────────────────────────────────────────
+// GeoJSON spec: [lng, lat]. Some tools export [lat, lng] by mistake.
+// For Los Lirios (Mendoza): lat ≈ -32, lng ≈ -68.
+// If first coordinate value > -60 it is latitude-first → swap everything.
+function swapCoordsArr(c) {
+  if (!Array.isArray(c)) return c;
+  if (c.length >= 2 && typeof c[0] === 'number') return [c[1], c[0]].concat(c.slice(2));
+  return c.map(swapCoordsArr);
+}
+
+function normalizeGeoJSON(data) {
+  if (!data || !Array.isArray(data.features) || !data.features.length) return data;
+  var geom = data.features[0] && data.features[0].geometry;
+  var sample = null;
+  if (geom) {
+    if (geom.type === 'Point') sample = geom.coordinates;
+    else if (geom.type === 'LineString') sample = geom.coordinates[0];
+    else if (geom.type === 'Polygon') sample = geom.coordinates[0] && geom.coordinates[0][0];
+    else if (geom.type === 'MultiLineString') sample = geom.coordinates[0] && geom.coordinates[0][0];
+  }
+  if (!sample || sample[0] < -60) return data; // already lng-first
+  var cloned = JSON.parse(JSON.stringify(data));
+  cloned.features.forEach(function(f) {
+    f.geometry.coordinates = swapCoordsArr(f.geometry.coordinates);
+  });
+  return cloned;
+}
+
+// ── Infrastructure layers ───────────────────────────────────────────────────
+function hasFeatures(data) {
+  return data && Array.isArray(data.features) && data.features.length > 0;
+}
+
+function makePopupHandler(label) {
+  return function(feature, layer) {
+    var props = feature && feature.properties;
+    if (!props) return;
+    var entries = Object.keys(props).filter(function(k) {
+      return props[k] != null && props[k] !== '';
+    });
+    if (!entries.length) return;
+    var rows = entries.map(function(k) {
+      return '<div style="margin:0 0 2px"><span style="color:#9ca3af;text-transform:capitalize">' +
+        k.replace(/_/g, ' ') + ':</span> ' + props[k] + '</div>';
+    }).join('');
+    layer.bindPopup(
+      '<div style="font-family:-apple-system,sans-serif;font-size:12px;color:#4b5563">' +
+      '<p style="font-size:12px;font-weight:700;color:#111827;margin:0 0 5px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">' +
+      label + '</p>' + rows + '</div>',
+      { maxWidth: 240 }
+    );
+  };
+}
+
+function initExtraLayers() {
+  var cfgs = [
+    { key: 'acequias',        type: 'line',  color: '#38bdf8', label: 'Acequia'         },
+    { key: 'lineaElectrica',  type: 'line',  color: '#facc15', label: 'Línea eléctrica' },
+    { key: 'canerias',        type: 'line',  color: '#1e3a8a', label: 'Cañería'         },
+    { key: 'valvulas',        type: 'point', color: '#1e3a8a', label: 'Válvula'         },
+    { key: 'cuadrantesRiego', type: 'poly',  color: '#d1d5db', label: null              },
+  ];
+
+  cfgs.forEach(function(cfg) {
+    var raw = GEO_DATA[cfg.key];
+    if (!hasFeatures(raw)) return;
+    var data = normalizeGeoJSON(raw);
+
+    var geoLayer;
+    if (cfg.type === 'point') {
+      geoLayer = L.geoJSON(data, {
+        pointToLayer: function(feature, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 5, color: cfg.color, fillColor: cfg.color,
+            fillOpacity: 1, weight: 1.5,
+          });
+        },
+        onEachFeature: cfg.label ? makePopupHandler(cfg.label) : null,
+      });
+    } else if (cfg.type === 'poly') {
+      geoLayer = L.geoJSON(data, {
+        style: function() {
+          return { color: cfg.color, fillColor: cfg.color, fillOpacity: 0.15, weight: 1.5 };
+        },
+        interactive: false,
+      });
+    } else {
+      geoLayer = L.geoJSON(data, {
+        style: function() { return { color: cfg.color, weight: 2, opacity: 0.85 }; },
+        onEachFeature: cfg.label ? makePopupHandler(cfg.label) : null,
+      });
+    }
+
+    var group = L.layerGroup([geoLayer]);
+    layerGroups[cfg.key] = group;
+    group.addTo(map);
+  });
+}
+
+// ── Layer panel toggle ──────────────────────────────────────────────────────
+function toggleLayerPanel() {
+  var panel = document.getElementById('layer-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleLayer(key) {
+  var group = layerGroups[key];
+  if (!group) return;
+  var cb = document.getElementById('cb-' + key);
+  if (cb && cb.checked) {
+    if (!map.hasLayer(group)) group.addTo(map);
+  } else {
+    if (map.hasLayer(group)) map.removeLayer(group);
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
 updateLegend();
-setTimeout(() => map.invalidateSize(), 200);
+initExtraLayers();
+setTimeout(function() { map.invalidateSize(); }, 200);
 </script>
 </body>
 </html>`
@@ -403,7 +615,7 @@ export default function MapaScreen() {
     )
   }
 
-  const html = buildMapHTML(parcelas)
+  const html = buildMapHTML(parcelas, GEO_LAYERS)
 
   return (
     <View style={styles.container}>

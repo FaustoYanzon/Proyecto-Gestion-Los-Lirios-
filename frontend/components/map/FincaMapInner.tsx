@@ -12,13 +12,14 @@ import {
 } from '@/lib/api/produccion'
 import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
+import LayerControl, { type LayerVisibility } from './LayerControl'
 
 type ColorMode = 'type' | 'variedad' | 'cosecha'
 
 const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
-  parral:   { color: '#16a34a', fillColor: '#22c55e' },
-  potrero:  { color: '#2563eb', fillColor: '#3b82f6' },
-  pasero:   { color: '#d97706', fillColor: '#f59e0b' },
+  parral:   { color: '#5b21b6', fillColor: '#7c3aed' },
+  potrero:  { color: '#15803d', fillColor: '#22c55e' },
+  pasero:   { color: '#78350f', fillColor: '#a16207' },
   cabezal:  { color: '#0891b2', fillColor: '#06b6d4' },
   finca:    { color: '#16a34a', fillColor: '#22c55e' },
   pipeline: { color: '#c47e2a', fillColor: '#c47e2a' },
@@ -77,7 +78,9 @@ function getPolyStyle(
     color,
     weight: selected ? 3 : 1.5,
     fillColor: fill,
-    fillOpacity: selected ? 0.55 : f.type === 'finca' ? 0.04 : 0.3,
+    fillOpacity: f.type === 'finca' ? 0.04
+      : f.type === 'parral' ? (selected ? 0.28 : 0.15)
+      : (selected ? 0.55 : 0.3),
     dashArray: f.type === 'finca' ? '6,4' : undefined,
   }
 }
@@ -332,15 +335,78 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
 
 interface Props { compact?: boolean; height?: string; cosechaByParcelaId?: Record<string, number> }
 
+// ── GeoJSON coordinate helpers ───────────────────────────────────────────────
+// GeoJSON spec: [lng, lat]. Some tools (Google Earth, QGIS export) save [lat, lng].
+// For Los Lirios (Mendoza): lat ≈ -32, lng ≈ -68.
+// Detection: if first coordinate value > -60, it's latitude-first → swap.
+
+function swapCoordsArr(c: unknown): unknown {
+  if (!Array.isArray(c)) return c
+  if (c.length >= 2 && typeof c[0] === 'number') return [c[1], c[0], ...c.slice(2)]
+  return c.map(swapCoordsArr)
+}
+
+function normalizeGeoJSON(raw: object): object {
+  const data = raw as { features?: Array<{ geometry: { type: string; coordinates: unknown } }> }
+  if (!data?.features?.length) return raw
+  const geom = data.features[0]?.geometry
+  let sample: number[] | null = null
+  if (geom?.type === 'Point')           sample = geom.coordinates as number[]
+  else if (geom?.type === 'LineString') sample = (geom.coordinates as number[][])[0]
+  else if (geom?.type === 'Polygon')    sample = ((geom.coordinates as number[][][])[0])?.[0]
+  else if (geom?.type === 'MultiLineString') sample = ((geom.coordinates as number[][][])[0])?.[0]
+  if (!sample || sample[0] < -60) return raw // already lng-first (valid for Mendoza)
+  // Swap [lat, lng] → [lng, lat] throughout all features
+  const cloned = JSON.parse(JSON.stringify(raw)) as typeof data
+  cloned.features?.forEach(f => { f.geometry.coordinates = swapCoordsArr(f.geometry.coordinates) })
+  return cloned as object
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeInfraPopup(label: string): (feature: any, layer: L.Layer) => void {
+  return (feature, layer) => {
+    const props = feature?.properties as Record<string, unknown> | null
+    if (!props) return
+    const entries = Object.entries(props).filter(([, v]) => v != null && v !== '')
+    if (entries.length === 0) return
+    const rows = entries.map(([k, v]) =>
+      `<div style="margin:0 0 2px"><span style="color:#9ca3af;text-transform:capitalize">${k.replace(/_/g, ' ')}:</span> ${v}</div>`
+    ).join('')
+    ;(layer as L.Path).bindPopup(
+      `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;color:#4b5563">` +
+      `<p style="font-size:11px;font-weight:700;color:#111827;margin:0 0 5px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">${label}</p>` +
+      rows + `</div>`,
+      { maxWidth: 260 }
+    )
+  }
+}
+
+const INFRA_LEGEND = [
+  { label: 'Acequias',        color: '#38bdf8', shape: 'line'   as const },
+  { label: 'Línea eléctrica', color: '#facc15', shape: 'line'   as const },
+  { label: 'Cañerías',        color: '#1e3a8a', shape: 'line'   as const },
+  { label: 'Válvulas',        color: '#1e3a8a', shape: 'dot'    as const },
+  { label: 'Cuadrantes',      color: '#9ca3af', shape: 'poly'   as const },
+]
+
 export default function FincaMapInner({ compact = false, height = '100%', cosechaByParcelaId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerGroupRef = useRef<L.LayerGroup | null>(null)
   const polyRef = useRef(new Map<string, L.Polygon>())
 
+  // Extra infrastructure layers
+  const extraGroupsRef = useRef<Partial<Record<keyof LayerVisibility, L.LayerGroup>>>({})
+  const visibleLayersRef = useRef<LayerVisibility>({
+    acequias: true, lineaElectrica: true, canerias: true, valvulas: true, cuadrantesRiego: true,
+  })
+
   const [features, setFeatures] = useState<KMLFeature[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('type')
+  const [mapReady, setMapReady] = useState(false)
+  const [visibleLayers, setVisibleLayers] = useState<LayerVisibility>(visibleLayersRef.current)
+  const [layerData, setLayerData] = useState<Partial<Record<keyof LayerVisibility, object>>>({})
 
   const { data: parcelas = [] } = useQuery({
     queryKey: ['parcelas-mapa'],
@@ -356,6 +422,7 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
 
   useEffect(() => { loadFincaKML().then(setFeatures) }, [])
 
+  // ── Map initialisation ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     const map = L.map(containerRef.current, {
@@ -372,6 +439,7 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
     ).addTo(map)
     layerGroupRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
+    setMapReady(true)
     // Force tile recalculation after container fully settles
     const t = setTimeout(() => map.invalidateSize(), 100)
     return () => {
@@ -379,10 +447,12 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
       map.remove()
       mapRef.current = null
       layerGroupRef.current = null
+      extraGroupsRef.current = {}
+      setMapReady(false)
     }
   }, [compact])
 
-  // Create polygon layers (only when features change)
+  // ── KML polygon layers ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !layerGroupRef.current || features.length === 0) return
     layerGroupRef.current.clearLayers()
@@ -415,7 +485,7 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
     return vals.length > 0 ? Math.max(...vals) : 0
   }, [cosechaByParcelaId])
 
-  // Update styles when parcelas, selection, colorMode, or cosecha data changes
+  // ── Style updates ────────────────────────────────────────────────────────────
   useEffect(() => {
     const maxKg = maxKgLegend
     polyRef.current.forEach((poly, name) => {
@@ -425,12 +495,115 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
     })
   }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend])
 
+  // ── Load GeoJSON layer data ──────────────────────────────────────────────────
+  useEffect(() => {
+    const layers: Array<{ key: keyof LayerVisibility; path: string }> = [
+      { key: 'acequias',        path: '/layers/Acequias.geojson'                                    },
+      { key: 'lineaElectrica',  path: '/layers/Linea%20Electrica.geojson'                           },
+      { key: 'canerias',        path: '/layers/Ca%C3%B1erias%20Primarias%20y%20Secundarias.geojson' },
+      { key: 'valvulas',        path: '/layers/Valvulas.geojson'                                    },
+      { key: 'cuadrantesRiego', path: '/layers/Cuadrantes%20de%20Riego.geojson'                     },
+    ]
+    Promise.allSettled(
+      layers.map(({ key, path }) =>
+        fetch(path)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => ({ key, data }))
+          .catch((err) => { console.error(`[mapa] Error cargando capa "${key}":`, err); return { key, data: null } })
+      )
+    ).then(results => {
+      const newData: Partial<Record<keyof LayerVisibility, object>> = {}
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value?.data) newData[r.value.key] = r.value.data
+      })
+      setLayerData(newData)
+    })
+  }, [])
+
+  // ── Build Leaflet layer groups when map + data are ready ─────────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    const map = mapRef.current
+
+    // Remove old groups
+    Object.values(extraGroupsRef.current).forEach(g => {
+      if (g && map.hasLayer(g)) map.removeLayer(g)
+    })
+    extraGroupsRef.current = {}
+
+    type CfgEntry = { key: keyof LayerVisibility; build: (data: object) => L.Layer }
+    const configs: CfgEntry[] = [
+      {
+        key: 'acequias',
+        build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
+          style: () => ({ color: '#38bdf8', weight: 2, opacity: 0.85 }),
+          onEachFeature: makeInfraPopup('Acequia'),
+        }),
+      },
+      {
+        key: 'lineaElectrica',
+        build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
+          style: () => ({ color: '#facc15', weight: 2, opacity: 0.85 }),
+          onEachFeature: makeInfraPopup('Línea eléctrica'),
+        }),
+      },
+      {
+        key: 'canerias',
+        build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
+          style: () => ({ color: '#1e3a8a', weight: 2, opacity: 0.85 }),
+          onEachFeature: makeInfraPopup('Cañería'),
+        }),
+      },
+      {
+        key: 'valvulas',
+        build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
+          pointToLayer: (_f, latlng) =>
+            L.circleMarker(latlng, {
+              radius: 5, color: '#1e3a8a', fillColor: '#1e3a8a',
+              fillOpacity: 1, weight: 1.5,
+            }),
+          onEachFeature: makeInfraPopup('Válvula'),
+        }),
+      },
+      {
+        key: 'cuadrantesRiego',
+        build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
+          style: () => ({ color: '#d1d5db', fillColor: '#d1d5db', fillOpacity: 0.15, weight: 1.5 }),
+          interactive: false,
+        }),
+      },
+    ]
+
+    configs.forEach(({ key, build }) => {
+      const data = layerData[key]
+      if (!data) return
+      const group = L.layerGroup([build(data)])
+      extraGroupsRef.current[key] = group
+      // Respect current visibility state (use ref to avoid stale closure)
+      if (visibleLayersRef.current[key]) group.addTo(map)
+    })
+  }, [mapReady, layerData])
+
+  // ── Toggle layer visibility ──────────────────────────────────────────────────
+  useEffect(() => {
+    visibleLayersRef.current = visibleLayers
+    if (!mapRef.current) return
+    const map = mapRef.current
+    ;(Object.keys(visibleLayers) as Array<keyof LayerVisibility>).forEach(key => {
+      const group = extraGroupsRef.current[key]
+      if (!group) return
+      if (visibleLayers[key] && !map.hasLayer(group)) group.addTo(map)
+      if (!visibleLayers[key] && map.hasLayer(group)) map.removeLayer(group)
+    })
+  }, [visibleLayers])
+
   const showPanel = !compact && !!selected && features.find(f => f.name === selected)?.type !== 'finca'
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height }}>
       <div ref={containerRef} className="absolute inset-0" />
 
+      {/* Color mode toggle — top left */}
       {!compact && (
         <button
           onClick={() => setColorMode(m => m === 'type' ? 'variedad' : m === 'variedad' ? 'cosecha' : 'type')}
@@ -441,6 +614,12 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
         </button>
       )}
 
+      {/* Layer control — top right */}
+      {!compact && (
+        <LayerControl visible={visibleLayers} onChange={setVisibleLayers} />
+      )}
+
+      {/* Legend — bottom left */}
       {!compact && (
         <div className="absolute bottom-4 left-3 z-[1000] bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 px-3 py-2.5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
@@ -478,6 +657,31 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
               )}
             </div>
           )}
+
+          {/* ── Infrastructure layers divider ──────────────────────── */}
+          <div className="border-t border-gray-100 mt-2 pt-2 space-y-1.5">
+            {INFRA_LEGEND.map(({ label, color, shape }) => (
+              <div key={label} className="flex items-center gap-2">
+                {shape === 'line' && (
+                  <div className="w-4 flex items-center flex-shrink-0">
+                    <div className="w-full h-[2px] rounded-full" style={{ background: color }} />
+                  </div>
+                )}
+                {shape === 'dot' && (
+                  <div className="w-3 flex items-center justify-center flex-shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                  </div>
+                )}
+                {shape === 'poly' && (
+                  <div
+                    className="w-3 h-3 rounded-[2px] border flex-shrink-0"
+                    style={{ background: color, borderColor: '#9ca3af' }}
+                  />
+                )}
+                <span className="text-xs text-gray-500">{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

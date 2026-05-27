@@ -23,7 +23,7 @@ function inferType(name: string): KMLFeature['type'] {
 }
 
 export async function loadFincaKML(): Promise<KMLFeature[]> {
-  const resp = await fetch('/los-lirios.kml')
+  const resp = await fetch('/Los%20Lirios%202026.kml')
   const text = await resp.text()
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   const features: KMLFeature[] = []
