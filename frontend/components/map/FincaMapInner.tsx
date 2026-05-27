@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, Droplets, ClipboardList, DollarSign, Sprout, Layers, Edit2, Save, XCircle } from 'lucide-react'
+import { X, Droplets, ClipboardList, DollarSign, Sprout, Layers, Edit2, Save, XCircle, ShoppingBasket } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { loadFincaKML, type KMLFeature } from '@/lib/kml'
@@ -13,7 +13,7 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 
-type ColorMode = 'type' | 'variedad'
+type ColorMode = 'type' | 'variedad' | 'cosecha'
 
 const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
   parral:   { color: '#16a34a', fillColor: '#22c55e' },
@@ -39,7 +39,33 @@ function formatARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 }
 
-function getPolyStyle(f: KMLFeature, p: ParcelaItem | undefined, selected: boolean, mode: ColorMode): L.PathOptions {
+function cosechaColor(kg: number, maxKg: number): string {
+  if (kg <= 0 || maxKg <= 0) return '#f3f4f6'
+  const ratio = Math.min(kg / maxKg, 1)
+  const r = Math.round(220 - ratio * (220 - 21))
+  const g = Math.round(252 - ratio * (252 - 128))
+  const b = Math.round(231 - ratio * (231 - 61))
+  return `rgb(${r},${g},${b})`
+}
+
+function getPolyStyle(
+  f: KMLFeature,
+  p: ParcelaItem | undefined,
+  selected: boolean,
+  mode: ColorMode,
+  cosechaByParcelaId?: Record<string, number>,
+  maxKg?: number,
+): L.PathOptions {
+  if (mode === 'cosecha') {
+    const kg = (p?.id != null && cosechaByParcelaId?.[p.id]) ? cosechaByParcelaId[p.id] : 0
+    const fill = cosechaColor(kg, maxKg ?? 0)
+    return {
+      color: '#166534',
+      weight: selected ? 3 : 1.5,
+      fillColor: fill,
+      fillOpacity: selected ? 0.75 : 0.6,
+    }
+  }
   let color: string, fill: string
   if (mode === 'variedad' && f.type === 'parral' && p?.variedad) {
     color = fill = VAR_COLORS[p.variedad] ?? '#94a3b8'
@@ -62,10 +88,11 @@ interface PanelProps {
   name: string
   parcelas: ParcelaItem[]
   estadoActual: EstadoActualItem[]
+  cosechaByParcelaId?: Record<string, number>
   onClose: () => void
 }
 
-function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
+function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose }: PanelProps) {
   const qc = useQueryClient()
   const user = useAuthStore(s => s.user)
   const parcela = parcelas.find(p => p.nombre === name)
@@ -230,6 +257,22 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
               </div>
             )}
 
+            {cosechaByParcelaId && parcela?.id && cosechaByParcelaId[parcela.id] != null && (
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                  <ShoppingBasket size={13} /> Cosecha — campaña actual
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-green-700">
+                    {cosechaByParcelaId[parcela.id].toLocaleString('es-AR')} kg
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {(cosechaByParcelaId[parcela.id] / 1000).toFixed(1)} t
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                 <Droplets size={13} /> Agua — campaña actual
@@ -287,9 +330,9 @@ function ParcelPanel({ name, parcelas, estadoActual, onClose }: PanelProps) {
 
 // ── Componente principal ─────────────────────────────────────────────────────
 
-interface Props { compact?: boolean; height?: string }
+interface Props { compact?: boolean; height?: string; cosechaByParcelaId?: Record<string, number> }
 
-export default function FincaMapInner({ compact = false, height = '100%' }: Props) {
+export default function FincaMapInner({ compact = false, height = '100%', cosechaByParcelaId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerGroupRef = useRef<L.LayerGroup | null>(null)
@@ -367,14 +410,20 @@ export default function FincaMapInner({ compact = false, height = '100%' }: Prop
     })
   }, [features, compact])
 
-  // Update styles when parcelas, selection, or colorMode changes
+  const maxKgLegend = useMemo(() => {
+    const vals = Object.values(cosechaByParcelaId ?? {})
+    return vals.length > 0 ? Math.max(...vals) : 0
+  }, [cosechaByParcelaId])
+
+  // Update styles when parcelas, selection, colorMode, or cosecha data changes
   useEffect(() => {
+    const maxKg = maxKgLegend
     polyRef.current.forEach((poly, name) => {
       const f = features.find(feat => feat.name === name)
       const p = parcelas.find(parc => parc.nombre === name)
-      if (f) poly.setStyle(getPolyStyle(f, p, name === selected, colorMode))
+      if (f) poly.setStyle(getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg))
     })
-  }, [features, parcelas, selected, colorMode])
+  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend])
 
   const showPanel = !compact && !!selected && features.find(f => f.name === selected)?.type !== 'finca'
 
@@ -384,41 +433,51 @@ export default function FincaMapInner({ compact = false, height = '100%' }: Prop
 
       {!compact && (
         <button
-          onClick={() => setColorMode(m => m === 'type' ? 'variedad' : 'type')}
+          onClick={() => setColorMode(m => m === 'type' ? 'variedad' : m === 'variedad' ? 'cosecha' : 'type')}
           className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg shadow-md text-xs font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 transition-colors"
         >
           <Layers size={13} />
-          {colorMode === 'type' ? 'Por tipo' : 'Por variedad'}
+          {colorMode === 'type' ? 'Por tipo' : colorMode === 'variedad' ? 'Por variedad' : '🌿 kg cosechados'}
         </button>
       )}
 
       {!compact && (
         <div className="absolute bottom-4 left-3 z-[1000] bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 px-3 py-2.5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-            {colorMode === 'type' ? 'Tipo' : 'Variedad'}
+            {colorMode === 'type' ? 'Tipo' : colorMode === 'variedad' ? 'Variedad' : 'Cosecha'}
           </p>
-          <div className="space-y-1.5">
-            {colorMode === 'type' ? (
-              [
-                { k: 'parral', label: 'Parral' },
-                { k: 'potrero', label: 'Potrero' },
-                { k: 'pasero', label: 'Pasero' },
-                { k: 'cabezal', label: 'Cabezal' },
-              ].map(({ k, label }) => (
-                <div key={k} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: TYPE_STYLES[k].fillColor }} />
-                  <span className="text-xs text-gray-700">{label}</span>
-                </div>
-              ))
-            ) : (
-              Object.entries(VARIEDAD_LABELS).map(([k, v]) => (
-                <div key={k} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: VAR_COLORS[k] ?? '#94a3b8' }} />
-                  <span className="text-xs text-gray-700">{v}</span>
-                </div>
-              ))
-            )}
-          </div>
+          {colorMode === 'cosecha' ? (
+            <div>
+              <div className="w-28 h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #dcfce7, #15803d)' }} />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>0</span>
+                <span>{maxKgLegend > 0 ? `${(maxKgLegend / 1000).toFixed(1)}t` : '—'}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {colorMode === 'type' ? (
+                [
+                  { k: 'parral', label: 'Parral' },
+                  { k: 'potrero', label: 'Potrero' },
+                  { k: 'pasero', label: 'Pasero' },
+                  { k: 'cabezal', label: 'Cabezal' },
+                ].map(({ k, label }) => (
+                  <div key={k} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: TYPE_STYLES[k].fillColor }} />
+                    <span className="text-xs text-gray-700">{label}</span>
+                  </div>
+                ))
+              ) : (
+                Object.entries(VARIEDAD_LABELS).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: VAR_COLORS[k] ?? '#94a3b8' }} />
+                    <span className="text-xs text-gray-700">{v}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -427,6 +486,7 @@ export default function FincaMapInner({ compact = false, height = '100%' }: Prop
           name={selected!}
           parcelas={parcelas}
           estadoActual={estadoActual}
+          cosechaByParcelaId={cosechaByParcelaId}
           onClose={() => setSelected(null)}
         />
       )}

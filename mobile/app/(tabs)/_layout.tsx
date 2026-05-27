@@ -70,6 +70,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="cosecha"
+        options={{
+          title: 'Cosecha',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="basket-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',

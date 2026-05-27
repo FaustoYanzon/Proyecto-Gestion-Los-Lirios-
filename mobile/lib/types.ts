@@ -199,3 +199,84 @@ export function calcMmRiego(inicioISO: string, finISO: string): number | null {
   if (horas <= 0) return null
   return Math.round(horas * MM_POR_HORA * 100) / 100
 }
+
+// ─── Cosecha ──────────────────────────────────────────────────────────────────
+
+export type CultivoCosecha = 'vid' | 'chacra' | 'ind_pasa' | 'alfalfa' | 'otro'
+export type DestinoCosecha = 'MI' | 'BODEGA' | 'EXPO' | 'PASAS' | 'RAMA_PASA' | 'SEMILLA' | 'DESC' | 'FARDO'
+export type TipoEnvase = 'caja' | 'bin' | 'chasis' | 'ficha' | 'vin' | 'bolsa' | 'otro'
+
+export interface RegistroCosecha {
+  id: string
+  temporada: number
+  semana: number | null
+  fecha: string
+  parcela_id: string | null
+  parcela_nombre: string | null
+  cultivo: CultivoCosecha
+  variedad: string | null
+  n_remito: string | null
+  n_ciu: string | null
+  destino: DestinoCosecha
+  comprador: string | null
+  cuadrilla: string | null
+  vehiculo_patente: string | null
+  tipo_envase: TipoEnvase
+  cantidad_envases: number | null
+  peso_unitario_kg: number | null
+  bruto_kg: number | null
+  tara_kg: number | null
+  kg_total: number
+  observaciones: string | null
+  created_at: string
+}
+
+export interface RegistroCosechaCreate {
+  fecha: string
+  parcela_id?: string | null
+  cultivo?: CultivoCosecha
+  variedad?: string | null
+  n_remito?: string | null
+  n_ciu?: string | null
+  destino: DestinoCosecha
+  comprador?: string | null
+  cuadrilla?: string | null
+  vehiculo_patente?: string | null
+  tipo_envase?: TipoEnvase
+  cantidad_envases?: number | null
+  peso_unitario_kg?: number | null
+  bruto_kg?: number | null
+  tara_kg?: number | null
+  kg_total: number
+  observaciones?: string | null
+}
+
+export const DESTINO_LABELS: Record<DestinoCosecha, string> = {
+  MI: 'Mercado Interno',
+  BODEGA: 'Bodega',
+  EXPO: 'Exportación',
+  PASAS: 'Pasas',
+  RAMA_PASA: 'Rama Pasa',
+  SEMILLA: 'Semilla',
+  DESC: 'Descarte',
+  FARDO: 'Fardo',
+}
+
+export const CULTIVO_LABELS: Record<CultivoCosecha, string> = {
+  vid: 'Vid',
+  chacra: 'Chacra',
+  ind_pasa: 'Ind. Pasa',
+  alfalfa: 'Alfalfa',
+  otro: 'Otro',
+}
+
+export const DESTINO_COLORS: Record<DestinoCosecha, string> = {
+  MI: '#16a34a',
+  BODEGA: '#2563eb',
+  EXPO: '#7c3aed',
+  PASAS: '#d97706',
+  RAMA_PASA: '#b45309',
+  SEMILLA: '#0891b2',
+  DESC: '#dc2626',
+  FARDO: '#4b5563',
+}

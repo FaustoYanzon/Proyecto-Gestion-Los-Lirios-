@@ -15,6 +15,8 @@ import {
 } from '@/lib/api/produccion'
 import type { EficienciaHidricaParcela } from '@/lib/api/produccion'
 import { getAlertasCarencia } from '@/lib/api/fitosanitarios'
+import { getCosechaTotales, getCosechaResumenPorParcela, DESTINO_LABELS } from '@/lib/api/cosecha'
+import type { DestinoCosecha } from '@/lib/api/cosecha'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,18 @@ interface ScatterPoint {
 
 export default function ProduccionDashboardPage() {
   const [anio, setAnio] = useState(DEFAULT_YEAR)
+
+  const { data: cosechaTotales } = useQuery({
+    queryKey: ['cosecha-totales', anio],
+    queryFn: () => getCosechaTotales(anio),
+    staleTime: 60_000,
+  })
+
+  const { data: cosechaParrales = [] } = useQuery({
+    queryKey: ['cosecha-parcelas', anio],
+    queryFn: () => getCosechaResumenPorParcela(anio),
+    staleTime: 60_000,
+  })
 
   const { data: estadoActual = [] } = useQuery({
     queryKey: ['estado-actual'],
@@ -116,6 +130,54 @@ export default function ProduccionDashboardPage() {
           {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>{y}/{y + 1}</option>)}
         </select>
       </div>
+
+      {/* Cosecha section */}
+      {cosechaTotales && cosechaTotales.kg_total > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            Cosecha Campaña {anio}/{anio + 1}
+          </h3>
+
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="bg-green-50 rounded-md p-3 border border-green-100 text-center">
+              <p className="text-xs text-green-700 font-medium uppercase tracking-wide">Total kg</p>
+              <p className="text-xl font-bold text-green-800 mt-0.5">
+                {(cosechaTotales.kg_total / 1000).toFixed(1)}t
+              </p>
+            </div>
+            <div className="bg-blue-50 rounded-md p-3 border border-blue-100 text-center">
+              <p className="text-xs text-blue-700 font-medium uppercase tracking-wide">Remitos</p>
+              <p className="text-xl font-bold text-blue-800 mt-0.5">{cosechaTotales.n_registros}</p>
+            </div>
+            <div className="bg-amber-50 rounded-md p-3 border border-amber-100 text-center">
+              <p className="text-xs text-amber-700 font-medium uppercase tracking-wide">Parrales</p>
+              <p className="text-xl font-bold text-amber-800 mt-0.5">{cosechaTotales.n_parcelas}</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            {cosechaTotales.resumen_por_destino.map((d) => {
+              const pct = cosechaTotales.kg_total > 0
+                ? Math.round((d.kg_total / cosechaTotales.kg_total) * 100)
+                : 0
+              return (
+                <div key={d.destino} className="flex items-center gap-2 text-xs">
+                  <span className="w-28 text-gray-500 truncate">
+                    {DESTINO_LABELS[d.destino as DestinoCosecha] ?? d.destino}
+                  </span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2">
+                    <div className="bg-green-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-16 text-right font-medium text-gray-700">
+                    {(d.kg_total / 1000).toFixed(1)}t
+                  </span>
+                  <span className="w-8 text-right text-gray-400">{pct}%</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Alertas carencia */}
       {alertasCarencia.length > 0 && (

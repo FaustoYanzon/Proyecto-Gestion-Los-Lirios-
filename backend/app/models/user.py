@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.finanzas import Egreso, Ingreso
     from app.models.produccion import (
         CicloCampana,
+        RegistroCosecha,
         RegistroFitosanitario,
         RegistroRiego,
         RegistroTrabajo,
@@ -68,4 +69,7 @@ class User(Base):
     )
     ciclos_campana: Mapped[list[CicloCampana]] = relationship(
         "CicloCampana", back_populates="created_by_user"
+    )
+    registros_cosecha: Mapped[list[RegistroCosecha]] = relationship(
+        "RegistroCosecha", back_populates="created_by_user"
     )

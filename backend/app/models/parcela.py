@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.finanzas import Egreso
     from app.models.produccion import (
         CicloCampana,
+        RegistroCosecha,
         RegistroFitosanitario,
         RegistroRiego,
         RegistroTrabajo,
@@ -78,4 +79,7 @@ class Parcela(Base):
     )
     ciclos_campana: Mapped[list[CicloCampana]] = relationship(
         "CicloCampana", back_populates="parcela"
+    )
+    registros_cosecha: Mapped[list[RegistroCosecha]] = relationship(
+        "RegistroCosecha", back_populates="parcela"
     )

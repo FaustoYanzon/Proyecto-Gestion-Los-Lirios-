@@ -3,7 +3,14 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.produccion import ClasificacionTarea, EstadoFenologico, UnidadMedida
+from app.models.produccion import (
+    ClasificacionTarea,
+    CultivoCosecha,
+    DestinoCosecha,
+    EstadoFenologico,
+    TipoEnvase,
+    UnidadMedida,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -220,3 +227,94 @@ class EficienciaHidricaParcela(BaseModel):
     mm_aplicados_total: float
     rendimiento_kg_ha: float | None
     eficiencia_kg_por_mm: float | None
+
+
+# ── Registro Cosecha ──────────────────────────────────────────────────────────
+
+class RegistroCosechaBase(BaseModel):
+    fecha: date
+    parcela_id: str | None = None
+    cultivo: CultivoCosecha = CultivoCosecha.vid
+    variedad: str | None = None
+    n_remito: str | None = None
+    n_ciu: str | None = None
+    destino: DestinoCosecha
+    comprador: str | None = None
+    cuadrilla: str | None = None
+    acarreo: str | None = None
+    vehiculo_patente: str | None = None
+    tipo_envase: TipoEnvase = TipoEnvase.caja
+    cantidad_envases: float | None = None
+    peso_unitario_kg: float | None = None
+    bruto_kg: float | None = None
+    tara_kg: float | None = None
+    kg_total: float
+    imagen_remito_url: str | None = None
+    observaciones: str | None = None
+
+
+class RegistroCosechaCreate(RegistroCosechaBase):
+    pass
+
+
+class RegistroCosechaUpdate(BaseModel):
+    fecha: date | None = None
+    parcela_id: str | None = None
+    cultivo: CultivoCosecha | None = None
+    variedad: str | None = None
+    n_remito: str | None = None
+    n_ciu: str | None = None
+    destino: DestinoCosecha | None = None
+    comprador: str | None = None
+    cuadrilla: str | None = None
+    acarreo: str | None = None
+    vehiculo_patente: str | None = None
+    tipo_envase: TipoEnvase | None = None
+    cantidad_envases: float | None = None
+    peso_unitario_kg: float | None = None
+    bruto_kg: float | None = None
+    tara_kg: float | None = None
+    kg_total: float | None = None
+    imagen_remito_url: str | None = None
+    observaciones: str | None = None
+
+
+class RegistroCosechaResponse(RegistroCosechaBase):
+    id: str
+    temporada: int
+    semana: int | None
+    created_by: str
+    created_at: datetime
+    parcela_nombre: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── Summary schemas ───────────────────────────────────────────────────────────
+
+class CosechaResumenPorParcela(BaseModel):
+    parcela_id: str | None
+    parcela_nombre: str
+    variedad: str | None
+    kg_total: float
+    n_registros: int
+
+
+class CosechaResumenPorSemana(BaseModel):
+    semana: int
+    kg_total: float
+    n_registros: int
+
+
+class CosechaResumenPorDestino(BaseModel):
+    destino: str
+    kg_total: float
+    n_registros: int
+
+
+class CosechaTotalesResponse(BaseModel):
+    temporada: int
+    kg_total: float
+    n_registros: int
+    n_parcelas: int
+    resumen_por_destino: list[CosechaResumenPorDestino]

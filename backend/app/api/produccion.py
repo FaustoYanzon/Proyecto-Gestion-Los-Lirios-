@@ -21,10 +21,14 @@ from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     CicloCampana,
     ClasificacionTarea,
+    CultivoCosecha,
+    DestinoCosecha,
     EstadoFenologico,
+    RegistroCosecha,
     RegistroFitosanitario,
     RegistroRiego,
     RegistroTrabajo,
+    TipoEnvase,
     UnidadMedida,
 )
 from app.models.user import User
@@ -32,9 +36,16 @@ from app.schemas.produccion import (
     CicloCampanaCreate,
     CicloCampanaResponse,
     CicloCampanaUpdate,
+    CosechaResumenPorDestino,
+    CosechaResumenPorParcela,
+    CosechaResumenPorSemana,
+    CosechaTotalesResponse,
     EficienciaHidricaParcela,
     EstadoActualResponse,
     RegistroCargaMasiva,
+    RegistroCosechaCreate,
+    RegistroCosechaResponse,
+    RegistroCosechaUpdate,
     RegistroFitosanitarioCreate,
     RegistroFitosanitarioResponse,
     RegistroFitosanitarioUpdate,
@@ -803,4 +814,235 @@ async def delete_campana(
     if campana is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ciclo not found")
     await db.delete(campana)
+    await db.flush()
+
+
+# ── Cosecha ────────────────────────────────────────────────────────────────────
+
+async def _enrich_cosecha(registro: RegistroCosecha, db: AsyncSession) -> RegistroCosechaResponse:
+    resp = RegistroCosechaResponse.model_validate(registro)
+    if registro.parcela_id:
+        p = await db.get(Parcela, registro.parcela_id)
+        resp.parcela_nombre = p.nombre if p else None
+    return resp
+
+
+# Static sub-routes must come before /{cosecha_id}
+
+@router.get("/cosecha/resumen/totales", response_model=CosechaTotalesResponse)
+async def cosecha_totales(
+    temporada: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> CosechaTotalesResponse:
+    if temporada is None:
+        today = date.today()
+        temporada = today.year if today.month >= 5 else today.year - 1
+
+    stmt = select(RegistroCosecha).where(RegistroCosecha.temporada == temporada)
+    records = list((await db.execute(stmt)).scalars().all())
+
+    by_destino: dict[str, dict] = defaultdict(lambda: {"kg": 0.0, "n": 0})
+    parcelas_set: set[str | None] = set()
+    total_kg = 0.0
+
+    for r in records:
+        by_destino[r.destino.value]["kg"] += r.kg_total
+        by_destino[r.destino.value]["n"] += 1
+        parcelas_set.add(r.parcela_id)
+        total_kg += r.kg_total
+
+    return CosechaTotalesResponse(
+        temporada=temporada,
+        kg_total=round(total_kg, 2),
+        n_registros=len(records),
+        n_parcelas=len({p for p in parcelas_set if p is not None}),
+        resumen_por_destino=[
+            CosechaResumenPorDestino(destino=d, kg_total=round(v["kg"], 2), n_registros=v["n"])
+            for d, v in sorted(by_destino.items(), key=lambda x: x[1]["kg"], reverse=True)
+        ],
+    )
+
+
+@router.get("/cosecha/resumen/por-parcela", response_model=list[CosechaResumenPorParcela])
+async def cosecha_resumen_por_parcela(
+    temporada: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[CosechaResumenPorParcela]:
+    if temporada is None:
+        today = date.today()
+        temporada = today.year if today.month >= 5 else today.year - 1
+
+    stmt = select(RegistroCosecha).where(RegistroCosecha.temporada == temporada)
+    records = list((await db.execute(stmt)).scalars().all())
+
+    parcela_ids = {r.parcela_id for r in records if r.parcela_id}
+    parcela_map: dict[str, str] = {}
+    for pid in parcela_ids:
+        p = await db.get(Parcela, pid)
+        if p:
+            parcela_map[pid] = p.nombre
+
+    agg: dict[str | None, dict] = defaultdict(
+        lambda: {"kg": 0.0, "n": 0, "variedad": None, "nombre": "Sin parcela"}
+    )
+    for r in records:
+        key = r.parcela_id
+        agg[key]["kg"] += r.kg_total
+        agg[key]["n"] += 1
+        if key and key in parcela_map:
+            agg[key]["nombre"] = parcela_map[key]
+        if r.variedad:
+            agg[key]["variedad"] = r.variedad
+
+    return sorted(
+        [
+            CosechaResumenPorParcela(
+                parcela_id=pid,
+                parcela_nombre=data["nombre"],
+                variedad=data["variedad"],
+                kg_total=round(data["kg"], 2),
+                n_registros=data["n"],
+            )
+            for pid, data in agg.items()
+        ],
+        key=lambda x: x.kg_total,
+        reverse=True,
+    )
+
+
+@router.get("/cosecha/resumen/por-semana", response_model=list[CosechaResumenPorSemana])
+async def cosecha_resumen_por_semana(
+    temporada: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[CosechaResumenPorSemana]:
+    if temporada is None:
+        today = date.today()
+        temporada = today.year if today.month >= 5 else today.year - 1
+
+    stmt = (
+        select(RegistroCosecha)
+        .where(RegistroCosecha.temporada == temporada)
+        .where(RegistroCosecha.semana.is_not(None))
+    )
+    records = list((await db.execute(stmt)).scalars().all())
+
+    agg: dict[int, dict] = defaultdict(lambda: {"kg": 0.0, "n": 0})
+    for r in records:
+        w = r.semana
+        agg[w]["kg"] += r.kg_total
+        agg[w]["n"] += 1
+
+    return [
+        CosechaResumenPorSemana(semana=w, kg_total=round(d["kg"], 2), n_registros=d["n"])
+        for w, d in sorted(agg.items())
+    ]
+
+
+@router.get("/cosecha/", response_model=list[RegistroCosechaResponse])
+async def list_cosecha(
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
+    temporada: int | None = Query(None),
+    parcela_id: str | None = Query(None),
+    destino: DestinoCosecha | None = Query(None),
+    cultivo: CultivoCosecha | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[RegistroCosechaResponse]:
+    stmt = select(RegistroCosecha).order_by(RegistroCosecha.fecha.desc())
+    if fecha_desde is not None:
+        stmt = stmt.where(RegistroCosecha.fecha >= fecha_desde)
+    if fecha_hasta is not None:
+        stmt = stmt.where(RegistroCosecha.fecha <= fecha_hasta)
+    if temporada is not None:
+        stmt = stmt.where(RegistroCosecha.temporada == temporada)
+    if parcela_id is not None:
+        stmt = stmt.where(RegistroCosecha.parcela_id == parcela_id)
+    if destino is not None:
+        stmt = stmt.where(RegistroCosecha.destino == destino)
+    if cultivo is not None:
+        stmt = stmt.where(RegistroCosecha.cultivo == cultivo)
+    stmt = stmt.offset(skip).limit(limit)
+
+    records = list((await db.execute(stmt)).scalars().all())
+    return [await _enrich_cosecha(r, db) for r in records]
+
+
+@router.get("/cosecha/{cosecha_id}", response_model=RegistroCosechaResponse)
+async def get_cosecha(
+    cosecha_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> RegistroCosechaResponse:
+    result = await db.execute(select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id))
+    registro = result.scalar_one_or_none()
+    if registro is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    return await _enrich_cosecha(registro, db)
+
+
+@router.post("/cosecha/", response_model=RegistroCosechaResponse, status_code=status.HTTP_201_CREATED)
+async def create_cosecha(
+    cosecha_data: RegistroCosechaCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_up),
+) -> RegistroCosechaResponse:
+    data = cosecha_data.model_dump()
+    data["created_by"] = current_user.id
+    f = cosecha_data.fecha
+    data["temporada"] = f.year if f.month >= 5 else f.year - 1
+    registro = RegistroCosecha(**data)
+    db.add(registro)
+    await db.flush()
+    await db.refresh(registro)
+    return await _enrich_cosecha(registro, db)
+
+
+@router.put("/cosecha/{cosecha_id}", response_model=RegistroCosechaResponse)
+async def update_cosecha(
+    cosecha_id: str,
+    cosecha_data: RegistroCosechaUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> RegistroCosechaResponse:
+    result = await db.execute(select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id))
+    registro = result.scalar_one_or_none()
+    if registro is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+
+    update_data = cosecha_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(registro, field, value)
+
+    if "fecha" in update_data:
+        f = registro.fecha
+        registro.temporada = f.year if f.month >= 5 else f.year - 1
+
+    if "kg_total" not in update_data:
+        if registro.cantidad_envases and registro.peso_unitario_kg:
+            registro.kg_total = round(registro.cantidad_envases * registro.peso_unitario_kg, 2)
+        elif registro.bruto_kg is not None and registro.tara_kg is not None:
+            registro.kg_total = round(registro.bruto_kg - registro.tara_kg, 2)
+
+    await db.flush()
+    await db.refresh(registro)
+    return await _enrich_cosecha(registro, db)
+
+
+@router.delete("/cosecha/{cosecha_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_cosecha(
+    cosecha_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> None:
+    result = await db.execute(select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id))
+    registro = result.scalar_one_or_none()
+    if registro is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    await db.delete(registro)
     await db.flush()

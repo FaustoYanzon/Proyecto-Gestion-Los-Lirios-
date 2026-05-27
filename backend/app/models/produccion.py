@@ -289,3 +289,112 @@ class CicloCampana(Base):
     created_by_user: Mapped[User] = relationship(
         "User", back_populates="ciclos_campana"
     )
+
+
+class CultivoCosecha(str, enum.Enum):
+    vid = "vid"
+    chacra = "chacra"
+    ind_pasa = "ind_pasa"
+    alfalfa = "alfalfa"
+    otro = "otro"
+
+
+class DestinoCosecha(str, enum.Enum):
+    mercado_interno = "MI"
+    bodega = "BODEGA"
+    exportacion = "EXPO"
+    pasas = "PASAS"
+    rama_pasa = "RAMA_PASA"
+    semilla = "SEMILLA"
+    desc = "DESC"
+    fardo = "FARDO"
+
+
+class TipoEnvase(str, enum.Enum):
+    caja = "caja"
+    bin = "bin"
+    chasis = "chasis"
+    ficha = "ficha"
+    vin = "vin"
+    bolsa = "bolsa"
+    otro = "otro"
+
+
+class RegistroCosecha(Base):
+    __tablename__ = "registros_cosecha"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    temporada: Mapped[int] = mapped_column(Integer, nullable=False)
+    semana: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False)
+
+    parcela_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("parcelas.id"), nullable=True
+    )
+    cultivo: Mapped[CultivoCosecha] = mapped_column(
+        SAEnum(CultivoCosecha), nullable=False, default=CultivoCosecha.vid
+    )
+    variedad: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    n_remito: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    n_ciu: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    destino: Mapped[DestinoCosecha] = mapped_column(
+        SAEnum(DestinoCosecha), nullable=False
+    )
+    comprador: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
+    cuadrilla: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    acarreo: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    vehiculo_patente: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    tipo_envase: Mapped[TipoEnvase] = mapped_column(
+        SAEnum(TipoEnvase), nullable=False, default=TipoEnvase.caja
+    )
+    cantidad_envases: Mapped[float | None] = mapped_column(Float, nullable=True)
+    peso_unitario_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bruto_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tara_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kg_total: Mapped[float] = mapped_column(Float, nullable=False)
+
+    imagen_remito_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "kg_total" not in kwargs or kwargs["kg_total"] is None:
+            cantidad = kwargs.get("cantidad_envases")
+            peso_u = kwargs.get("peso_unitario_kg")
+            bruto = kwargs.get("bruto_kg")
+            tara = kwargs.get("tara_kg")
+            if cantidad is not None and peso_u is not None:
+                kwargs["kg_total"] = round(float(cantidad) * float(peso_u), 2)
+            elif bruto is not None and tara is not None:
+                kwargs["kg_total"] = round(float(bruto) - float(tara), 2)
+            else:
+                kwargs["kg_total"] = 0.0
+        if "temporada" not in kwargs and "fecha" in kwargs:
+            f = kwargs["fecha"]
+            kwargs["temporada"] = f.year if f.month >= 5 else f.year - 1
+        super().__init__(**kwargs)
+
+    parcela: Mapped["Parcela | None"] = relationship(
+        "Parcela", back_populates="registros_cosecha"
+    )
+    created_by_user: Mapped["User"] = relationship(
+        "User", back_populates="registros_cosecha"
+    )
