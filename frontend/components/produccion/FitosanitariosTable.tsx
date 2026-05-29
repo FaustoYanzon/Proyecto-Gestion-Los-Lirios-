@@ -100,7 +100,7 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                     <td className="px-3 py-3 whitespace-nowrap text-gray-700">{r.responsable}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => onEdit(r)} title="Editar" className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                        <button onClick={() => onEdit(r)} title="Editar" className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors">
                           <Pencil size={15} />
                         </button>
                         <button onClick={() => handleDelete(r.id)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">

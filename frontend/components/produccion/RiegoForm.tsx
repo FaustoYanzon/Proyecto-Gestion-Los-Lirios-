@@ -43,7 +43,7 @@ interface Props {
 const today = new Date().toISOString().split('T')[0]
 
 const field =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err = 'mt-1 text-xs text-red-600'
 
@@ -208,7 +208,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
 
       {/* Preview duración + mm */}
       {preview ? (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-md px-4 py-3">
+        <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#fbfaf6] rounded-md px-4 py-3">
           <Droplets size={18} className="text-blue-500 flex-shrink-0" />
           <div className="text-sm">
             <span className="text-blue-700 font-medium">{preview.horas}h de riego</span>
@@ -261,7 +261,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
               key={v}
               className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors select-none text-sm font-medium ${
                 selectedValvulas.has(v)
-                  ? 'bg-blue-50 border-blue-400 text-blue-700'
+                  ? 'bg-[#faf6ec] border-[#7a1f2c] text-[#7a1f2c]'
                   : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
               }`}
             >
@@ -292,7 +292,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
             type="checkbox"
             checked={conFertilizante}
             onChange={(e) => setConFertilizante(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-gray-300 text-[#7a1f2c] focus:ring-[#7a1f2c]"
           />
           <span className="text-sm font-medium text-gray-700">Con fertiriego</span>
         </label>
@@ -326,7 +326,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
         >
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
           {isEdit ? 'Guardar cambios' : 'Registrar riego'}

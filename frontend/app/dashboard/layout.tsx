@@ -3,85 +3,141 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  LayoutDashboard,
-  Map,
-  DollarSign,
-  TrendingDown,
-  TrendingUp,
-  BarChart3,
-  PieChart,
-  Sprout,
-  ClipboardList,
-  Droplets,
-  FlaskConical,
-  CalendarDays,
-  BarChart2,
-  HardHat,
-  ShoppingBasket,
-  Settings,
-  Users,
-  MapPin,
-  LogOut,
-  Menu,
-  ChevronDown,
-  ChevronRight,
+  LayoutDashboard, Map, Sprout, DollarSign,
+  Settings, Bell, LogOut,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { logout } from '@/lib/auth'
+import type { Role } from '@/lib/theme'
+import FincaSwitcher from '@/components/FincaSwitcher'
+import CampanaSwitcher from '@/components/CampanaSwitcher'
+import UserBadge from '@/components/UserBadge'
+import CommandPalette from '@/components/CommandPalette'
 
-type LucideIcon = React.ComponentType<{ size?: number; className?: string }>
+type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string; color?: string }>
 
-type NavLeaf = { href: string; label: string; icon: LucideIcon }
-type NavGroup = { label: string; icon: LucideIcon; children: NavLeaf[] }
-type NavItem = NavLeaf | NavGroup
-
-function isGroup(item: NavItem): item is NavGroup {
-  return 'children' in item
+type NavItem = {
+  href: string
+  label: string
+  short: string
+  icon: LucideIcon
+  matchFn: (path: string) => boolean
+  allowedRoles?: Role[]
 }
 
-const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
-  { href: '/dashboard/mapa', label: 'Mapa de Finca', icon: Map },
+const ALL_NAV: NavItem[] = [
   {
-    label: 'Finanzas',
-    icon: DollarSign,
-    children: [
-      { href: '/dashboard/finanzas/egresos', label: 'Egresos', icon: TrendingDown },
-      { href: '/dashboard/finanzas/ingresos', label: 'Ingresos', icon: TrendingUp },
-      { href: '/dashboard/finanzas/flujo', label: 'Flujo Anual', icon: BarChart3 },
-      { href: '/dashboard/finanzas/dashboard', label: 'Dashboard', icon: PieChart },
-    ],
+    href: '/dashboard',
+    label: 'Inicio',
+    short: 'Inicio',
+    icon: LayoutDashboard,
+    matchFn: (p) => p === '/dashboard',
   },
   {
+    href: '/dashboard/mapa',
+    label: 'Mapa',
+    short: 'Mapa',
+    icon: Map,
+    matchFn: (p) => p.startsWith('/dashboard/mapa'),
+  },
+  {
+    href: '/dashboard/produccion/tareas',
     label: 'Producción',
+    short: 'Prod.',
     icon: Sprout,
-    children: [
-      { href: '/dashboard/produccion/tareas', label: 'Tarea Diaria', icon: ClipboardList },
-      { href: '/dashboard/produccion/riego', label: 'Riego', icon: Droplets },
-      { href: '/dashboard/produccion/fitosanitarios', label: 'Fitosanitarios', icon: FlaskConical },
-      { href: '/dashboard/produccion/campana', label: 'Ciclo Campaña', icon: CalendarDays },
-      { href: '/dashboard/produccion/mano-de-obra', label: 'Mano de Obra', icon: HardHat },
-      { href: '/dashboard/produccion/cosecha', label: 'Cosecha', icon: ShoppingBasket },
-      { href: '/dashboard/produccion/dashboard', label: 'Dashboard', icon: BarChart2 },
+    matchFn: (p) =>
+      p.startsWith('/dashboard/produccion') &&
+      !p.startsWith('/dashboard/produccion/dashboard'),
+  },
+  {
+    href: '/dashboard/finanzas/egresos',
+    label: 'Finanzas',
+    short: 'Finanzas',
+    icon: DollarSign,
+    matchFn: (p) => p.startsWith('/dashboard/finanzas'),
+    allowedRoles: ['super_admin', 'gerencial'],
+  },
+  {
+    href: '/dashboard/admin/usuarios',
+    label: 'Admin',
+    short: 'Admin',
+    icon: Settings,
+    matchFn: (p) => p.startsWith('/dashboard/admin'),
+    allowedRoles: ['super_admin', 'gerencial'],
+  },
+]
+
+type SubNav = { prefix: string; items: { href: string; label: string }[] }
+
+const SUB_NAVS: SubNav[] = [
+  {
+    prefix: '/dashboard/produccion',
+    items: [
+      { href: '/dashboard/produccion/tareas',         label: 'Tareas'         },
+      { href: '/dashboard/produccion/riego',          label: 'Riego'          },
+      { href: '/dashboard/produccion/fitosanitarios', label: 'Fitosanitarios' },
+      { href: '/dashboard/produccion/campana',        label: 'Campaña'        },
+      { href: '/dashboard/produccion/cosecha',        label: 'Cosecha'        },
+      { href: '/dashboard/produccion/mano-de-obra',   label: 'Mano de Obra'   },
+      { href: '/dashboard/produccion/dashboard',      label: 'Dashboard Producción' },
     ],
   },
   {
-    label: 'Administración',
-    icon: Settings,
-    children: [
-      { href: '/dashboard/admin/usuarios', label: 'Usuarios', icon: Users },
-      { href: '/dashboard/admin/parcelas', label: 'Parcelas', icon: MapPin },
+    prefix: '/dashboard/finanzas',
+    items: [
+      { href: '/dashboard/finanzas/egresos',   label: 'Egresos'     },
+      { href: '/dashboard/finanzas/ingresos',  label: 'Ingresos'    },
+      { href: '/dashboard/finanzas/dashboard', label: 'Dashboard'   },
+      { href: '/dashboard/finanzas/flujo',     label: 'Flujo Anual' },
+    ],
+  },
+  {
+    prefix: '/dashboard/admin',
+    items: [
+      { href: '/dashboard/admin/usuarios', label: 'Usuarios' },
+      { href: '/dashboard/admin/parcelas', label: 'Parcelas' },
     ],
   },
 ]
 
-function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
-  const pathname = usePathname()
-  const router = useRouter()
-  const user = useAuthStore((state) => state.user)
-  const clearUser = useAuthStore((state) => state.clearUser)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+function SidebarItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
+  const iconColor  = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)'
+  const labelColor = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)'
+
+  return (
+    <Link
+      href={item.href}
+      title={item.label}
+      className={`flex flex-col items-center justify-center gap-1 w-14 py-2.5 rounded-xl mx-auto
+                  transition-colors duration-150 ${
+                    isActive ? 'hover:bg-white/20' : 'hover:bg-white/10'
+                  }`}
+      style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.12)' : undefined }}
+    >
+      <item.icon size={20} strokeWidth={1.5} color={iconColor} />
+      <span
+        className="text-[9px] font-bold uppercase tracking-wide leading-none"
+        style={{ color: labelColor }}
+      >
+        {item.short}
+      </span>
+    </Link>
+  )
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname  = usePathname()
+  const router    = useRouter()
+  const user      = useAuthStore((s) => s.user)
+  const clearUser = useAuthStore((s) => s.clearUser)
+  const [cmdOpen, setCmdOpen] = useState(false)
+
+  const role     = user?.role as Role | undefined
+  const subNav   = SUB_NAVS.find((s) => pathname.startsWith(s.prefix))
+  const navItems = ALL_NAV.filter(
+    (item) => !item.allowedRoles || (role && item.allowedRoles.includes(role))
+  )
 
   function handleLogout() {
     logout()
@@ -89,154 +145,139 @@ function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
     router.push('/login')
   }
 
-  function toggleGroup(label: string) {
-    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }))
-  }
-
-  function isGroupOpen(group: NavGroup): boolean {
-    const hasActiveChild = group.children.some((c) => pathname.startsWith(c.href))
-    return hasActiveChild || !!openGroups[group.label]
-  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCmdOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 py-5 border-b border-gray-100">
-        <span className="text-base font-semibold text-gray-900">Los Lirios SA</span>
-      </div>
+    <div className="flex h-screen overflow-hidden bg-white">
+      {/* Sidebar 68px */}
+      <aside
+        className="flex flex-col w-[68px] flex-shrink-0 py-3 items-center gap-1"
+        style={{ backgroundColor: '#7a1f2c' }}
+      >
+        {/* Logo mark */}
+        <Link
+          href="/dashboard"
+          className="flex items-center justify-center w-14 h-11 mb-3"
+          aria-label="Inicio"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-mark.svg"
+            alt=""
+            width={26}
+            height={26}
+            style={{ filter: 'brightness(0) invert(1)' }}
+          />
+        </Link>
 
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <div className="space-y-0.5">
-          {navItems.map((item) => {
-            if (!isGroup(item)) {
-              const active =
-                pathname === item.href ||
-                (item.href !== '/dashboard' && pathname.startsWith(item.href))
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavClick}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-green-50 text-green-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </Link>
-              )
-            }
+        {/* Nav items */}
+        <nav className="flex flex-col gap-0.5 flex-1 w-full px-1">
+          {navItems.map((item) => (
+            <SidebarItem
+              key={item.href}
+              item={item}
+              isActive={item.matchFn(pathname)}
+            />
+          ))}
+        </nav>
 
-            const open = isGroupOpen(item)
-            const groupActive = item.children.some((c) => pathname.startsWith(c.href))
-
-            return (
-              <div key={item.label}>
-                <button
-                  onClick={() => toggleGroup(item.label)}
-                  className={`flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    groupActive
-                      ? 'text-green-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <item.icon size={18} />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                </button>
-                {open && (
-                  <div className="mt-0.5 space-y-0.5">
-                    {item.children.map((child) => {
-                      const active = pathname.startsWith(child.href)
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          onClick={onNavClick}
-                          className={`flex items-center gap-3 pl-8 pr-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            active
-                              ? 'bg-green-50 text-green-700'
-                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                          }`}
-                        >
-                          <child.icon size={16} />
-                          {child.label}
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </nav>
-
-      <div className="px-3 py-4 border-t border-gray-100">
-        <div className="px-3 py-2 mb-1">
-          <p className="text-sm font-medium text-gray-900 truncate">
-            {user?.full_name ?? '—'}
-          </p>
-          <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-        </div>
+        {/* Logout */}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+          className="flex flex-col items-center justify-center gap-1 w-14 py-2.5 rounded-xl
+                     hover:bg-white/10 transition-colors duration-150 mb-1"
         >
-          <LogOut size={18} />
-          Cerrar sesión
+          <LogOut size={20} strokeWidth={1.5} color="rgba(255,255,255,0.55)" />
+          <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Salir
+          </span>
         </button>
-      </div>
-    </div>
-  )
-}
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [mobileOpen, setMobileOpen] = useState(false)
-
-  return (
-    <div
-      className="flex h-screen overflow-hidden bg-gray-50"
-      style={{ backgroundColor: '#f9fafb' }}
-    >
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-60 flex-shrink-0 bg-white border-r border-gray-200">
-        <Sidebar />
       </aside>
 
-      {/* Mobile sidebar overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileOpen(false)}>
-          <div className="absolute inset-0 bg-black/30" />
-          <aside
-            className="absolute left-0 top-0 bottom-0 w-60 bg-white shadow-xl z-50"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Sidebar onNavClick={() => setMobileOpen(false)} />
-          </aside>
-        </div>
-      )}
+      {/* Right column */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Topbar 56px */}
+        <header
+          className="flex items-center gap-3 h-14 px-4 flex-shrink-0 border-b bg-white"
+          style={{ borderColor: '#fbfaf6' }}
+        >
+          <div className="flex items-center gap-2">
+            <FincaSwitcher />
+            <CampanaSwitcher />
+          </div>
 
-      <div className="flex flex-col flex-1 overflow-hidden">
-        {/* Mobile header */}
-        <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100"
-          >
-            <Menu size={20} />
-          </button>
-          <span className="text-base font-semibold text-gray-900">Los Lirios SA</span>
+          <div className="flex-1 flex justify-center">
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border
+                         text-sm text-[#a09584] hover:bg-[#fbfaf6]
+                         transition-colors duration-150 min-w-[200px]"
+              style={{ borderColor: '#fbfaf6' }}
+            >
+              <span className="flex-1 text-left">Buscar...</span>
+              <kbd className="text-xs font-mono border border-[#a09584]/30 rounded px-1.5 py-0.5 bg-[#fbfaf6]">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-[#5a544c]" aria-label="Clima">☀ 22°</span>
+            <button
+              aria-label="Notificaciones"
+              className="flex items-center justify-center w-8 h-8 rounded-lg
+                         text-[#5a544c] hover:bg-[#fbfaf6] transition-colors"
+            >
+              <Bell size={18} strokeWidth={1.75} />
+            </button>
+            <UserBadge />
+          </div>
         </header>
 
-        <main
-          className="flex-1 overflow-y-auto p-6 bg-gray-50"
-          style={{ backgroundColor: '#f9fafb' }}
-        >
+        {/* Sub-nav tabs — módulos con sub-secciones */}
+        {subNav && (
+          <div
+            className="flex items-end gap-1 px-4 border-b flex-shrink-0"
+            style={{ borderColor: '#fbfaf6', backgroundColor: '#ffffff' }}
+          >
+            {subNav.items.map((tab) => {
+              const active = pathname.startsWith(tab.href)
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`flex items-center h-10 px-3 text-sm font-medium border-b-2
+                              transition-colors duration-150 whitespace-nowrap ${
+                                active
+                                  ? 'text-[#7a1f2c] border-[#7a1f2c]'
+                                  : 'text-[#5a544c] border-transparent hover:text-[#1f1a17]'
+                              }`}
+                >
+                  {tab.label}
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Canvas */}
+        <main className="flex-1 overflow-y-auto bg-white p-6">
           {children}
         </main>
       </div>
+
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </div>
   )
 }

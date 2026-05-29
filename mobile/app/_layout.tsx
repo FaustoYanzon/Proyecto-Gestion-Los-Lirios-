@@ -1,8 +1,20 @@
 import { useEffect } from 'react'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { useFonts } from 'expo-font'
+import {
+  PublicSans_400Regular,
+  PublicSans_600SemiBold,
+  PublicSans_700Bold,
+} from '@expo-google-fonts/public-sans'
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces'
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono'
+import * as SplashScreen from 'expo-splash-screen'
 import { useAuthStore } from '../store/authStore'
 import { registerForPushNotifications } from '../lib/notifications'
+import { colors } from '../lib/theme'
+
+SplashScreen.preventAutoHideAsync()
 
 function AuthGuard() {
   const user = useAuthStore((s) => s.user)
@@ -27,11 +39,25 @@ export default function RootLayout() {
   const initAuth = useAuthStore((s) => s.initAuth)
   const user = useAuthStore((s) => s.user)
 
+  const [fontsLoaded] = useFonts({
+    PublicSans_400Regular,
+    PublicSans_600SemiBold,
+    PublicSans_700Bold,
+    Fraunces_600SemiBold,
+    JetBrainsMono_500Medium,
+  })
+
   useEffect(() => { initAuth() }, [])
+
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync()
+  }, [fontsLoaded])
 
   useEffect(() => {
     if (user) registerForPushNotifications()
   }, [user])
+
+  if (!fontsLoaded) return null
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -44,8 +70,18 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: 'Estado Fenológico',
-            headerStyle: { backgroundColor: '#16a34a' },
-            headerTintColor: '#fff',
+            headerStyle: { backgroundColor: colors.burdeos[600] },
+            headerTintColor: colors.blanco,
+            headerTitleStyle: { fontWeight: 'bold' },
+          }}
+        />
+        <Stack.Screen
+          name="fito"
+          options={{
+            headerShown: true,
+            title: 'Aplicación Fitosanitaria',
+            headerStyle: { backgroundColor: colors.burdeos[600] },
+            headerTintColor: colors.blanco,
             headerTitleStyle: { fontWeight: 'bold' },
           }}
         />

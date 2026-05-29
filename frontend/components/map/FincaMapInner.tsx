@@ -17,11 +17,11 @@ import LayerControl, { type LayerVisibility } from './LayerControl'
 type ColorMode = 'type' | 'variedad' | 'cosecha'
 
 const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
-  parral:   { color: '#5b21b6', fillColor: '#7c3aed' },
-  potrero:  { color: '#15803d', fillColor: '#22c55e' },
-  pasero:   { color: '#78350f', fillColor: '#a16207' },
-  cabezal:  { color: '#0891b2', fillColor: '#06b6d4' },
-  finca:    { color: '#16a34a', fillColor: '#22c55e' },
+  parral:   { color: '#5a1320', fillColor: '#7a1f2c' },
+  potrero:  { color: '#2d4a28', fillColor: '#3f5c3a' },
+  pasero:   { color: '#6b4420', fillColor: '#8a5a2b' },
+  cabezal:  { color: '#2d5468', fillColor: '#3d6b86' },
+  finca:    { color: '#2d4a28', fillColor: '#3f5c3a' },
   pipeline: { color: '#c47e2a', fillColor: '#c47e2a' },
 }
 
@@ -93,9 +93,10 @@ interface PanelProps {
   estadoActual: EstadoActualItem[]
   cosechaByParcelaId?: Record<string, number>
   onClose: () => void
+  onQuickAction: (a: 'riego' | 'tarea' | 'fito') => void
 }
 
-function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose }: PanelProps) {
+function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose, onQuickAction }: PanelProps) {
   const qc = useQueryClient()
   const user = useAuthStore(s => s.user)
   const parcela = parcelas.find(p => p.nombre === name)
@@ -183,7 +184,7 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
           {canEdit && parcela && !editing && (
             <button
               onClick={() => { setEditVariedad(parcela.variedad ?? ''); setEditSuperficie(String(parcela.superficie_ha ?? '')); setEditing(true) }}
-              className="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+              className="p-1.5 rounded text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
             >
               <Edit2 size={14} />
             </button>
@@ -198,8 +199,8 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
         {parcela ? (
           <>
             {editing ? (
-              <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs font-medium text-blue-700">Editar parcela</p>
+              <div className="space-y-3 bg-[#faf6ec] border border-[#fbfaf6] rounded-lg p-3">
+                <p className="text-xs font-medium text-[#7a1f2c]">Editar parcela</p>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Variedad</label>
                   <select
@@ -224,7 +225,7 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
                 <div className="flex gap-2">
                   <button
                     onClick={handleSave} disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 disabled:opacity-60"
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-[#7a1f2c] text-white rounded-md py-1.5 hover:bg-[#5a1320] disabled:opacity-60"
                   >
                     <Save size={12} /> {saving ? 'Guardando...' : 'Guardar'}
                   </button>
@@ -284,7 +285,7 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
                 <div className="h-7 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-blue-700">{mmTotal.toFixed(1)} mm</span>
+                  <span className="text-sm font-bold text-[#3d6b86]">{mmTotal.toFixed(1)} mm</span>
                   <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
                 </div>
               )}
@@ -319,7 +320,7 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
               {loadTrab ? (
                 <div className="h-7 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <p className="text-base font-bold text-green-700">{costoTotal > 0 ? formatARS(costoTotal) : '—'}</p>
+                <p className="text-base font-bold text-[#3f5c3a]">{costoTotal > 0 ? formatARS(costoTotal) : '—'}</p>
               )}
             </div>
           </>
@@ -327,6 +328,26 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
           <p className="text-xs text-gray-400 text-center py-8">No hay registro de {name} en la base de datos.</p>
         )}
       </div>
+
+      {/* Acciones rápidas */}
+      {parcela && (
+        <div className="flex-shrink-0 border-t border-[#fbfaf6] px-4 py-3 flex gap-2">
+          {([
+            { key: 'riego', label: '+ Riego' },
+            { key: 'tarea', label: '+ Tarea' },
+            { key: 'fito',  label: '+ Fito'  },
+          ] as { key: 'riego' | 'tarea' | 'fito'; label: string }[]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => onQuickAction(key)}
+              className="flex-1 py-1.5 text-xs font-medium rounded-md border transition-colors
+                         border-[#fbfaf6] text-[#5a544c] hover:bg-[#7a1f2c] hover:text-white hover:border-[#7a1f2c]"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -398,14 +419,17 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
   // Extra infrastructure layers
   const extraGroupsRef = useRef<Partial<Record<keyof LayerVisibility, L.LayerGroup>>>({})
   const visibleLayersRef = useRef<LayerVisibility>({
-    acequias: true, lineaElectrica: true, canerias: true, valvulas: true, cuadrantesRiego: true,
+    acequias: false, lineaElectrica: false, canerias: false, valvulas: false, cuadrantesRiego: false,
   })
 
   const [features, setFeatures] = useState<KMLFeature[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [colorMode, setColorMode] = useState<ColorMode>('type')
+  const [quickAction, setQuickAction] = useState<'riego' | 'tarea' | 'fito' | null>(null)
   const [mapReady, setMapReady] = useState(false)
-  const [visibleLayers, setVisibleLayers] = useState<LayerVisibility>(visibleLayersRef.current)
+  const [visibleLayers, setVisibleLayers] = useState<LayerVisibility>({
+    acequias: false, lineaElectrica: false, canerias: false, valvulas: false, cuadrantesRiego: false,
+  })
   const [layerData, setLayerData] = useState<Partial<Record<keyof LayerVisibility, object>>>({})
 
   const { data: parcelas = [] } = useQuery({
@@ -603,15 +627,29 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
     <div className="relative w-full overflow-hidden" style={{ height }}>
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* Color mode toggle — top left */}
+      {/* Color mode chips — top left */}
       {!compact && (
-        <button
-          onClick={() => setColorMode(m => m === 'type' ? 'variedad' : m === 'variedad' ? 'cosecha' : 'type')}
-          className="absolute top-3 left-3 z-[1000] flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg shadow-md text-xs font-medium text-gray-700 hover:bg-gray-50 border border-gray-200 transition-colors"
-        >
-          <Layers size={13} />
-          {colorMode === 'type' ? 'Por tipo' : colorMode === 'variedad' ? 'Por variedad' : '🌿 kg cosechados'}
-        </button>
+        <div className="absolute top-3 left-3 z-[1000] flex items-center gap-1 bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 p-1">
+          <Layers size={12} className="text-gray-400 ml-1 mr-0.5 flex-shrink-0" />
+          {([
+            { mode: 'type',    label: 'Tipo'     },
+            { mode: 'variedad', label: 'Variedad' },
+            { mode: 'cosecha',  label: 'Cosecha'  },
+          ] as { mode: ColorMode; label: string }[]).map(({ mode, label }) => (
+            <button
+              key={mode}
+              onClick={() => setColorMode(mode)}
+              className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+              style={
+                colorMode === mode
+                  ? { backgroundColor: '#7a1f2c', color: '#ffffff' }
+                  : { color: '#5a544c' }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Layer control — top right */}
@@ -692,7 +730,34 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
           estadoActual={estadoActual}
           cosechaByParcelaId={cosechaByParcelaId}
           onClose={() => setSelected(null)}
+          onQuickAction={setQuickAction}
         />
+      )}
+
+      {/* Modal placeholder acciones rápidas */}
+      {quickAction && (
+        <div
+          className="absolute inset-0 z-[2000] flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(31,26,23,0.4)' }}
+          onClick={() => setQuickAction(null)}
+        >
+          <div
+            className="bg-white rounded-[14px] px-8 py-6 text-center"
+            style={{ boxShadow: '0 12px 32px rgba(31,26,23,0.12)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-[#1f1a17] mb-1">
+              Nuevo {quickAction === 'riego' ? 'Riego' : quickAction === 'tarea' ? 'Tarea' : 'Fitosanitario'}
+            </p>
+            <p className="text-xs text-[#a09584] mb-4">Formulario disponible en Fase 4</p>
+            <button
+              onClick={() => setQuickAction(null)}
+              className="px-4 py-1.5 rounded-md text-sm font-medium bg-[#7a1f2c] text-white hover:bg-[#5a1320] transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

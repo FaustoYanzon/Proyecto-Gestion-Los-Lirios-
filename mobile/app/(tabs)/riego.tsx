@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -8,427 +8,328 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
-  Modal,
-  FlatList,
   TextInput,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { useAuthStore } from '../../store/authStore'
-import type { Parcela, RegistroRiego, RiegoPayload } from '../../lib/types'
-import { getValvulasForParcela, calcMmRiego } from '../../lib/types'
+import { colors, fonts } from '../../lib/theme'
+import type { Parcela, RegistroRiego } from '../../lib/types'
+import { CABEZAL_VALVULAS } from '../../lib/types'
 
-function isoToday() {
-  return new Date().toISOString().split('T')[0]
-}
+const M3_POR_HORA = 3.6
 
-function buildISO(date: string, hour: number, minute: number): string {
-  const h = String(hour).padStart(2, '0')
-  const m = String(minute).padStart(2, '0')
-  return `${date}T${h}:${m}:00`
-}
+function isoNow() { return new Date().toISOString() }
+function isoToday() { return new Date().toISOString().split('T')[0] }
 
-function formatDateDisplay(dateISO: string): string {
-  const [y, mo, d] = dateISO.split('-')
-  return `${d}/${mo}/${y}`
-}
-
-function formatTimeDisplay(hour: number, minute: number): string {
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 function formatDatetime(dt: string) {
   try {
     return new Date(dt).toLocaleString('es-AR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     })
   } catch { return dt }
 }
 
-const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const DAY_NAMES = ['Lu','Ma','Mi','Ju','Vi','Sa','Do']
+// ─── Step indicator ───────────────────────────────────────────────────────────
 
-function buildCalendarDays(year: number, month: number): (string | null)[] {
-  const firstDay = new Date(year, month, 1).getDay() // 0=Sun
-  const offset = firstDay === 0 ? 6 : firstDay - 1   // shift so Mon=0
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const cells: (string | null)[] = Array(offset).fill(null)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const mm = String(month + 1).padStart(2, '0')
-    const dd = String(d).padStart(2, '0')
-    cells.push(`${year}-${mm}-${dd}`)
-  }
-  return cells
-}
+const STEP_LABELS = ['Cabezal', 'Riego', 'Confirmar']
 
-// ─── Parcela picker modal ─────────────────────────────────────────────────────
-
-function ParcelaPicker({
-  visible, parcelas, onSelect, onClose,
-}: {
-  visible: boolean; parcelas: Parcela[]; onSelect: (p: Parcela) => void; onClose: () => void
-}) {
-  const [search, setSearch] = useState('')
-  const filtered = parcelas.filter((p) => p.nombre.toLowerCase().includes(search.toLowerCase()))
-
+function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Seleccionar parral</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color="#374151" />
-          </TouchableOpacity>
-        </View>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar..."
-          placeholderTextColor="#9ca3af"
-          value={search}
-          onChangeText={setSearch}
-        />
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.modalItem}
-              onPress={() => { onSelect(item); onClose() }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalItemText}>{item.nombre}</Text>
-                <Text style={styles.modalItemSub}>
-                  Cabezal {item.cabezal_riego ?? '—'}
-                  {item.superficie_ha ? ` · ${item.superficie_ha.toFixed(2)} ha` : ''}
-                </Text>
-              </View>
-              <View style={styles.cabezalBadge}>
-                <Text style={styles.cabezalBadgeText}>CAB. {item.cabezal_riego}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-        />
-      </View>
-    </Modal>
+    <View style={si.row}>
+      {STEP_LABELS.map((label, idx) => {
+        const done = idx < current
+        const active = idx === current
+        return (
+          <View key={label} style={si.item}>
+            <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
+              {done ? (
+                <Ionicons name="checkmark" size={11} color={colors.blanco} />
+              ) : (
+                <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
+              )}
+            </View>
+            <Text style={[si.label, active && si.labelActive, done && si.labelDone]}>{label}</Text>
+            {idx < STEP_LABELS.length - 1 && (
+              <View style={[si.line, done && si.lineDone]} />
+            )}
+          </View>
+        )
+      })}
+    </View>
   )
 }
 
-// ─── Date+Time picker modal ───────────────────────────────────────────────────
-
-const MINUTE_OPTIONS = [0, 15, 30, 45]
-
-function DateTimePicker({
-  visible, label, date, hour, minute,
-  onConfirm, onClose,
-}: {
-  visible: boolean
-  label: string
-  date: string
-  hour: number
-  minute: number
-  onConfirm: (date: string, hour: number, minute: number) => void
-  onClose: () => void
-}) {
-  const todayISO = new Date().toISOString().split('T')[0]
-  const [selDate, setSelDate] = useState(date)
-  const [selHour, setSelHour] = useState(hour)
-  const [selMin, setSelMin] = useState(minute)
-  const [calYear, setCalYear] = useState(() => parseInt(date.split('-')[0]))
-  const [calMonth, setCalMonth] = useState(() => parseInt(date.split('-')[1]) - 1)
-
-  useEffect(() => {
-    if (visible) {
-      setSelDate(date); setSelHour(hour); setSelMin(minute)
-      setCalYear(parseInt(date.split('-')[0]))
-      setCalMonth(parseInt(date.split('-')[1]) - 1)
-    }
-  }, [visible, date, hour, minute])
-
-  const HOURS = Array.from({ length: 24 }, (_, i) => i)
-  const calDays = buildCalendarDays(calYear, calMonth)
-
-  function prevMonth() {
-    if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) }
-    else setCalMonth(calMonth - 1)
-  }
-  function nextMonth() {
-    if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) }
-    else setCalMonth(calMonth + 1)
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>{label}</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color="#374151" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-          {/* Calendar */}
-          <View style={dtStyles.section}>
-            <View style={dtStyles.calNavRow}>
-              <TouchableOpacity onPress={prevMonth} style={dtStyles.navBtn}>
-                <Ionicons name="chevron-back" size={18} color="#374151" />
-              </TouchableOpacity>
-              <Text style={dtStyles.calMonthLabel}>
-                {MONTH_NAMES[calMonth]} {calYear}
-              </Text>
-              <TouchableOpacity onPress={nextMonth} style={dtStyles.navBtn}>
-                <Ionicons name="chevron-forward" size={18} color="#374151" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={dtStyles.dayNamesRow}>
-              {DAY_NAMES.map((d) => (
-                <Text key={d} style={dtStyles.dayName}>{d}</Text>
-              ))}
-            </View>
-
-            <View style={dtStyles.calGrid}>
-              {calDays.map((isoDate, idx) => {
-                if (!isoDate) return <View key={`e-${idx}`} style={dtStyles.calCell} />
-                const isSelected = isoDate === selDate
-                const isToday = isoDate === todayISO
-                return (
-                  <TouchableOpacity
-                    key={isoDate}
-                    style={[
-                      dtStyles.calCell,
-                      isSelected && dtStyles.calCellSelected,
-                      !isSelected && isToday && dtStyles.calCellToday,
-                    ]}
-                    onPress={() => setSelDate(isoDate)}
-                  >
-                    <Text style={[
-                      dtStyles.calCellText,
-                      isSelected && dtStyles.calCellTextSelected,
-                      !isSelected && isToday && dtStyles.calCellTextToday,
-                    ]}>
-                      {parseInt(isoDate.split('-')[2])}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-
-          {/* Hour selector */}
-          <View style={dtStyles.section}>
-            <Text style={dtStyles.sectionLabel}>HORA</Text>
-            <View style={dtStyles.hourGrid}>
-              {HOURS.map((h) => (
-                <TouchableOpacity
-                  key={h}
-                  style={[dtStyles.hourBtn, selHour === h && dtStyles.hourBtnActive]}
-                  onPress={() => setSelHour(h)}
-                >
-                  <Text style={[dtStyles.hourBtnText, selHour === h && dtStyles.hourBtnTextActive]}>
-                    {String(h).padStart(2, '0')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Minute selector */}
-          <View style={dtStyles.section}>
-            <Text style={dtStyles.sectionLabel}>MINUTOS</Text>
-            <View style={dtStyles.minuteRow}>
-              {MINUTE_OPTIONS.map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  style={[dtStyles.minBtn, selMin === m && dtStyles.minBtnActive]}
-                  onPress={() => setSelMin(m)}
-                >
-                  <Text style={[dtStyles.minBtnText, selMin === m && dtStyles.minBtnTextActive]}>
-                    :{String(m).padStart(2, '0')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Preview */}
-          <View style={dtStyles.preview}>
-            <Ionicons name="time-outline" size={16} color="#16a34a" />
-            <Text style={dtStyles.previewText}>
-              {formatDateDisplay(selDate)} a las {formatTimeDisplay(selHour, selMin)}
-            </Text>
-          </View>
-        </ScrollView>
-
-        <View style={{ padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f2f5' }}>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => { onConfirm(selDate, selHour, selMin); onClose() }}
-          >
-            <Text style={styles.primaryBtnText}>Confirmar</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  )
-}
-
-const dtStyles = StyleSheet.create({
-  section: { paddingHorizontal: 16, marginBottom: 16 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 },
-  calNavRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  navBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center' },
-  calMonthLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
-  dayName: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase' },
-  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calCell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', padding: 2 },
-  calCellSelected: { backgroundColor: '#16a34a', borderRadius: 8 },
-  calCellToday: { backgroundColor: '#f0fdf4', borderRadius: 8 },
-  calCellText: { fontSize: 14, fontWeight: '500', color: '#374151' },
-  calCellTextSelected: { color: '#fff', fontWeight: '700' },
-  calCellTextToday: { color: '#16a34a', fontWeight: '700' },
-  hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  hourBtn: {
-    width: 48, height: 36, borderRadius: 8, borderWidth: 1,
-    borderColor: '#e5e7eb', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center',
+const si = StyleSheet.create({
+  row: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: colors.blanco,
+    borderBottomWidth: 1, borderBottomColor: colors.hueso,
   },
-  hourBtnActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  hourBtnText: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  hourBtnTextActive: { color: '#fff' },
-  minuteRow: { flexDirection: 'row', gap: 10 },
-  minBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5,
-    borderColor: '#e5e7eb', backgroundColor: '#fff', alignItems: 'center',
+  item: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  dot: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center',
   },
-  minBtnActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  minBtnText: { fontSize: 15, fontWeight: '700', color: '#374151' },
-  minBtnTextActive: { color: '#fff' },
-  preview: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#f0fdf4', borderRadius: 10, paddingHorizontal: 14,
-    paddingVertical: 12, marginHorizontal: 16, marginBottom: 4,
-  },
-  previewText: { fontSize: 15, fontWeight: '700', color: '#166534' },
+  dotActive: { backgroundColor: colors.cielo },
+  dotDone:   { backgroundColor: colors.cielo },
+  dotText:   { fontSize: 11, fontWeight: '700', color: colors.niebla },
+  label:     { fontSize: 11, color: colors.niebla, marginLeft: 6, fontWeight: '500' },
+  labelActive: { color: colors.ink, fontWeight: '700' },
+  labelDone:   { color: colors.cielo, fontWeight: '600' },
+  line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 4 },
+  lineDone: { backgroundColor: colors.cielo },
 })
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// ─── Step 1: seleccionar cabezal ──────────────────────────────────────────────
 
-export default function RiegoScreen() {
-  const user = useAuthStore((s) => s.user)
-  const [parcelas, setParcelas] = useState<Parcela[]>([])
-  const [riegos, setRiegos] = useState<RegistroRiego[]>([])
-  const [pickerVisible, setPickerVisible] = useState(false)
-  const [dtPickerTarget, setDtPickerTarget] = useState<'inicio' | 'fin' | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+const CABEZALES = Object.keys(CABEZAL_VALVULAS).sort()
 
-  // Form state
-  const [parcela, setParcela] = useState<Parcela | null>(null)
-  const [selectedValvulas, setSelectedValvulas] = useState<Set<string>>(new Set())
+function StepCabezal({ onSelect }: { onSelect: (cabezal: string | null) => void }) {
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={0} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        <Text style={styles.stepTitle}>¿Qué cabezal?</Text>
 
-  const now = new Date()
-  const [inicioDate, setInicioDate] = useState(isoToday())
-  const [inicioHour, setInicioHour] = useState(now.getHours())
-  const [inicioMin, setInicioMin] = useState(0)
+        <View style={styles.cabezalGrid}>
+          {CABEZALES.map((cab) => {
+            const info = CABEZAL_VALVULAS[cab]
+            return (
+              <TouchableOpacity
+                key={cab}
+                style={styles.cabezalCard}
+                onPress={() => onSelect(cab)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cabezalNum}>{cab}</Text>
+                <Text style={styles.cabezalDesc} numberOfLines={2}>
+                  {info?.descripcion ?? ''}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
-  const [finDate, setFinDate] = useState(isoToday())
-  const [finHour, setFinHour] = useState(Math.min(now.getHours() + 4, 23))
-  const [finMin, setFinMin] = useState(0)
+        <TouchableOpacity
+          style={styles.mantoBtn}
+          onPress={() => onSelect(null)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="water-outline" size={18} color={colors.ink60} />
+          <Text style={styles.mantoBtnText}>Sin cabezal (manto)</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  )
+}
 
-  const [mmAplicados, setMmAplicados] = useState('')
-  const [fertNombre, setFertNombre] = useState('')
-  const [fertDosis, setFertDosis] = useState('')
-  const [responsable, setResponsable] = useState(user?.full_name ?? '')
-  const [conFertilizante, setConFertilizante] = useState(false)
+// ─── Step 2: cronómetro + parcelas ────────────────────────────────────────────
 
-  // Derived
-  const cabezal = parcela?.cabezal_riego ?? null
-  const valvulasDisponibles = parcela ? getValvulasForParcela(parcela.nombre) : []
+function StepCronometro({
+  cabezal, parcelas, onNext, onBack,
+}: {
+  cabezal: string | null
+  parcelas: Parcela[]
+  onNext: (inicio: string, fin: string, selectedIds: string[]) => void
+  onBack: () => void
+}) {
+  const [running, setRunning] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [inicioISO, setInicioISO] = useState<string | null>(null)
+  const [finISO, setFinISO] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const inicioISO = buildISO(inicioDate, inicioHour, inicioMin)
-  const finISO = buildISO(finDate, finHour, finMin)
-  const mmPreview = calcMmRiego(inicioISO, finISO)
-
-  const loadData = useCallback(async () => {
-    const [cachedParcelas, cachedRiegos] = await Promise.all([
-      getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas),
-      getCache<RegistroRiego[]>('riegos', CACHE_TTL.riegos),
-    ])
-    if (cachedParcelas) setParcelas(cachedParcelas.filter(
-      (p) => p.tipo === 'parral' && p.cabezal_riego && p.cabezal_riego !== 'MANTO'
-    ))
-    if (cachedRiegos) setRiegos(cachedRiegos)
-
-    try {
-      const [parcelasRes, riegosRes] = await Promise.all([
-        api.get<Parcela[]>('/parcelas/mapa'),
-        api.get<RegistroRiego[]>('/produccion/riego/?limit=10'),
-      ])
-      const active = parcelasRes.data.filter((p) => p.is_active)
-      const parrales = active.filter(
-        (p) => p.tipo === 'parral' && p.cabezal_riego && p.cabezal_riego !== 'MANTO'
+  const parcelasFiltradas = cabezal
+    ? parcelas.filter(
+        (p) => p.tipo === 'parral' && p.cabezal_riego === cabezal,
       )
-      setParcelas(parrales)
-      setRiegos(riegosRes.data)
-      await Promise.all([
-        setCache('parcelas', active),
-        setCache('riegos', riegosRes.data),
-      ])
-    } catch { /* offline — use cache */ }
-    finally { setRefreshing(false) }
+    : parcelas.filter((p) => p.tipo === 'parral')
+
+  useEffect(() => {
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
-
-  function onRefresh() { setRefreshing(true); loadData() }
-
-  function handleSelectParcela(p: Parcela) {
-    setParcela(p)
-    setSelectedValvulas(new Set())
+  function handleStart() {
+    const now = isoNow()
+    setInicioISO(now)
+    setFinISO(null)
+    setElapsed(0)
+    setRunning(true)
+    intervalRef.current = setInterval(() => {
+      setElapsed((e) => e + 1)
+    }, 1000)
   }
 
-  function toggleValvula(v: string) {
-    setSelectedValvulas((prev) => {
+  function handleStop() {
+    setFinISO(isoNow())
+    setRunning(false)
+    if (intervalRef.current) clearInterval(intervalRef.current)
+  }
+
+  function toggleParcela(id: string) {
+    setSelectedIds((prev) => {
       const next = new Set(prev)
-      next.has(v) ? next.delete(v) : next.add(v)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
   }
 
+  function handleNext() {
+    if (!inicioISO) { Alert.alert('Error', 'Iniciá el cronómetro primero.'); return }
+    if (!finISO)    { Alert.alert('Error', 'Detené el cronómetro para registrar el fin.'); return }
+    onNext(inicioISO, finISO, Array.from(selectedIds))
+  }
+
+  const m3Estimados = elapsed > 0 ? ((elapsed / 3600) * M3_POR_HORA).toFixed(1) : null
+
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={1} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <Text style={styles.stepTitle}>
+          {cabezal ? `Cabezal ${cabezal}` : 'Riego a manto'}
+        </Text>
+
+        {/* Cronómetro */}
+        <View style={styles.chronoCard}>
+          <Text style={[styles.chronoTime, { fontFamily: fonts.mono }]}>
+            {formatDuration(elapsed)}
+          </Text>
+          {m3Estimados && (
+            <Text style={styles.chronoM3}>≈ {m3Estimados} m³ estimados</Text>
+          )}
+          <View style={styles.chronoBtns}>
+            {!running && !inicioISO && (
+              <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
+                <Ionicons name="play" size={20} color={colors.blanco} />
+                <Text style={styles.startBtnText}>Iniciar</Text>
+              </TouchableOpacity>
+            )}
+            {running && (
+              <TouchableOpacity style={styles.stopBtn} onPress={handleStop}>
+                <Ionicons name="stop" size={20} color={colors.blanco} />
+                <Text style={styles.startBtnText}>Detener</Text>
+              </TouchableOpacity>
+            )}
+            {!running && inicioISO && (
+              <View style={styles.chronoDone}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.cielo} />
+                <Text style={styles.chronoDoneText}>
+                  {formatDatetime(inicioISO)} → {finISO ? formatDatetime(finISO) : '…'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Parcelas */}
+        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PARCELAS REGADAS</Text>
+        {parcelasFiltradas.length === 0 ? (
+          <Text style={styles.emptyText}>Sin parrales para este cabezal</Text>
+        ) : (
+          <View style={styles.parcelasGrid}>
+            {parcelasFiltradas.map((p) => {
+              const active = selectedIds.has(p.id)
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.parcelaChip, active && styles.parcelaChipActive]}
+                  onPress={() => toggleParcela(p.id)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.parcelaChipText, active && styles.parcelaChipTextActive]}>
+                    {p.nombre}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={13} color={colors.blanco} style={{ marginLeft: 4 }} />}
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        )}
+
+        <View style={[styles.actionRow, { marginTop: 24 }]}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleNext}>
+            <Text style={styles.primaryBtnText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Step 3: confirmar ────────────────────────────────────────────────────────
+
+function StepConfirmar({
+  cabezal, inicioISO, finISO, parcelaIds, parcelas,
+  onSuccess, onBack,
+}: {
+  cabezal: string | null
+  inicioISO: string
+  finISO: string
+  parcelaIds: string[]
+  parcelas: Parcela[]
+  onSuccess: () => void
+  onBack: () => void
+}) {
+  const user = useAuthStore((s) => s.user)
+  const [observacion, setObservacion] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const duracionSec = Math.round(
+    (new Date(finISO).getTime() - new Date(inicioISO).getTime()) / 1000,
+  )
+  const duracionH = duracionSec / 3600
+  const m3Estimados = (duracionH * M3_POR_HORA).toFixed(2)
+
+  const selectedParcelas = parcelas.filter((p) => parcelaIds.includes(p.id))
+  const fecha = inicioISO.split('T')[0]
+
   async function handleSubmit() {
-    if (!parcela) { Alert.alert('Error', 'Seleccioná una parcela.'); return }
-    if (!cabezal) { Alert.alert('Error', 'Esta parcela no tiene cabezal asignado.'); return }
-    if (selectedValvulas.size === 0) { Alert.alert('Error', 'Seleccioná al menos una válvula.'); return }
-    if (!responsable.trim()) { Alert.alert('Error', 'Ingresá el responsable.'); return }
-
-    const iniDate = new Date(inicioISO)
-    const finDate2 = new Date(finISO)
-    if (finDate2 <= iniDate) { Alert.alert('Error', 'El fin debe ser posterior al inicio.'); return }
-
-    const valvula = Array.from(selectedValvulas).sort().join(',')
-    const payload: RiegoPayload = {
-      fecha: inicioDate,
-      parcela_id: parcela.id,
-      cabezal,
-      valvula,
-      inicio: iniDate.toISOString(),
-      fin: finDate2.toISOString(),
-      responsable: responsable.trim(),
-    }
-    if (mmAplicados) payload.mm_aplicados = Number(mmAplicados)
-    if (conFertilizante && fertNombre.trim()) payload.fertilizante_nombre = fertNombre.trim()
-    if (conFertilizante && fertDosis) payload.fertilizante_dosis_lt_ha = Number(fertDosis)
-
+    const responsable = user?.full_name ?? 'Sin nombre'
     try {
       setLoading(true)
-      await api.post('/produccion/riego/', payload)
-      setSubmitted(true)
-      loadData()
+      if (selectedParcelas.length === 0) {
+        // Sin parcela — un único registro
+        await api.post('/produccion/riego/', {
+          fecha,
+          parcela_id: null,
+          cabezal: cabezal ?? 'MANTO',
+          valvula: '1',
+          inicio: inicioISO,
+          fin: finISO,
+          responsable,
+          ...(observacion.trim() ? {} : {}),
+        })
+      } else {
+        await Promise.all(
+          selectedParcelas.map((p) =>
+            api.post('/produccion/riego/', {
+              fecha,
+              parcela_id: p.id,
+              cabezal: p.cabezal_riego ?? cabezal ?? 'MANTO',
+              valvula: '1',
+              inicio: inicioISO,
+              fin: finISO,
+              responsable,
+            }),
+          ),
+        )
+      }
+      onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el riego.')
@@ -437,31 +338,236 @@ export default function RiegoScreen() {
     }
   }
 
-  function resetForm() {
-    setParcela(null)
-    setSelectedValvulas(new Set())
-    const n = new Date()
-    setInicioDate(isoToday()); setInicioHour(n.getHours()); setInicioMin(0)
-    setFinDate(isoToday()); setFinHour(Math.min(n.getHours() + 4, 23)); setFinMin(0)
-    setMmAplicados(''); setFertNombre(''); setFertDosis('')
-    setResponsable(user?.full_name ?? '')
-    setConFertilizante(false)
-    setSubmitted(false)
-  }
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={2} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <Text style={styles.stepTitle}>Confirmar</Text>
 
-  function parcelaNombre(id: string): string {
+        <View style={styles.summaryCard}>
+          {[
+            { label: 'Cabezal',   value: cabezal ? `Cabezal ${cabezal}` : 'Manto' },
+            { label: 'Inicio',    value: formatDatetime(inicioISO) },
+            { label: 'Fin',       value: formatDatetime(finISO) },
+            { label: 'Duración',  value: formatDuration(duracionSec) },
+            { label: 'm³ est.',   value: `${m3Estimados} m³`, highlight: true },
+            {
+              label: 'Parcelas',
+              value: selectedParcelas.length > 0
+                ? selectedParcelas.map((p) => p.nombre).join(', ')
+                : 'Sin parcela',
+            },
+          ].map(({ label, value, highlight }, idx, arr) => (
+            <View
+              key={label}
+              style={[
+                styles.summaryRow,
+                idx < arr.length - 1 && styles.summaryRowBorder,
+                highlight && styles.summaryRowHighlight,
+              ]}
+            >
+              <Text style={[styles.summaryLabel, highlight && { color: colors.cielo }]}>
+                {label}
+              </Text>
+              <Text
+                style={[styles.summaryValue, highlight && { color: colors.cielo }, { flex: 1, textAlign: 'right' }]}
+                numberOfLines={2}
+              >
+                {value}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>OBSERVACIÓN (opcional)</Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 12 }]}
+          value={observacion}
+          onChangeText={setObservacion}
+          placeholder="Notas sobre el riego..."
+          placeholderTextColor={colors.niebla}
+          multiline
+        />
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 2 }, loading && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.blanco} size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <Text style={styles.primaryBtnText}>Confirmar</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Recent riegos ────────────────────────────────────────────────────────────
+
+function RecentRiegos({
+  riegos, parcelas, refreshing, onRefresh,
+}: {
+  riegos: RegistroRiego[]
+  parcelas: Parcela[]
+  refreshing: boolean
+  onRefresh: () => void
+}) {
+  function parcelaNombre(id: string) {
     return parcelas.find((p) => p.id === id)?.nombre ?? '—'
   }
 
-  if (submitted) {
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cielo} />
+      }
+    >
+      {riegos.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="water-outline" size={36} color={colors.hueso} />
+          <Text style={styles.emptyStateTitle}>Sin riegos recientes</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>RIEGOS RECIENTES</Text>
+          {riegos.map((r) => (
+            <View key={r.id} style={styles.riegoCard}>
+              <View style={styles.riegoCardHeader}>
+                <Text style={styles.riegoNombre}>{parcelaNombre(r.parcela_id)}</Text>
+                <Text style={styles.riegoDate}>{r.fecha}</Text>
+              </View>
+              <View style={styles.riegoBadges}>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>Cab. {r.cabezal}</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
+                  <Text style={[styles.badgeText, { color: colors.cielo }]}>
+                    {r.duracion_horas.toFixed(1)} h
+                  </Text>
+                </View>
+                {r.mm_aplicados != null && (
+                  <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
+                    <Text style={[styles.badgeText, { color: colors.cielo }]}>
+                      {r.mm_aplicados} mm
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.riegoResp}>{r.responsable}</Text>
+            </View>
+          ))}
+        </>
+      )}
+    </ScrollView>
+  )
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
+type Step = 'list' | 'cabezal' | 'cronometro' | 'confirmar' | 'success'
+
+export default function RiegoScreen() {
+  const [step, setStep] = useState<Step>('list')
+  const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [riegos, setRiegos] = useState<RegistroRiego[]>([])
+  const [refreshing, setRefreshing] = useState(false)
+
+  const [selCabezal, setSelCabezal] = useState<string | null>(null)
+  const [selInicio, setSelInicio] = useState('')
+  const [selFin, setSelFin] = useState('')
+  const [selParcelaIds, setSelParcelaIds] = useState<string[]>([])
+
+  const loadData = useCallback(async () => {
+    const [cachedParcelas, cachedRiegos] = await Promise.all([
+      getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas),
+      getCache<RegistroRiego[]>('riegos', CACHE_TTL.riegos),
+    ])
+    if (cachedParcelas) setParcelas(cachedParcelas)
+    if (cachedRiegos) setRiegos(cachedRiegos)
+
+    try {
+      const [parcelasRes, riegosRes] = await Promise.all([
+        api.get<Parcela[]>('/parcelas/mapa'),
+        api.get<RegistroRiego[]>('/produccion/riego/?limit=10'),
+      ])
+      const active = parcelasRes.data.filter((p) => p.is_active)
+      setParcelas(active)
+      setRiegos(riegosRes.data)
+      await Promise.all([
+        setCache('parcelas', active),
+        setCache('riegos', riegosRes.data),
+      ])
+    } catch { /* offline */ }
+    finally { setRefreshing(false) }
+  }, [])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  function onRefresh() { setRefreshing(true); loadData() }
+
+  function resetWizard() {
+    setSelCabezal(null); setSelInicio(''); setSelFin(''); setSelParcelaIds([])
+    setStep('list')
+  }
+
+  if (step === 'cabezal') {
+    return (
+      <StepCabezal
+        onSelect={(cab) => { setSelCabezal(cab); setStep('cronometro') }}
+      />
+    )
+  }
+
+  if (step === 'cronometro') {
+    return (
+      <StepCronometro
+        cabezal={selCabezal}
+        parcelas={parcelas}
+        onNext={(inicio, fin, ids) => {
+          setSelInicio(inicio); setSelFin(fin); setSelParcelaIds(ids)
+          setStep('confirmar')
+        }}
+        onBack={() => setStep('cabezal')}
+      />
+    )
+  }
+
+  if (step === 'confirmar') {
+    return (
+      <StepConfirmar
+        cabezal={selCabezal}
+        inicioISO={selInicio}
+        finISO={selFin}
+        parcelaIds={selParcelaIds}
+        parcelas={parcelas}
+        onSuccess={() => { setStep('success'); loadData() }}
+        onBack={() => setStep('cronometro')}
+      />
+    )
+  }
+
+  if (step === 'success') {
     return (
       <View style={styles.successContainer}>
         <View style={styles.successIcon}>
-          <Ionicons name="water" size={36} color="#fff" />
+          <Ionicons name="water" size={36} color={colors.blanco} />
         </View>
-        <Text style={styles.successTitle}>Riego registrado</Text>
+        <Text style={[styles.successTitle, { fontFamily: fonts.display }]}>Riego registrado</Text>
         <Text style={styles.successSub}>Se guardó el registro correctamente</Text>
-        <TouchableOpacity style={styles.successBtn} onPress={resetForm}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={resetWizard}>
           <Text style={styles.primaryBtnText}>Nuevo riego</Text>
         </TouchableOpacity>
       </View>
@@ -469,379 +575,165 @@ export default function RiegoScreen() {
   }
 
   return (
-    <>
-      <ParcelaPicker
-        visible={pickerVisible}
-        parcelas={parcelas}
-        onSelect={handleSelectParcela}
-        onClose={() => setPickerVisible(false)}
-      />
-      <DateTimePicker
-        visible={dtPickerTarget === 'inicio'}
-        label="Inicio del riego"
-        date={inicioDate}
-        hour={inicioHour}
-        minute={inicioMin}
-        onConfirm={(d, h, m) => { setInicioDate(d); setInicioHour(h); setInicioMin(m) }}
-        onClose={() => setDtPickerTarget(null)}
-      />
-      <DateTimePicker
-        visible={dtPickerTarget === 'fin'}
-        label="Fin del riego"
-        date={finDate}
-        hour={finHour}
-        minute={finMin}
-        onConfirm={(d, h, m) => { setFinDate(d); setFinHour(h); setFinMin(m) }}
-        onClose={() => setDtPickerTarget(null)}
-      />
-
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
+    <View style={{ flex: 1 }}>
+      <TouchableOpacity
+        style={styles.newBtn}
+        onPress={() => setStep('cabezal')}
+        activeOpacity={0.85}
       >
-        <Text style={styles.screenTitle}>Registrar riego</Text>
-
-        {/* Parcela */}
-        <Text style={styles.fieldLabel}>PARCELA</Text>
-        <TouchableOpacity style={styles.pickerBtn} onPress={() => setPickerVisible(true)}>
-          <View style={{ flex: 1 }}>
-            <Text style={parcela ? styles.pickerValue : styles.pickerPlaceholder}>
-              {parcela ? parcela.nombre : 'Seleccionar parral...'}
-            </Text>
-            {parcela && cabezal && (
-              <Text style={styles.pickerSub}>Cabezal {cabezal}</Text>
-            )}
-          </View>
-          <Ionicons name="chevron-down" size={16} color="#9ca3af" />
-        </TouchableOpacity>
-
-        {/* Cabezal — read only derived from parcela */}
-        {parcela && cabezal && (
-          <View style={styles.cabezalInfo}>
-            <Ionicons name="water-outline" size={14} color="#2563eb" />
-            <Text style={styles.cabezalInfoText}>Cabezal {cabezal} asignado automáticamente</Text>
-          </View>
-        )}
-
-        {/* Válvulas */}
-        {parcela && (
-          <>
-            <Text style={[styles.fieldLabel, { marginTop: 4 }]}>VÁLVULAS ABIERTAS</Text>
-            <View style={styles.valvulasRow}>
-              {valvulasDisponibles.map((v) => {
-                const active = selectedValvulas.has(v)
-                return (
-                  <TouchableOpacity
-                    key={v}
-                    style={[styles.valvulaChip, active && styles.valvulaChipActive]}
-                    onPress={() => toggleValvula(v)}
-                  >
-                    <Text style={[styles.valvulaChipText, active && styles.valvulaChipTextActive]}>
-                      Válvula {v}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </>
-        )}
-
-        {/* Datetime pickers */}
-        <Text style={[styles.fieldLabel, { marginTop: 4 }]}>HORARIO</Text>
-        <View style={styles.datetimeRow}>
-          <TouchableOpacity
-            style={styles.datetimeBtn}
-            onPress={() => setDtPickerTarget('inicio')}
-          >
-            <Text style={styles.datetimeBtnLabel}>Inicio</Text>
-            <Text style={styles.datetimeBtnValue}>{formatTimeDisplay(inicioHour, inicioMin)}</Text>
-            <Text style={styles.datetimeBtnDate}>{formatDateDisplay(inicioDate)}</Text>
-          </TouchableOpacity>
-          <View style={styles.datetimeArrow}>
-            <Ionicons name="arrow-forward" size={18} color="#9ca3af" />
-          </View>
-          <TouchableOpacity
-            style={styles.datetimeBtn}
-            onPress={() => setDtPickerTarget('fin')}
-          >
-            <Text style={styles.datetimeBtnLabel}>Fin</Text>
-            <Text style={styles.datetimeBtnValue}>{formatTimeDisplay(finHour, finMin)}</Text>
-            <Text style={styles.datetimeBtnDate}>{formatDateDisplay(finDate)}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* MM preview */}
-        {mmPreview !== null && (
-          <View style={styles.mmPreview}>
-            <Ionicons name="water" size={14} color="#2563eb" />
-            <Text style={styles.mmPreviewText}>
-              {(new Date(finISO).getTime() - new Date(inicioISO).getTime()) / 3600000 < 1
-                ? (((new Date(finISO).getTime() - new Date(inicioISO).getTime()) / 3600000).toFixed(1) + ' h')
-                : (((new Date(finISO).getTime() - new Date(inicioISO).getTime()) / 3600000).toFixed(1) + ' h')
-              } de riego → <Text style={{ fontWeight: '800', color: '#1e40af' }}>{mmPreview} mm</Text>
-            </Text>
-          </View>
-        )}
-
-        {/* Responsable */}
-        <Text style={[styles.fieldLabel, { marginTop: 4 }]}>RESPONSABLE</Text>
-        <TextInput
-          style={styles.input}
-          value={responsable}
-          onChangeText={setResponsable}
-          placeholder="Nombre del responsable"
-          placeholderTextColor="#9ca3af"
-          autoCapitalize="words"
-        />
-
-        {/* mm aplicados manual */}
-        <Text style={styles.fieldLabel}>MM APLICADOS (opcional)</Text>
-        <TextInput
-          style={styles.input}
-          value={mmAplicados}
-          onChangeText={setMmAplicados}
-          placeholder={mmPreview !== null ? `Auto: ${mmPreview} mm` : 'Se calcula del horario'}
-          placeholderTextColor="#9ca3af"
-          keyboardType="numeric"
-        />
-
-        {/* Fertilizante toggle */}
-        <TouchableOpacity
-          style={styles.fertToggle}
-          onPress={() => setConFertilizante(!conFertilizante)}
-        >
-          <View style={[styles.toggle, conFertilizante && styles.toggleActive]}>
-            {conFertilizante && <View style={styles.toggleKnobRight} />}
-            {!conFertilizante && <View style={styles.toggleKnobLeft} />}
-          </View>
-          <Text style={styles.fertToggleText}>Con fertiriego</Text>
-        </TouchableOpacity>
-
-        {conFertilizante && (
-          <View style={styles.fertSection}>
-            <Text style={styles.fieldLabel}>FERTILIZANTE</Text>
-            <TextInput
-              style={styles.input}
-              value={fertNombre}
-              onChangeText={setFertNombre}
-              placeholder="Nombre del producto"
-              placeholderTextColor="#9ca3af"
-            />
-            <Text style={styles.fieldLabel}>DOSIS (L/HA)</Text>
-            <TextInput
-              style={styles.input}
-              value={fertDosis}
-              onChangeText={setFertDosis}
-              placeholder="0.0"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-            />
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.primaryBtn, { marginTop: 8 }, loading && { opacity: 0.6 }]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Guardar riego</Text>}
-        </TouchableOpacity>
-
-        {/* Recent riegos */}
-        <Text style={[styles.sectionLabel, { marginTop: 28 }]}>RIEGOS RECIENTES</Text>
-        {riegos.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="water-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyStateTitle}>Sin riegos recientes</Text>
-          </View>
-        ) : (
-          riegos.map((r) => (
-            <View key={r.id} style={styles.riegoCard}>
-              <View style={styles.riegoCardHeader}>
-                <Text style={styles.riegoParcelaNombre}>{parcelaNombre(r.parcela_id)}</Text>
-                <Text style={styles.riegoDate}>{r.fecha}</Text>
-              </View>
-              <View style={styles.riegoCardMeta}>
-                <View style={styles.riegoBadge}>
-                  <Text style={styles.riegoBadgeText}>Cab. {r.cabezal}</Text>
-                </View>
-                <View style={[styles.riegoBadge, { backgroundColor: '#eff6ff' }]}>
-                  <Text style={[styles.riegoBadgeText, { color: '#2563eb' }]}>Válv. {r.valvula}</Text>
-                </View>
-              </View>
-              <Text style={styles.riegoSub}>
-                {formatDatetime(r.inicio)} → {formatDatetime(r.fin)}
-              </Text>
-              <View style={styles.riegoStats}>
-                <Text style={styles.riegoStatItem}>{r.duracion_horas.toFixed(1)} h</Text>
-                {r.mm_aplicados != null && (
-                  <Text style={styles.riegoStatItem}>{r.mm_aplicados} mm</Text>
-                )}
-                {r.fertilizante_nombre && (
-                  <Text style={styles.riegoStatItem}>{r.fertilizante_nombre}</Text>
-                )}
-              </View>
-              <Text style={styles.riegoResp}>{r.responsable}</Text>
-            </View>
-          ))
-        )}
-      </ScrollView>
-    </>
+        <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+        <Text style={styles.newBtnText}>Registrar riego</Text>
+      </TouchableOpacity>
+      <RecentRiegos
+        riegos={riegos}
+        parcelas={parcelas}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      />
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f6f8' },
-  screenTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 20 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#6b7280', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8 },
+  container: { flex: 1, backgroundColor: colors.hueso },
+  stepContainer: { flex: 1, backgroundColor: colors.hueso },
+  stepTitle: { fontSize: 20, fontWeight: '800', color: colors.ink, marginBottom: 20 },
+  fieldLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.ink60,
+    letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.niebla,
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  },
+
+  // cabezal grid 2×2
+  cabezalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
+  cabezalCard: {
+    width: '47%', backgroundColor: colors.cielo, borderRadius: 16,
+    padding: 20, alignItems: 'center',
+    shadowColor: colors.cielo,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  cabezalNum: { fontSize: 36, fontWeight: '800', color: colors.blanco, marginBottom: 6 },
+  cabezalDesc: { fontSize: 11, color: 'rgba(255,255,255,0.8)', textAlign: 'center', fontWeight: '500' },
+  mantoBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderRadius: 14, borderWidth: 1.5, borderColor: colors.hueso,
+    backgroundColor: colors.blanco, paddingVertical: 16,
+  },
+  mantoBtnText: { fontSize: 15, color: colors.ink60, fontWeight: '600' },
+
+  // cronómetro
+  chronoCard: {
+    backgroundColor: colors.blanco, borderRadius: 20, padding: 24,
+    alignItems: 'center', borderWidth: 1, borderColor: colors.hueso,
+  },
+  chronoTime: { fontSize: 48, color: colors.ink, letterSpacing: 2, marginBottom: 6 },
+  chronoM3: { fontSize: 14, color: colors.cielo, fontWeight: '600', marginBottom: 16 },
+  chronoBtns: { width: '100%' },
+  startBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.cielo, borderRadius: 12, paddingVertical: 14,
+  },
+  stopBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.sangre, borderRadius: 12, paddingVertical: 14,
+  },
+  startBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
+  chronoDone: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#e0f2fe', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
+  },
+  chronoDoneText: { fontSize: 13, color: colors.cielo, fontWeight: '600' },
+
+  // parcelas multiselect
+  parcelasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  parcelaChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
+  },
+  parcelaChipActive: { backgroundColor: colors.cielo, borderColor: colors.cielo },
+  parcelaChipText: { fontSize: 13, color: colors.ink, fontWeight: '600' },
+  parcelaChipTextActive: { color: colors.blanco },
+
+  // summary
+  summaryCard: {
+    backgroundColor: colors.blanco, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.hueso, overflow: 'hidden',
+  },
+  summaryRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14,
+  },
+  summaryRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.hueso },
+  summaryRowHighlight: { backgroundColor: '#e0f2fe' },
+  summaryLabel: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
+  summaryValue: { fontSize: 14, color: colors.ink, fontWeight: '700' },
+
   input: {
-    height: 48,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e8eaed',
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: '#111827',
-    marginBottom: 14,
+    backgroundColor: colors.blanco, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.hueso,
+    paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14, height: 48,
   },
-  pickerBtn: {
-    minHeight: 52,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e8eaed',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  pickerValue: { fontSize: 15, color: '#111827', fontWeight: '600' },
-  pickerPlaceholder: { fontSize: 15, color: '#9ca3af' },
-  pickerSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  cabezalInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#eff6ff',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-  },
-  cabezalInfoText: { fontSize: 13, color: '#2563eb', fontWeight: '600' },
-  valvulasRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  valvulaChip: {
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff',
-  },
-  valvulaChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  valvulaChipText: { fontSize: 14, color: '#374151', fontWeight: '600' },
-  valvulaChipTextActive: { color: '#fff' },
-  datetimeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  datetimeBtn: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1.5,
-    borderColor: '#e8eaed', paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center',
-  },
-  datetimeBtnLabel: { fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
-  datetimeBtnValue: { fontSize: 22, fontWeight: '800', color: '#111827', marginTop: 2 },
-  datetimeBtnDate: { fontSize: 11, color: '#6b7280', marginTop: 2 },
-  datetimeArrow: { width: 28, alignItems: 'center' },
-  mmPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 14,
-    paddingVertical: 10, marginBottom: 16,
-  },
-  mmPreviewText: { fontSize: 14, color: '#2563eb', fontWeight: '600', flex: 1 },
-  fertToggle: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 12, marginBottom: 14,
-  },
-  toggle: {
-    width: 44, height: 24, borderRadius: 12, backgroundColor: '#e5e7eb',
-    justifyContent: 'center', paddingHorizontal: 3,
-  },
-  toggleActive: { backgroundColor: '#16a34a' },
-  toggleKnobLeft: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', alignSelf: 'flex-start' },
-  toggleKnobRight: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', alignSelf: 'flex-end' },
-  fertToggleText: { fontSize: 15, color: '#374151', fontWeight: '600' },
-  fertSection: {
-    backgroundColor: '#f8fafc', borderRadius: 12, padding: 14,
-    marginBottom: 14, borderWidth: 1, borderColor: '#e5e7eb',
-  },
+  actionRow: { flexDirection: 'row', gap: 10 },
   primaryBtn: {
-    height: 52, backgroundColor: '#16a34a', borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#16a34a', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+    height: 52, backgroundColor: colors.cielo, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center', flexDirection: 'row',
   },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  primaryBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
+  secondaryBtn: {
+    flex: 1, height: 52, borderRadius: 12,
+    borderWidth: 1.5, borderColor: colors.hueso,
+    backgroundColor: colors.blanco, justifyContent: 'center', alignItems: 'center',
+  },
+  secondaryBtnText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
+
+  // new btn
+  newBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.cielo, borderRadius: 14,
+    margin: 16, paddingVertical: 16, paddingHorizontal: 20,
+    justifyContent: 'center',
+    shadowColor: colors.cielo,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+  },
+  newBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
+
+  // recent
   riegoCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    backgroundColor: colors.blanco, borderRadius: 14, padding: 14, marginBottom: 8,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  riegoCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  riegoParcelaNombre: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  riegoDate: { fontSize: 12, color: '#9ca3af' },
-  riegoCardMeta: { flexDirection: 'row', gap: 6, marginBottom: 8 },
-  riegoBadge: {
-    backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6,
+  riegoCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
   },
-  riegoBadgeText: { fontSize: 11, fontWeight: '700', color: '#166534' },
-  riegoSub: { fontSize: 12, color: '#6b7280', marginBottom: 6 },
-  riegoStats: { flexDirection: 'row', gap: 12, marginBottom: 4 },
-  riegoStatItem: { fontSize: 13, fontWeight: '700', color: '#374151' },
-  riegoResp: { fontSize: 12, color: '#16a34a', fontWeight: '600' },
-  emptyState: { alignItems: 'center', paddingVertical: 32 },
-  emptyStateTitle: { fontSize: 14, color: '#9ca3af', marginTop: 10 },
+  riegoNombre: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  riegoDate: { fontSize: 12, color: colors.niebla },
+  riegoBadges: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  badge: {
+    backgroundColor: colors.crema, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', color: colors.burdeos[600] },
+  riegoResp: { fontSize: 12, color: colors.cielo, fontWeight: '600' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyStateTitle: { fontSize: 14, color: colors.niebla, marginTop: 10 },
+  emptyText: { fontSize: 13, color: colors.niebla, fontStyle: 'italic', paddingVertical: 8 },
+
+  // success
   successContainer: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#f4f6f8', padding: 32,
+    backgroundColor: colors.hueso, padding: 32,
   },
   successIcon: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#2563eb',
+    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.cielo,
     justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    shadowColor: '#2563eb', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+    shadowColor: colors.cielo,
+    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  successTitle: { fontSize: 26, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  successSub: { fontSize: 15, color: '#6b7280', marginBottom: 32, textAlign: 'center' },
-  successBtn: {
-    width: 240, height: 52, backgroundColor: '#2563eb', borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
-  },
-  // Modal
-  modalContainer: { flex: 1, backgroundColor: '#f4f6f8', paddingTop: 16 },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f2f5',
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center' },
-  searchInput: {
-    height: 46, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
-    borderColor: '#e8eaed', paddingHorizontal: 14, fontSize: 15, color: '#111827',
-    marginHorizontal: 16, marginBottom: 12,
-  },
-  modalItem: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
-    paddingHorizontal: 16, backgroundColor: '#fff',
-  },
-  modalItemText: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  modalItemSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  cabezalBadge: {
-    backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 6, marginLeft: 10,
-  },
-  cabezalBadgeText: { fontSize: 10, fontWeight: '800', color: '#2563eb', letterSpacing: 0.5 },
-  separator: { height: 1, backgroundColor: '#f4f6f8' },
+  successTitle: { fontSize: 26, color: colors.ink, marginBottom: 8 },
+  successSub: { fontSize: 15, color: colors.ink60, marginBottom: 32, textAlign: 'center' },
 })

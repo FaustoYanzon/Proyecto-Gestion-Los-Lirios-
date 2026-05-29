@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native'
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
+import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import type { Parcela } from '../../lib/types'
@@ -157,11 +158,11 @@ html,body,#map { width:100%; height:100%; }
   </button>
   <div id="layer-panel">
     <div class="lp-title">Infraestructura</div>
-    <label class="lp-row"><input type="checkbox" id="cb-acequias" checked onchange="toggleLayer('acequias')"><span class="lp-line" style="background:#38bdf8"></span><span class="lp-lbl">Acequias</span></label>
-    <label class="lp-row"><input type="checkbox" id="cb-lineaElectrica" checked onchange="toggleLayer('lineaElectrica')"><span class="lp-line" style="background:#facc15"></span><span class="lp-lbl">Línea eléctrica</span></label>
-    <label class="lp-row"><input type="checkbox" id="cb-canerias" checked onchange="toggleLayer('canerias')"><span class="lp-line" style="background:#1e3a8a"></span><span class="lp-lbl">Cañerías</span></label>
-    <label class="lp-row"><input type="checkbox" id="cb-valvulas" checked onchange="toggleLayer('valvulas')"><span class="lp-dot" style="background:#1e3a8a"></span><span class="lp-lbl">Válvulas</span></label>
-    <label class="lp-row"><input type="checkbox" id="cb-cuadrantesRiego" checked onchange="toggleLayer('cuadrantesRiego')"><span class="lp-poly" style="background:#d1d5db"></span><span class="lp-lbl">Cuadrantes</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-acequias" onchange="toggleLayer('acequias')"><span class="lp-line" style="background:#38bdf8"></span><span class="lp-lbl">Acequias</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-lineaElectrica" onchange="toggleLayer('lineaElectrica')"><span class="lp-line" style="background:#facc15"></span><span class="lp-lbl">Línea eléctrica</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-canerias" onchange="toggleLayer('canerias')"><span class="lp-line" style="background:#1e3a8a"></span><span class="lp-lbl">Cañerías</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-valvulas" onchange="toggleLayer('valvulas')"><span class="lp-dot" style="background:#1e3a8a"></span><span class="lp-lbl">Válvulas</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-cuadrantesRiego" onchange="toggleLayer('cuadrantesRiego')"><span class="lp-poly" style="background:#d1d5db"></span><span class="lp-lbl">Cuadrantes</span></label>
   </div>
 </div>
 
@@ -368,7 +369,7 @@ function initExtraLayers() {
 
     var group = L.layerGroup([geoLayer]);
     layerGroups[cfg.key] = group;
-    group.addTo(map);
+    // Layers are off by default; user enables them via panel
   });
 }
 
@@ -401,6 +402,7 @@ setTimeout(function() { map.invalidateSize(); }, 200);
 // ─── Native parcel panel ──────────────────────────────────────────────────────
 
 function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () => void }) {
+  const router = useRouter()
   const p = panel.parcela
   const estado = panel.estado?.estado_fenologico
   const estadoColor = estado ? (ESTADO_COLORS[estado] ?? '#94a3b8') : null
@@ -484,6 +486,24 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           <Text style={panelStyles.emptyText}>Sin registros en la campaña actual</Text>
         )}
       </ScrollView>
+
+      {/* ── Quick actions ── */}
+      <View style={panelStyles.actionsBar}>
+        {([
+          { key: 'riego', label: '+ Riego', route: '/(tabs)/riego'  },
+          { key: 'tarea', label: '+ Tarea', route: '/(tabs)/tareas' },
+          { key: 'fito',  label: '+ Fito',  route: '/fito'          },
+        ] as const).map(({ key, label, route }) => (
+          <TouchableOpacity
+            key={key}
+            style={panelStyles.actionBtn}
+            onPress={() => { onClose(); router.push(route) }}
+            activeOpacity={0.75}
+          >
+            <Text style={panelStyles.actionBtnText}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   )
 }
@@ -527,6 +547,16 @@ const panelStyles = StyleSheet.create({
   tareaName: { fontSize: 13, color: '#374151', fontWeight: '500', flex: 1, marginRight: 8 },
   tareaFecha: { fontSize: 12, color: '#9ca3af' },
   emptyText: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: 8 },
+  actionsBar: {
+    flexDirection: 'row', gap: 8, padding: 12,
+    borderTopWidth: 1, borderTopColor: '#f0f2f5',
+  },
+  actionBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: '#f0f2f5', backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  actionBtnText: { fontSize: 12, fontWeight: '700', color: '#7a1f2c' },
 })
 
 // ─── Main screen ──────────────────────────────────────────────────────────────

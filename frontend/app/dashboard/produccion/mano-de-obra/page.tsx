@@ -109,7 +109,7 @@ function CheckboxGroup({
             type="checkbox"
             checked={selected.has(opt.value)}
             onChange={() => onChange(opt.value)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-gray-300 text-[#7a1f2c] focus:ring-[#7a1f2c]"
           />
           <span className="text-sm text-gray-700">{opt.label}</span>
         </label>
@@ -316,7 +316,7 @@ export default function ManoDeObraPage() {
       .map(([nombre, monto]) => ({ nombre, monto }))
   }, [filtered])
 
-  const inputCls = 'w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const inputCls = 'w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]'
 
   return (
     <div className="space-y-5">
@@ -496,7 +496,7 @@ export default function ManoDeObraPage() {
 
                 <button
                   onClick={applyFilters}
-                  className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                  className="w-full py-2.5 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
                 >
                   Aplicar Filtros
                 </button>

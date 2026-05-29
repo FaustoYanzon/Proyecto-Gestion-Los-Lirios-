@@ -22,7 +22,7 @@ import {
 } from '@/lib/api/parcelas'
 import { useAuthStore } from '@/store/authStore'
 
-const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent'
+const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err   = 'mt-1 text-xs text-red-600'
 
@@ -189,7 +189,7 @@ function ParcelaForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-60 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
         >
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
           {isEdit ? 'Guardar cambios' : 'Crear parcela'}
@@ -244,7 +244,7 @@ export default function ParcelasPage() {
         {isSuperAdmin && (
           <button
             onClick={() => setModal('create')}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
           >
             <Plus size={16} />
             Nueva parcela
@@ -260,7 +260,7 @@ export default function ParcelasPage() {
             onClick={() => setTipoFilter(opt.value)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tipoFilter === opt.value
-                ? 'bg-green-600 text-white'
+                ? 'bg-[#7a1f2c] text-white'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
             }`}
           >
@@ -325,7 +325,7 @@ export default function ParcelasPage() {
                           <button
                             onClick={() => setModal({ edit: p })}
                             title="Editar"
-                            className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
                           >
                             <Pencil size={15} />
                           </button>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" role="img" aria-label="Los Lirios SA">
+  <title>Los Lirios SA — marca</title>
+
+  <!-- Stem -->
+  <path d="M40 7 C40 11 41 15 41 19" stroke="#5a1320" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Tendril -->
+  <path d="M41 12 C47 7 55 11 52 17" stroke="#5a1320" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Row 1: 2 -->
+  <circle cx="34" cy="27" r="7" fill="#5a1320"/>
+  <circle cx="46" cy="27" r="7" fill="#5a1320"/>
+  <circle cx="31.5" cy="24.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="43.5" cy="24.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+
+  <!-- Row 2: 3 -->
+  <circle cx="28" cy="39" r="7" fill="#5a1320"/>
+  <circle cx="40" cy="39" r="7" fill="#5a1320"/>
+  <circle cx="52" cy="39" r="7" fill="#5a1320"/>
+  <circle cx="25.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="37.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="49.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+
+  <!-- Row 3: 4 (widest) -->
+  <circle cx="22" cy="51" r="7" fill="#5a1320"/>
+  <circle cx="34" cy="51" r="7" fill="#5a1320"/>
+  <circle cx="46" cy="51" r="7" fill="#5a1320"/>
+  <circle cx="58" cy="51" r="7" fill="#5a1320"/>
+  <circle cx="19.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="31.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="43.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="55.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+
+  <!-- Row 4: 3 -->
+  <circle cx="28" cy="63" r="7" fill="#5a1320"/>
+  <circle cx="40" cy="63" r="7" fill="#5a1320"/>
+  <circle cx="52" cy="63" r="7" fill="#5a1320"/>
+  <circle cx="25.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="37.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="49.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+
+  <!-- Row 5: 2 -->
+  <circle cx="34" cy="75" r="7" fill="#5a1320"/>
+  <circle cx="46" cy="75" r="7" fill="#5a1320"/>
+  <circle cx="31.5" cy="72.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <circle cx="43.5" cy="72.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+
+  <!-- Row 6: 1 (tip) -->
+  <circle cx="40" cy="87" r="7" fill="#5a1320"/>
+  <circle cx="37.5" cy="84.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+</svg>

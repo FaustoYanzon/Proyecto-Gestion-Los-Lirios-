@@ -25,7 +25,7 @@ const ROLE_BADGE: Record<UserRole, string> = {
   obrero:      'bg-gray-100 text-gray-600',
 }
 
-const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent'
+const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err   = 'mt-1 text-xs text-red-600'
 
@@ -129,7 +129,7 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
         <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
           Cancelar
         </button>
-        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-60 transition-colors">
+        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
           Crear usuario
         </button>
@@ -189,7 +189,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
       </div>
       <div>
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input type="checkbox" {...register('is_active')} className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
+          <input type="checkbox" {...register('is_active')} className="rounded border-gray-300 text-[#7a1f2c] focus:ring-[#7a1f2c]" />
           <span className="text-sm font-medium text-gray-700">Usuario activo</span>
         </label>
       </div>
@@ -206,7 +206,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
         <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
           Cancelar
         </button>
-        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-60 transition-colors">
+        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
           Guardar cambios
         </button>
@@ -237,7 +237,7 @@ export default function UsuariosPage() {
         {isSuperAdmin && (
           <button
             onClick={() => setModal('create')}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
           >
             <Plus size={16} />
             Nuevo usuario
@@ -306,7 +306,7 @@ export default function UsuariosPage() {
                           <button
                             onClick={() => setModal({ edit: u })}
                             title="Editar"
-                            className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
                           >
                             <Pencil size={15} />
                           </button>

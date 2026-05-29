@@ -55,7 +55,7 @@ export default function LayerControl({ visible, onChange }: Props) {
                   type="checkbox"
                   checked={visible[key]}
                   onChange={e => onChange({ ...visible, [key]: e.target.checked })}
-                  className="rounded border-gray-300 text-green-600 focus:ring-1 focus:ring-green-500 focus:ring-offset-0 cursor-pointer"
+                  className="rounded border-gray-300 text-[#7a1f2c] focus:ring-1 focus:ring-[#7a1f2c] focus:ring-offset-0 cursor-pointer"
                 />
                 <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
                   {shape === 'line' && (

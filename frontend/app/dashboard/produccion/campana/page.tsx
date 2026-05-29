@@ -166,7 +166,7 @@ function UpdateModal({
                 value={rendimiento}
                 onChange={(e) => setRendimiento(e.target.value)}
                 placeholder="Ej: 1200"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
               />
             </div>
           )}
@@ -180,7 +180,7 @@ function UpdateModal({
               onChange={(e) => setObs(e.target.value)}
               placeholder="Notas adicionales..."
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
             />
           </div>
 
@@ -197,7 +197,7 @@ function UpdateModal({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-[2] flex items-center justify-center gap-2 bg-green-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-green-700 disabled:opacity-60 transition-colors"
+            className="flex-[2] flex items-center justify-center gap-2 bg-[#7a1f2c] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
           >
             <Save size={14} />
             {saving ? 'Guardando...' : 'Guardar'}
@@ -318,7 +318,7 @@ export default function CampanaPage() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => setEditing(item)}
-                      className="text-xs text-green-600 hover:text-green-800 font-semibold hover:underline transition-colors"
+                      className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"
                     >
                       Actualizar
                     </button>

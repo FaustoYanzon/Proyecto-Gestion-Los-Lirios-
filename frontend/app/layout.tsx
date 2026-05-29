@@ -3,6 +3,7 @@
 
 import type { Metadata } from 'next';
 import { Public_Sans, Fraunces, JetBrains_Mono } from 'next/font/google';
+import Providers from './providers';
 import './globals.css';
 
 const publicSans = Public_Sans({
@@ -43,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="es"
       className={`${publicSans.variable} ${fraunces.variable} ${jetbrains.variable}`}
     >
-      <body>{children}</body>
+      <body><Providers>{children}</Providers></body>
     </html>
   );
 }

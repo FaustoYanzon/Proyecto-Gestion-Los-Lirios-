@@ -86,7 +86,7 @@ function CheckboxGroup({
             type="checkbox"
             checked={selected.has(opt.value)}
             onChange={() => onChange(opt.value)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-gray-300 text-[#7a1f2c] focus:ring-[#7a1f2c]"
           />
           <span className="text-sm text-gray-700">{opt.label}</span>
         </label>
@@ -307,7 +307,7 @@ export default function FinanceDashboardPage() {
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
           >
             {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>{y}/{y + 1}</option>)}
           </select>
@@ -359,7 +359,7 @@ export default function FinanceDashboardPage() {
             )}
           </div>
 
-          <div className="bg-blue-50 rounded-lg border border-blue-100 shadow-sm p-5">
+          <div className="bg-[#faf6ec] rounded-lg border border-[#fbfaf6] shadow-sm p-5">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp size={16} className="text-blue-600" />
               <h3 className="text-sm font-semibold text-blue-800">Estacionalidad</h3>
@@ -552,7 +552,7 @@ export default function FinanceDashboardPage() {
               type="date"
               value={pDesde}
               onChange={(e) => setPDesde(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
             />
           </div>
 
@@ -562,7 +562,7 @@ export default function FinanceDashboardPage() {
               type="date"
               value={pHasta}
               onChange={(e) => setPHasta(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
             />
           </div>
 
@@ -595,7 +595,7 @@ export default function FinanceDashboardPage() {
 
           <button
             onClick={applyFilters}
-            className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full py-2.5 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
           >
             Aplicar Filtros
           </button>

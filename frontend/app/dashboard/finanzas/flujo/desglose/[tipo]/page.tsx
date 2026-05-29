@@ -81,7 +81,7 @@ export default function DesgloseEgresoPage({
             <select
               value={anio}
               onChange={(e) => setAnio(Number(e.target.value))}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
             >
               {AVAILABLE_YEARS.map((y) => (
                 <option key={y} value={y}>{y}/{y + 1}</option>
@@ -192,9 +192,9 @@ function ExpandableRow({ row, forceOpen }: { row: FlujoDesgloseRow; forceOpen: b
       {open && row.items.map((item) => (
         <tr
           key={item.descripcion}
-          className="border-b border-gray-100 bg-white hover:bg-blue-50 transition-colors"
+          className="border-b border-gray-100 bg-white hover:bg-[#fbfaf6] transition-colors"
         >
-          <td className="sticky left-0 z-10 bg-white hover:bg-blue-50 px-3 py-1.5 whitespace-nowrap min-w-[220px]">
+          <td className="sticky left-0 z-10 bg-white hover:bg-[#fbfaf6] px-3 py-1.5 whitespace-nowrap min-w-[220px]">
             <div className="flex items-center gap-2 pl-7">
               <span className="w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0" />
               <span className="text-xs text-gray-600">{item.descripcion}</span>

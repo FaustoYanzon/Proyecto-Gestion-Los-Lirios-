@@ -32,7 +32,7 @@ function SectionHeader({ label }: { label: string }) {
     <tr>
       <td
         colSpan={14}
-        className="sticky left-0 z-10 bg-green-700 text-white px-3 py-2 text-xs font-bold uppercase tracking-wider"
+        className="sticky left-0 z-10 bg-[#5a1320] text-white px-3 py-2 text-xs font-bold uppercase tracking-wider"
       >
         {label}
       </td>
@@ -117,7 +117,7 @@ function SaldoRow({
   const totalVal = showLastAsTotal
     ? (valores.at(-1) ?? 0)
     : valores.reduce((s, v) => s + v, 0)
-  const bg = showLastAsTotal ? 'bg-blue-50' : 'bg-amber-50'
+  const bg = 'bg-[#faf6ec]'
 
   return (
     <tr className={`border-b border-gray-300 ${bg}`}>
@@ -128,7 +128,7 @@ function SaldoRow({
         <td
           key={i}
           className={`px-2 py-2 text-right font-mono text-sm font-semibold whitespace-nowrap ${
-            v >= 0 ? 'text-green-700' : 'text-red-600'
+            v >= 0 ? 'text-[#3f5c3a]' : 'text-[#a3293a]'
           }`}
         >
           {fmtAlways(v)}
@@ -136,7 +136,7 @@ function SaldoRow({
       ))}
       <td
         className={`px-2 py-2 text-right font-mono text-sm font-bold whitespace-nowrap border-l border-gray-300 ${
-          totalVal >= 0 ? 'text-green-700' : 'text-red-600'
+          totalVal >= 0 ? 'text-[#3f5c3a]' : 'text-[#a3293a]'
         }`}
       >
         {fmtAlways(totalVal)}
@@ -151,14 +151,14 @@ function EgresoRow({
   const router = useRouter()
   return (
     <tr
-      className="border-b border-gray-100 hover:bg-green-50 transition-colors cursor-pointer group"
+      className="border-b border-gray-100 hover:bg-[#fbfaf6] transition-colors cursor-pointer group"
       onClick={() => router.push(`/dashboard/finanzas/flujo/desglose/${tipo}?anio=${anio}`)}
     >
-      <td className="sticky left-0 z-10 bg-white group-hover:bg-green-50 px-3 py-1.5 text-sm text-gray-700 whitespace-nowrap min-w-[180px]">
+      <td className="sticky left-0 z-10 bg-white group-hover:bg-[#fbfaf6] px-3 py-1.5 text-sm text-gray-700 whitespace-nowrap min-w-[180px]">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 font-mono w-4 text-right flex-shrink-0">{num}</span>
           <span>{label}</span>
-          <ChevronRight size={12} className="text-gray-300 group-hover:text-green-600 ml-auto flex-shrink-0" />
+          <ChevronRight size={12} className="text-gray-300 group-hover:text-[#7a1f2c] ml-auto flex-shrink-0" />
         </div>
       </td>
       {valores.map((v, i) => (
@@ -223,7 +223,7 @@ export default function FlujoPage() {
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
           >
             {AVAILABLE_YEARS.map((y) => (
               <option key={y} value={y}>

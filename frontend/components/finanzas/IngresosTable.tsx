@@ -145,7 +145,7 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
                       <button
                         onClick={() => onEdit(ing)}
                         title="Editar"
-                        className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                        className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
                       >
                         <Pencil size={15} />
                       </button>
