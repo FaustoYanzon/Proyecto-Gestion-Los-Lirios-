@@ -214,11 +214,22 @@ export default function CampanaPage() {
   const [editing, setEditing] = useState<EstadoActualItem | null>(null)
   const qc = useQueryClient()
 
-  const { data: estados = [], isLoading } = useQuery({
+  const { data: estadosRaw = [], isLoading } = useQuery({
     queryKey: ['estado-actual'],
     queryFn: getEstadoActual,
     staleTime: 30_000,
   })
+
+  const estados = useMemo(() => {
+    const map = new Map<string, EstadoActualItem>()
+    for (const item of estadosRaw) {
+      const prev = map.get(item.parcela_id)
+      if (!prev || (item.fecha_estado ?? '') > (prev.fecha_estado ?? '')) {
+        map.set(item.parcela_id, item)
+      }
+    }
+    return Array.from(map.values())
+  }, [estadosRaw])
 
   const summary = useMemo(() =>
     ESTADOS.reduce<Record<string, number>>((acc, e) => {
@@ -302,7 +313,7 @@ export default function CampanaPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {estados.map((item) => (
-                <tr key={item.parcela_id} className="hover:bg-gray-50 transition-colors">
+                <tr key={item.id ?? item.parcela_id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
                     {item.parcela_nombre}
                   </td>

@@ -723,7 +723,7 @@ export default function TareasScreen() {
 
   const loadRegistros = useCallback(async () => {
     try {
-      const { data } = await api.get<RegistroTrabajo[]>('/produccion/trabajo/?limit=20')
+      const { data } = await api.get<RegistroTrabajo[]>('/produccion/trabajo/?limit=10')
       setRegistros(data)
     } catch { /* offline */ }
     finally { setRefreshing(false) }

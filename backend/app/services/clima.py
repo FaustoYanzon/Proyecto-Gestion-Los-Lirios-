@@ -3,7 +3,7 @@
 # Open-Meteo es gratis, sin API key, devuelve JSON. Docs:
 #   https://open-meteo.com/en/docs
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 import httpx
 from sqlalchemy import select
@@ -24,7 +24,7 @@ ClimaKind = Literal["actual", "pronostico"]
 
 
 def _is_fresh(fetched_at: datetime) -> bool:
-    return datetime.utcnow() - fetched_at < timedelta(minutes=CACHE_TTL_MIN)
+    return datetime.now(timezone.utc) - fetched_at < timedelta(minutes=CACHE_TTL_MIN)
 
 
 async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
@@ -91,11 +91,11 @@ async def get_clima(db: AsyncSession, finca: str, kind: ClimaKind) -> dict:
 
     # 3. Actualizar cache (upsert)
     if row is None:
-        row = ClimaCache(finca=finca, kind=kind, payload=payload, fetched_at=datetime.utcnow())
+        row = ClimaCache(finca=finca, kind=kind, payload=payload, fetched_at=datetime.now(timezone.utc))
         db.add(row)
     else:
         row.payload = payload
-        row.fetched_at = datetime.utcnow()
+        row.fetched_at = datetime.now(timezone.utc)
     await db.flush()
 
     return {**payload, "_cached": False, "_fetched_at": row.fetched_at.isoformat()}

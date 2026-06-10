@@ -1,7 +1,7 @@
-import asyncio
 import json
-import urllib.request
 from typing import Sequence
+
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -27,15 +27,14 @@ class SendNotificationRequest(BaseModel):
     user_ids: list[str] | None = None  # None = todos los usuarios
 
 
-def _send_expo_push_sync(messages: list[dict]) -> int:
-    data = json.dumps(messages).encode("utf-8")
-    req = urllib.request.Request(
-        "https://exp.host/--/api/v2/push/send",
-        data=data,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        return resp.status
+async def _send_expo_push(messages: list[dict]) -> int:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            "https://exp.host/--/api/v2/push/send",
+            json=messages,
+            headers={"Accept": "application/json"},
+        )
+        return resp.status_code
 
 
 @router.post("/token", status_code=204)
@@ -53,7 +52,7 @@ async def register_token(
         existing.platform = req.platform
     else:
         db.add(PushToken(user_id=current_user.id, token=req.token, platform=req.platform))
-    await db.commit()
+    await db.flush()  # commit delegated to get_db context manager
 
 
 @router.post("/enviar")
@@ -76,5 +75,5 @@ async def send_notification(
         for t in tokens
     ]
 
-    status = await asyncio.to_thread(_send_expo_push_sync, messages)
-    return {"enviados": len(messages), "expo_status": status}
+    http_status = await _send_expo_push(messages)
+    return {"enviados": len(messages), "expo_status": http_status}

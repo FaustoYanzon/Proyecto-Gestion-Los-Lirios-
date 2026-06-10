@@ -9,6 +9,7 @@ from app.core.database import Base
 import app.models.user  # noqa: F401
 import app.models.parcela  # noqa: F401
 import app.models.finanzas  # noqa: F401
+import app.models.trabajador  # noqa: F401
 import app.models.produccion  # noqa: F401
 
 config = context.config

@@ -28,9 +28,9 @@ function formatDateDisplay(iso: string) {
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-const STEP_LABELS = ['Fecha / Responsable', 'Detalle']
+const STEP_LABELS = ['Fecha / Resp.', 'Detalle', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 }) {
+function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -251,14 +251,23 @@ function StepFechaResp({
 
 // ─── Step 2: Detalle ──────────────────────────────────────────────────────────
 
+type DetalleData = {
+  parcela: Parcela | null
+  producto: string
+  dosis: string
+  motivo: string
+  diasCarencia: number
+  diasReingreso: number
+}
+
 function StepDetalle({
   fecha, responsable, parcelas,
-  onSuccess, onBack,
+  onNext, onBack,
 }: {
   fecha: string
   responsable: string
   parcelas: Parcela[]
-  onSuccess: () => void
+  onNext: (data: DetalleData) => void
   onBack: () => void
 }) {
   const [search, setSearch] = useState('')
@@ -269,7 +278,6 @@ function StepDetalle({
   const [motivo, setMotivo] = useState('')
   const [diasCarencia, setDiasCarencia] = useState(14)
   const [diasReingreso, setDiasReingreso] = useState(12)
-  const [loading, setLoading] = useState(false)
 
   const filtered = parcelas
     .filter((p) => p.tipo === 'parral')
@@ -280,39 +288,20 @@ function StepDetalle({
     setProducto(fav)
   }
 
-  // Preview: habilitación cosecha y reingreso
   function addDays(iso: string, days: number): string {
     const d = new Date(iso)
     d.setDate(d.getDate() + days)
     return d.toISOString().split('T')[0]
   }
 
-  async function handleSubmit() {
+  function handleNext() {
     const prod = producto.trim()
     if (!prod) { Alert.alert('Error', 'Ingresá o seleccioná un producto.'); return }
     if (!parcela) { Alert.alert('Error', 'Seleccioná una parcela.'); return }
     if (!motivo.trim()) { Alert.alert('Error', 'Ingresá el motivo de la aplicación.'); return }
     const dosisNum = parseFloat(dosis.replace(',', '.'))
     if (isNaN(dosisNum) || dosisNum <= 0) { Alert.alert('Error', 'Ingresá una dosis válida (lt/ha).'); return }
-    try {
-      setLoading(true)
-      await api.post('/produccion/fitosanitarios/', {
-        fecha,
-        parcela_id: parcela.id,
-        producto_nombre: prod,
-        dosis_lt_ha: dosisNum,
-        motivo: motivo.trim(),
-        dias_carencia: diasCarencia,
-        dias_reingreso: diasReingreso,
-        responsable,
-      })
-      onSuccess()
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
-    } finally {
-      setLoading(false)
-    }
+    onNext({ parcela, producto: prod, dosis, motivo: motivo.trim(), diasCarencia, diasReingreso })
   }
 
   return (
@@ -445,6 +434,98 @@ function StepDetalle({
             <Text style={styles.secondaryBtnText}>Atrás</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 2 }]}
+            onPress={handleNext}
+          >
+            <Text style={styles.primaryBtnText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Step 3: Confirmar ────────────────────────────────────────────────────────
+
+function StepConfirmar({
+  fecha, responsable, parcela, producto, dosis, motivo, diasCarencia, diasReingreso,
+  onSuccess, onBack,
+}: {
+  fecha: string
+  responsable: string
+  parcela: Parcela | null
+  producto: string
+  dosis: string
+  motivo: string
+  diasCarencia: number
+  diasReingreso: number
+  onSuccess: () => void
+  onBack: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+
+  function addDays(iso: string, days: number): string {
+    const d = new Date(iso)
+    d.setDate(d.getDate() + days)
+    return d.toISOString().split('T')[0]
+  }
+
+  async function handleSubmit() {
+    const dosisNum = parseFloat(dosis.replace(',', '.'))
+    try {
+      setLoading(true)
+      await api.post('/produccion/fitosanitarios/', {
+        fecha,
+        parcela_id: parcela?.id,
+        producto_nombre: producto,
+        dosis_lt_ha: dosisNum,
+        motivo,
+        dias_carencia: diasCarencia,
+        dias_reingreso: diasReingreso,
+        responsable,
+      })
+      onSuccess()
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const rows = [
+    { label: 'Fecha',        value: formatDateDisplay(fecha) },
+    { label: 'Responsable',  value: responsable },
+    { label: 'Parcela',      value: parcela?.nombre ?? 'Sin parcela' },
+    { label: 'Producto',     value: producto },
+    { label: 'Dosis',        value: `${dosis} lt/ha` },
+    { label: 'Motivo',       value: motivo },
+    { label: 'Días carencia',  value: `${diasCarencia} días` },
+    { label: 'Días reingreso', value: `${diasReingreso} días` },
+    { label: 'Hab. cosecha',   value: formatDateDisplay(addDays(fecha, diasCarencia)) },
+    { label: 'Hab. reingreso', value: formatDateDisplay(addDays(fecha, diasReingreso)) },
+  ]
+
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={2} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <Text style={styles.stepTitle}>Confirmar</Text>
+
+        <View style={styles.summaryCard}>
+          {rows.map(({ label, value }, idx) => (
+            <View key={label} style={[styles.summaryRow, idx < rows.length - 1 && styles.summaryRowBorder]}>
+              <Text style={styles.summaryLabel}>{label}</Text>
+              <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right' }]}>{value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.actionRow, { marginTop: 24 }]}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.primaryBtn, { flex: 2 }, loading && { opacity: 0.6 }]}
             onPress={handleSubmit}
             disabled={loading}
@@ -454,7 +535,7 @@ function StepDetalle({
             ) : (
               <>
                 <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
-                <Text style={styles.primaryBtnText}>Guardar</Text>
+                <Text style={styles.primaryBtnText}>Confirmar</Text>
               </>
             )}
           </TouchableOpacity>
@@ -466,7 +547,7 @@ function StepDetalle({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'fecha_resp' | 'detalle' | 'success'
+type Step = 'fecha_resp' | 'detalle' | 'confirmar' | 'success'
 
 export default function FitoScreen() {
   const user = useAuthStore((s) => s.user)
@@ -475,6 +556,7 @@ export default function FitoScreen() {
 
   const [selFecha, setSelFecha] = useState(isoToday())
   const [selResponsable, setSelResponsable] = useState('')
+  const [selDetalle, setSelDetalle] = useState<DetalleData | null>(null)
 
   const initialResponsable = user?.full_name?.split(' ')[0] ?? ''
 
@@ -492,6 +574,7 @@ export default function FitoScreen() {
   function reset() {
     setSelFecha(isoToday())
     setSelResponsable('')
+    setSelDetalle(null)
     setStep('fecha_resp')
   }
 
@@ -501,8 +584,25 @@ export default function FitoScreen() {
         fecha={selFecha}
         responsable={selResponsable}
         parcelas={parcelas}
-        onSuccess={() => setStep('success')}
+        onNext={(data) => { setSelDetalle(data); setStep('confirmar') }}
         onBack={() => setStep('fecha_resp')}
+      />
+    )
+  }
+
+  if (step === 'confirmar' && selDetalle) {
+    return (
+      <StepConfirmar
+        fecha={selFecha}
+        responsable={selResponsable}
+        parcela={selDetalle.parcela}
+        producto={selDetalle.producto}
+        dosis={selDetalle.dosis}
+        motivo={selDetalle.motivo}
+        diasCarencia={selDetalle.diasCarencia}
+        diasReingreso={selDetalle.diasReingreso}
+        onSuccess={() => setStep('success')}
+        onBack={() => setStep('detalle')}
       />
     )
   }
@@ -604,6 +704,19 @@ const styles = StyleSheet.create({
   },
   daysValue: { fontSize: 22, fontWeight: '800', color: colors.ink, minWidth: 36, textAlign: 'center' },
   daysHint: { fontSize: 10, color: colors.niebla, fontWeight: '500' },
+
+  // summary card (step 3)
+  summaryCard: {
+    backgroundColor: colors.blanco, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.hueso, overflow: 'hidden',
+  },
+  summaryRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13,
+  },
+  summaryRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.hueso },
+  summaryLabel: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
+  summaryValue: { fontSize: 13, color: colors.ink, fontWeight: '700' },
 
   // actions
   actionRow: { flexDirection: 'row', gap: 10 },

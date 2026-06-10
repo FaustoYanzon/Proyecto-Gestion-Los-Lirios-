@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, finanzas, notificaciones, parcelas, produccion, users
+from app.api import auth, finanzas, notificaciones, parcelas, produccion, trabajadores, users
 
 app = FastAPI(
     title="Los Lirios API",
@@ -28,6 +28,7 @@ app.include_router(users.router)
 app.include_router(parcelas.router)
 app.include_router(finanzas.router)
 app.include_router(produccion.router)
+app.include_router(trabajadores.router)
 app.include_router(notificaciones.router)
 
 

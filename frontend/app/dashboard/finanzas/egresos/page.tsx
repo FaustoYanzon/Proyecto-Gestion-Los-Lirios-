@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Download } from 'lucide-react'
 import {
   getEgresos,
   deleteEgreso,
   TIPO_EGRESO_VALUES,
   TIPO_EGRESO_LABELS,
+  CLASIFICACION_LABELS,
   type EgresosFilter,
   type EgresoResponse,
 } from '@/lib/api/egresos'
@@ -65,6 +66,38 @@ function Sheet({ open, onClose, title, children }: SheetProps) {
   )
 }
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+
+const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete' }
+const FORMA_PAGO_LABELS: Record<string, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia', cheque: 'Cheque', credito: 'Crédito' }
+
+function exportCSV(data: EgresoResponse[]) {
+  const headers = ['Fecha', 'Tipo', 'Clasificación', 'Descripción', 'Monto', 'Moneda', 'Finca', 'Origen', 'Forma Pago']
+  const rows = data.map((e) => [
+    e.fecha,
+    TIPO_EGRESO_LABELS[e.tipo] ?? e.tipo,
+    CLASIFICACION_LABELS[e.clasificacion] ?? e.clasificacion,
+    e.descripcion ?? '',
+    e.monto,
+    e.moneda.toUpperCase(),
+    FINCA_LABELS[e.finca] ?? e.finca,
+    e.origen === 'oficial' ? 'Oficial' : 'No oficial',
+    FORMA_PAGO_LABELS[e.forma_pago] ?? e.forma_pago,
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `egresos-${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const EMPTY_FILTERS: EgresosFilter = {}
@@ -120,13 +153,25 @@ export default function EgresosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Egresos</h1>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
-        >
-          <Plus size={16} />
-          Nuevo Egreso
-        </button>
+        <div className="flex items-center gap-2">
+          {egresos.length > 0 && (
+            <button
+              onClick={() => exportCSV(egresos)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              title="Exportar registros actuales a CSV"
+            >
+              <Download size={15} />
+              CSV
+            </button>
+          )}
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+          >
+            <Plus size={16} />
+            Nuevo Egreso
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}

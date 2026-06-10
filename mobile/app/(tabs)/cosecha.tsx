@@ -61,7 +61,7 @@ export default function CosechaScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const data = await getCosechas({ temporada: TEMPORADA, limit: 200 })
+      const data = await getCosechas({ temporada: TEMPORADA, limit: 10 })
       setRegistros(data)
     } catch {
       Alert.alert('Error', 'No se pudieron cargar los registros')

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, Droplets, ClipboardList, DollarSign, Sprout, Layers, Edit2, Save, XCircle, ShoppingBasket } from 'lucide-react'
+import { X, Droplets, ClipboardList, DollarSign, Sprout, Layers, Edit2, Save, XCircle, ShoppingBasket, FlaskConical } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { loadFincaKML, type KMLFeature } from '@/lib/kml'
@@ -136,14 +136,27 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
     staleTime: 60_000,
   })
 
+  const { data: fitos = [], isLoading: loadFito } = useQuery({
+    queryKey: ['panel-fito', parcela?.id, fechaDesde],
+    queryFn: async () => {
+      const { data } = await api.get<{ id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]>(
+        '/produccion/fitosanitarios/', { params: { parcela_id: parcela!.id, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 200 } }
+      )
+      return data
+    },
+    enabled: !!parcela?.id,
+    staleTime: 60_000,
+  })
+
   const costoTotal = useMemo(() => trabajos.reduce((s, t) => s + Number(t.monto_total), 0), [trabajos])
   const mmTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.mm_aplicados), 0), [riegos])
+  const lastFitos = useMemo(() => [...fitos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5), [fitos])
   const lastTareas = useMemo(() => {
     const m = new Map<string, string>()
     ;[...trabajos].sort((a, b) => b.fecha.localeCompare(a.fecha)).forEach(t => {
       if (!m.has(t.tarea)) m.set(t.tarea, t.fecha)
     })
-    return [...m.entries()].slice(0, 4)
+    return [...m.entries()].slice(0, 5)
   }, [trabajos])
 
   async function handleSave() {
@@ -247,20 +260,6 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
               </div>
             )}
 
-            {estado?.estado_fenologico && (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                <Sprout size={14} className="text-green-600 flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-medium text-green-800">
-                    {ESTADO_LABELS[estado.estado_fenologico] ?? estado.estado_fenologico}
-                  </p>
-                  {estado.fecha_estado && (
-                    <p className="text-xs text-green-500">{estado.fecha_estado.split('-').reverse().join('/')}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
             {cosechaByParcelaId && parcela?.id && cosechaByParcelaId[parcela.id] != null && (
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
@@ -277,6 +276,20 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
               </div>
             )}
 
+            {estado?.estado_fenologico && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                <Sprout size={14} className="text-green-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-green-800">
+                    {ESTADO_LABELS[estado.estado_fenologico] ?? estado.estado_fenologico}
+                  </p>
+                  {estado.fecha_estado && (
+                    <p className="text-xs text-green-500">{estado.fecha_estado.split('-').reverse().join('/')}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                 <Droplets size={13} /> Agua — campaña actual
@@ -288,6 +301,39 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
                   <span className="text-sm font-bold text-[#3d6b86]">{mmTotal.toFixed(1)} mm</span>
                   <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
                 </div>
+              )}
+            </div>
+
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                <FlaskConical size={13} /> Aplicaciones fito — campaña actual
+              </p>
+              {loadFito ? (
+                <div className="space-y-1.5">
+                  {[1, 2].map(i => <div key={i} className="h-5 bg-gray-100 rounded animate-pulse" />)}
+                </div>
+              ) : lastFitos.length === 0 ? (
+                <p className="text-xs text-gray-400">Sin aplicaciones</p>
+              ) : (
+                <div className="space-y-1">
+                  {lastFitos.map((f) => (
+                    <div key={f.id} className="flex justify-between text-xs">
+                      <span className="text-gray-700 truncate mr-2">{f.producto_nombre} · {f.dosis_lt_ha} L/ha</span>
+                      <span className="text-gray-400 flex-shrink-0">{f.fecha.split('-').reverse().join('/')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                <DollarSign size={13} /> Costo laboral — campaña actual
+              </p>
+              {loadTrab ? (
+                <div className="h-7 bg-gray-100 rounded animate-pulse" />
+              ) : (
+                <p className="text-base font-bold text-[#3f5c3a]">{costoTotal > 0 ? formatARS(costoTotal) : '—'}</p>
               )}
             </div>
 
@@ -310,17 +356,6 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                <DollarSign size={13} /> Costo laboral — campaña actual
-              </p>
-              {loadTrab ? (
-                <div className="h-7 bg-gray-100 rounded animate-pulse" />
-              ) : (
-                <p className="text-base font-bold text-[#3f5c3a]">{costoTotal > 0 ? formatARS(costoTotal) : '—'}</p>
               )}
             </div>
           </>

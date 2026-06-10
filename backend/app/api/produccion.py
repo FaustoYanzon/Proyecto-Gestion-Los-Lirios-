@@ -31,6 +31,7 @@ from app.models.produccion import (
     TipoEnvase,
     UnidadMedida,
 )
+from app.models.trabajador import Trabajador
 from app.models.user import User
 from app.schemas.produccion import (
     CicloCampanaCreate,
@@ -68,7 +69,12 @@ def _get_clasificacion(tarea: str) -> ClasificacionTarea:
     return ClasificacionTarea(CLASIFICACION_POR_TAREA.get(tarea, "general"))
 
 
-def _build_egreso_for_trabajo(registro: RegistroTrabajo, user_id: str, parcela_nombre: str | None) -> Egreso:
+def _build_egreso_for_trabajo(
+    registro: RegistroTrabajo,
+    user_id: str,
+    parcela_nombre: str | None,
+    finca: Finca,
+) -> Egreso:
     parts = [registro.tarea, registro.trabajador_nombre]
     if parcela_nombre:
         parts.append(parcela_nombre)
@@ -80,7 +86,7 @@ def _build_egreso_for_trabajo(registro: RegistroTrabajo, user_id: str, parcela_n
         monto=registro.monto_total,
         moneda=MonedaTipo.ars,
         origen=OrigenPago.no_oficial,
-        finca=Finca.media_agua,
+        finca=finca,
         forma_pago=FormaPago.efectivo,
         parcela_id=registro.parcela_id,
         fuente="trabajo_diario",
@@ -276,6 +282,7 @@ async def create_trabajo_masivo(
             fecha=carga.fecha,
             parcela_id=carga.parcela_id,
             trabajador_nombre=item.trabajador_nombre,
+            trabajador_id=item.trabajador_id if hasattr(item, "trabajador_id") else None,
             clasificacion=clasificacion,
             tarea=carga.tarea,
             cantidad=item.cantidad,
@@ -290,7 +297,7 @@ async def create_trabajo_masivo(
     await db.flush()
     for r in registros:
         await db.refresh(r)
-        egreso = _build_egreso_for_trabajo(r, current_user.id, parcela_nombre)
+        egreso = _build_egreso_for_trabajo(r, current_user.id, parcela_nombre, carga.finca)
         db.add(egreso)
 
     return registros
@@ -391,6 +398,13 @@ async def create_trabajo(
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroTrabajo:
     data = trabajo_data.model_dump()
+    finca = data.pop("finca")  # not a DB field — used only for egreso generation
+    trabajador_id = data.get("trabajador_id")
+    if trabajador_id is not None:
+        t = await db.get(Trabajador, trabajador_id)
+        if t is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
+        data["trabajador_nombre"] = t.nombre_completo
     data["clasificacion"] = _get_clasificacion(trabajo_data.tarea)
     data["created_by"] = current_user.id
     registro = RegistroTrabajo(**data)
@@ -403,7 +417,7 @@ async def create_trabajo(
         p = await db.get(Parcela, registro.parcela_id)
         if p:
             parcela_nombre = p.nombre
-    db.add(_build_egreso_for_trabajo(registro, current_user.id, parcela_nombre))
+    db.add(_build_egreso_for_trabajo(registro, current_user.id, parcela_nombre, finca))
 
     return registro
 

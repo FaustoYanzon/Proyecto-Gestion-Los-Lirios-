@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.finanzas import Finca
 from app.models.produccion import (
     ClasificacionTarea,
     CultivoCosecha,
@@ -18,6 +19,7 @@ from app.models.produccion import (
 class TrabajadorItem(BaseModel):
     trabajador_nombre: str
     cantidad: Decimal
+    trabajador_id: str | None = None
 
 
 # ── Registro Trabajo ──────────────────────────────────────────────────────────
@@ -34,12 +36,18 @@ class RegistroTrabajoBase(BaseModel):
 
 
 class RegistroTrabajoCreate(RegistroTrabajoBase):
-    pass
+    # Required for correct egreso assignment — must match the finca where the
+    # work is performed. Defaults to media_agua for backward compat but should
+    # always be sent explicitly by the frontend.
+    finca: Finca = Finca.media_agua
+    # If provided, overrides trabajador_nombre with the linked Trabajador's full name.
+    trabajador_id: str | None = None
 
 
 class RegistroCargaMasiva(BaseModel):
     fecha: date
     parcela_id: str | None = None
+    finca: Finca = Finca.media_agua  # same rationale as RegistroTrabajoCreate
     tarea: str
     unidad_medida: UnidadMedida
     precio_unitario: Decimal
@@ -51,6 +59,7 @@ class RegistroTrabajoUpdate(BaseModel):
     fecha: date | None = None
     parcela_id: str | None = None
     trabajador_nombre: str | None = None
+    trabajador_id: str | None = None
     tarea: str | None = None
     cantidad: Decimal | None = None
     unidad_medida: UnidadMedida | None = None
@@ -62,6 +71,7 @@ class RegistroTrabajoResponse(RegistroTrabajoBase):
     id: str
     clasificacion: ClasificacionTarea
     monto_total: Decimal
+    trabajador_id: str | None = None
     created_by: str
     created_at: datetime
 

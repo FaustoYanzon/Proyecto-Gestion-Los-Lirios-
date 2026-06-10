@@ -64,11 +64,22 @@ export default function ProduccionDashboardPage() {
     staleTime: 60_000,
   })
 
-  const { data: estadoActual = [] } = useQuery({
+  const { data: estadoActualRaw = [] } = useQuery({
     queryKey: ['estado-actual'],
     queryFn: getEstadoActual,
     staleTime: 120_000,
   })
+
+  const estadoActual = useMemo(() => {
+    const map = new Map<string, (typeof estadoActualRaw)[0]>()
+    for (const item of estadoActualRaw) {
+      const prev = map.get(item.parcela_id)
+      if (!prev || (item.fecha_estado ?? '') > (prev.fecha_estado ?? '')) {
+        map.set(item.parcela_id, item)
+      }
+    }
+    return Array.from(map.values())
+  }, [estadoActualRaw])
 
   const { data: alertasCarencia = [] } = useQuery({
     queryKey: ['alertas-carencia'],
@@ -221,7 +232,7 @@ export default function ProduccionDashboardPage() {
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
             {estadoActual.map((e) => (
-              <div key={e.parcela_id} className="flex-shrink-0 bg-gray-50 rounded-lg p-3 border border-gray-200 w-44">
+              <div key={e.id ?? e.parcela_id} className="flex-shrink-0 bg-gray-50 rounded-lg p-3 border border-gray-200 w-44">
                 <p className="text-sm font-semibold text-gray-800 truncate">{e.parcela_nombre}</p>
                 {e.estado_fenologico ? (
                   <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${FENOLOGIA_STYLES[e.estado_fenologico] ?? 'bg-gray-100 text-gray-700'}`}>

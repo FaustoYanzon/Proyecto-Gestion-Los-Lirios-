@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, AlertTriangle } from 'lucide-react'
+import { Plus, X, AlertTriangle, Download } from 'lucide-react'
 import {
   getFitosanitarios, deleteFitosanitario, getAlertasCarencia,
   type FitosanitarioFilter, type FitosanitarioResponse,
@@ -10,6 +10,36 @@ import {
 import { getParcelas } from '@/lib/api/produccion'
 import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+
+function exportCSV(data: FitosanitarioResponse[], parcelaNombre: (id: string) => string) {
+  const headers = ['Fecha', 'Parcela', 'Producto', 'Dosis L/ha', 'Motivo', 'Carencia (d)', 'Reingreso (d)', 'Hab. Cosecha', 'Hab. Reingreso', 'Responsable']
+  const rows = data.map((r) => [
+    r.fecha,
+    parcelaNombre(r.parcela_id),
+    r.producto_nombre,
+    r.dosis_lt_ha,
+    r.motivo,
+    r.dias_carencia,
+    r.dias_reingreso,
+    r.fecha_habilitacion_cosecha,
+    r.fecha_habilitacion_reingreso,
+    r.responsable,
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `fitosanitarios-${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 function Sheet({ open, onClose, title, children }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode
@@ -88,10 +118,22 @@ export default function FitosanitariosPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Fitosanitarios</h1>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors">
-          <Plus size={16} />
-          Nueva Aplicación
-        </button>
+        <div className="flex items-center gap-2">
+          {registros.length > 0 && (
+            <button
+              onClick={() => exportCSV(registros, parcelaNombre)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              title="Exportar registros actuales a CSV"
+            >
+              <Download size={15} />
+              CSV
+            </button>
+          )}
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors">
+            <Plus size={16} />
+            Nueva Aplicación
+          </button>
+        </div>
       </div>
 
       {/* Alertas carencia */}

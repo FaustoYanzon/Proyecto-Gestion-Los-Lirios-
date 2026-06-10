@@ -2,7 +2,7 @@
 # Cache simple para evitar golpear open-meteo en cada request.
 # TTL controlado por el service layer (services/clima.py).
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, JSON
 from app.core.database import Base
 
@@ -15,4 +15,4 @@ class ClimaCache(Base):
     kind = Column(String(32), primary_key=True)
 
     payload = Column(JSON, nullable=False)
-    fetched_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    fetched_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

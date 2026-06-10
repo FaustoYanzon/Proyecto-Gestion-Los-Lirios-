@@ -1,6 +1,7 @@
 'use client'
 
-import { Pencil, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   TIPO_EGRESO_LABELS,
   CLASIFICACION_LABELS,
@@ -57,9 +58,17 @@ function SkeletonRow() {
   )
 }
 
+const PAGE_SIZE = 10
+
 export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: Props) {
+  const [page, setPage] = useState(1)
   const totalARS = egresos.filter((e) => e.moneda === 'ars').reduce((s, e) => s + e.monto, 0)
   const totalUSD = egresos.filter((e) => e.moneda === 'usd').reduce((s, e) => s + e.monto, 0)
+
+  useEffect(() => { setPage(1) }, [egresos])
+
+  const totalPages = Math.max(1, Math.ceil(egresos.length / PAGE_SIZE))
+  const pagedEgresos = egresos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este egreso? Esta acción no se puede deshacer.')) {
@@ -95,7 +104,7 @@ export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: P
                 </td>
               </tr>
             ) : (
-              egresos.map((e) => (
+              pagedEgresos.map((e) => (
                 <tr key={e.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">{formatDate(e.fecha)}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">
@@ -154,6 +163,29 @@ export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: P
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {!isLoading && totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-gray-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, egresos.length)} de {egresos.length}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Totals footer */}
       {!isLoading && egresos.length > 0 && (

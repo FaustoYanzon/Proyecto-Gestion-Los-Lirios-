@@ -1,6 +1,7 @@
 'use client'
 
-import { Pencil, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Pencil, Trash2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 
 function formatDate(d: string) {
@@ -34,7 +35,16 @@ function SkeletonRow() {
   )
 }
 
+const PAGE_SIZE = 10
+
 export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
+  const [page, setPage] = useState(1)
+
+  useEffect(() => { setPage(1) }, [registros])
+
+  const totalPages = Math.max(1, Math.ceil(registros.length / PAGE_SIZE))
+  const pagedRegistros = registros.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este registro fitosanitario?')) onDelete(id)
   }
@@ -67,7 +77,7 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                 </td>
               </tr>
             ) : (
-              registros.map((r) => {
+              pagedRegistros.map((r) => {
                 const enCarencia = r.fecha_habilitacion_cosecha > today
                 return (
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
@@ -115,6 +125,29 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
           </tbody>
         </table>
       </div>
+      {/* Pagination */}
+      {!isLoading && totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-gray-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, registros.length)} de {registros.length}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
       {!isLoading && registros.length > 0 && (
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center gap-4 text-sm">
           <span className="flex items-center gap-1.5 text-amber-600">

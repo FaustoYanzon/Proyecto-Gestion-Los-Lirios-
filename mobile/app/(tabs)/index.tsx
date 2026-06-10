@@ -119,7 +119,7 @@ export default function InicioScreen() {
         ) : null}
       </View>
 
-      {/* ── 3 action buttons ── */}
+      {/* ── Action buttons ── */}
       <View style={styles.actionsGrid}>
         <ActionButton
           label="Registrar tarea"
@@ -137,13 +137,19 @@ export default function InicioScreen() {
           label="Aplicación fito"
           icon="flask-outline"
           bg={colors.verdeCampo}
-          onPress={() => router.push('/fito')}
+          onPress={() => router.push('/(tabs)/fitosanitario')}
         />
         <ActionButton
           label="Registrar cosecha"
           icon="basket-outline"
           bg="#16a34a"
           onPress={() => router.push('/(tabs)/cosecha')}
+        />
+        <ActionButton
+          label="Ciclo Campaña"
+          icon="leaf-outline"
+          bg="#7c3aed"
+          onPress={() => router.push('/(tabs)/campana')}
         />
       </View>
 

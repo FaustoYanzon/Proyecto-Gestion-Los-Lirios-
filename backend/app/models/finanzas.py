@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Numeric, String
+from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Index, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -126,13 +126,19 @@ class Egreso(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_egresos_fecha", "fecha"),
+        Index("ix_egresos_finca_fecha", "finca", "fecha"),
+        Index("ix_egresos_moneda_fecha", "moneda", "fecha"),
     )
 
     parcela: Mapped[Parcela | None] = relationship("Parcela", back_populates="egresos")
@@ -166,13 +172,19 @@ class Ingreso(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_ingresos_fecha", "fecha"),
+        Index("ix_ingresos_finca_fecha", "finca", "fecha"),
+        Index("ix_ingresos_moneda_fecha", "moneda", "fecha"),
     )
 
     created_by_user: Mapped[User] = relationship("User", back_populates="ingresos")

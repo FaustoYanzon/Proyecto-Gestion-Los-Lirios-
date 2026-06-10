@@ -50,7 +50,9 @@ interface ParcelPanel {
   parcela: Parcela
   estado: EstadoActual | null
   mmTotal: number | null
+  riegoCount: number | null
   tareas: { tarea: string; fecha: string }[]
+  fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]
   loadingExtra: boolean
 }
 
@@ -439,20 +441,12 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
               <Text style={panelStyles.statValue}>{p.cabezal_riego}</Text>
             </View>
           )}
-          {panel.mmTotal !== null && (
-            <View style={[panelStyles.statCard, { borderColor: '#bfdbfe' }]}>
-              <Text style={panelStyles.statLabel}>MM · CAMPAÑA</Text>
-              <Text style={[panelStyles.statValue, { color: '#1d4ed8' }]}>
-                {panel.mmTotal.toFixed(1)} mm
-              </Text>
-            </View>
-          )}
         </View>
 
-        {/* Estado fenológico */}
+        {/* Ciclo de Campaña */}
         {estadoLabel && estadoColor && (
           <View style={panelStyles.section}>
-            <Text style={panelStyles.sectionTitle}>ESTADO FENOLÓGICO</Text>
+            <Text style={panelStyles.sectionTitle}>CICLO DE CAMPAÑA</Text>
             <View style={[panelStyles.estadoBadge, { backgroundColor: `${estadoColor}18`, borderColor: `${estadoColor}40` }]}>
               <View style={[panelStyles.estadoDot, { backgroundColor: estadoColor }]} />
               <Text style={[panelStyles.estadoLabel, { color: estadoColor }]}>{estadoLabel}</Text>
@@ -465,25 +459,63 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           </View>
         )}
 
-        {/* Últimas tareas */}
-        {panel.tareas.length > 0 && (
+        {/* Riego */}
+        {!panel.loadingExtra && (
+          <View style={panelStyles.section}>
+            <Text style={panelStyles.sectionTitle}>RIEGO — CAMPAÑA</Text>
+            {panel.mmTotal === null ? (
+              <Text style={panelStyles.emptyText}>Sin datos</Text>
+            ) : (
+              <View style={panelStyles.riegoRow}>
+                <Text style={panelStyles.mmValue}>{panel.mmTotal.toFixed(1)} mm</Text>
+                {panel.riegoCount != null && (
+                  <Text style={panelStyles.riegoSub}>
+                    {panel.riegoCount} riego{panel.riegoCount !== 1 ? 's' : ''}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Aplicaciones Fito */}
+        {!panel.loadingExtra && (
+          <View style={panelStyles.section}>
+            <Text style={panelStyles.sectionTitle}>APLICACIONES FITO</Text>
+            {panel.fitos.length === 0 ? (
+              <Text style={panelStyles.emptyText}>Sin aplicaciones</Text>
+            ) : (
+              panel.fitos.map((f) => (
+                <View key={f.id} style={panelStyles.tareaRow}>
+                  <Text style={panelStyles.tareaName} numberOfLines={1}>
+                    {f.producto_nombre} · {f.dosis_lt_ha} L/ha
+                  </Text>
+                  <Text style={panelStyles.tareaFecha}>{f.fecha.split('-').reverse().join('/')}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* Tareas recientes */}
+        {!panel.loadingExtra && (
           <View style={panelStyles.section}>
             <Text style={panelStyles.sectionTitle}>TAREAS RECIENTES</Text>
-            {panel.tareas.slice(0, 5).map((t) => (
-              <View key={`${t.tarea}-${t.fecha}`} style={panelStyles.tareaRow}>
-                <Text style={panelStyles.tareaName} numberOfLines={1}>{t.tarea}</Text>
-                <Text style={panelStyles.tareaFecha}>{t.fecha.split('-').reverse().join('/')}</Text>
-              </View>
-            ))}
+            {panel.tareas.length === 0 ? (
+              <Text style={panelStyles.emptyText}>Sin tareas</Text>
+            ) : (
+              panel.tareas.slice(0, 5).map((t) => (
+                <View key={`${t.tarea}-${t.fecha}`} style={panelStyles.tareaRow}>
+                  <Text style={panelStyles.tareaName} numberOfLines={1}>{t.tarea}</Text>
+                  <Text style={panelStyles.tareaFecha}>{t.fecha.split('-').reverse().join('/')}</Text>
+                </View>
+              ))
+            )}
           </View>
         )}
 
         {panel.loadingExtra && (
           <ActivityIndicator color="#16a34a" style={{ marginTop: 8 }} />
-        )}
-
-        {!panel.loadingExtra && !estadoLabel && panel.tareas.length === 0 && panel.mmTotal === 0 && (
-          <Text style={panelStyles.emptyText}>Sin registros en la campaña actual</Text>
         )}
       </ScrollView>
 
@@ -512,7 +544,7 @@ const panelStyles = StyleSheet.create({
   container: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    maxHeight: 380, shadowColor: '#000',
+    maxHeight: 460, shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 12,
   },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#d1d5db', alignSelf: 'center', marginTop: 10 },
@@ -546,7 +578,10 @@ const panelStyles = StyleSheet.create({
   tareaRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   tareaName: { fontSize: 13, color: '#374151', fontWeight: '500', flex: 1, marginRight: 8 },
   tareaFecha: { fontSize: 12, color: '#9ca3af' },
-  emptyText: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: 8 },
+  emptyText: { fontSize: 13, color: '#9ca3af', fontStyle: 'italic' },
+  riegoRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  mmValue: { fontSize: 18, fontWeight: '800', color: '#1d4ed8' },
+  riegoSub: { fontSize: 12, color: '#9ca3af' },
   actionsBar: {
     flexDirection: 'row', gap: 8, padding: 12,
     borderTopWidth: 1, borderTopColor: '#f0f2f5',
@@ -583,39 +618,47 @@ export default function MapaScreen() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  async function fetchPanelExtras(parcelaId: string): Promise<{ mmTotal: number; tareas: { tarea: string; fecha: string }[] }> {
+  async function fetchPanelExtras(parcelaId: string): Promise<{
+    mmTotal: number; riegoCount: number;
+    tareas: { tarea: string; fecha: string }[];
+    fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[];
+  }> {
     const now = new Date()
     const year = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
     const desde = `${year}-05-01`
     const today = now.toISOString().split('T')[0]
     try {
-      const [riegosRes, tareasRes] = await Promise.all([
+      const [riegosRes, tareasRes, fitosRes] = await Promise.all([
         api.get<{ mm_aplicados: number | null }[]>('/produccion/riego/', {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
         }),
         api.get<{ tarea: string; fecha: string }[]>('/produccion/trabajo/', {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
         }),
+        api.get<{ id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]>('/produccion/fitosanitarios/', {
+          params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 100 },
+        }),
       ])
       const mmTotal = riegosRes.data.reduce((s, r) => s + (Number(r.mm_aplicados) || 0), 0)
-      // Deduplicate: last date per task type
+      const riegoCount = riegosRes.data.length
       const tareaMap = new Map<string, string>()
       for (const t of tareasRes.data) {
         if (!tareaMap.has(t.tarea) || t.fecha > tareaMap.get(t.tarea)!) tareaMap.set(t.tarea, t.fecha)
       }
       const tareas = Array.from(tareaMap.entries()).map(([tarea, fecha]) => ({ tarea, fecha }))
         .sort((a, b) => b.fecha.localeCompare(a.fecha))
-      return { mmTotal, tareas }
+      const fitos = [...fitosRes.data].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5)
+      return { mmTotal, riegoCount, tareas, fitos }
     } catch {
-      return { mmTotal: 0, tareas: [] }
+      return { mmTotal: 0, riegoCount: 0, tareas: [], fitos: [] }
     }
   }
 
   async function handleParcelSelect(parcela: Parcela) {
     const estado = estados.find((e) => e.parcela_id === parcela.id) ?? null
-    setPanel({ parcela, estado, mmTotal: null, tareas: [], loadingExtra: true })
-    const { mmTotal, tareas } = await fetchPanelExtras(parcela.id)
-    setPanel((prev) => prev ? { ...prev, mmTotal, tareas, loadingExtra: false } : null)
+    setPanel({ parcela, estado, mmTotal: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true })
+    const { mmTotal, riegoCount, tareas, fitos } = await fetchPanelExtras(parcela.id)
+    setPanel((prev) => prev ? { ...prev, mmTotal, riegoCount, tareas, fitos, loadingExtra: false } : null)
   }
 
   function handleMessage(event: WebViewMessageEvent) {
@@ -679,7 +722,7 @@ export default function MapaScreen() {
       )}
 
       <TouchableOpacity
-        style={[styles.refreshBtn, panel && { bottom: 400 }]}
+        style={[styles.refreshBtn, panel && { bottom: 480 }]}
         onPress={refresh}
       >
         <Ionicons name="refresh-outline" size={18} color="#374151" />

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Download } from 'lucide-react'
 import {
   getRiegos,
   deleteRiego,
@@ -12,6 +12,37 @@ import {
 import { getParcelas } from '@/lib/api/produccion'
 import RiegoTable from '@/components/produccion/RiegoTable'
 import RiegoForm from '@/components/produccion/RiegoForm'
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+
+function exportCSV(data: RiegoResponse[], parcelaNombre: (id: string) => string) {
+  const headers = ['Fecha', 'Parcela', 'Cabezal', 'Válvulas', 'Inicio', 'Fin', 'Duración (h)', 'mm', 'Fertilizante', 'Dosis L/ha', 'Responsable']
+  const rows = data.map((r) => [
+    r.fecha,
+    parcelaNombre(r.parcela_id),
+    r.cabezal,
+    r.valvula,
+    r.inicio,
+    r.fin,
+    r.duracion_horas,
+    r.mm_aplicados ?? '',
+    r.fertilizante_nombre ?? '',
+    r.fertilizante_dosis_lt_ha ?? '',
+    r.responsable,
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `riegos-${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 // ─── Sheet ────────────────────────────────────────────────────────────────────
 
@@ -92,13 +123,25 @@ export default function RiegoPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Riego</h1>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
-        >
-          <Plus size={16} />
-          Nuevo Riego
-        </button>
+        <div className="flex items-center gap-2">
+          {riegos.length > 0 && (
+            <button
+              onClick={() => exportCSV(riegos, parcelaNombre)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              title="Exportar registros actuales a CSV"
+            >
+              <Download size={15} />
+              CSV
+            </button>
+          )}
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+          >
+            <Plus size={16} />
+            Nuevo Riego
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}

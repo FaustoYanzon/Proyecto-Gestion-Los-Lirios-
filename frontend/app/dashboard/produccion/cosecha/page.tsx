@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area,
 } from 'recharts'
-import { Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   getCosechas, createCosecha, updateCosecha, deleteCosecha,
   getCosechaTotales, getCosechaResumenPorParcela, getCosechaResumenPorSemana,
@@ -96,6 +96,39 @@ function KpiCard({ label, value, color }: { label: string; value: string; color:
   )
 }
 
+// ── CSV Export ────────────────────────────────────────────────────────────────
+
+function exportCSV(data: RegistroCosechaResponse[], temporada: number) {
+  const headers = ['Fecha', 'Parral', 'Variedad', 'Destino', 'Cuadrilla', 'Envase', 'Cant. Envases', 'Kg Total', 'N° Remito', 'N° CIU', 'Comprador']
+  const rows = data.map((r) => [
+    r.fecha,
+    r.parcela_nombre ?? '',
+    r.variedad ?? '',
+    DESTINO_LABELS[r.destino] ?? r.destino,
+    r.cuadrilla ?? '',
+    ENVASE_LABELS[r.tipo_envase] ?? r.tipo_envase,
+    r.cantidad_envases ?? '',
+    r.kg_total,
+    r.n_remito ?? '',
+    r.n_ciu ?? '',
+    r.comprador ?? '',
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `cosecha-${temporada}-${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+const COSECHA_PAGE_SIZE = 10
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CosechaPage() {
@@ -106,6 +139,7 @@ export default function CosechaPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [cosechaPage, setCosechaPage] = useState(1)
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -155,6 +189,11 @@ export default function CosechaPage() {
       setForm(f => ({ ...f, kg_total: computed }))
     }
   }, [form.bruto_kg, form.tara_kg])
+
+  useEffect(() => { setCosechaPage(1) }, [cosechas])
+
+  const totalCosechaPages = Math.max(1, Math.ceil(cosechas.length / COSECHA_PAGE_SIZE))
+  const pagedCosechas = cosechas.slice((cosechaPage - 1) * COSECHA_PAGE_SIZE, cosechaPage * COSECHA_PAGE_SIZE)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -268,6 +307,16 @@ export default function CosechaPage() {
           >
             {AVAILABLE_YEARS.map(y => <option key={y} value={y}>{y}/{y + 1}</option>)}
           </select>
+          {cosechas.length > 0 && (
+            <button
+              onClick={() => exportCSV(cosechas, temporada)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Exportar registros actuales a CSV"
+            >
+              <Download size={15} />
+              CSV
+            </button>
+          )}
           <button
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
@@ -408,7 +457,7 @@ export default function CosechaPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {cosechas.map(r => (
+                {pagedCosechas.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtFecha(r.fecha)}</td>
                     <td className="px-4 py-2.5 text-gray-600">{r.parcela_nombre ?? '–'}</td>
@@ -470,6 +519,30 @@ export default function CosechaPage() {
             </table>
           </div>
         )}
+
+        {/* Pagination */}
+        {!isLoading && totalCosechaPages > 1 && (
+          <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+            <button
+              onClick={() => setCosechaPage(p => Math.max(1, p - 1))}
+              disabled={cosechaPage === 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={14} /> Anterior
+            </button>
+            <span className="text-xs text-gray-500">
+              {(cosechaPage - 1) * COSECHA_PAGE_SIZE + 1}–{Math.min(cosechaPage * COSECHA_PAGE_SIZE, cosechas.length)} de {cosechas.length}
+            </span>
+            <button
+              onClick={() => setCosechaPage(p => Math.min(totalCosechaPages, p + 1))}
+              disabled={cosechaPage === totalCosechaPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Siguiente <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* Modal */}

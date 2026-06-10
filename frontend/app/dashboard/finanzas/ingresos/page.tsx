@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Download } from 'lucide-react'
 import {
   getIngresos,
   deleteIngreso,
   PRODUCTO_INGRESO_VALUES,
   PRODUCTO_INGRESO_LABELS,
+  VARIEDAD_LABELS,
   type IngresosFilter,
   type IngresoResponse,
 } from '@/lib/api/ingresos'
@@ -60,6 +61,38 @@ function Sheet({ open, onClose, title, children }: SheetProps) {
       </div>
     </div>
   )
+}
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+
+const FINCA_LABELS_I: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete' }
+
+function exportCSV(data: IngresoResponse[]) {
+  const headers = ['Fecha', 'Cliente', 'Producto', 'Variedad', 'Kg', '$/Kg', 'Monto', 'Moneda', 'Finca', 'Origen']
+  const rows = data.map((i) => [
+    i.fecha,
+    i.cliente,
+    PRODUCTO_INGRESO_LABELS[i.producto] ?? i.producto,
+    i.variedad ? (VARIEDAD_LABELS[i.variedad] ?? i.variedad) : '',
+    i.kg_totales ?? '',
+    i.precio_por_kg ?? '',
+    i.monto,
+    i.moneda.toUpperCase(),
+    FINCA_LABELS_I[i.finca] ?? i.finca,
+    i.origen === 'oficial' ? 'Oficial' : 'No oficial',
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ingresos-${new Date().toISOString().split('T')[0]}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -117,13 +150,25 @@ export default function IngresosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Ingresos</h1>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
-        >
-          <Plus size={16} />
-          Nuevo Ingreso
-        </button>
+        <div className="flex items-center gap-2">
+          {ingresos.length > 0 && (
+            <button
+              onClick={() => exportCSV(ingresos)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              title="Exportar registros actuales a CSV"
+            >
+              <Download size={15} />
+              CSV
+            </button>
+          )}
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+          >
+            <Plus size={16} />
+            Nuevo Ingreso
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}

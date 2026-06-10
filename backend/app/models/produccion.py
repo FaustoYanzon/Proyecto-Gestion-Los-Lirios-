@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.parcela import Parcela
+    from app.models.trabajador import Trabajador
     from app.models.user import User
 
 
@@ -120,17 +121,26 @@ class RegistroTrabajo(Base):
     precio_unitario: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     monto_total: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     detalle: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    trabajador_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trabajadores.id"), nullable=True
+    )
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_registros_trabajo_fecha", "fecha"),
+        Index("ix_registros_trabajo_parcela_fecha", "parcela_id", "fecha"),
+        Index("ix_registros_trabajo_trabajador_id", "trabajador_id"),
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -143,6 +153,9 @@ class RegistroTrabajo(Base):
 
     parcela: Mapped[Parcela | None] = relationship(
         "Parcela", back_populates="registros_trabajo"
+    )
+    trabajador: Mapped[Trabajador | None] = relationship(
+        "Trabajador", back_populates="registros_trabajo"
     )
     created_by_user: Mapped[User] = relationship(
         "User", back_populates="registros_trabajo"
@@ -172,13 +185,18 @@ class RegistroRiego(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_registros_riego_fecha", "fecha"),
+        Index("ix_registros_riego_parcela_fecha", "parcela_id", "fecha"),
     )
 
     # 16,000 L/ha/h = 1.6 mm/h
@@ -223,13 +241,18 @@ class RegistroFitosanitario(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_registros_fitosanitarios_fecha", "fecha"),
+        Index("ix_registros_fitosanitarios_parcela_fecha", "parcela_id", "fecha"),
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -274,13 +297,18 @@ class CicloCampana(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_ciclos_campana_anio", "anio"),
+        Index("ix_ciclos_campana_parcela_anio", "parcela_id", "anio"),
     )
 
     parcela: Mapped[Parcela] = relationship(
@@ -366,12 +394,12 @@ class RegistroCosecha(Base):
         String(36), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
@@ -391,6 +419,12 @@ class RegistroCosecha(Base):
             f = kwargs["fecha"]
             kwargs["temporada"] = f.year if f.month >= 5 else f.year - 1
         super().__init__(**kwargs)
+
+    __table_args__ = (
+        Index("ix_registros_cosecha_fecha", "fecha"),
+        Index("ix_registros_cosecha_temporada", "temporada"),
+        Index("ix_registros_cosecha_parcela_temporada", "parcela_id", "temporada"),
+    )
 
     parcela: Mapped["Parcela | None"] = relationship(
         "Parcela", back_populates="registros_cosecha"

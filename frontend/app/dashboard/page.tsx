@@ -10,6 +10,33 @@ import type { EgresoResponse } from '@/lib/api/egresos'
 
 interface TrabajoItem { id: string }
 
+// WMO weather code → short Spanish description
+// Ref: https://open-meteo.com/en/docs#weathervariables
+function wmoDescription(code: number): string {
+  if (code === 0) return 'Despejado'
+  if (code <= 2) return 'Parcialmente nublado'
+  if (code === 3) return 'Nublado'
+  if (code <= 49) return 'Niebla'
+  if (code <= 59) return 'Llovizna'
+  if (code <= 69) return 'Lluvia'
+  if (code <= 79) return 'Nieve'
+  if (code <= 84) return 'Chaparrón'
+  if (code <= 99) return 'Tormenta'
+  return 'Variable'
+}
+
+interface ClimaActualResponse {
+  current: {
+    temperature_2m: number
+    weather_code: number
+  }
+  daily: {
+    temperature_2m_max: number[]
+    temperature_2m_min: number[]
+  }
+  _cached?: boolean
+}
+
 type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; color?: string }>
 
 function KpiCard({
@@ -40,6 +67,24 @@ function KpiCard({
 }
 
 function ClimateCard() {
+  const { data, isLoading, isError } = useQuery<ClimaActualResponse>({
+    queryKey: ['clima-actual', 'los_mimbres'],
+    queryFn: async () => {
+      const { data } = await api.get<ClimaActualResponse>('/clima/actual', {
+        params: { finca: 'los_mimbres' },
+      })
+      return data
+    },
+    // Cache 30 min client-side, matching backend TTL
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  })
+
+  const temp = data ? Math.round(data.current.temperature_2m) : null
+  const desc = data ? wmoDescription(data.current.weather_code) : null
+  const max  = data?.daily.temperature_2m_max[0] != null ? Math.round(data.daily.temperature_2m_max[0]) : null
+  const min  = data?.daily.temperature_2m_min[0] != null ? Math.round(data.daily.temperature_2m_min[0]) : null
+
   return (
     <div
       className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0"
@@ -51,14 +96,34 @@ function ClimateCard() {
           Clima — Los Mimbres
         </span>
       </div>
-      <div className="flex items-end gap-3">
-        <span className="text-3xl font-bold text-[#1f1a17]">22°</span>
-        <div className="text-xs text-[#5a544c] mb-1">
-          <p>Despejado</p>
-          <p className="text-[#a09584]">Máx 27° · Mín 11°</p>
+
+      {isLoading && (
+        <div className="space-y-1.5">
+          <div className="h-8 bg-[#f0ead8] rounded animate-pulse w-16" />
+          <div className="h-3 bg-[#f0ead8] rounded animate-pulse w-24" />
         </div>
-      </div>
-      <p className="text-xs text-[#a09584] mt-2">Datos en tiempo real — Fase 5</p>
+      )}
+
+      {isError && (
+        <p className="text-xs text-[#a09584]">Sin datos de clima</p>
+      )}
+
+      {!isLoading && !isError && temp !== null && (
+        <>
+          <div className="flex items-end gap-3">
+            <span className="text-3xl font-bold text-[#1f1a17]">{temp}°</span>
+            <div className="text-xs text-[#5a544c] mb-1">
+              <p>{desc}</p>
+              {max !== null && min !== null && (
+                <p className="text-[#a09584]">Máx {max}° · Mín {min}°</p>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-[#a09584] mt-2">
+            {data?._cached ? 'Actualizado hace menos de 30 min' : 'Actualizado ahora'}
+          </p>
+        </>
+      )}
     </div>
   )
 }

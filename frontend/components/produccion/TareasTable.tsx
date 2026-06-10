@@ -1,6 +1,7 @@
 'use client'
 
-import { Pencil, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   TEMPORADA_LABELS,
   UNIDAD_LABELS,
@@ -45,8 +46,16 @@ function SkeletonRow() {
   )
 }
 
+const PAGE_SIZE = 10
+
 export default function TareasTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
+  const [page, setPage] = useState(1)
   const total = registros.reduce((s, r) => s + Number(r.monto_total), 0)
+
+  useEffect(() => { setPage(1) }, [registros])
+
+  const totalPages = Math.max(1, Math.ceil(registros.length / PAGE_SIZE))
+  const pagedRegistros = registros.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este registro? También se eliminará el egreso vinculado.')) {
@@ -82,7 +91,7 @@ export default function TareasTable({ registros, isLoading, parcelaNombre, onEdi
                 </td>
               </tr>
             ) : (
-              registros.map((r) => (
+              pagedRegistros.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">{formatDate(r.fecha)}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-900 font-medium">{r.tarea}</td>
@@ -131,6 +140,29 @@ export default function TareasTable({ registros, isLoading, parcelaNombre, onEdi
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {!isLoading && totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-gray-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, registros.length)} de {registros.length}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
 
       {!isLoading && registros.length > 0 && (
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center gap-6 text-sm">

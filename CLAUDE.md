@@ -63,3 +63,18 @@ Never hand-edit committed migration files.
 
 ## Compact instructions
 When compacting: preserve current task goal, any decisions made about architecture or DB schema, and filenames modified. Drop verbose tool output and intermediate reasoning.
+
+## Project map
+Full structural reference → `PROJECT_MAP.md` in this directory.
+Read it at the start of every session before exploring files.
+
+## Knowledge base (Obsidian)
+Live documentation maintained in Obsidian, linked into this repo via symlinks at `docs/`:
+- `docs/sistema/Arquitectura.md` — full stack reference, API routes, models, conventions
+- `docs/sistema/Bugs Conocidos.md` — known bugs with impact and fix descriptions
+- `docs/sistema/Stack Técnico.md` — dependency versions and migration history
+- `docs/sistema/Decisiones/` — architectural decision records
+- `docs/proyectos/Dashboards.md` — dashboard status, available API functions, codebase patterns
+- `docs/proyectos/Sistema de Gestión Agrícola.md` — module status and roadmap
+
+Read the relevant file before working on a task in that area. These files are the source of truth for decisions already made — do not contradict them without raising the conflict explicitly.

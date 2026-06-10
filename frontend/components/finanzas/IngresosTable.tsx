@@ -1,6 +1,7 @@
 'use client'
 
-import { Pencil, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   PRODUCTO_INGRESO_LABELS,
   VARIEDAD_LABELS,
@@ -64,10 +65,18 @@ function SkeletonRow() {
   )
 }
 
+const PAGE_SIZE = 10
+
 export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }: Props) {
+  const [page, setPage] = useState(1)
   const totalARS = ingresos.filter((i) => i.moneda === 'ars').reduce((s, i) => s + i.monto, 0)
   const totalUSD = ingresos.filter((i) => i.moneda === 'usd').reduce((s, i) => s + i.monto, 0)
   const totalKg = ingresos.reduce((s, i) => s + (i.kg_totales ?? 0), 0)
+
+  useEffect(() => { setPage(1) }, [ingresos])
+
+  const totalPages = Math.max(1, Math.ceil(ingresos.length / PAGE_SIZE))
+  const pagedIngresos = ingresos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este ingreso? Esta acción no se puede deshacer.')) {
@@ -104,7 +113,7 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
                 </td>
               </tr>
             ) : (
-              ingresos.map((ing) => (
+              pagedIngresos.map((ing) => (
                 <tr key={ing.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">{formatDate(ing.fecha)}</td>
                   <td className="px-3 py-3 whitespace-nowrap font-medium text-gray-800">{ing.cliente}</td>
@@ -164,6 +173,29 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {!isLoading && totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <span className="text-xs text-gray-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, ingresos.length)} de {ingresos.length}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Totals footer */}
       {!isLoading && ingresos.length > 0 && (
