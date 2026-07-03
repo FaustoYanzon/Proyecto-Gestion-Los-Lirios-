@@ -31,6 +31,11 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+    # Session invalidation: reject tokens whose version does not match the
+    # user's current token_version (password change, forced logout). Tokens
+    # issued before this feature lack "tv" and are rejected, forcing re-login.
+    if payload.get("tv") != user.token_version:
+        raise credentials_exception
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

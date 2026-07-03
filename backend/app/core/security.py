@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -24,11 +25,21 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode["exp"] = expire
+    # PyJWT >= 2 returns a str (python-jose also did), so callers are unaffected.
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict | None:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
+        # algorithms is pinned to our single allowed algorithm. This is the
+        # mitigation against algorithm-confusion attacks: never trust the alg
+        # header from the token itself.
+        return jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},  # reject tokens without an expiry
+        )
+    except PyJWTError:
+        # Covers expired signature, invalid signature, malformed token, etc.
         return None
