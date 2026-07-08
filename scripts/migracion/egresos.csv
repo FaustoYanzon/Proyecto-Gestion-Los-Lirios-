@@ -1,0 +1,145 @@
+fecha,tipo,clasificacion,monto,moneda,origen,finca,forma_pago,descripcion
+2025-05-15,sueldos_personal,obreros,7050000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-06-15,sueldos_personal,obreros,8841000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-07-15,sueldos_personal,obreros,9784000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-08-15,sueldos_personal,obreros,14365000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-09-15,sueldos_personal,obreros,12108000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-10-15,sueldos_personal,obreros,14572000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-11-15,sueldos_personal,obreros,14000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-12-15,sueldos_personal,obreros,15516000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2026-01-15,sueldos_personal,obreros,16245000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2026-02-15,sueldos_personal,obreros,32560000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2026-03-15,sueldos_personal,obreros,24448000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2026-04-15,sueldos_personal,obreros,21412600.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · OBRERO FINCA
+2025-05-15,sueldos_personal,encargados,4501000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-06-15,sueldos_personal,encargados,1483500.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-07-15,sueldos_personal,encargados,900000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-08-15,sueldos_personal,encargados,900000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-09-15,sueldos_personal,encargados,900000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-10-15,sueldos_personal,encargados,954000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-11-15,sueldos_personal,encargados,954000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-12-15,sueldos_personal,encargados,1431000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2026-01-15,sueldos_personal,encargados,1011240.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2026-02-15,sueldos_personal,encargados,1011240.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2026-03-15,sueldos_personal,encargados,1011240.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2026-04-15,sueldos_personal,encargados,1071914.4,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENCARGADO
+2025-05-15,sueldos_personal,gerenciales,4550000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-06-15,sueldos_personal,gerenciales,41825000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-07-15,sueldos_personal,gerenciales,9823000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-08-15,sueldos_personal,gerenciales,9823000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-09-15,sueldos_personal,gerenciales,9823000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-10-15,sueldos_personal,gerenciales,10112380.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-11-15,sueldos_personal,gerenciales,10112380.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-12-15,sueldos_personal,gerenciales,7668570.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2026-01-15,sueldos_personal,gerenciales,5419122.8,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2026-02-15,sueldos_personal,gerenciales,5419122.8,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2026-03-15,sueldos_personal,gerenciales,5419122.8,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2026-04-15,sueldos_personal,gerenciales,5901484.28,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · GERENCIALES
+2025-05-15,impuestos_servicios,vep,500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-06-15,impuestos_servicios,vep,539428.99,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-07-15,impuestos_servicios,vep,783305.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-08-15,impuestos_servicios,vep,548000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-09-15,impuestos_servicios,vep,550753.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-10-15,impuestos_servicios,vep,551599.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-11-15,impuestos_servicios,vep,602841.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-12-15,impuestos_servicios,vep,591828.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2026-01-15,impuestos_servicios,vep,1237000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2026-02-15,impuestos_servicios,vep,1016000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2026-03-15,impuestos_servicios,vep,1011000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2026-04-15,impuestos_servicios,vep,980000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · VEP
+2025-06-15,insumos_varios,insumos_otros,502098.77,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2025-07-15,insumos_varios,insumos_otros,1179624.65,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2025-08-15,insumos_varios,insumos_otros,1537214.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2025-09-15,insumos_varios,insumos_otros,368727.7,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2025-10-15,insumos_varios,insumos_otros,5601785.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2026-01-15,insumos_varios,insumos_otros,200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INSUMOS
+2025-09-15,produccion,fertilizantes,6000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · FERTILIZANTES
+2025-10-15,produccion,fertilizantes,6000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · FERTILIZANTES
+2025-11-15,produccion,fertilizantes,6000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · FERTILIZANTES
+2026-03-15,produccion,fertilizantes,5000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · FERTILIZANTES
+2026-04-15,produccion,fertilizantes,5000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · FERTILIZANTES
+2025-09-15,produccion,agroquimicos,5000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · AGROQUIMICOS
+2025-10-15,produccion,agroquimicos,5000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · AGROQUIMICOS
+2025-11-15,produccion,agroquimicos,5000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · AGROQUIMICOS
+2025-05-15,insumos_varios,combustibles,1500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-06-15,insumos_varios,combustibles,1500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-07-15,insumos_varios,combustibles,1500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-08-15,insumos_varios,combustibles,1500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-09-15,insumos_varios,combustibles,1500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-10-15,insumos_varios,combustibles,2500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-11-15,insumos_varios,combustibles,2500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-12-15,insumos_varios,combustibles,2500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2026-01-15,insumos_varios,combustibles,2500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2026-02-15,insumos_varios,combustibles,2500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2026-03-15,insumos_varios,combustibles,2000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2026-04-15,insumos_varios,combustibles,2000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · COMBUSTIBLES
+2025-05-15,impuestos_servicios,energia_electrica,2679797.18,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-06-15,impuestos_servicios,energia_electrica,1503485.35,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-07-15,impuestos_servicios,energia_electrica,1532484.03,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-08-15,impuestos_servicios,energia_electrica,630000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-09-15,impuestos_servicios,energia_electrica,800000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-10-15,impuestos_servicios,energia_electrica,510000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-11-15,impuestos_servicios,energia_electrica,780000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-12-15,impuestos_servicios,energia_electrica,2000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2026-01-15,impuestos_servicios,energia_electrica,2200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2026-02-15,impuestos_servicios,energia_electrica,3500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2026-03-15,impuestos_servicios,energia_electrica,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2026-04-15,impuestos_servicios,energia_electrica,2600000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · ENERGIA ELECTRICA
+2025-05-15,impuestos_servicios,hidraulica,2225813.04,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · HIDR-RENTAS
+2025-07-15,impuestos_servicios,hidraulica,7166005.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · HIDR-RENTAS
+2026-02-15,impuestos_servicios,hidraulica,780261.52,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · HIDR-RENTAS
+2026-03-15,impuestos_servicios,hidraulica,40000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · HIDR-RENTAS
+2026-04-15,impuestos_servicios,hidraulica,40000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · HIDR-RENTAS
+2025-05-15,insumos_varios,rep_repuestos_vehiculos,1000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-06-15,insumos_varios,rep_repuestos_vehiculos,1000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-07-15,insumos_varios,rep_repuestos_vehiculos,1000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-08-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-09-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-10-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-11-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-12-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2026-01-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2026-02-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2026-03-15,insumos_varios,rep_repuestos_vehiculos,1200000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REP-REPU MOVIL
+2025-05-15,insumos_varios,rep_repuestos_infraestructura,500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-06-15,insumos_varios,rep_repuestos_infraestructura,500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-07-15,insumos_varios,rep_repuestos_infraestructura,500000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-08-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-09-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-10-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-11-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-12-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2026-01-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2026-02-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2026-03-15,insumos_varios,rep_repuestos_infraestructura,700000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · REPAR CONST
+2025-05-15,financiero,creditos_bancarios,2123966.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-06-15,financiero,creditos_bancarios,1996211.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-07-15,financiero,creditos_bancarios,1942641.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-08-15,financiero,creditos_bancarios,6642509.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-09-15,financiero,creditos_bancarios,7137597.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-10-15,financiero,creditos_bancarios,6899479.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-11-15,financiero,creditos_bancarios,6580075.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-12-15,financiero,creditos_bancarios,6304662.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2026-01-15,financiero,creditos_bancarios,6220000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2026-02-15,financiero,creditos_bancarios,6286000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2026-03-15,financiero,creditos_bancarios,6910000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2026-04-15,financiero,creditos_bancarios,1410000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · CREDITOS
+2025-05-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-06-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-07-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-08-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-09-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-10-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-11-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-12-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2026-01-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2026-02-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2026-03-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2026-04-15,sueldos_personal,obreros,3000000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · PLUS JORNAL
+2025-05-15,inversion,inversion_otros,10733000.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-06-15,inversion,inversion_otros,10305812.4,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-07-15,inversion,inversion_otros,17600511.4,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-08-15,inversion,inversion_otros,3475111.7,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-09-15,inversion,inversion_otros,13583254.88,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-10-15,inversion,inversion_otros,12527760.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
+2025-11-15,inversion,inversion_otros,14883760.0,ars,no_oficial,media_agua,efectivo,Migración Excel · agregado mensual SEGUIM 25-26 · INVERSIONES
