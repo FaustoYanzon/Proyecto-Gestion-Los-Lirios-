@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { getRiegos, type RiegoResponse } from '@/lib/api/riego'
 import { getEstadoActual, type EstadoActualItem } from '@/lib/api/produccion'
+import { getAlertasCarencia, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 
 interface Alerta {
   id: string
@@ -11,9 +12,43 @@ interface Alerta {
   mensaje: string
 }
 
-function derivarAlertas(riegos: RiegoResponse[], estadoActual: EstadoActualItem[]): Alerta[] {
+function derivarAlertas(
+  riegos: RiegoResponse[],
+  estadoActual: EstadoActualItem[],
+  carencias: FitosanitarioResponse[],
+): Alerta[] {
   const alertas: Alerta[] = []
   const now = new Date()
+
+  // Carencia fitosanitaria: parcelas que aún no pueden cosecharse.
+  // Food-safety rule — always listed first, before any other alert.
+  // Backend already filters fecha_habilitacion_cosecha >= today; we keep
+  // only the latest habilitación per parcela (multiple applications may overlap).
+  const nombrePorParcela: Record<string, string> = {}
+  for (const e of estadoActual) nombrePorParcela[e.parcela_id] = e.parcela_nombre
+
+  const carenciaPorParcela: Record<string, FitosanitarioResponse> = {}
+  for (const c of carencias) {
+    const prev = carenciaPorParcela[c.parcela_id]
+    if (!prev || c.fecha_habilitacion_cosecha > prev.fecha_habilitacion_cosecha) {
+      carenciaPorParcela[c.parcela_id] = c
+    }
+  }
+  const ordenadas = Object.values(carenciaPorParcela).sort((a, b) =>
+    a.fecha_habilitacion_cosecha.localeCompare(b.fecha_habilitacion_cosecha),
+  )
+  for (const c of ordenadas) {
+    // Parse as local date (avoid UTC shift from new Date('YYYY-MM-DD'))
+    const [y, m, d] = c.fecha_habilitacion_cosecha.split('-').map(Number)
+    const habilitacion = new Date(y, m - 1, d)
+    const dias = Math.ceil((habilitacion.getTime() - now.getTime()) / 86_400_000)
+    const nombre = nombrePorParcela[c.parcela_id] ?? c.parcela_id
+    alertas.push({
+      id: `carencia-${c.parcela_id}`,
+      nivel: 'warn',
+      mensaje: `${nombre} en carencia (${c.producto_nombre}): no cosechar hasta el ${d}/${m} (${dias} día${dias !== 1 ? 's' : ''})`,
+    })
+  }
 
   // Cabezales con >7 días sin riego
   const ultimoPorCabezal: Record<string, Date> = {}
@@ -64,7 +99,15 @@ export default function Alertas() {
     staleTime: 300_000,
   })
 
-  const alertas = derivarAlertas(riegos, estadoActual)
+  // Requires encargado+ role; on 403 the query fails silently and defaults to []
+  const { data: carencias = [] } = useQuery({
+    queryKey: ['alertas-carencia'],
+    queryFn: getAlertasCarencia,
+    staleTime: 300_000,
+    retry: false,
+  })
+
+  const alertas = derivarAlertas(riegos, estadoActual, carencias)
 
   return (
     <div

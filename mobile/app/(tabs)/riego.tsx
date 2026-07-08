@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   TextInput,
+  Modal,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
@@ -16,33 +17,44 @@ import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 import type { Parcela, RegistroRiego } from '../../lib/types'
-import { CABEZAL_VALVULAS } from '../../lib/types'
+import { CABEZAL_VALVULAS, getValvulasForParcela, calcRiegoTotales } from '../../lib/types'
 
-const M3_POR_HORA = 3.6
+// El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
+// al usuario se ancla explícitamente a America/Argentina/San_Juan: no hay que
+// depender del huso del dispositivo (podría estar mal configurado) ni de
+// toISOString() (siempre UTC), que hacían que "hoy" o la hora mostrada
+// pudieran desfasarse según el momento del día.
+const TZ_ARGENTINA = 'America/Argentina/San_Juan'
 
-function isoNow() { return new Date().toISOString() }
-function isoToday() { return new Date().toISOString().split('T')[0] }
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = seconds % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+function isoToday() {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: TZ_ARGENTINA, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
 }
-
-function formatDatetime(dt: string) {
+function nowHHMM() {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: TZ_ARGENTINA, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date())
+}
+function formatDateDisplay(iso: string) {
+  if (!iso) return '—'
+  const [y, mo, d] = iso.split('-')
+  return `${d}/${mo}/${y}`
+}
+function formatDatetime(iso: string) {
   try {
-    return new Date(dt).toLocaleString('es-AR', {
+    return new Date(iso).toLocaleString('es-AR', {
+      timeZone: TZ_ARGENTINA,
       day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     })
-  } catch { return dt }
+  } catch { return iso }
 }
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-const STEP_LABELS = ['Cabezal', 'Riego', 'Confirmar']
+const STEP_LABELS = ['Parral', 'Horario', 'Detalle', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -52,12 +64,12 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
           <View key={label} style={si.item}>
             <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
               {done ? (
-                <Ionicons name="checkmark" size={11} color={colors.blanco} />
+                <Ionicons name="checkmark" size={10} color={colors.blanco} />
               ) : (
                 <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
               )}
             </View>
-            <Text style={[si.label, active && si.labelActive, done && si.labelDone]}>{label}</Text>
+            <Text style={[si.label, active && si.labelActive, done && si.labelDone]} numberOfLines={1}>{label}</Text>
             {idx < STEP_LABELS.length - 1 && (
               <View style={[si.line, done && si.lineDone]} />
             )}
@@ -71,198 +83,479 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
 const si = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: 12, paddingVertical: 12,
     backgroundColor: colors.blanco,
     borderBottomWidth: 1, borderBottomColor: colors.hueso,
   },
   item: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   dot: {
-    width: 24, height: 24, borderRadius: 12,
+    width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center',
+    flexShrink: 0,
   },
   dotActive: { backgroundColor: colors.cielo },
   dotDone:   { backgroundColor: colors.cielo },
-  dotText:   { fontSize: 11, fontWeight: '700', color: colors.niebla },
-  label:     { fontSize: 11, color: colors.niebla, marginLeft: 6, fontWeight: '500' },
+  dotText:   { fontSize: 10, fontWeight: '700', color: colors.niebla },
+  label:     { fontSize: 9, color: colors.niebla, marginLeft: 4, fontWeight: '500', flex: 1 },
   labelActive: { color: colors.ink, fontWeight: '700' },
   labelDone:   { color: colors.cielo, fontWeight: '600' },
-  line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 4 },
+  line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 3 },
   lineDone: { backgroundColor: colors.cielo },
 })
 
-// ─── Step 1: seleccionar cabezal ──────────────────────────────────────────────
+// ─── DatePickerModal ──────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const DAY_NAMES = ['Lu','Ma','Mi','Ju','Vi','Sa','Do']
+
+function buildCalendarDays(year: number, month: number): (string | null)[] {
+  const firstDay = new Date(year, month, 1).getDay()
+  const offset = firstDay === 0 ? 6 : firstDay - 1
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells: (string | null)[] = Array(offset).fill(null)
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm = String(month + 1).padStart(2, '0')
+    const dd = String(d).padStart(2, '0')
+    cells.push(`${year}-${mm}-${dd}`)
+  }
+  return cells
+}
+
+function DatePickerModal({
+  visible, value, onConfirm, onClose,
+}: {
+  visible: boolean; value: string
+  onConfirm: (d: string) => void; onClose: () => void
+}) {
+  const todayISO = isoToday()
+  const [selDate, setSelDate] = useState(value || todayISO)
+  const [calYear, setCalYear] = useState(() => parseInt((value || todayISO).split('-')[0]))
+  const [calMonth, setCalMonth] = useState(() => parseInt((value || todayISO).split('-')[1]) - 1)
+
+  useEffect(() => {
+    if (visible) {
+      const v = value || todayISO
+      setSelDate(v)
+      setCalYear(parseInt(v.split('-')[0]))
+      setCalMonth(parseInt(v.split('-')[1]) - 1)
+    }
+  }, [visible, value])
+
+  const calDays = buildCalendarDays(calYear, calMonth)
+
+  function prevMonth() {
+    if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(calMonth - 1)
+  }
+  function nextMonth() {
+    if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1)
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Seleccionar fecha</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Ionicons name="close" size={20} color={colors.ink} />
+          </TouchableOpacity>
+        </View>
+        <View style={{ padding: 16 }}>
+          <View style={dp.navRow}>
+            <TouchableOpacity onPress={prevMonth} style={dp.navBtn}>
+              <Ionicons name="chevron-back" size={18} color={colors.ink} />
+            </TouchableOpacity>
+            <Text style={dp.monthLabel}>{MONTH_NAMES[calMonth]} {calYear}</Text>
+            <TouchableOpacity onPress={nextMonth} style={dp.navBtn}>
+              <Ionicons name="chevron-forward" size={18} color={colors.ink} />
+            </TouchableOpacity>
+          </View>
+          <View style={dp.dayNamesRow}>
+            {DAY_NAMES.map((d) => (
+              <Text key={d} style={dp.dayName}>{d}</Text>
+            ))}
+          </View>
+          <View style={dp.grid}>
+            {calDays.map((isoDate, idx) => {
+              if (!isoDate) return <View key={`e-${idx}`} style={dp.cell} />
+              const isSel = isoDate === selDate
+              const isToday = isoDate === todayISO
+              return (
+                <TouchableOpacity
+                  key={isoDate}
+                  style={[dp.cell, isSel && dp.cellSel, !isSel && isToday && dp.cellToday]}
+                  onPress={() => setSelDate(isoDate)}
+                >
+                  <Text style={[dp.cellText, isSel && dp.cellTextSel, !isSel && isToday && dp.cellTextToday]}>
+                    {parseInt(isoDate.split('-')[2])}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+        <View style={{ padding: 16 }}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => { onConfirm(selDate); onClose() }}
+          >
+            <Text style={styles.primaryBtnText}>Confirmar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+const dp = StyleSheet.create({
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  navBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center' },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
+  dayName: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: colors.niebla, textTransform: 'uppercase' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', padding: 2 },
+  cellSel: { backgroundColor: colors.cielo, borderRadius: 8 },
+  cellToday: { backgroundColor: colors.crema, borderRadius: 8 },
+  cellText: { fontSize: 15, fontWeight: '500', color: colors.ink },
+  cellTextSel: { color: colors.blanco, fontWeight: '700' },
+  cellTextToday: { color: colors.cielo, fontWeight: '700' },
+})
+
+// ─── TimePickerModal ──────────────────────────────────────────────────────────
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
+
+function TimePickerModal({
+  visible, value, onConfirm, onClose,
+}: {
+  visible: boolean; value: string
+  onConfirm: (t: string) => void; onClose: () => void
+}) {
+  const [h, setH] = useState('00')
+  const [m, setM] = useState('00')
+
+  useEffect(() => {
+    if (visible) {
+      const [vh, vm] = (value || nowHHMM()).split(':')
+      setH(vh ?? '00')
+      // Redondea al múltiplo de 5 más cercano hacia abajo
+      const mm = Math.floor(parseInt(vm ?? '0', 10) / 5) * 5
+      setM(String(mm).padStart(2, '0'))
+    }
+  }, [visible, value])
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Seleccionar hora</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Ionicons name="close" size={20} color={colors.ink} />
+          </TouchableOpacity>
+        </View>
+        <View style={{ padding: 16 }}>
+          <Text style={tp.bigTime}>{h}:{m}</Text>
+
+          <Text style={tp.sectionLabel}>HORA</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={tp.chipRow}>
+            {HOURS.map((hh) => (
+              <TouchableOpacity
+                key={hh}
+                style={[tp.chip, h === hh && tp.chipActive]}
+                onPress={() => setH(hh)}
+              >
+                <Text style={[tp.chipText, h === hh && tp.chipTextActive]}>{hh}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={tp.sectionLabel}>MINUTOS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={tp.chipRow}>
+            {MINUTES.map((mm) => (
+              <TouchableOpacity
+                key={mm}
+                style={[tp.chip, m === mm && tp.chipActive]}
+                onPress={() => setM(mm)}
+              >
+                <Text style={[tp.chipText, m === mm && tp.chipTextActive]}>{mm}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <TouchableOpacity
+            style={tp.nowBtn}
+            onPress={() => {
+              const now = nowHHMM().split(':')
+              setH(now[0])
+              setM(String(Math.floor(parseInt(now[1], 10) / 5) * 5).padStart(2, '0'))
+            }}
+          >
+            <Ionicons name="time-outline" size={14} color={colors.ink60} />
+            <Text style={tp.nowBtnText}>Ahora</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={{ padding: 16 }}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => { onConfirm(`${h}:${m}`); onClose() }}
+          >
+            <Text style={styles.primaryBtnText}>Confirmar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+const tp = StyleSheet.create({
+  bigTime: {
+    fontSize: 40, fontWeight: '800', color: colors.ink, textAlign: 'center',
+    marginBottom: 20, fontFamily: fonts.mono,
+  },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.ink60,
+    letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8, marginTop: 12,
+  },
+  chipRow: { gap: 8, paddingBottom: 4 },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
+  },
+  chipActive: { backgroundColor: colors.cielo, borderColor: colors.cielo },
+  chipText: { fontSize: 14, color: colors.ink, fontWeight: '600', fontFamily: fonts.mono },
+  chipTextActive: { color: colors.blanco },
+  nowBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 16, paddingVertical: 10,
+  },
+  nowBtnText: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
+})
+
+// ─── Step 1: cabezal + parral + válvulas ──────────────────────────────────────
 
 const CABEZALES = Object.keys(CABEZAL_VALVULAS).sort()
 
-function StepCabezal({ onSelect }: { onSelect: (cabezal: string | null) => void }) {
+function StepUbicacion({
+  parcelas, initialCabezal, initialParcelaId, initialValvulas, onNext,
+}: {
+  parcelas: Parcela[]
+  initialCabezal: string | null
+  initialParcelaId: string | null
+  initialValvulas: string[]
+  onNext: (cabezal: string, parcela: Parcela, valvulas: string[]) => void
+}) {
+  const [cabezal, setCabezal] = useState<string | null>(initialCabezal)
+  const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
+  const [valvulas, setValvulas] = useState<Set<string>>(new Set(initialValvulas))
+
+  const parralesDelCabezal = cabezal
+    ? parcelas.filter((p) => p.tipo === 'parral' && p.is_active && p.cabezal_riego === cabezal)
+    : []
+
+  const parcelaSel = parcelas.find((p) => p.id === parcelaId) ?? null
+  const valvulasDisponibles = parcelaSel ? getValvulasForParcela(parcelaSel.nombre) : []
+
+  function selectCabezal(cab: string) {
+    setCabezal(cab)
+    setParcelaId(null)
+    setValvulas(new Set())
+  }
+
+  function selectParcela(p: Parcela) {
+    setParcelaId(p.id)
+    setValvulas(new Set())
+  }
+
+  function toggleValvula(v: string) {
+    setValvulas((prev) => {
+      const next = new Set(prev)
+      next.has(v) ? next.delete(v) : next.add(v)
+      return next
+    })
+  }
+
+  function handleContinue() {
+    if (!cabezal) { Alert.alert('Falta el cabezal', 'Seleccioná un cabezal de riego.'); return }
+    if (!parcelaSel) { Alert.alert('Falta el parral', 'Seleccioná el parral a regar.'); return }
+    if (valvulas.size === 0) { Alert.alert('Faltan válvulas', 'Seleccioná al menos una válvula.'); return }
+    onNext(cabezal, parcelaSel, Array.from(valvulas).sort((a, b) => Number(a) - Number(b)))
+  }
+
   return (
     <View style={styles.stepContainer}>
       <StepIndicator current={0} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        <Text style={styles.stepTitle}>¿Qué cabezal?</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
-        <View style={styles.cabezalGrid}>
-          {CABEZALES.map((cab) => {
-            const info = CABEZAL_VALVULAS[cab]
-            return (
-              <TouchableOpacity
-                key={cab}
-                style={styles.cabezalCard}
-                onPress={() => onSelect(cab)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.cabezalNum}>{cab}</Text>
-                <Text style={styles.cabezalDesc} numberOfLines={2}>
-                  {info?.descripcion ?? ''}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
+        <Text style={styles.fieldLabel}>1. CABEZAL</Text>
+        <View style={styles.chipGridWrap}>
+          {CABEZALES.map((cab) => (
+            <TouchableOpacity
+              key={cab}
+              style={[styles.cabezalChip, cabezal === cab && styles.cabezalChipActive]}
+              onPress={() => selectCabezal(cab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.cabezalChipText, cabezal === cab && styles.cabezalChipTextActive]}>
+                Cabezal {cab}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        <TouchableOpacity
-          style={styles.mantoBtn}
-          onPress={() => onSelect(null)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="water-outline" size={18} color={colors.ink60} />
-          <Text style={styles.mantoBtnText}>Sin cabezal (manto)</Text>
+        {cabezal && (
+          <>
+            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>2. PARRAL</Text>
+            {parralesDelCabezal.length === 0 ? (
+              <Text style={styles.emptyText}>Sin parrales activos para este cabezal</Text>
+            ) : (
+              <View style={styles.chipGridWrap}>
+                {parralesDelCabezal.map((p) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.parcelaChip, parcelaId === p.id && styles.parcelaChipActive]}
+                    onPress={() => selectParcela(p)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.parcelaChipText, parcelaId === p.id && styles.parcelaChipTextActive]}>
+                      {p.nombre}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
+        {parcelaSel && (
+          <>
+            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>3. VÁLVULAS ABIERTAS</Text>
+            <View style={styles.chipGridWrap}>
+              {valvulasDisponibles.map((v) => (
+                <TouchableOpacity
+                  key={v}
+                  style={[styles.valvulaChip, valvulas.has(v) && styles.valvulaChipActive]}
+                  onPress={() => toggleValvula(v)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name="water"
+                    size={14}
+                    color={valvulas.has(v) ? colors.blanco : colors.cielo}
+                  />
+                  <Text style={[styles.valvulaChipText, valvulas.has(v) && styles.valvulaChipTextActive]}>
+                    Válvula {v}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {valvulas.size > 0 && (
+              <Text style={styles.hintText}>
+                {valvulas.size} válvula{valvulas.size > 1 ? 's' : ''} × 1 ha c/u ≈ {valvulas.size} ha regadas
+              </Text>
+            )}
+          </>
+        )}
+
+        <TouchableOpacity style={[styles.primaryBtn, { marginTop: 28 }]} onPress={handleContinue}>
+          <Text style={styles.primaryBtnText}>Continuar</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
   )
 }
 
-// ─── Step 2: cronómetro + parcelas ────────────────────────────────────────────
+// ─── Step 2: horario ──────────────────────────────────────────────────────────
 
-function StepCronometro({
-  cabezal, parcelas, onNext, onBack,
+function StepHorario({
+  initialFechaInicio, initialHoraInicio, initialFechaFin, initialHoraFin, onNext, onBack,
 }: {
-  cabezal: string | null
-  parcelas: Parcela[]
-  onNext: (inicio: string, fin: string, selectedIds: string[]) => void
+  initialFechaInicio: string
+  initialHoraInicio: string
+  initialFechaFin: string
+  initialHoraFin: string
+  onNext: (fechaInicio: string, horaInicio: string, fechaFin: string, horaFin: string) => void
   onBack: () => void
 }) {
-  const [running, setRunning] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-  const [inicioISO, setInicioISO] = useState<string | null>(null)
-  const [finISO, setFinISO] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [fechaInicio, setFechaInicio] = useState(initialFechaInicio || isoToday())
+  const [horaInicio, setHoraInicio] = useState(initialHoraInicio)
+  const [fechaFin, setFechaFin] = useState(initialFechaFin || isoToday())
+  const [horaFin, setHoraFin] = useState(initialHoraFin)
 
-  const parcelasFiltradas = cabezal
-    ? parcelas.filter(
-        (p) => p.tipo === 'parral' && p.cabezal_riego === cabezal,
-      )
-    : parcelas.filter((p) => p.tipo === 'parral')
+  const [dateModal, setDateModal] = useState<'inicio' | 'fin' | null>(null)
+  const [timeModal, setTimeModal] = useState<'inicio' | 'fin' | null>(null)
 
-  useEffect(() => {
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [])
+  const preview = (horaInicio && horaFin)
+    ? calcRiegoTotales(`${fechaInicio}T${horaInicio}:00`, `${fechaFin}T${horaFin}:00`, 1)
+    : null
 
-  function handleStart() {
-    const now = isoNow()
-    setInicioISO(now)
-    setFinISO(null)
-    setElapsed(0)
-    setRunning(true)
-    intervalRef.current = setInterval(() => {
-      setElapsed((e) => e + 1)
-    }, 1000)
+  function handleContinue() {
+    if (!horaInicio) { Alert.alert('Falta la hora de inicio', ''); return }
+    if (!horaFin) { Alert.alert('Falta la hora de fin', ''); return }
+    if (!preview) { Alert.alert('Horario inválido', 'El fin debe ser posterior al inicio.'); return }
+    onNext(fechaInicio, horaInicio, fechaFin, horaFin)
   }
-
-  function handleStop() {
-    setFinISO(isoNow())
-    setRunning(false)
-    if (intervalRef.current) clearInterval(intervalRef.current)
-  }
-
-  function toggleParcela(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  function handleNext() {
-    if (!inicioISO) { Alert.alert('Error', 'Iniciá el cronómetro primero.'); return }
-    if (!finISO)    { Alert.alert('Error', 'Detené el cronómetro para registrar el fin.'); return }
-    onNext(inicioISO, finISO, Array.from(selectedIds))
-  }
-
-  const m3Estimados = elapsed > 0 ? ((elapsed / 3600) * M3_POR_HORA).toFixed(1) : null
 
   return (
     <View style={styles.stepContainer}>
       <StepIndicator current={1} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>
-          {cabezal ? `Cabezal ${cabezal}` : 'Riego a manto'}
-        </Text>
+        <Text style={styles.stepTitle}>¿Cuándo se regó?</Text>
 
-        {/* Cronómetro */}
-        <View style={styles.chronoCard}>
-          <Text style={[styles.chronoTime, { fontFamily: fonts.mono }]}>
-            {formatDuration(elapsed)}
-          </Text>
-          {m3Estimados && (
-            <Text style={styles.chronoM3}>≈ {m3Estimados} m³ estimados</Text>
-          )}
-          <View style={styles.chronoBtns}>
-            {!running && !inicioISO && (
-              <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
-                <Ionicons name="play" size={20} color={colors.blanco} />
-                <Text style={styles.startBtnText}>Iniciar</Text>
-              </TouchableOpacity>
-            )}
-            {running && (
-              <TouchableOpacity style={styles.stopBtn} onPress={handleStop}>
-                <Ionicons name="stop" size={20} color={colors.blanco} />
-                <Text style={styles.startBtnText}>Detener</Text>
-              </TouchableOpacity>
-            )}
-            {!running && inicioISO && (
-              <View style={styles.chronoDone}>
-                <Ionicons name="checkmark-circle" size={18} color={colors.cielo} />
-                <Text style={styles.chronoDoneText}>
-                  {formatDatetime(inicioISO)} → {finISO ? formatDatetime(finISO) : '…'}
-                </Text>
-              </View>
-            )}
-          </View>
+        <Text style={styles.fieldLabel}>INICIO</Text>
+        <View style={styles.dateTimeRow}>
+          <DatePickerModal
+            visible={dateModal === 'inicio'} value={fechaInicio}
+            onConfirm={setFechaInicio} onClose={() => setDateModal(null)}
+          />
+          <TimePickerModal
+            visible={timeModal === 'inicio'} value={horaInicio}
+            onConfirm={setHoraInicio} onClose={() => setTimeModal(null)}
+          />
+          <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setDateModal('inicio')}>
+            <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+            <Text style={styles.dateBtnText}>{formatDateDisplay(fechaInicio)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setTimeModal('inicio')}>
+            <Ionicons name="time-outline" size={16} color={colors.ink60} />
+            <Text style={styles.dateBtnText}>{horaInicio || 'Hora'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Parcelas */}
-        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PARCELAS REGADAS</Text>
-        {parcelasFiltradas.length === 0 ? (
-          <Text style={styles.emptyText}>Sin parrales para este cabezal</Text>
-        ) : (
-          <View style={styles.parcelasGrid}>
-            {parcelasFiltradas.map((p) => {
-              const active = selectedIds.has(p.id)
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.parcelaChip, active && styles.parcelaChipActive]}
-                  onPress={() => toggleParcela(p.id)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.parcelaChipText, active && styles.parcelaChipTextActive]}>
-                    {p.nombre}
-                  </Text>
-                  {active && <Ionicons name="checkmark" size={13} color={colors.blanco} style={{ marginLeft: 4 }} />}
-                </TouchableOpacity>
-              )
-            })}
+        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>FIN</Text>
+        <View style={styles.dateTimeRow}>
+          <DatePickerModal
+            visible={dateModal === 'fin'} value={fechaFin}
+            onConfirm={setFechaFin} onClose={() => setDateModal(null)}
+          />
+          <TimePickerModal
+            visible={timeModal === 'fin'} value={horaFin}
+            onConfirm={setHoraFin} onClose={() => setTimeModal(null)}
+          />
+          <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setDateModal('fin')}>
+            <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+            <Text style={styles.dateBtnText}>{formatDateDisplay(fechaFin)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setTimeModal('fin')}>
+            <Ionicons name="time-outline" size={16} color={colors.ink60} />
+            <Text style={styles.dateBtnText}>{horaFin || 'Hora'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {preview ? (
+          <View style={styles.previewCard}>
+            <Ionicons name="time" size={16} color={colors.cielo} />
+            <Text style={styles.previewText}>Duración: {preview.horas} h</Text>
           </View>
-        )}
+        ) : (horaInicio && horaFin) ? (
+          <Text style={styles.errorText}>El fin debe ser posterior al inicio.</Text>
+        ) : null}
 
         <View style={[styles.actionRow, { marginTop: 24 }]}>
           <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
             <Text style={styles.secondaryBtnText}>Atrás</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleNext}>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleContinue}>
             <Text style={styles.primaryBtnText}>Continuar</Text>
           </TouchableOpacity>
         </View>
@@ -271,64 +564,145 @@ function StepCronometro({
   )
 }
 
-// ─── Step 3: confirmar ────────────────────────────────────────────────────────
+// ─── Step 3: fertirriego + responsable ────────────────────────────────────────
+
+function StepDetalle({
+  initialConFertirriego, initialProducto, initialDosis, initialResponsable, onNext, onBack,
+}: {
+  initialConFertirriego: boolean
+  initialProducto: string
+  initialDosis: string
+  initialResponsable: string
+  onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string) => void
+  onBack: () => void
+}) {
+  const [conFertirriego, setConFertirriego] = useState(initialConFertirriego)
+  const [producto, setProducto] = useState(initialProducto)
+  const [dosis, setDosis] = useState(initialDosis)
+  const [responsable, setResponsable] = useState(initialResponsable)
+
+  function handleContinue() {
+    if (conFertirriego && !producto.trim()) {
+      Alert.alert('Falta el producto', 'Indicá el nombre del fertilizante.')
+      return
+    }
+    if (!responsable.trim()) {
+      Alert.alert('Falta el responsable', 'Indicá quién realizó el riego.')
+      return
+    }
+    onNext(conFertirriego, producto.trim(), dosis.trim(), responsable.trim())
+  }
+
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={2} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <Text style={styles.stepTitle}>Fertiriego y responsable</Text>
+
+        <Text style={styles.fieldLabel}>¿ES CON FERTIRIEGO?</Text>
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            style={[styles.toggleBtn, !conFertirriego && styles.toggleBtnActive]}
+            onPress={() => setConFertirriego(false)}
+          >
+            <Text style={[styles.toggleBtnText, !conFertirriego && styles.toggleBtnTextActive]}>Solo agua</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleBtn, conFertirriego && styles.toggleBtnActive]}
+            onPress={() => setConFertirriego(true)}
+          >
+            <Text style={[styles.toggleBtnText, conFertirriego && styles.toggleBtnTextActive]}>Con fertiriego</Text>
+          </TouchableOpacity>
+        </View>
+
+        {conFertirriego && (
+          <View style={{ marginTop: 16 }}>
+            <Text style={styles.fieldLabel}>PRODUCTO</Text>
+            <TextInput
+              style={styles.input}
+              value={producto}
+              onChangeText={setProducto}
+              placeholder="Nombre del fertilizante..."
+              placeholderTextColor={colors.niebla}
+            />
+            <Text style={styles.fieldLabel}>DOSIS (L/HA)</Text>
+            <TextInput
+              style={styles.input}
+              value={dosis}
+              onChangeText={setDosis}
+              placeholder="0.0"
+              placeholderTextColor={colors.niebla}
+              keyboardType="decimal-pad"
+            />
+          </View>
+        )}
+
+        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RESPONSABLE</Text>
+        <TextInput
+          style={styles.input}
+          value={responsable}
+          onChangeText={setResponsable}
+          placeholder="Nombre del responsable..."
+          placeholderTextColor={colors.niebla}
+        />
+
+        <View style={[styles.actionRow, { marginTop: 24 }]}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleContinue}>
+            <Text style={styles.primaryBtnText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Step 4: confirmar ────────────────────────────────────────────────────────
+
+interface RiegoDraft {
+  cabezal: string
+  parcela: Parcela
+  valvulas: string[]
+  fechaInicio: string
+  horaInicio: string
+  fechaFin: string
+  horaFin: string
+  conFertirriego: boolean
+  producto: string
+  dosis: string
+  responsable: string
+}
 
 function StepConfirmar({
-  cabezal, inicioISO, finISO, parcelaIds, parcelas,
-  onSuccess, onBack,
+  draft, onSuccess, onBack,
 }: {
-  cabezal: string | null
-  inicioISO: string
-  finISO: string
-  parcelaIds: string[]
-  parcelas: Parcela[]
+  draft: RiegoDraft
   onSuccess: () => void
   onBack: () => void
 }) {
-  const user = useAuthStore((s) => s.user)
-  const [observacion, setObservacion] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const duracionSec = Math.round(
-    (new Date(finISO).getTime() - new Date(inicioISO).getTime()) / 1000,
-  )
-  const duracionH = duracionSec / 3600
-  const m3Estimados = (duracionH * M3_POR_HORA).toFixed(2)
-
-  const selectedParcelas = parcelas.filter((p) => parcelaIds.includes(p.id))
-  const fecha = inicioISO.split('T')[0]
+  const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00`
+  const finISO = `${draft.fechaFin}T${draft.horaFin}:00`
+  const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length)
 
   async function handleSubmit() {
-    const responsable = user?.full_name ?? 'Sin nombre'
+    if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
     try {
       setLoading(true)
-      if (selectedParcelas.length === 0) {
-        // Sin parcela — un único registro
-        await api.post('/produccion/riego/', {
-          fecha,
-          parcela_id: null,
-          cabezal: cabezal ?? 'MANTO',
-          valvula: '1',
-          inicio: inicioISO,
-          fin: finISO,
-          responsable,
-          ...(observacion.trim() ? {} : {}),
-        })
-      } else {
-        await Promise.all(
-          selectedParcelas.map((p) =>
-            api.post('/produccion/riego/', {
-              fecha,
-              parcela_id: p.id,
-              cabezal: p.cabezal_riego ?? cabezal ?? 'MANTO',
-              valvula: '1',
-              inicio: inicioISO,
-              fin: finISO,
-              responsable,
-            }),
-          ),
-        )
-      }
+      await api.post('/produccion/riego/', {
+        fecha: draft.fechaInicio,
+        parcela_id: draft.parcela.id,
+        cabezal: draft.cabezal,
+        valvula: draft.valvulas.join(','),
+        inicio: inicioISO,
+        fin: finISO,
+        responsable: draft.responsable,
+        fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
+        fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
+      })
       onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -338,26 +712,29 @@ function StepConfirmar({
     }
   }
 
+  const rows: { label: string; value: string; highlight?: boolean }[] = [
+    { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
+    { label: 'Parral', value: draft.parcela.nombre },
+    { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
+    { label: 'Inicio', value: formatDatetime(inicioISO) },
+    { label: 'Fin', value: formatDatetime(finISO) },
+    { label: 'Duración', value: totales ? `${totales.horas} h` : '—' },
+    { label: 'Litros totales', value: totales ? `${totales.litros.toLocaleString('es-AR')} L` : '—', highlight: true },
+    {
+      label: 'Fertiriego',
+      value: draft.conFertirriego && draft.producto ? `${draft.producto} (${draft.dosis || '0'} L/ha)` : 'Sin fertiriego',
+    },
+    { label: 'Responsable', value: draft.responsable },
+  ]
+
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} />
+      <StepIndicator current={3} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>Confirmar</Text>
+        <Text style={styles.stepTitle}>Confirmar riego</Text>
 
         <View style={styles.summaryCard}>
-          {[
-            { label: 'Cabezal',   value: cabezal ? `Cabezal ${cabezal}` : 'Manto' },
-            { label: 'Inicio',    value: formatDatetime(inicioISO) },
-            { label: 'Fin',       value: formatDatetime(finISO) },
-            { label: 'Duración',  value: formatDuration(duracionSec) },
-            { label: 'm³ est.',   value: `${m3Estimados} m³`, highlight: true },
-            {
-              label: 'Parcelas',
-              value: selectedParcelas.length > 0
-                ? selectedParcelas.map((p) => p.nombre).join(', ')
-                : 'Sin parcela',
-            },
-          ].map(({ label, value, highlight }, idx, arr) => (
+          {rows.map(({ label, value, highlight }, idx, arr) => (
             <View
               key={label}
               style={[
@@ -366,9 +743,7 @@ function StepConfirmar({
                 highlight && styles.summaryRowHighlight,
               ]}
             >
-              <Text style={[styles.summaryLabel, highlight && { color: colors.cielo }]}>
-                {label}
-              </Text>
+              <Text style={[styles.summaryLabel, highlight && { color: colors.cielo }]}>{label}</Text>
               <Text
                 style={[styles.summaryValue, highlight && { color: colors.cielo }, { flex: 1, textAlign: 'right' }]}
                 numberOfLines={2}
@@ -379,18 +754,8 @@ function StepConfirmar({
           ))}
         </View>
 
-        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>OBSERVACIÓN (opcional)</Text>
-        <TextInput
-          style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 12 }]}
-          value={observacion}
-          onChangeText={setObservacion}
-          placeholder="Notas sobre el riego..."
-          placeholderTextColor={colors.niebla}
-          multiline
-        />
-
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack} disabled={loading}>
             <Text style={styles.secondaryBtnText}>Atrás</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -451,18 +816,21 @@ function RecentRiegos({
               </View>
               <View style={styles.riegoBadges}>
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Cab. {r.cabezal}</Text>
+                  <Text style={styles.badgeText}>Cab. {r.cabezal} · V{r.valvula.split(',').join('+')}</Text>
                 </View>
                 <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
                   <Text style={[styles.badgeText, { color: colors.cielo }]}>
                     {r.duracion_horas.toFixed(1)} h
                   </Text>
                 </View>
-                {r.mm_aplicados != null && (
-                  <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
-                    <Text style={[styles.badgeText, { color: colors.cielo }]}>
-                      {r.mm_aplicados} mm
-                    </Text>
+                <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
+                  <Text style={[styles.badgeText, { color: colors.cielo }]}>
+                    {r.litros_aplicados.toLocaleString('es-AR')} L
+                  </Text>
+                </View>
+                {r.fertilizante_nombre && (
+                  <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={[styles.badgeText, { color: '#92400e' }]}>Fertiriego</Text>
                   </View>
                 )}
               </View>
@@ -477,18 +845,21 @@ function RecentRiegos({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'cabezal' | 'cronometro' | 'confirmar' | 'success'
+type Step = 'list' | 'ubicacion' | 'horario' | 'detalle' | 'confirmar' | 'success'
+
+const emptyDraft: RiegoDraft = {
+  cabezal: '', parcela: null as unknown as Parcela, valvulas: [],
+  fechaInicio: isoToday(), horaInicio: '', fechaFin: isoToday(), horaFin: '',
+  conFertirriego: false, producto: '', dosis: '', responsable: '',
+}
 
 export default function RiegoScreen() {
+  const user = useAuthStore((s) => s.user)
   const [step, setStep] = useState<Step>('list')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [riegos, setRiegos] = useState<RegistroRiego[]>([])
   const [refreshing, setRefreshing] = useState(false)
-
-  const [selCabezal, setSelCabezal] = useState<string | null>(null)
-  const [selInicio, setSelInicio] = useState('')
-  const [selFin, setSelFin] = useState('')
-  const [selParcelaIds, setSelParcelaIds] = useState<string[]>([])
+  const [draft, setDraft] = useState<RiegoDraft>(emptyDraft)
 
   const loadData = useCallback(async () => {
     const [cachedParcelas, cachedRiegos] = await Promise.all([
@@ -518,29 +889,59 @@ export default function RiegoScreen() {
 
   function onRefresh() { setRefreshing(true); loadData() }
 
+  function startWizard() {
+    setDraft({ ...emptyDraft, responsable: user?.full_name ?? '' })
+    setStep('ubicacion')
+  }
+
   function resetWizard() {
-    setSelCabezal(null); setSelInicio(''); setSelFin(''); setSelParcelaIds([])
+    setDraft(emptyDraft)
     setStep('list')
   }
 
-  if (step === 'cabezal') {
+  if (step === 'ubicacion') {
     return (
-      <StepCabezal
-        onSelect={(cab) => { setSelCabezal(cab); setStep('cronometro') }}
+      <StepUbicacion
+        parcelas={parcelas}
+        initialCabezal={draft.cabezal || null}
+        initialParcelaId={draft.parcela?.id ?? null}
+        initialValvulas={draft.valvulas}
+        onNext={(cabezal, parcela, valvulas) => {
+          setDraft((d) => ({ ...d, cabezal, parcela, valvulas }))
+          setStep('horario')
+        }}
       />
     )
   }
 
-  if (step === 'cronometro') {
+  if (step === 'horario') {
     return (
-      <StepCronometro
-        cabezal={selCabezal}
-        parcelas={parcelas}
-        onNext={(inicio, fin, ids) => {
-          setSelInicio(inicio); setSelFin(fin); setSelParcelaIds(ids)
+      <StepHorario
+        initialFechaInicio={draft.fechaInicio}
+        initialHoraInicio={draft.horaInicio}
+        initialFechaFin={draft.fechaFin}
+        initialHoraFin={draft.horaFin}
+        onNext={(fechaInicio, horaInicio, fechaFin, horaFin) => {
+          setDraft((d) => ({ ...d, fechaInicio, horaInicio, fechaFin, horaFin }))
+          setStep('detalle')
+        }}
+        onBack={() => setStep('ubicacion')}
+      />
+    )
+  }
+
+  if (step === 'detalle') {
+    return (
+      <StepDetalle
+        initialConFertirriego={draft.conFertirriego}
+        initialProducto={draft.producto}
+        initialDosis={draft.dosis}
+        initialResponsable={draft.responsable}
+        onNext={(conFertirriego, producto, dosis, responsable) => {
+          setDraft((d) => ({ ...d, conFertirriego, producto, dosis, responsable }))
           setStep('confirmar')
         }}
-        onBack={() => setStep('cabezal')}
+        onBack={() => setStep('horario')}
       />
     )
   }
@@ -548,13 +949,9 @@ export default function RiegoScreen() {
   if (step === 'confirmar') {
     return (
       <StepConfirmar
-        cabezal={selCabezal}
-        inicioISO={selInicio}
-        finISO={selFin}
-        parcelaIds={selParcelaIds}
-        parcelas={parcelas}
+        draft={draft}
         onSuccess={() => { setStep('success'); loadData() }}
-        onBack={() => setStep('cronometro')}
+        onBack={() => setStep('detalle')}
       />
     )
   }
@@ -578,7 +975,7 @@ export default function RiegoScreen() {
     <View style={{ flex: 1 }}>
       <TouchableOpacity
         style={styles.newBtn}
-        onPress={() => setStep('cabezal')}
+        onPress={startWizard}
         activeOpacity={0.85}
       >
         <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
@@ -606,57 +1003,69 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
   },
+  hintText: { fontSize: 12, color: colors.ink60, marginTop: 8, fontStyle: 'italic' },
+  errorText: { fontSize: 12, color: colors.sangre, marginTop: 8 },
 
-  // cabezal grid 2×2
-  cabezalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  cabezalCard: {
-    width: '47%', backgroundColor: colors.cielo, borderRadius: 16,
-    padding: 20, alignItems: 'center',
-    shadowColor: colors.cielo,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  // chip grids (cabezal / parral / valvula)
+  chipGridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  cabezalChip: {
+    paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12,
+    borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
   },
-  cabezalNum: { fontSize: 36, fontWeight: '800', color: colors.blanco, marginBottom: 6 },
-  cabezalDesc: { fontSize: 11, color: 'rgba(255,255,255,0.8)', textAlign: 'center', fontWeight: '500' },
-  mantoBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    borderRadius: 14, borderWidth: 1.5, borderColor: colors.hueso,
-    backgroundColor: colors.blanco, paddingVertical: 16,
-  },
-  mantoBtnText: { fontSize: 15, color: colors.ink60, fontWeight: '600' },
+  cabezalChipActive: { backgroundColor: colors.cielo, borderColor: colors.cielo },
+  cabezalChipText: { fontSize: 14, color: colors.ink, fontWeight: '700' },
+  cabezalChipTextActive: { color: colors.blanco },
 
-  // cronómetro
-  chronoCard: {
-    backgroundColor: colors.blanco, borderRadius: 20, padding: 24,
-    alignItems: 'center', borderWidth: 1, borderColor: colors.hueso,
-  },
-  chronoTime: { fontSize: 48, color: colors.ink, letterSpacing: 2, marginBottom: 6 },
-  chronoM3: { fontSize: 14, color: colors.cielo, fontWeight: '600', marginBottom: 16 },
-  chronoBtns: { width: '100%' },
-  startBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.cielo, borderRadius: 12, paddingVertical: 14,
-  },
-  stopBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.sangre, borderRadius: 12, paddingVertical: 14,
-  },
-  startBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
-  chronoDone: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#e0f2fe', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
-  },
-  chronoDoneText: { fontSize: 13, color: colors.cielo, fontWeight: '600' },
-
-  // parcelas multiselect
-  parcelasGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   parcelaChip: {
-    flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
     borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
   },
-  parcelaChipActive: { backgroundColor: colors.cielo, borderColor: colors.cielo },
+  parcelaChipActive: { backgroundColor: colors.burdeos[600], borderColor: colors.burdeos[600] },
   parcelaChipText: { fontSize: 13, color: colors.ink, fontWeight: '600' },
   parcelaChipTextActive: { color: colors.blanco },
+
+  valvulaChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.cielo, backgroundColor: colors.blanco,
+  },
+  valvulaChipActive: { backgroundColor: colors.cielo },
+  valvulaChipText: { fontSize: 13, color: colors.cielo, fontWeight: '700' },
+  valvulaChipTextActive: { color: colors.blanco },
+
+  emptyText: { fontSize: 13, color: colors.niebla, fontStyle: 'italic', paddingVertical: 8 },
+
+  // date/time
+  dateTimeRow: { flexDirection: 'row', gap: 8 },
+  dateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.hueso,
+    backgroundColor: colors.blanco, paddingVertical: 14, paddingHorizontal: 14,
+  },
+  dateBtnText: { fontSize: 14, color: colors.ink, fontWeight: '600' },
+
+  previewCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#e0f2fe', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14,
+    marginTop: 16,
+  },
+  previewText: { fontSize: 14, color: colors.cielo, fontWeight: '700' },
+
+  // toggle (fertirriego)
+  toggleRow: { flexDirection: 'row', gap: 8 },
+  toggleBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
+  },
+  toggleBtnActive: { backgroundColor: colors.cielo, borderColor: colors.cielo },
+  toggleBtnText: { fontSize: 14, color: colors.ink, fontWeight: '600' },
+  toggleBtnTextActive: { color: colors.blanco },
+
+  input: {
+    backgroundColor: colors.blanco, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.hueso,
+    paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14, height: 48,
+  },
 
   // summary
   summaryCard: {
@@ -672,11 +1081,6 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
   summaryValue: { fontSize: 14, color: colors.ink, fontWeight: '700' },
 
-  input: {
-    backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
-    paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14, height: 48,
-  },
   actionRow: { flexDirection: 'row', gap: 10 },
   primaryBtn: {
     height: 52, backgroundColor: colors.cielo, borderRadius: 12,
@@ -689,6 +1093,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blanco, justifyContent: 'center', alignItems: 'center',
   },
   secondaryBtnText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
+
+  // modal header (shared by DatePickerModal / TimePickerModal)
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: colors.hueso,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  closeBtn: { padding: 4 },
 
   // new btn
   newBtn: {
@@ -712,7 +1125,7 @@ const styles = StyleSheet.create({
   },
   riegoNombre: { fontSize: 15, fontWeight: '700', color: colors.ink },
   riegoDate: { fontSize: 12, color: colors.niebla },
-  riegoBadges: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  riegoBadges: { flexDirection: 'row', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
   badge: {
     backgroundColor: colors.crema, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
   },
@@ -721,7 +1134,6 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyStateTitle: { fontSize: 14, color: colors.niebla, marginTop: 10 },
-  emptyText: { fontSize: 13, color: colors.niebla, fontStyle: 'italic', paddingVertical: 8 },
 
   // success
   successContainer: {

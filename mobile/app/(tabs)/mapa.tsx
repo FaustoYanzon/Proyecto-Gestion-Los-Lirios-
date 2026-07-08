@@ -11,7 +11,7 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
-import type { Parcela } from '../../lib/types'
+import type { Parcela, FaseVariedad } from '../../lib/types'
 import { FINCA_FEATURES } from '../../lib/kmlData'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
@@ -49,6 +49,7 @@ interface EstadoActual {
 interface ParcelPanel {
   parcela: Parcela
   estado: EstadoActual | null
+  fenologia: FaseVariedad | null
   mmTotal: number | null
   riegoCount: number | null
   tareas: { tarea: string; fecha: string }[]
@@ -56,7 +57,7 @@ interface ParcelPanel {
   loadingExtra: boolean
 }
 
-function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData): string {
+function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData, fenologia: FaseVariedad[]): string {
   const featuresJSON = JSON.stringify(FINCA_FEATURES)
   const parcelasJSON = JSON.stringify(
     parcelas.map((p) => ({
@@ -66,6 +67,12 @@ function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData): string {
   )
   const typeColorsJSON = JSON.stringify(TYPE_COLORS)
   const varColorsJSON = JSON.stringify(VAR_COLORS)
+  const estadoColorsJSON = JSON.stringify(ESTADO_COLORS)
+  const estadoLabelsJSON = JSON.stringify(ESTADO_LABELS)
+  // Keyed by variedad for O(1) lookup inside the WebView JS.
+  const fenologiaJSON = JSON.stringify(
+    Object.fromEntries(fenologia.map((f) => [f.variedad, f]))
+  )
 
   // Serialize each layer; null-safe (empty FeatureCollection → no features rendered)
   const acequiasJSON = JSON.stringify(layers.acequias)
@@ -185,6 +192,9 @@ const FEATURES = ${featuresJSON};
 const PARCELAS = ${parcelasJSON};
 const TYPE_COLORS = ${typeColorsJSON};
 const VAR_COLORS = ${varColorsJSON};
+const ESTADO_COLORS = ${estadoColorsJSON};
+const ESTADO_LABELS = ${estadoLabelsJSON};
+const FENOLOGIA = ${fenologiaJSON}; // keyed by variedad
 
 // Infrastructure GeoJSON data
 const GEO_DATA = {
@@ -207,7 +217,10 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
 function getStyle(f, selected) {
   const p = PARCELAS.find(p => p.nombre === f.name);
   let stroke, fill;
-  if (colorMode === 'variedad' && f.type === 'parral' && p && p.variedad) {
+  if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && FENOLOGIA[p.variedad]) {
+    const estado = FENOLOGIA[p.variedad].estado_fenologico;
+    stroke = fill = ESTADO_COLORS[estado] || '#94a3b8';
+  } else if (colorMode === 'variedad' && f.type === 'parral' && p && p.variedad) {
     stroke = fill = VAR_COLORS[p.variedad] || '#94a3b8';
   } else {
     const c = TYPE_COLORS[f.type] || TYPE_COLORS.parral;
@@ -230,10 +243,14 @@ function updateLegend() {
     title.textContent = 'Tipo';
     const types = [{ k:'parral',label:'Parral'},{ k:'potrero',label:'Potrero'},{ k:'pasero',label:'Pasero'},{ k:'cabezal',label:'Cabezal'}];
     items.innerHTML = types.map(t => '<div class="legend-item"><div class="legend-dot" style="background:'+TYPE_COLORS[t.k].fill+'"></div><span class="legend-label">'+t.label+'</span></div>').join('');
-  } else {
+  } else if (colorMode === 'variedad') {
     title.textContent = 'Variedad';
     const vars = [{k:'flame',label:'Flame'},{k:'red_globe',label:'Red Globe'},{k:'fiesta',label:'Fiesta'},{k:'bonarda',label:'Bonarda'},{k:'sultanina',label:'Sultanina'},{k:'syrah',label:'Syrah/Asp.'}];
     items.innerHTML = vars.map(v => '<div class="legend-item"><div class="legend-dot" style="background:'+(VAR_COLORS[v.k]||'#94a3b8')+'"></div><span class="legend-label">'+v.label+'</span></div>').join('');
+  } else {
+    title.textContent = 'Fenología';
+    const estados = ['brotacion','floracion','cuaje','envero','madurez','cosecha','latencia'];
+    items.innerHTML = estados.map(e => '<div class="legend-item"><div class="legend-dot" style="background:'+(ESTADO_COLORS[e]||'#94a3b8')+'"></div><span class="legend-label">'+(ESTADO_LABELS[e]||e)+'</span></div>').join('');
   }
 }
 
@@ -244,9 +261,12 @@ function updateStyles() {
   });
 }
 
+const MODE_LABELS = { type: '&#9632; Por tipo', variedad: '&#9632; Por variedad', fenologia: '&#9632; Fenología' };
+const MODE_ORDER = ['type', 'variedad', 'fenologia'];
+
 function toggleMode() {
-  colorMode = colorMode === 'type' ? 'variedad' : 'type';
-  document.getElementById('mode-btn').innerHTML = colorMode === 'type' ? '&#9632; Por tipo' : '&#9632; Por variedad';
+  colorMode = MODE_ORDER[(MODE_ORDER.indexOf(colorMode) + 1) % MODE_ORDER.length];
+  document.getElementById('mode-btn').innerHTML = MODE_LABELS[colorMode];
   updateStyles(); updateLegend();
 }
 
@@ -406,9 +426,11 @@ setTimeout(function() { map.invalidateSize(); }, 200);
 function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () => void }) {
   const router = useRouter()
   const p = panel.parcela
-  const estado = panel.estado?.estado_fenologico
+  // Prefer the automatic/override fenología engine (per-variedad) when available;
+  // fall back to the raw manual per-parral estado for parcelas without a variedad match.
+  const estado = panel.fenologia?.estado_fenologico ?? panel.estado?.estado_fenologico
   const estadoColor = estado ? (ESTADO_COLORS[estado] ?? '#94a3b8') : null
-  const estadoLabel = estado ? (ESTADO_LABELS[estado] ?? estado) : null
+  const estadoLabel = panel.fenologia?.fase_label ?? (estado ? (ESTADO_LABELS[estado] ?? estado) : null)
 
   return (
     <View style={panelStyles.container}>
@@ -450,12 +472,30 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
             <View style={[panelStyles.estadoBadge, { backgroundColor: `${estadoColor}18`, borderColor: `${estadoColor}40` }]}>
               <View style={[panelStyles.estadoDot, { backgroundColor: estadoColor }]} />
               <Text style={[panelStyles.estadoLabel, { color: estadoColor }]}>{estadoLabel}</Text>
-              {panel.estado?.fecha_estado && (
+              {(panel.fenologia?.fecha_confirmacion ?? panel.estado?.fecha_estado) && (
                 <Text style={panelStyles.estadoFecha}>
-                  {panel.estado.fecha_estado.split('-').reverse().join('/')}
+                  {(panel.fenologia?.fecha_confirmacion ?? panel.estado?.fecha_estado ?? '').split('-').reverse().join('/')}
                 </Text>
               )}
             </View>
+            {panel.fenologia && (
+              <>
+                <Text style={panelStyles.fuenteTag}>
+                  {panel.fenologia.fuente === 'manual' ? '✎ Confirmado a mano' : '✦ Estimado automático'}
+                </Text>
+                {panel.fenologia.proxima_fase_label && (
+                  <Text style={panelStyles.proximaFase}>
+                    Próxima: {panel.fenologia.proxima_fase_label}
+                    {panel.fenologia.proxima_fase_fecha
+                      ? ` · ${panel.fenologia.proxima_fase_fecha.split('-').reverse().join('/')}`
+                      : ''}
+                  </Text>
+                )}
+                {panel.fenologia.tareas_recomendadas.slice(0, 3).map((t, i) => (
+                  <Text key={i} style={panelStyles.tareaSugerida} numberOfLines={1}>• {t}</Text>
+                ))}
+              </>
+            )}
           </View>
         )}
 
@@ -575,6 +615,9 @@ const panelStyles = StyleSheet.create({
   estadoDot: { width: 10, height: 10, borderRadius: 5 },
   estadoLabel: { fontSize: 14, fontWeight: '700', flex: 1 },
   estadoFecha: { fontSize: 11, color: '#9ca3af' },
+  fuenteTag: { fontSize: 10, color: '#9ca3af', marginTop: 6, fontWeight: '600' },
+  proximaFase: { fontSize: 12, color: '#6b7280', marginTop: 6 },
+  tareaSugerida: { fontSize: 12, color: '#374151', marginTop: 4 },
   tareaRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   tareaName: { fontSize: 13, color: '#374151', fontWeight: '500', flex: 1, marginRight: 8 },
   tareaFecha: { fontSize: 12, color: '#9ca3af' },
@@ -599,6 +642,7 @@ const panelStyles = StyleSheet.create({
 export default function MapaScreen() {
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [estados, setEstados] = useState<EstadoActual[]>([])
+  const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [panel, setPanel] = useState<ParcelPanel | null>(null)
@@ -606,12 +650,14 @@ export default function MapaScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [parcelasRes, estadosRes] = await Promise.all([
+      const [parcelasRes, estadosRes, fenologiaRes] = await Promise.all([
         api.get<Parcela[]>('/parcelas/mapa'),
         api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
+        api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
       ])
       setParcelas(parcelasRes.data.filter((p) => p.is_active))
       setEstados(estadosRes.data)
+      setFenologia(fenologiaRes.data)
     } catch { /* offline */ }
     finally { setLoading(false) }
   }, [])
@@ -656,7 +702,10 @@ export default function MapaScreen() {
 
   async function handleParcelSelect(parcela: Parcela) {
     const estado = estados.find((e) => e.parcela_id === parcela.id) ?? null
-    setPanel({ parcela, estado, mmTotal: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true })
+    const fase = parcela.variedad
+      ? fenologia.find((f) => f.variedad === parcela.variedad) ?? null
+      : null
+    setPanel({ parcela, estado, fenologia: fase, mmTotal: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true })
     const { mmTotal, riegoCount, tareas, fitos } = await fetchPanelExtras(parcela.id)
     setPanel((prev) => prev ? { ...prev, mmTotal, riegoCount, tareas, fitos, loadingExtra: false } : null)
   }
@@ -688,7 +737,7 @@ export default function MapaScreen() {
     )
   }
 
-  const html = buildMapHTML(parcelas, GEO_LAYERS)
+  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia)
 
   return (
     <View style={styles.container}>

@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { RiegoResponse } from '@/lib/api/riego'
+import { formatHoraLocal, type RiegoResponse } from '@/lib/api/riego'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
 }
 
+// inicio/fin vienen del backend en UTC: hay que convertirlos a hora de
+// Argentina, nunca recortar el string ISO crudo (eso mostraba la hora UTC).
 function formatTime(dt: string) {
-  return dt.includes('T') ? dt.split('T')[1].slice(0, 5) : dt.slice(11, 16)
+  return formatHoraLocal(dt)
 }
 
 function formatHoras(h: number) {
@@ -30,7 +32,7 @@ interface Props {
 function SkeletonRow() {
   return (
     <tr>
-      {Array.from({ length: 8 }).map((_, i) => (
+      {Array.from({ length: 9 }).map((_, i) => (
         <td key={i} className="px-3 py-3">
           <div className="h-4 bg-gray-200 rounded animate-pulse" />
         </td>
@@ -65,6 +67,7 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Inicio → Fin</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Duración</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">mm</th>
+              <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Litros</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Fertilizante</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Responsable</th>
               <th className="px-3 py-3 font-medium text-gray-600 text-center whitespace-nowrap">Acciones</th>
@@ -97,6 +100,9 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
                   </td>
                   <td className="px-3 py-3 text-right whitespace-nowrap font-mono font-semibold text-blue-700">
                     {r.mm_aplicados != null ? `${r.mm_aplicados} mm` : '—'}
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-blue-700">
+                    {r.litros_aplicados.toLocaleString('es-AR')} L
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                     {r.fertilizante_nombre
@@ -157,7 +163,11 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
           <span className="font-medium text-gray-700">
             Total:{' '}
             <span className="font-mono text-blue-700">
-              {riegos.reduce((s, r) => s + (r.mm_aplicados ?? 0), 0).toFixed(1)} mm acumulados
+              {riegos.reduce((s, r) => s + (r.mm_aplicados ?? 0), 0).toFixed(1)} mm
+            </span>
+            {' · '}
+            <span className="font-mono text-blue-700">
+              {riegos.reduce((s, r) => s + (r.litros_aplicados ?? 0), 0).toLocaleString('es-AR')} L acumulados
             </span>
           </span>
           <span className="ml-auto text-gray-400">

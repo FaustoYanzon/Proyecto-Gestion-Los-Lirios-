@@ -2,7 +2,7 @@ import axios from 'axios'
 import * as SecureStore from 'expo-secure-store'
 
 export const TOKEN_KEY = 'loslirios_token'
-export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.105:8000'
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.100.216:8000'
 
 const api = axios.create({
   baseURL: API_BASE,

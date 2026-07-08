@@ -13,6 +13,7 @@ export const CACHE_TTL = {
   tareas: 15 * 60 * 1000,
   riegos: 15 * 60 * 1000,
   kpis: 15 * 60 * 1000,
+  fenologia: 6 * 60 * 60 * 1000, // 6 horas: cambia una vez por día como mucho
 }
 
 export async function getCache<T>(key: string, ttlMs: number): Promise<T | null> {

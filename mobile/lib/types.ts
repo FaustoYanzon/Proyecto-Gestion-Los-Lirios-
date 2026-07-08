@@ -13,6 +13,28 @@ export type VariedadUva = 'flame' | 'red_globe' | 'fiesta' | 'bonarda' | 'sultan
 export type UnidadMedida = 'dias' | 'plantas' | 'melgas' | 'metros' | 'vines' | 'cajas' | 'gamelas' | 'otros'
 export type EstadoFenologico = 'brotacion' | 'floracion' | 'cuaje' | 'envero' | 'madurez' | 'cosecha' | 'latencia'
 
+export const VARIEDAD_LABELS: Record<string, string> = {
+  flame: 'Flame', red_globe: 'Red Globe', fiesta: 'Fiesta', bonarda: 'Bonarda',
+  sultanina: 'Sultanina', syrah: 'Syrah', aspirant: 'Aspirant', alfalfa: 'Alfalfa', otro: 'Otro',
+}
+
+// Fenología automática por variedad (GET /produccion/fenologia/estado-actual).
+export interface FaseVariedad {
+  variedad: string
+  tipo_uso: string
+  fase: string
+  fase_label: string
+  estado_fenologico: EstadoFenologico
+  riesgo_oidio: string
+  tareas_recomendadas: string[]
+  proxima_fase: string | null
+  proxima_fase_label: string | null
+  proxima_fase_fecha: string | null
+  parcelas: string[]
+  fuente: 'automatico' | 'manual'
+  fecha_confirmacion: string | null
+}
+
 export interface Parcela {
   id: string
   nombre: string
@@ -64,6 +86,8 @@ export interface RegistroRiego {
   fin: string
   duracion_horas: number
   mm_aplicados: number | null
+  n_valvulas: number
+  litros_aplicados: number
   fertilizante_nombre: string | null
   fertilizante_dosis_lt_ha: number | null
   responsable: string
@@ -190,7 +214,11 @@ export function getValvulasForParcela(parcelaNombre: string): string[] {
   return Array.from({ length: max }, (_, i) => String(i + 1))
 }
 
+// Cada válvula riega 1 ha: 16.000 L/h => 1.6 mm/h sobre esa ha.
 export const MM_POR_HORA = 1.6
+export const LITROS_POR_HORA_VALVULA = 16_000
+// Referencia agronómica para el suelo de Media Agua: 6.000.000 L/ha/año.
+export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
 export function calcMmRiego(inicioISO: string, finISO: string): number | null {
   const start = new Date(inicioISO)
@@ -198,6 +226,21 @@ export function calcMmRiego(inicioISO: string, finISO: string): number | null {
   const horas = (end.getTime() - start.getTime()) / 3600000
   if (horas <= 0) return null
   return Math.round(horas * MM_POR_HORA * 100) / 100
+}
+
+export function calcRiegoTotales(
+  inicioISO: string, finISO: string, nValvulas: number,
+): { horas: number; mm: number; litros: number } | null {
+  const start = new Date(inicioISO)
+  const end = new Date(finISO)
+  const horas = (end.getTime() - start.getTime()) / 3600000
+  if (horas <= 0) return null
+  const n = nValvulas > 0 ? nValvulas : 1
+  return {
+    horas: Math.round(horas * 100) / 100,
+    mm: Math.round(horas * MM_POR_HORA * 100) / 100,
+    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * n),
+  }
 }
 
 // ─── Cosecha ──────────────────────────────────────────────────────────────────

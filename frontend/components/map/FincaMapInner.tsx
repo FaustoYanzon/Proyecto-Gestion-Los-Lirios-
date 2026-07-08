@@ -14,7 +14,10 @@ import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 import LayerControl, { type LayerVisibility } from './LayerControl'
 
-type ColorMode = 'type' | 'variedad' | 'cosecha'
+type ColorMode = 'type' | 'variedad' | 'cosecha' | 'riego' | 'fenologia'
+
+// Objetivo agronómico: 6.000.000 L/ha/año (suelo de Media Agua)
+const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
 const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
   parral:   { color: '#5a1320', fillColor: '#7a1f2c' },
@@ -36,6 +39,12 @@ const ESTADO_LABELS: Record<string, string> = {
   envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
 }
 
+// Colores por estado fenológico — mismos que mobile/lib/types.ts (ESTADO_COLORS).
+const ESTADO_COLORS: Record<string, string> = {
+  brotacion: '#eab308', floracion: '#ec4899', cuaje: '#f97316',
+  envero: '#a855f7', madurez: '#22c55e', cosecha: '#ef4444', latencia: '#6b7280',
+}
+
 function formatARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 }
@@ -49,6 +58,29 @@ function cosechaColor(kg: number, maxKg: number): string {
   return `rgb(${r},${g},${b})`
 }
 
+export interface RiegoMapaInfo {
+  litros_totales: number
+  porcentaje_cumplimiento: number | null
+}
+
+// Semáforo de riego vs objetivo anual (6M L/ha): déficit severo, déficit,
+// en objetivo, o posible exceso.
+function riegoColor(pct: number | null): string {
+  if (pct == null) return '#f3f4f6'
+  if (pct < 50) return '#dc2626'
+  if (pct < 85) return '#f59e0b'
+  if (pct <= 115) return '#16a34a'
+  return '#3d6b86'
+}
+
+export interface FenologiaMapaInfo {
+  estado_fenologico: string
+  fase_label: string
+  tareas_recomendadas: string[]
+  proxima_fase_label: string | null
+  proxima_fase_fecha: string | null
+}
+
 function getPolyStyle(
   f: KMLFeature,
   p: ParcelaItem | undefined,
@@ -56,12 +88,35 @@ function getPolyStyle(
   mode: ColorMode,
   cosechaByParcelaId?: Record<string, number>,
   maxKg?: number,
+  riegoByParcelaId?: Record<string, RiegoMapaInfo>,
+  fenologiaByVariedad?: Record<string, FenologiaMapaInfo>,
 ): L.PathOptions {
   if (mode === 'cosecha') {
     const kg = (p?.id != null && cosechaByParcelaId?.[p.id]) ? cosechaByParcelaId[p.id] : 0
     const fill = cosechaColor(kg, maxKg ?? 0)
     return {
       color: '#166534',
+      weight: selected ? 3 : 1.5,
+      fillColor: fill,
+      fillOpacity: selected ? 0.75 : 0.6,
+    }
+  }
+  if (mode === 'riego') {
+    const info = p?.id != null ? riegoByParcelaId?.[p.id] : undefined
+    const fill = riegoColor(info?.porcentaje_cumplimiento ?? null)
+    return {
+      color: '#2d5468',
+      weight: selected ? 3 : 1.5,
+      fillColor: fill,
+      fillOpacity: selected ? 0.75 : 0.6,
+    }
+  }
+  if (mode === 'fenologia') {
+    // La fenología se calcula por variedad, no por parcela puntual.
+    const info = p?.variedad != null ? fenologiaByVariedad?.[p.variedad] : undefined
+    const fill = info ? (ESTADO_COLORS[info.estado_fenologico] ?? '#94a3b8') : '#f3f4f6'
+    return {
+      color: '#3f5c3a',
       weight: selected ? 3 : 1.5,
       fillColor: fill,
       fillOpacity: selected ? 0.75 : 0.6,
@@ -92,11 +147,12 @@ interface PanelProps {
   parcelas: ParcelaItem[]
   estadoActual: EstadoActualItem[]
   cosechaByParcelaId?: Record<string, number>
+  fenologiaByVariedad?: Record<string, FenologiaMapaInfo>
   onClose: () => void
   onQuickAction: (a: 'riego' | 'tarea' | 'fito') => void
 }
 
-function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose, onQuickAction }: PanelProps) {
+function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, fenologiaByVariedad, onClose, onQuickAction }: PanelProps) {
   const qc = useQueryClient()
   const user = useAuthStore(s => s.user)
   const parcela = parcelas.find(p => p.nombre === name)
@@ -127,7 +183,7 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
   const { data: riegos = [], isLoading: loadRiego } = useQuery({
     queryKey: ['panel-riego', parcela?.id, fechaDesde],
     queryFn: async () => {
-      const { data } = await api.get<{ id: string; inicio: string; mm_aplicados: number }[]>(
+      const { data } = await api.get<{ id: string; inicio: string; mm_aplicados: number; litros_aplicados: number }[]>(
         '/produccion/riego/', { params: { parcela_id: parcela!.id, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 200 } }
       )
       return data
@@ -150,6 +206,11 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
 
   const costoTotal = useMemo(() => trabajos.reduce((s, t) => s + Number(t.monto_total), 0), [trabajos])
   const mmTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.mm_aplicados), 0), [riegos])
+  // Litros totales entregados al parral (ya contempla la cantidad de válvulas
+  // abiertas en cada riego, calculado en el backend) vs. objetivo anual.
+  const litrosTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.litros_aplicados ?? 0), 0), [riegos])
+  const objetivoAnual = parcela?.superficie_ha ? parcela.superficie_ha * LITROS_OBJETIVO_ANUAL_POR_HA : null
+  const porcentajeCumplimiento = objetivoAnual ? (litrosTotal / objetivoAnual) * 100 : null
   const lastFitos = useMemo(() => [...fitos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5), [fitos])
   const lastTareas = useMemo(() => {
     const m = new Map<string, string>()
@@ -282,11 +343,35 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
                 <div>
                   <p className="text-xs font-medium text-green-800">
                     {ESTADO_LABELS[estado.estado_fenologico] ?? estado.estado_fenologico}
+                    <span className="text-green-500 font-normal"> · confirmado a mano</span>
                   </p>
                   {estado.fecha_estado && (
                     <p className="text-xs text-green-500">{estado.fecha_estado.split('-').reverse().join('/')}</p>
                   )}
                 </div>
+              </div>
+            )}
+
+            {parcela?.variedad && fenologiaByVariedad?.[parcela.variedad] && (
+              <div className="bg-purple-50 border border-purple-200 rounded-md px-3 py-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sprout size={14} className="text-purple-600 flex-shrink-0" />
+                  <p className="text-xs font-medium text-purple-800">
+                    {fenologiaByVariedad[parcela.variedad].fase_label}
+                    <span className="text-purple-500 font-normal"> · estimado automático</span>
+                  </p>
+                </div>
+                {fenologiaByVariedad[parcela.variedad].proxima_fase_label && (
+                  <p className="text-xs text-purple-500 mb-1.5">
+                    Próxima: {fenologiaByVariedad[parcela.variedad].proxima_fase_label}
+                    {fenologiaByVariedad[parcela.variedad].proxima_fase_fecha
+                      ? ` (${fenologiaByVariedad[parcela.variedad].proxima_fase_fecha!.split('-').reverse().join('/')})`
+                      : ''}
+                  </p>
+                )}
+                {fenologiaByVariedad[parcela.variedad].tareas_recomendadas.slice(0, 3).map((t, i) => (
+                  <p key={i} className="text-xs text-purple-700 leading-snug">• {t}</p>
+                ))}
               </div>
             )}
 
@@ -297,10 +382,31 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
               {loadRiego ? (
                 <div className="h-7 bg-gray-100 rounded animate-pulse" />
               ) : (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-[#3d6b86]">{mmTotal.toFixed(1)} mm</span>
-                  <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-[#3d6b86]">
+                      {litrosTotal.toLocaleString('es-AR')} L
+                    </span>
+                    <span className="text-xs text-gray-400">{mmTotal.toFixed(1)} mm</span>
+                    <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  {objetivoAnual != null && porcentajeCumplimiento != null && (
+                    <div className="mt-1.5">
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.min(porcentajeCumplimiento, 100)}%`,
+                            background: riegoColor(porcentajeCumplimiento),
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {porcentajeCumplimiento.toFixed(0)}% de {(objetivoAnual / 1_000_000).toFixed(1)}M L/año objetivo
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -389,7 +495,13 @@ function ParcelPanel({ name, parcelas, estadoActual, cosechaByParcelaId, onClose
 
 // ── Componente principal ─────────────────────────────────────────────────────
 
-interface Props { compact?: boolean; height?: string; cosechaByParcelaId?: Record<string, number> }
+interface Props {
+  compact?: boolean
+  height?: string
+  cosechaByParcelaId?: Record<string, number>
+  riegoByParcelaId?: Record<string, RiegoMapaInfo>
+  fenologiaByVariedad?: Record<string, FenologiaMapaInfo>
+}
 
 // ── GeoJSON coordinate helpers ───────────────────────────────────────────────
 // GeoJSON spec: [lng, lat]. Some tools (Google Earth, QGIS export) save [lat, lng].
@@ -445,7 +557,7 @@ const INFRA_LEGEND = [
   { label: 'Cuadrantes',      color: '#9ca3af', shape: 'poly'   as const },
 ]
 
-export default function FincaMapInner({ compact = false, height = '100%', cosechaByParcelaId }: Props) {
+export default function FincaMapInner({ compact = false, height = '100%', cosechaByParcelaId, riegoByParcelaId, fenologiaByVariedad }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerGroupRef = useRef<L.LayerGroup | null>(null)
@@ -550,9 +662,9 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
     polyRef.current.forEach((poly, name) => {
       const f = features.find(feat => feat.name === name)
       const p = parcelas.find(parc => parc.nombre === name)
-      if (f) poly.setStyle(getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg))
+      if (f) poly.setStyle(getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, riegoByParcelaId, fenologiaByVariedad))
     })
-  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend])
+  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, riegoByParcelaId, fenologiaByVariedad])
 
   // ── Load GeoJSON layer data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -670,6 +782,8 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
             { mode: 'type',    label: 'Tipo'     },
             { mode: 'variedad', label: 'Variedad' },
             { mode: 'cosecha',  label: 'Cosecha'  },
+            { mode: 'riego',    label: 'Riego'    },
+            { mode: 'fenologia', label: 'Fenología' },
           ] as { mode: ColorMode; label: string }[]).map(({ mode, label }) => (
             <button
               key={mode}
@@ -696,7 +810,11 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
       {!compact && (
         <div className="absolute bottom-4 left-3 z-[1000] bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 px-3 py-2.5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-            {colorMode === 'type' ? 'Tipo' : colorMode === 'variedad' ? 'Variedad' : 'Cosecha'}
+            {colorMode === 'type' ? 'Tipo'
+              : colorMode === 'variedad' ? 'Variedad'
+              : colorMode === 'cosecha' ? 'Cosecha'
+              : colorMode === 'fenologia' ? 'Estado fenológico (automático)'
+              : 'Riego (% objetivo anual)'}
           </p>
           {colorMode === 'cosecha' ? (
             <div>
@@ -705,6 +823,34 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
                 <span>0</span>
                 <span>{maxKgLegend > 0 ? `${(maxKgLegend / 1000).toFixed(1)}t` : '—'}</span>
               </div>
+            </div>
+          ) : colorMode === 'fenologia' ? (
+            <div className="space-y-1.5">
+              {Object.entries(ESTADO_LABELS).map(([k, label]) => (
+                <div key={k} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10" style={{ background: ESTADO_COLORS[k] }} />
+                  <span className="text-xs text-gray-700">{label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10" style={{ background: '#f3f4f6' }} />
+                <span className="text-xs text-gray-700">Sin variedad / dato</span>
+              </div>
+            </div>
+          ) : colorMode === 'riego' ? (
+            <div className="space-y-1.5">
+              {[
+                { color: '#dc2626', label: '< 50% (déficit severo)' },
+                { color: '#f59e0b', label: '50–85% (por debajo)' },
+                { color: '#16a34a', label: '85–115% (en objetivo)' },
+                { color: '#3d6b86', label: '> 115% (posible exceso)' },
+                { color: '#f3f4f6', label: 'Sin datos' },
+              ].map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10" style={{ background: color }} />
+                  <span className="text-xs text-gray-700">{label}</span>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -764,6 +910,7 @@ export default function FincaMapInner({ compact = false, height = '100%', cosech
           parcelas={parcelas}
           estadoActual={estadoActual}
           cosechaByParcelaId={cosechaByParcelaId}
+          fenologiaByVariedad={fenologiaByVariedad}
           onClose={() => setSelected(null)}
           onQuickAction={setQuickAction}
         />

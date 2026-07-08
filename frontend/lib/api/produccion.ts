@@ -183,6 +183,48 @@ export async function getEstadoActual(): Promise<EstadoActualItem[]> {
   return data
 }
 
+// ── Fenología automática por variedad ───────────────────────────────────────
+
+export interface FaseVariedadItem {
+  variedad: string
+  tipo_uso: string
+  fase: string
+  fase_label: string
+  estado_fenologico: string
+  riesgo_oidio: string
+  tareas_recomendadas: string[]
+  proxima_fase: string | null
+  proxima_fase_label: string | null
+  proxima_fase_fecha: string | null
+  parcelas: string[]
+  fuente: 'automatico' | 'manual'
+  fecha_confirmacion: string | null
+}
+
+export async function getFenologiaEstadoActual(): Promise<FaseVariedadItem[]> {
+  const { data } = await api.get<FaseVariedadItem[]>('/produccion/fenologia/estado-actual')
+  return data
+}
+
+// Borra las confirmaciones manuales de CicloCampana usadas como override
+// (sin rendimiento_kg_ha asociado) para volver 100% al calendario
+// automático. No toca los registros con historial real de cosecha.
+export async function limpiarOverridesFenologia(): Promise<{ eliminados: number }> {
+  const { data } = await api.delete<{ eliminados: number }>('/produccion/fenologia/overrides')
+  return data
+}
+
+// Espejo de mobile/lib/theme.ts — mismos colores por estado en ambas apps.
+export const ESTADO_COLORS: Record<string, string> = {
+  brotacion: '#eab308',
+  floracion: '#ec4899',
+  cuaje: '#f97316',
+  envero: '#a855f7',
+  madurez: '#22c55e',
+  cosecha: '#ef4444',
+  latencia: '#6b7280',
+}
+
 export async function createCicloCampana(payload: {
   parcela_id: string
   anio: number
@@ -243,6 +285,9 @@ export interface EficienciaHidricaParcela {
   variedad: string | null
   superficie_ha: number | null
   mm_aplicados_total: number
+  litros_totales: number
+  litros_objetivo_anual: number | null
+  porcentaje_cumplimiento: number | null
   rendimiento_kg_ha: number | null
   eficiencia_kg_por_mm: number | null
 }

@@ -1,606 +1,401 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Legend,
+  ComposedChart, BarChart, Bar, Cell, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+  ResponsiveContainer, Legend,
 } from 'recharts'
-import { AlertTriangle, TrendingUp } from 'lucide-react'
-import { getEgresos, getEgresosPorMes, TIPO_EGRESO_VALUES, TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
+import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
-import { getIngresos } from '@/lib/api/ingresos'
+import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const now = new Date()
 const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = Array.from({ length: DEFAULT_YEAR - 2020 + 1 }, (_, i) => DEFAULT_YEAR - i)
+const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
 
-const FINCA_OPTIONS = [
-  { value: 'los_mimbres', label: 'Los Mimbres' },
-  { value: 'media_agua', label: 'Media Agua' },
-  { value: 'caucete', label: 'Caucete' },
-]
-const ORIGEN_OPTIONS = [
-  { value: 'oficial', label: 'Oficial' },
-  { value: 'no_oficial', label: 'No Oficial' },
-]
-const PIE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2']
-const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const MESES_ORDER = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4]
+const MES_LABELS: Record<number, string> = {
+  5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Oct',
+  11: 'Nov', 12: 'Dic', 1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
+}
+
 const NUM_FMT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
+const fmtMoney = (n: number, moneda: string) =>
+  `${moneda === 'usd' ? 'US$' : '$'}${NUM_FMT.format(n)}`
+const fmtM = (n: number) =>
+  Math.abs(n) >= 1_000_000 ? `${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M` : NUM_FMT.format(n)
 
-function fmtARS(n: number) { return `$${NUM_FMT.format(n)}` }
-function fmtM(n: number) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return `$${n}`
-}
+// ── Small UI pieces ───────────────────────────────────────────────────────────
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function toggleSet(prev: Set<string>, v: string): Set<string> {
-  const next = new Set(prev)
-  next.has(v) ? next.delete(v) : next.add(v)
-  return next
-}
-
-interface FilterState {
-  desde: string; hasta: string
-  origenes: Set<string>; fincas: Set<string>; tipos: Set<string>
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function KpiCard({ label, value, sub, color }: {
-  label: string; value: string; sub?: string
-  color: 'blue' | 'green' | 'red' | 'purple'
+function KpiCard({ label, value, hint, tone = 'neutral' }: {
+  label: string
+  value: string
+  hint?: string
+  tone?: 'good' | 'bad' | 'neutral'
 }) {
-  const cls = {
-    blue:   { border: 'border-l-blue-500',   val: 'text-blue-600' },
-    green:  { border: 'border-l-green-500',  val: 'text-green-600' },
-    red:    { border: 'border-l-red-500',    val: 'text-red-600' },
-    purple: { border: 'border-l-purple-500', val: 'text-purple-600' },
-  }[color]
+  const hintCls =
+    tone === 'good' ? 'text-green-700' : tone === 'bad' ? 'text-red-700' : 'text-gray-400'
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 border-l-4 ${cls.border} shadow-sm p-4`}>
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-      <p className={`text-xl font-bold mt-1 leading-tight truncate ${cls.val}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
+      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+      {hint && <p className={`text-xs font-medium mt-0.5 ${hintCls}`}>{hint}</p>}
     </div>
   )
 }
 
-function CheckboxGroup({
-  options, selected, onChange,
-}: {
-  options: { value: string; label: string }[]
-  selected: Set<string>
-  onChange: (v: string) => void
+function ChartCard({ title, subtitle, children, flex }: {
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+  flex?: string
 }) {
   return (
-    <div className="border border-gray-200 rounded-md divide-y divide-gray-100 max-h-44 overflow-y-auto">
-      {options.map((opt) => (
-        <label key={opt.value} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={selected.has(opt.value)}
-            onChange={() => onChange(opt.value)}
-            className="rounded border-gray-300 text-[#7a1f2c] focus:ring-[#7a1f2c]"
-          />
-          <span className="text-sm text-gray-700">{opt.label}</span>
-        </label>
-      ))}
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5" style={flex ? { flex } : undefined}>
+      <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+      {subtitle ? <p className="text-xs text-gray-400 mb-3">{subtitle}</p> : <div className="mb-3" />}
+      {children}
     </div>
   )
 }
 
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-      {label && <p className="font-semibold text-gray-700 mb-1">{label}</p>}
-      <p className="font-mono text-blue-700">{fmtARS(payload[0].value)}</p>
-    </div>
-  )
-}
-
-function PieTooltip({ active, payload }: { active?: boolean; payload?: { name: string; value: number }[] }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-medium text-gray-700">{payload[0].name}</p>
-      <p className="font-mono text-gray-800 mt-0.5">{fmtARS(payload[0].value)}</p>
-    </div>
-  )
-}
+const EmptyChart = ({ msg }: { msg: string }) => (
+  <div className="flex items-center justify-center h-64 text-gray-400 text-sm text-center px-6">{msg}</div>
+)
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FinanceDashboardPage() {
   const [anio, setAnio] = useState(DEFAULT_YEAR)
-  const [groupBy, setGroupBy] = useState<'mes' | 'trimestre'>('mes')
+  const [moneda, setMoneda] = useState<'ars' | 'usd'>('ars')
+  // Month-range filter expressed as positions in the campaign order (0 = May, 11 = Apr)
+  const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
+  const [mesHastaIdx, setMesHastaIdx] = useState(11)
+  const [tipoFilter, setTipoFilter] = useState<string>('todos')
 
-  const campaignDesde = `${anio}-05-01`
-  const campaignHasta = `${anio + 1}-04-30`
-
-  // Pending filter state (form values, not yet applied)
-  const [pDesde, setPDesde] = useState(campaignDesde)
-  const [pHasta, setPHasta] = useState(campaignHasta)
-  const [pOrigenes, setPOrigenes] = useState<Set<string>>(new Set())
-  const [pFincas, setPFincas] = useState<Set<string>>(new Set())
-  const [pTipos, setPTipos] = useState<Set<string>>(new Set())
-
-  // Applied filter state (drives computed values)
-  const [applied, setApplied] = useState<FilterState>({
-    desde: campaignDesde, hasta: campaignHasta,
-    origenes: new Set(), fincas: new Set(), tipos: new Set(),
-  })
-
-  // Reset when campaign year changes
-  useEffect(() => {
-    const desde = `${anio}-05-01`
-    const hasta = `${anio + 1}-04-30`
-    setPDesde(desde); setPHasta(hasta)
-    setPOrigenes(new Set()); setPFincas(new Set()); setPTipos(new Set())
-    setApplied({ desde, hasta, origenes: new Set(), fincas: new Set(), tipos: new Set() })
-  }, [anio])
-
-  // Fetch full campaign egresos in ARS (client-side filter applies on top)
-  const { data: egresos = [] } = useQuery({
-    queryKey: ['finanzas-dash-egresos', anio],
-    queryFn: () => getEgresos({ fecha_desde: campaignDesde, fecha_hasta: campaignHasta, moneda: 'ars', limit: 1000 }),
+  const { data: pvr = [] } = useQuery({
+    queryKey: ['kpi-presup-real', anio, moneda],
+    queryFn: () => getPresupuestoVsReal({ temporada: anio, moneda }),
     staleTime: 60_000,
   })
 
-  const { data: ingresos = [] } = useQuery({
-    queryKey: ['finanzas-dash-ingresos', anio],
-    queryFn: () => getIngresos({ fecha_desde: campaignDesde, fecha_hasta: campaignHasta, moneda: 'ars', limit: 1000 }),
-    staleTime: 60_000,
+  const { data: compradores = [] } = useQuery({
+    queryKey: ['kpi-compradores', anio],
+    queryFn: () => getKpiCompradores(anio),
+    staleTime: 300_000,
   })
 
-  const { data: egresosPorMes } = useQuery({
-    queryKey: ['egresos-por-mes', anio],
-    queryFn: () => getEgresosPorMes(anio),
-    staleTime: 60_000,
-  })
+  // ── Derived data ───────────────────────────────────────────────────────────
 
-  // ── Client-side filter ───────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let data = egresos
-    if (applied.desde) data = data.filter((e) => e.fecha >= applied.desde)
-    if (applied.hasta) data = data.filter((e) => e.fecha <= applied.hasta)
-    if (applied.origenes.size > 0) data = data.filter((e) => applied.origenes.has(e.origen))
-    if (applied.fincas.size > 0)   data = data.filter((e) => applied.fincas.has(e.finca))
-    if (applied.tipos.size > 0)    data = data.filter((e) => applied.tipos.has(e.tipo))
-    return data
-  }, [egresos, applied])
-
-  // ── KPIs ─────────────────────────────────────────────────────────────────
-  const gastoTotal     = useMemo(() => filtered.reduce((s, e) => s + Number(e.monto), 0), [filtered])
-  const gastoOficial   = useMemo(() => filtered.filter((e) => e.origen === 'oficial').reduce((s, e) => s + Number(e.monto), 0), [filtered])
-  const gastoNoOficial = useMemo(() => filtered.filter((e) => e.origen === 'no_oficial').reduce((s, e) => s + Number(e.monto), 0), [filtered])
-  const ivaEstimado    = gastoOficial * 0.21
-  const ingresoTotal   = useMemo(() => ingresos.reduce((s, i) => s + Number(i.monto), 0), [ingresos])
-  const saldoARS       = ingresoTotal - gastoTotal
-
-  // ── Monthly evolution ────────────────────────────────────────────────────
-  const monthlyEvolution = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const e of filtered) {
-      const key = groupBy === 'mes'
-        ? e.fecha.slice(0, 7)
-        : `${e.fecha.slice(0, 4)}-Q${Math.ceil(Number(e.fecha.slice(5, 7)) / 3)}`
-      map[key] = (map[key] ?? 0) + Number(e.monto)
-    }
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, total]) => {
-        let periodo: string
-        if (groupBy === 'mes') {
-          const [, m] = key.split('-')
-          periodo = MONTH_NAMES[Number(m) - 1]
-        } else {
-          periodo = key.replace('-', ' ')
-        }
-        return { periodo, total }
-      })
-  }, [filtered, groupBy])
-
-  // ── Estacionalidad ───────────────────────────────────────────────────────
-  const estacionalidad = useMemo(() => {
-    if (monthlyEvolution.length < 2) return null
-    const sorted = [...monthlyEvolution].sort((a, b) => b.total - a.total)
-    return { pico: sorted[0], bajo: sorted[sorted.length - 1] }
-  }, [monthlyEvolution])
-
-  // ── Aumentos significativos (last 2 months, per tipo) ────────────────────
-  const aumentos = useMemo(() => {
-    const months = [...new Set(filtered.map((e) => e.fecha.slice(0, 7)))].sort()
-    if (months.length < 2) return []
-    const lastM = months[months.length - 1]
-    const prevM = months[months.length - 2]
-    const results: { label: string; pct: number }[] = []
-
-    for (const tipo of TIPO_EGRESO_VALUES) {
-      const last = filtered.filter((e) => e.fecha.slice(0, 7) === lastM && e.tipo === tipo).reduce((s, e) => s + Number(e.monto), 0)
-      const prev = filtered.filter((e) => e.fecha.slice(0, 7) === prevM && e.tipo === tipo).reduce((s, e) => s + Number(e.monto), 0)
-      if (prev > 0 && last > prev * 1.25 && last > 50000) {
-        results.push({ label: TIPO_EGRESO_LABELS[tipo], pct: ((last - prev) / prev) * 100 })
-      }
-    }
-    return results.sort((a, b) => b.pct - a.pct).slice(0, 4)
-  }, [filtered])
-
-  // ── Distribución por categoría ───────────────────────────────────────────
-  const distribCategoria = useMemo(() => {
-    const energiaTotal = filtered.filter((e) => e.clasificacion === 'energia_electrica').reduce((s, e) => s + Number(e.monto), 0)
-    const sueldosTotal = filtered.filter((e) => e.tipo === 'sueldos_personal').reduce((s, e) => s + Number(e.monto), 0)
-    const inversionTotal = filtered.filter((e) => e.tipo === 'inversion').reduce((s, e) => s + Number(e.monto), 0)
-    const t = gastoTotal || 1
-    return {
-      energia:  (energiaTotal  / t) * 100,
-      sueldos:  (sueldosTotal  / t) * 100,
-      inversion: (inversionTotal / t) * 100,
-    }
-  }, [filtered, gastoTotal])
-
-  // ── Flujo mensual (ingresos vs egresos por mes) ──────────────────────────
-  const flujoMensual = useMemo(() => {
-    const months: Array<{ label: string; key: string; ingresos: number; egresos: number; saldo: number }> = []
-    for (let i = 0; i < 12; i++) {
-      const m = ((4 + i) % 12) + 1
-      const y = m >= 5 ? anio : anio + 1
-      const key = `${y}-${String(m).padStart(2, '0')}`
-      const label = MONTH_NAMES[m - 1]
-      const ing = ingresos.filter((r) => r.fecha.slice(0, 7) === key).reduce((s, r) => s + Number(r.monto), 0)
-      const egr = filtered.filter((r) => r.fecha.slice(0, 7) === key).reduce((s, r) => s + Number(r.monto), 0)
-      months.push({ label, key, ingresos: ing, egresos: egr, saldo: ing - egr })
-    }
-    return months
-  }, [ingresos, filtered, anio])
-
-  // ── Distribución por tipo de egreso ─────────────────────────────────────
-  const tipoData = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const e of filtered) map[e.tipo] = (map[e.tipo] ?? 0) + Number(e.monto)
-    return Object.entries(map)
-      .map(([tipo, value]) => ({ name: TIPO_EGRESO_LABELS[tipo as TipoEgreso] ?? tipo, value }))
-      .sort((a, b) => b.value - a.value)
-      .map((d, i) => ({ ...d, fill: PIE_COLORS[i % PIE_COLORS.length] }))
-  }, [filtered])
-
-  // ── Stacked egresos por tipo por mes (full campaign, unfiltered) ─────────
-  const stackedData = useMemo(() => {
-    if (!egresosPorMes) return []
-    const map: Record<string, Record<string, number | string>> = {}
-    for (const item of egresosPorMes.items) {
-      if (!map[item.mes_key]) {
-        const m = parseInt(item.mes_key.slice(5, 7)) - 1
-        map[item.mes_key] = { _label: MONTH_NAMES[m] }
-      }
-      map[item.mes_key][item.tipo] = Number(item.total)
-    }
-    return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, v]) => v)
-  }, [egresosPorMes])
-
-  function applyFilters() {
-    setApplied({
-      desde: pDesde, hasta: pHasta,
-      origenes: new Set(pOrigenes), fincas: new Set(pFincas), tipos: new Set(pTipos),
-    })
+  const inRange = (mes: number) => {
+    const idx = MESES_ORDER.indexOf(mes)
+    return idx >= mesDesdeIdx && idx <= mesHastaIdx
   }
 
-  return (
-    <div className="flex gap-5 items-start">
-      {/* ── Main content ── */}
-      <div className="flex-1 space-y-5 min-w-0">
+  // Rows after filters: month range applies to everything below; the tipo
+  // filter only narrows egreso lines (ingresos have no tipo).
+  const pvrFiltrado = useMemo(
+    () =>
+      pvr.filter((r) =>
+        inRange(r.mes) &&
+        (tipoFilter === 'todos' || r.concepto === 'ingreso' || r.tipo === tipoFilter),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pvr, mesDesdeIdx, mesHastaIdx, tipoFilter],
+  )
 
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Dashboard Financiero</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Análisis de gastos · Campaña {anio}/{anio + 1}</p>
+  // Aggregate the view rows (per tipo) up to month level
+  const porMes = useMemo(() => {
+    const meses = MESES_ORDER.slice(mesDesdeIdx, mesHastaIdx + 1)
+    const base = meses.map((m) => ({
+      mes: m, label: MES_LABELS[m],
+      egresoPresup: 0, egresoReal: 0, ingresoPresup: 0, ingresoReal: 0,
+    }))
+    const idx = new Map(base.map((r) => [r.mes, r]))
+    for (const row of pvrFiltrado) {
+      const r = idx.get(row.mes)
+      if (!r) continue
+      if (row.concepto === 'egreso') {
+        r.egresoPresup += Number(row.monto_presupuesto)
+        r.egresoReal += Number(row.monto_real)
+      } else {
+        r.ingresoPresup += Number(row.monto_presupuesto)
+        r.ingresoReal += Number(row.monto_real)
+      }
+    }
+    let acum = 0
+    return base.map((r) => {
+      acum += r.ingresoReal - r.egresoReal
+      return {
+        ...r,
+        desvioPct: r.egresoPresup > 0 ? ((r.egresoReal - r.egresoPresup) / r.egresoPresup) * 100 : null,
+        saldo: r.ingresoReal - r.egresoReal,
+        saldoAcum: acum,
+      }
+    })
+  }, [pvrFiltrado, mesDesdeIdx, mesHastaIdx])
+
+  const hayPresupuesto = useMemo(() => pvr.some((r) => Number(r.monto_presupuesto) > 0), [pvr])
+  const hayReal = useMemo(() => pvr.some((r) => Number(r.monto_real) > 0), [pvr])
+
+  // Current campaign month (calendar month of "today")
+  const mesActual = now.getMonth() + 1
+  const kpiMes = porMes.find((r) => r.mes === mesActual)
+
+  // Accumulated deviation per expense tipo across the selected range
+  const desvioPorTipo = useMemo(() => {
+    const acc = new Map<string, { presup: number; real: number }>()
+    for (const row of pvrFiltrado) {
+      if (row.concepto !== 'egreso' || !row.tipo) continue
+      const cur = acc.get(row.tipo) ?? { presup: 0, real: 0 }
+      cur.presup += Number(row.monto_presupuesto)
+      cur.real += Number(row.monto_real)
+      acc.set(row.tipo, cur)
+    }
+    return Array.from(acc.entries())
+      .filter(([, v]) => v.presup > 0)
+      .map(([tipo, v]) => ({
+        tipo: TIPO_EGRESO_LABELS[tipo as TipoEgreso] ?? tipo,
+        desvio: ((v.real - v.presup) / v.presup) * 100,
+        impacto: v.real - v.presup,
+      }))
+      .sort((a, b) => Math.abs(b.impacto) - Math.abs(a.impacto))
+  }, [pvrFiltrado])
+
+  const compradoresData = useMemo(
+    () =>
+      compradores
+        .filter((c) => c.kg_entregados > 0 || c.monto_cobrado_ars > 0 || c.monto_cobrado_usd > 0)
+        .slice(0, 12),
+    [compradores],
+  )
+  const maxKg = Math.max(1, ...compradoresData.map((c) => c.kg_entregados))
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Dashboard Finanzas</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            ¿Cumplimos el presupuesto del mes y en qué categoría se escapa? · Campaña {anio}/{anio + 1}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={tipoFilter}
+            onChange={(e) => setTipoFilter(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="todos">Todos los tipos de egreso</option>
+            {(Object.keys(TIPO_EGRESO_LABELS) as TipoEgreso[]).map((t) => (
+              <option key={t} value={t}>{TIPO_EGRESO_LABELS[t]}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1 text-sm">
+            <select
+              value={mesDesdeIdx}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setMesDesdeIdx(v)
+                if (v > mesHastaIdx) setMesHastaIdx(v)
+              }}
+              className="rounded-md border border-gray-300 px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {MESES_ORDER.map((m, i) => <option key={m} value={i}>{MES_LABELS[m]}</option>)}
+            </select>
+            <span className="text-gray-400">→</span>
+            <select
+              value={mesHastaIdx}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setMesHastaIdx(v)
+                if (v < mesDesdeIdx) setMesDesdeIdx(v)
+              }}
+              className="rounded-md border border-gray-300 px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {MESES_ORDER.map((m, i) => <option key={m} value={i}>{MES_LABELS[m]}</option>)}
+            </select>
+          </div>
+          <div className="flex rounded-md border border-gray-300 overflow-hidden text-sm">
+            {(['ars', 'usd'] as const).map((m) => (
+              <button key={m} onClick={() => setMoneda(m)}
+                className={`px-3 py-2 font-semibold ${moneda === m ? 'text-white' : 'text-gray-600 bg-white hover:bg-gray-50'}`}
+                style={moneda === m ? { backgroundColor: '#7a1f2c' } : undefined}>
+                {m.toUpperCase()}
+              </button>
+            ))}
           </div>
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>{y}/{y + 1}</option>)}
           </select>
         </div>
+      </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-3 gap-4">
-          <KpiCard label="Gasto Total" value={fmtARS(gastoTotal)} color="blue" />
-          <KpiCard
-            label="Gasto Oficial"
-            value={fmtARS(gastoOficial)}
-            sub={gastoTotal > 0 ? `${((gastoOficial / gastoTotal) * 100).toFixed(1)}% del total` : undefined}
-            color="green"
-          />
-          <KpiCard
-            label="Gasto No Oficial"
-            value={fmtARS(gastoNoOficial)}
-            sub={gastoTotal > 0 ? `${((gastoNoOficial / gastoTotal) * 100).toFixed(1)}% del total` : undefined}
-            color="red"
-          />
-          <KpiCard label="IVA Estimado" value={fmtARS(ivaEstimado)} sub="21% del oficial" color="purple" />
-          <KpiCard label="Ingresos ARS" value={fmtARS(ingresoTotal)} color="green" />
-          <KpiCard
-            label="Saldo Campaña"
-            value={`${saldoARS >= 0 ? '+' : ''}${fmtARS(saldoARS)}`}
-            color={saldoARS >= 0 ? 'green' : 'red'}
-            sub={ingresoTotal > 0 ? `Margen ${((saldoARS / ingresoTotal) * 100).toFixed(1)}%` : undefined}
-          />
+      {!hayPresupuesto && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          No hay presupuesto cargado para esta campaña en {moneda.toUpperCase()} — los desvíos aparecen
+          cuando lo cargues en <span className="font-semibold">Finanzas → Presupuesto</span>.
         </div>
+      )}
 
-        {/* Aumentos + Estacionalidad */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={16} className="text-amber-500" />
-              <h3 className="text-sm font-semibold text-gray-700">Aumentos Significativos</h3>
-            </div>
-            {aumentos.length === 0 ? (
-              <p className="text-sm text-gray-400">No hay aumentos significativos detectados</p>
-            ) : (
-              <div className="space-y-2">
-                {aumentos.map((a, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700">{a.label}</span>
-                    <span className="font-semibold text-red-600">+{a.pct.toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* KPI cards (current month) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label={`Cumplimiento ${MES_LABELS[mesActual] ?? ''}`}
+          value={
+            kpiMes && kpiMes.egresoPresup > 0
+              ? `${((kpiMes.egresoReal / kpiMes.egresoPresup) * 100).toFixed(0)}%`
+              : '—'
+          }
+          hint="egresos reales / presupuesto"
+          tone={
+            !kpiMes || kpiMes.egresoPresup === 0 ? 'neutral'
+              : kpiMes.egresoReal <= kpiMes.egresoPresup * 1.1 ? 'good' : 'bad'
+          }
+        />
+        <KpiCard
+          label={`Egresos ${MES_LABELS[mesActual] ?? ''}`}
+          value={kpiMes ? fmtMoney(kpiMes.egresoReal, moneda) : '—'}
+          hint={moneda === 'ars' ? 'USD aparte — usá el selector' : undefined}
+        />
+        <KpiCard
+          label={`Ingresos ${MES_LABELS[mesActual] ?? ''}`}
+          value={kpiMes ? fmtMoney(kpiMes.ingresoReal, moneda) : '—'}
+        />
+        <KpiCard
+          label={mesDesdeIdx === 0 && mesHastaIdx === 11 ? 'Saldo acumulado campaña' : 'Saldo acumulado (rango)'}
+          value={fmtMoney(porMes.at(-1)?.saldoAcum ?? 0, moneda)}
+          hint={kpiMes ? `mes: ${fmtMoney(kpiMes.saldo, moneda)}` : undefined}
+          tone={(porMes.at(-1)?.saldoAcum ?? 0) >= 0 ? 'good' : 'bad'}
+        />
+      </div>
 
-          <div className="bg-[#faf6ec] rounded-lg border border-[#fbfaf6] shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp size={16} className="text-blue-600" />
-              <h3 className="text-sm font-semibold text-blue-800">Estacionalidad</h3>
-            </div>
-            {estacionalidad ? (
-              <div className="space-y-2">
-                <div className="bg-white rounded-md px-3 py-2.5">
-                  <p className="text-xs text-gray-500 mb-0.5">Mes Pico Histórico</p>
-                  <p className="text-sm font-medium text-blue-700">
-                    {estacionalidad.pico.periodo} — {fmtARS(estacionalidad.pico.total)}
-                  </p>
-                </div>
-                <div className="bg-white rounded-md px-3 py-2.5">
-                  <p className="text-xs text-gray-500 mb-0.5">Mes Bajo Histórico</p>
-                  <p className="text-sm font-medium text-blue-700">
-                    {estacionalidad.bajo.periodo} — {fmtARS(estacionalidad.bajo.total)}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-blue-400">Sin datos suficientes</p>
-            )}
-          </div>
-        </div>
-
-        {/* Distribución por categoría */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Distribución por Categoría</h3>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: '% Energía',   value: distribCategoria.energia,   color: 'bg-blue-50 text-blue-600 text-blue-700' },
-              { label: '% Sueldos',   value: distribCategoria.sueldos,   color: 'bg-green-50 text-green-600 text-green-700' },
-              { label: '% Inversión', value: distribCategoria.inversion, color: 'bg-purple-50 text-purple-600 text-purple-700' },
-            ].map(({ label, value, color }) => {
-              const [bg, lbl, val] = color.split(' ')
-              return (
-                <div key={label} className={`text-center p-4 rounded-lg ${bg}`}>
-                  <p className={`text-xs font-medium mb-1 ${lbl}`}>{label}</p>
-                  <p className={`text-3xl font-bold ${val}`}>{value.toFixed(1)}%</p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Ingresos vs Egresos — ComposedChart */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Ingresos vs Egresos — Campaña {anio}/{anio + 1}</h3>
-          <div style={{ height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={flujoMensual} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+      {/* Row 1: presupuesto vs real + desvío por tipo */}
+      <div className="flex gap-5 items-start flex-wrap">
+        <ChartCard title="Egresos: presupuesto vs real por mes"
+          subtitle={`${moneda.toUpperCase()} · línea = desvío %`} flex="1 1 55%">
+          {!hayReal && !hayPresupuesto ? (
+            <EmptyChart msg="Sin egresos ni presupuesto para esta campaña/moneda" />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={porMes} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="bars" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
-                <YAxis yAxisId="line" orientation="right" tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
+                <YAxis tick={{ fontSize: 11 }} width={55} tickFormatter={(v) => fmtM(Number(v))} />
+                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} width={40} unit="%" />
                 <Tooltip
-                  formatter={(value, name) => [
-                    fmtARS(Number(value)),
-                    name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Saldo',
+                  formatter={(v, name) => {
+                    if (name === 'Desvío %') return [`${Number(v).toFixed(1)}%`, name]
+                    return [fmtMoney(Number(v), moneda), name]
+                  }}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                <Legend />
+                <Bar dataKey="egresoPresup" name="Presupuesto" fill="#e6c8cd" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="egresoReal" name="Real" fill="#7a1f2c" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Line yAxisId="pct" dataKey="desvioPct" name="Desvío %" stroke="#c89a3a"
+                  strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Desvío acumulado por tipo de egreso"
+          subtitle="% sobre presupuesto · ordenado por impacto en plata" flex="1 1 38%">
+          {desvioPorTipo.length === 0 ? (
+            <EmptyChart msg="Cargá el presupuesto en Finanzas → Presupuesto para ver desvíos por categoría" />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={desvioPorTipo} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11 }} unit="%" />
+                <YAxis type="category" dataKey="tipo" tick={{ fontSize: 10 }} width={120} />
+                <Tooltip
+                  formatter={(v, _n, item) => [
+                    `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}% (${fmtMoney(item.payload.impacto, moneda)})`,
+                    'Desvío',
                   ]}
                   contentStyle={{ fontSize: 12 }}
                 />
-                <Legend formatter={(v) => v === 'ingresos' ? 'Ingresos' : v === 'egresos' ? 'Egresos' : 'Saldo'} />
-                <Bar yAxisId="bars" dataKey="ingresos" fill="#16a34a" radius={[4, 4, 0, 0]} maxBarSize={32} name="ingresos" />
-                <Bar yAxisId="bars" dataKey="egresos" fill="#dc2626" radius={[4, 4, 0, 0]} maxBarSize={32} name="egresos" />
-                <Line yAxisId="line" type="monotone" dataKey="saldo" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3 }} name="saldo" />
+                <ReferenceLine x={0} stroke="#5a544c" />
+                <Bar dataKey="desvio" radius={[0, 3, 3, 0]} maxBarSize={18}>
+                  {desvioPorTipo.map((d, i) => (
+                    <Cell key={i} fill={Math.abs(d.desvio) > 25 ? '#a3293a' : Math.abs(d.desvio) > 10 ? '#c89a3a' : '#3f5c3a'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Row 2: flujo mensual + compradores */}
+      <div className="flex gap-5 items-start flex-wrap">
+        <ChartCard title="Flujo de caja mensual" subtitle={`${moneda.toUpperCase()} · línea = saldo acumulado`} flex="1 1 55%">
+          {!hayReal ? (
+            <EmptyChart msg="Sin movimientos registrados para esta campaña/moneda" />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={porMes} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={55} tickFormatter={(v) => fmtM(Number(v))} />
+                <Tooltip formatter={(v, name) => [fmtMoney(Number(v), moneda), name]} contentStyle={{ fontSize: 12 }} />
+                <Legend />
+                <Bar dataKey="ingresoReal" name="Ingresos" fill="#3f5c3a" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="egresoReal" name="Egresos" fill="#9a3140" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                <Line dataKey="saldoAcum" name="Saldo acum." stroke="#1f1a17" strokeWidth={2} dot={false} />
+                <ReferenceLine y={0} stroke="#5a544c" />
               </ComposedChart>
             </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Egresos por Tipo por Mes — stacked bar (full campaign, unfiltered) */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Egresos por Tipo por Mes — Campaña {anio}/{anio + 1}</h3>
-          {stackedData.length === 0 ? (
-            <div className="flex items-center justify-center h-20 text-gray-400 text-sm">Sin datos</div>
-          ) : (
-            <>
-              <div style={{ height: 280 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stackedData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="_label" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
-                    <Tooltip
-                      formatter={(value, name) => {
-                        const label = typeof name === 'string'
-                          ? (TIPO_EGRESO_LABELS[name as TipoEgreso] ?? name)
-                          : String(name)
-                        return [fmtARS(Number(value)), label]
-                      }}
-                      contentStyle={{ fontSize: 12 }}
-                    />
-                    {(egresosPorMes?.tipos_presentes ?? []).map((tipo, i) => (
-                      <Bar key={tipo} dataKey={tipo} stackId="a" fill={PIE_COLORS[i % PIE_COLORS.length]} name={tipo} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap gap-3 mt-3">
-                {(egresosPorMes?.tipos_presentes ?? []).map((tipo, i) => (
-                  <div key={tipo} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-gray-600">{TIPO_EGRESO_LABELS[tipo as TipoEgreso] ?? tipo}</span>
-                  </div>
-                ))}
-              </div>
-            </>
           )}
-        </div>
+        </ChartCard>
 
-        {/* Evolución de gastos + Tipo donut */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Evolución de Gastos Totales</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                Agrupar por:
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as 'mes' | 'trimestre')}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:outline-none"
-                >
-                  <option value="mes">Mes</option>
-                  <option value="trimestre">Trimestre</option>
-                </select>
-              </div>
+        <ChartCard title="Kg entregados vs cobrado por comprador"
+          subtitle="cruce cosecha × ingresos (por nombre) · kg sin cobros = alerta de cobranza" flex="1 1 38%">
+          {compradoresData.length === 0 ? (
+            <EmptyChart msg="Sin cosechas con comprador ni cobros registrados" />
+          ) : (
+            <div className="space-y-2 pt-1">
+              {compradoresData.map((c) => (
+                <div key={c.comprador} className="text-xs">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-semibold text-gray-700 truncate">{c.comprador}</span>
+                    <span className="text-gray-500">
+                      {(c.kg_entregados / 1000).toFixed(1)} t ·{' '}
+                      <span className={c.kg_entregados > 0 && c.monto_cobrado_ars === 0 && c.monto_cobrado_usd === 0
+                        ? 'text-red-700 font-semibold' : 'text-gray-700 font-medium'}>
+                        {fmtMoney(c.monto_cobrado_ars, 'ars')}
+                        {c.monto_cobrado_usd > 0 && ` + ${fmtMoney(c.monto_cobrado_usd, 'usd')}`}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="bg-gray-100 rounded-full h-2">
+                    <div className="h-2 rounded-full"
+                      style={{ width: `${(c.kg_entregados / maxKg) * 100}%`, backgroundColor: '#7a1f2c' }} />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div style={{ height: 280 }}>
-              {monthlyEvolution.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400 text-sm">Sin datos en el período</div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyEvolution} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={70} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      stroke="#2563eb"
-                      strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#2563eb', strokeWidth: 0 }}
-                      activeDot={{ r: 6 }}
-                      name="Gastos"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Egresos por Tipo</h3>
-            <div style={{ height: 280 }}>
-              {tipoData.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400 text-sm">Sin datos</div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={tipoData}
-                      cx="50%"
-                      cy="42%"
-                      innerRadius={50}
-                      outerRadius={90}
-                      dataKey="value"
-                      nameKey="name"
-                    />
-                    <Tooltip content={<PieTooltip />} />
-                    <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
-
+          )}
+        </ChartCard>
       </div>
 
-      {/* ── Right sidebar filter panel ── */}
-      <div className="w-64 flex-shrink-0">
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sticky top-4 space-y-4">
-          <h3 className="text-base font-semibold text-gray-900">Filtros</h3>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Fecha desde</label>
-            <input
-              type="date"
-              value={pDesde}
-              onChange={(e) => setPDesde(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Fecha hasta</label>
-            <input
-              type="date"
-              value={pHasta}
-              onChange={(e) => setPHasta(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Origen</label>
-            <CheckboxGroup
-              options={ORIGEN_OPTIONS}
-              selected={pOrigenes}
-              onChange={(v) => setPOrigenes((p) => toggleSet(p, v))}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Finca</label>
-            <CheckboxGroup
-              options={FINCA_OPTIONS}
-              selected={pFincas}
-              onChange={(v) => setPFincas((p) => toggleSet(p, v))}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Tipo</label>
-            <CheckboxGroup
-              options={TIPO_EGRESO_VALUES.map((t) => ({ value: t, label: TIPO_EGRESO_LABELS[t] }))}
-              selected={pTipos}
-              onChange={(v) => setPTipos((p) => toggleSet(p, v))}
-            />
-          </div>
-
-          <button
-            onClick={applyFilters}
-            className="w-full py-2.5 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
-          >
-            Aplicar Filtros
-          </button>
-        </div>
-      </div>
+      <p className="text-xs text-gray-400">
+        ARS y USD nunca se suman: cambiá de moneda con el selector. Comparaciones entre campañas → usar USD.
+      </p>
     </div>
   )
 }

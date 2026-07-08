@@ -2,10 +2,12 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Sprout, Save, X } from 'lucide-react'
-import api from '@/lib/api'
-import { getEstadoActual, createCicloCampana } from '@/lib/api/produccion'
-import type { EstadoActualItem } from '@/lib/api/produccion'
+import { Sprout, Save, X, Sparkles, PenLine, RotateCcw } from 'lucide-react'
+import {
+  getFenologiaEstadoActual, createCicloCampana, getParcelasMapa, VARIEDAD_LABELS,
+  limpiarOverridesFenologia,
+  type FaseVariedadItem,
+} from '@/lib/api/produccion'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +38,6 @@ const TIMELINE_DOTS: Record<EstadoKey, string> = {
 
 const now = new Date()
 const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = Array.from({ length: DEFAULT_YEAR - 2020 + 1 }, (_, i) => DEFAULT_YEAR - i)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -45,23 +46,24 @@ function fmt(date: string | null): string {
   return date.split('-').reverse().join('/')
 }
 
+function toEstadoKey(estado: string): EstadoKey {
+  return (ESTADOS as readonly string[]).includes(estado) ? (estado as EstadoKey) : 'latencia'
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function EstadoBadge({ estado }: { estado: string | null }) {
-  if (!estado) {
-    return <span className="text-xs text-gray-400 italic">Sin estado</span>
-  }
-  const c = ESTADO_COLORS[estado as EstadoKey] ?? ESTADO_COLORS.latencia
+function EstadoBadge({ estado }: { estado: string }) {
+  const c = ESTADO_COLORS[toEstadoKey(estado)]
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${c.bg} ${c.text}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {ESTADO_LABELS[estado as EstadoKey] ?? estado}
+      {ESTADO_LABELS[toEstadoKey(estado)]}
     </span>
   )
 }
 
-function EstadoTimeline({ estado }: { estado: string | null }) {
-  const idx = estado ? ESTADOS.indexOf(estado as EstadoKey) : -1
+function EstadoTimeline({ estado }: { estado: string }) {
+  const idx = ESTADOS.indexOf(toEstadoKey(estado))
   return (
     <div className="flex items-center gap-0.5 w-36">
       {ESTADOS.map((e, i) => (
@@ -77,36 +79,62 @@ function EstadoTimeline({ estado }: { estado: string | null }) {
   )
 }
 
-// ── Update Modal ──────────────────────────────────────────────────────────────
+function FuenteTag({ fuente, fecha }: { fuente: string; fecha: string | null }) {
+  if (fuente === 'manual') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-[#7a1f2c] font-medium">
+        <PenLine size={11} /> Confirmado a mano{fecha ? ` · ${fmt(fecha)}` : ''}
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+      <Sparkles size={11} /> Estimado automático
+    </span>
+  )
+}
+
+// ── Update Modal (bulk por variedad) ────────────────────────────────────────────
 
 function UpdateModal({
   item,
+  parcelaIds,
   onClose,
   onSaved,
 }: {
-  item: EstadoActualItem
+  item: FaseVariedadItem
+  parcelaIds: string[]
   onClose: () => void
   onSaved: () => void
 }) {
-  const [estado, setEstado] = useState<EstadoKey>((item.estado_fenologico as EstadoKey) ?? 'brotacion')
-  const [rendimiento, setRendimiento] = useState('')
+  const [estado, setEstado] = useState<EstadoKey>(toEstadoKey(item.estado_fenologico))
   const [obs, setObs] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   async function handleSave() {
+    if (parcelaIds.length === 0) {
+      setError('No hay parrales activos para esta variedad.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
       const anio = new Date().getMonth() >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
-      await createCicloCampana({
-        parcela_id: item.parcela_id,
-        anio,
-        estado_fenologico: estado,
-        fecha_estado: new Date().toISOString().split('T')[0],
-        rendimiento_kg_ha: rendimiento ? parseFloat(rendimiento) : null,
-        observaciones: obs.trim() || null,
-      })
+      const fecha_estado = new Date().toISOString().split('T')[0]
+      // Confirma el estado para TODOS los parrales de la variedad a la vez
+      // (la campaña ahora se gestiona por variedad, no parral por parral).
+      await Promise.all(
+        parcelaIds.map((parcela_id) =>
+          createCicloCampana({
+            parcela_id,
+            anio,
+            estado_fenologico: estado,
+            fecha_estado,
+            observaciones: obs.trim() || null,
+          })
+        )
+      )
       onSaved()
       onClose()
     } catch (e: unknown) {
@@ -122,8 +150,10 @@ function UpdateModal({
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
           <div>
-            <h2 className="font-semibold text-gray-900">{item.parcela_nombre}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Actualizar estado fenológico</p>
+            <h2 className="font-semibold text-gray-900">{VARIEDAD_LABELS[item.variedad] ?? item.variedad}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Confirmar estado real — se aplica a {parcelaIds.length} parral{parcelaIds.length !== 1 ? 'es' : ''}
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
             <X size={18} />
@@ -156,21 +186,6 @@ function UpdateModal({
             </div>
           </div>
 
-          {estado === 'cosecha' && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Rendimiento (kg/ha) — opcional
-              </label>
-              <input
-                type="number"
-                value={rendimiento}
-                onChange={(e) => setRendimiento(e.target.value)}
-                placeholder="Ej: 1200"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
-              />
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Observaciones — opcional
@@ -183,6 +198,11 @@ function UpdateModal({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
             />
           </div>
+
+          <p className="text-xs text-gray-400">
+            Esta confirmación reemplaza el estimado automático para esta variedad durante ~45 días.
+            Pasado ese tiempo, si no se vuelve a confirmar, el sistema retoma el cálculo automático.
+          </p>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
@@ -211,50 +231,95 @@ function UpdateModal({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CampanaPage() {
-  const [editing, setEditing] = useState<EstadoActualItem | null>(null)
+  const [editing, setEditing] = useState<FaseVariedadItem | null>(null)
+  const [resetting, setResetting] = useState(false)
   const qc = useQueryClient()
 
-  const { data: estadosRaw = [], isLoading } = useQuery({
-    queryKey: ['estado-actual'],
-    queryFn: getEstadoActual,
+  const { data: fases = [], isLoading } = useQuery({
+    queryKey: ['fenologia-campana'],
+    queryFn: getFenologiaEstadoActual,
     staleTime: 30_000,
   })
 
-  const estados = useMemo(() => {
-    const map = new Map<string, EstadoActualItem>()
-    for (const item of estadosRaw) {
-      const prev = map.get(item.parcela_id)
-      if (!prev || (item.fecha_estado ?? '') > (prev.fecha_estado ?? '')) {
-        map.set(item.parcela_id, item)
-      }
-    }
-    return Array.from(map.values())
-  }, [estadosRaw])
+  const { data: parcelas = [] } = useQuery({
+    queryKey: ['parcelas-mapa'],
+    queryFn: getParcelasMapa,
+    staleTime: 5 * 60_000,
+  })
 
+  // Cuenta parrales (no variedades) por estado, para que los badges de
+  // resumen sigan reflejando cuánta superficie está en cada fase.
   const summary = useMemo(() =>
     ESTADOS.reduce<Record<string, number>>((acc, e) => {
-      acc[e] = estados.filter((es) => es.estado_fenologico === e).length
+      acc[e] = fases
+        .filter((f) => toEstadoKey(f.estado_fenologico) === e)
+        .reduce((s, f) => s + f.parcelas.length, 0)
       return acc
     }, {}),
-  [estados])
+  [fases])
+
+  const sinCalendario = useMemo(() => {
+    const conVariedad = new Set(fases.map((f) => f.variedad))
+    return parcelas.filter((p) => p.tipo === 'parral' && p.is_active && p.variedad && !conVariedad.has(p.variedad))
+  }, [fases, parcelas])
+
+  function parcelaIdsDeVariedad(variedad: string): string[] {
+    return parcelas
+      .filter((p) => p.tipo === 'parral' && p.is_active && p.variedad === variedad)
+      .map((p) => p.id)
+  }
 
   function onSaved() {
-    qc.invalidateQueries({ queryKey: ['estado-actual'] })
+    qc.invalidateQueries({ queryKey: ['fenologia-campana'] })
+    qc.invalidateQueries({ queryKey: ['fenologia-mapa'] })
+    qc.invalidateQueries({ queryKey: ['fenologia-notificaciones'] })
+  }
+
+  const hasManual = fases.some((f) => f.fuente === 'manual')
+
+  async function handleReset() {
+    if (!confirm(
+      'Esto borra las confirmaciones manuales de fenología cargadas para probar el sistema ' +
+      '(no toca el historial real de cosecha) y deja el estado de cada variedad 100% gobernado ' +
+      'por el calendario automático. ¿Continuar?'
+    )) return
+    setResetting(true)
+    try {
+      await limpiarOverridesFenologia()
+      onSaved()
+    } finally {
+      setResetting(false)
+    }
   }
 
   return (
     <div className="space-y-5">
       {editing && (
-        <UpdateModal item={editing} onClose={() => setEditing(null)} onSaved={onSaved} />
+        <UpdateModal
+          item={editing}
+          parcelaIds={parcelaIdsDeVariedad(editing.variedad)}
+          onClose={() => setEditing(null)}
+          onSaved={onSaved}
+        />
       )}
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Ciclo de Campaña</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Estado fenológico por parral · Campaña {DEFAULT_YEAR}/{DEFAULT_YEAR + 1}
+            Estado fenológico por variedad · Campaña {DEFAULT_YEAR}/{DEFAULT_YEAR + 1}
           </p>
         </div>
+        {hasManual && (
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-[#7a1f2c] border border-gray-200 hover:border-[#7a1f2c] rounded-lg px-3 py-1.5 transition-colors disabled:opacity-60"
+          >
+            <RotateCcw size={13} />
+            {resetting ? 'Limpiando...' : 'Resetear a automático'}
+          </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -267,37 +332,40 @@ export default function CampanaPage() {
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${c.bg} ${c.text}`}
             >
               <span className={`w-2 h-2 rounded-full ${c.dot}`} />
-              {ESTADO_LABELS[e]} · {summary[e]}
+              {ESTADO_LABELS[e]} · {summary[e]} parral{summary[e] !== 1 ? 'es' : ''}
             </span>
           )
         })}
-        {estados.filter((e) => !e.estado_fenologico).length > 0 && (
+        {sinCalendario.length > 0 && (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gray-50 text-gray-500">
             <span className="w-2 h-2 rounded-full bg-gray-300" />
-            Sin estado · {estados.filter((e) => !e.estado_fenologico).length}
+            Sin calendario definido · {sinCalendario.length}
           </span>
         )}
       </div>
 
-      {/* Table */}
+      {/* Tabla por variedad */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-6 space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.15 }} />
             ))}
           </div>
-        ) : estados.length === 0 ? (
+        ) : fases.length === 0 ? (
           <div className="p-10 text-center">
             <Sprout size={32} className="mx-auto text-gray-200 mb-3" />
-            <p className="text-gray-400">Sin parrales activos</p>
+            <p className="text-gray-400">Sin variedades con calendario definido todavía</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Parral
+                  Variedad
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Parrales
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   Progresión
@@ -306,27 +374,36 @@ export default function CampanaPage() {
                   Estado actual
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Actualizado
+                  Tareas recomendadas
                 </th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {estados.map((item) => (
-                <tr key={item.id ?? item.parcela_id} className="hover:bg-gray-50 transition-colors">
+              {fases.map((item) => (
+                <tr key={item.variedad} className="hover:bg-gray-50 transition-colors align-top">
                   <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
-                    {item.parcela_nombre}
+                    {VARIEDAD_LABELS[item.variedad] ?? item.variedad}
+                    <p className="text-[11px] font-normal text-gray-400 capitalize">{item.tipo_uso}</p>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600 max-w-[220px]">
+                    {item.parcelas.join(', ')}
                   </td>
                   <td className="px-4 py-3">
                     <EstadoTimeline estado={item.estado_fenologico} />
                   </td>
                   <td className="px-4 py-3">
                     <EstadoBadge estado={item.estado_fenologico} />
+                    <div className="mt-1">
+                      <FuenteTag fuente={item.fuente} fecha={item.fecha_confirmacion} />
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                    {fmt(item.fecha_estado)}
+                  <td className="px-4 py-3 text-xs text-gray-600 max-w-[280px]">
+                    {item.tareas_recomendadas.slice(0, 2).map((t, i) => (
+                      <p key={i} className="leading-snug">• {t}</p>
+                    ))}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button
                       onClick={() => setEditing(item)}
                       className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"

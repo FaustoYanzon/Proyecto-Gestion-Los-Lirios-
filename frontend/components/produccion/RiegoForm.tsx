@@ -11,6 +11,9 @@ import {
   getValvulas,
   createRiego,
   updateRiego,
+  formatFechaLocal,
+  formatHoraLocal,
+  hoyArgentina,
   type RiegoResponse,
 } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
@@ -40,21 +43,23 @@ interface Props {
   onCancel: () => void
 }
 
-const today = new Date().toISOString().split('T')[0]
+const today = hoyArgentina()
 
 const field =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err = 'mt-1 text-xs text-red-600'
 
+// inicio/fin llegan del backend en UTC: hay que convertirlos a fecha/hora de
+// Argentina, nunca recortar el string ISO crudo (mostraba/reenviaba la hora UTC).
 function extractDate(dt: string): string {
   if (!dt) return today
-  return dt.includes('T') ? dt.split('T')[0] : dt.slice(0, 10)
+  return formatFechaLocal(dt)
 }
 
 function extractTime(dt: string): string {
   if (!dt) return ''
-  return dt.includes('T') ? dt.split('T')[1].slice(0, 5) : dt.slice(11, 16)
+  return formatHoraLocal(dt)
 }
 
 export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Props) {
@@ -111,7 +116,10 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
 
   const parcelaSeleccionada = parcelas.find((p) => p.id === parcelaIdW)
   const valvulasDisponibles = parcelaSeleccionada ? getValvulas(parcelaSeleccionada.nombre) : [1, 2, 3, 4]
-  const preview = calcMm(fechaInicioW, horaInicioW, fechaFinW, horaFinW)
+  const preview = calcMm(
+    fechaInicioW, horaInicioW, fechaFinW, horaFinW,
+    selectedValvulas.size || 1,
+  )
 
   // Auto-populate cabezal from parcela
   useEffect(() => {
@@ -206,15 +214,21 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         </div>
       </div>
 
-      {/* Preview duración + mm */}
+      {/* Preview duración + mm + litros totales */}
       {preview ? (
         <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#fbfaf6] rounded-md px-4 py-3">
           <Droplets size={18} className="text-blue-500 flex-shrink-0" />
           <div className="text-sm">
-            <span className="text-blue-700 font-medium">{preview.horas}h de riego</span>
+            <span className="text-blue-700 font-medium">{preview.horas}h</span>
+            <span className="text-blue-400 mx-2">·</span>
+            <span className="text-blue-900 font-mono">{preview.mm} mm/válvula</span>
             <span className="text-blue-400 mx-2">→</span>
-            <span className="text-blue-900 font-semibold font-mono">{preview.mm} mm</span>
-            <span className="text-blue-400 text-xs ml-2">(16.000 L/ha/h)</span>
+            <span className="text-blue-900 font-semibold font-mono">
+              {preview.litros.toLocaleString('es-AR')} L totales
+            </span>
+            <span className="text-blue-400 text-xs ml-2">
+              ({selectedValvulas.size || 1} válvula{(selectedValvulas.size || 1) > 1 ? 's' : ''} × 16.000 L/ha/h)
+            </span>
           </div>
         </div>
       ) : (fechaInicioW && horaInicioW && fechaFinW && horaFinW) ? (
