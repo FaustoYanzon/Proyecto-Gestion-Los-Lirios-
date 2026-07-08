@@ -128,6 +128,8 @@ class RegistroRiegoUpdate(BaseModel):
 class RegistroRiegoResponse(RegistroRiegoBase):
     id: str
     duracion_horas: float
+    n_valvulas: int
+    litros_aplicados: float
     created_by: str
     created_at: datetime
 
@@ -213,6 +215,27 @@ class EstadoActualResponse(BaseModel):
     fecha_estado: date | None = None
 
 
+class FaseVariedadResponse(BaseModel):
+    """Estado fenológico de una variedad, calculado automáticamente por
+    fecha (ver app.core.fenologia) salvo que exista una confirmación manual
+    reciente (CicloCampana) para alguna de sus parcelas, en cuyo caso esa
+    confirmación tiene prioridad (`fuente="manual"`). Agrupa todos los
+    parrales activos de esa variedad."""
+    variedad: str
+    tipo_uso: str
+    fase: str
+    fase_label: str
+    estado_fenologico: EstadoFenologico
+    riesgo_oidio: str
+    tareas_recomendadas: list[str]
+    proxima_fase: str | None
+    proxima_fase_label: str | None
+    proxima_fase_fecha: date | None
+    parcelas: list[str]
+    fuente: str  # "automatico" | "manual"
+    fecha_confirmacion: date | None
+
+
 # ── Dashboard schemas ─────────────────────────────────────────────────────────
 
 class RendimientoAnio(BaseModel):
@@ -235,6 +258,9 @@ class EficienciaHidricaParcela(BaseModel):
     variedad: str | None
     superficie_ha: float | None
     mm_aplicados_total: float
+    litros_totales: float
+    litros_objetivo_anual: float | None
+    porcentaje_cumplimiento: float | None
     rendimiento_kg_ha: float | None
     eficiencia_kg_por_mm: float | None
 

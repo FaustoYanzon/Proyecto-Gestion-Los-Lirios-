@@ -12,6 +12,11 @@ from app.models.finanzas import (
     ProductoIngreso,
     TipoEgreso,
 )
+from app.models.presupuesto import (
+    ConceptoPresupuesto,
+    MetaProduccion,
+    Presupuesto,
+)
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     TAREAS_POR_CLASIFICACION,
@@ -57,4 +62,7 @@ __all__ = [
     "RegistroFitosanitario",
     "EstadoFenologico",
     "CicloCampana",
+    "ConceptoPresupuesto",
+    "Presupuesto",
+    "MetaProduccion",
 ]

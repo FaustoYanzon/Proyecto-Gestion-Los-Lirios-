@@ -7,6 +7,7 @@ from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up
+from app.core import fenologia
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -16,7 +17,7 @@ from app.models.finanzas import (
     OrigenPago,
     TipoEgreso,
 )
-from app.models.parcela import Parcela, TipoParcela
+from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     CicloCampana,
@@ -43,6 +44,7 @@ from app.schemas.produccion import (
     CosechaTotalesResponse,
     EficienciaHidricaParcela,
     EstadoActualResponse,
+    FaseVariedadResponse,
     RegistroCargaMasiva,
     RegistroCosechaCreate,
     RegistroCosechaResponse,
@@ -190,6 +192,24 @@ async def dashboard_eficiencia_hidrica(
     )).all()
     mm_por_parcela: dict[str, float] = {row.parcela_id: float(row.mm_total) for row in riego_rows}
 
+    # litros_aplicados depende de la cantidad de valvulas abiertas por registro
+    # (campo `valvula` como CSV, ej "1,2,3"), algo que no se puede sumar con
+    # func.sum directo en SQL. Se trae duracion+valvula y se calcula en Python.
+    litros_rows = (await db.execute(
+        select(RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula)
+        .where(
+            RegistroRiego.parcela_id.in_(parcela_ids),
+            RegistroRiego.fecha >= start,
+            RegistroRiego.fecha <= end,
+        )
+    )).all()
+    litros_por_parcela: dict[str, float] = defaultdict(float)
+    for row in litros_rows:
+        n_valvulas = len([v for v in (row.valvula or "").split(",") if v.strip()]) or 1
+        litros_por_parcela[row.parcela_id] += (
+            row.duracion_horas * RegistroRiego.LITROS_POR_HORA_VALVULA * n_valvulas
+        )
+
     ciclos = list(
         (await db.execute(
             select(CicloCampana).where(
@@ -207,16 +227,26 @@ async def dashboard_eficiencia_hidrica(
     items: list[EficienciaHidricaParcela] = []
     for p in parcelas:
         mm = mm_por_parcela.get(p.id, 0.0)
-        if mm == 0.0:
+        litros = round(litros_por_parcela.get(p.id, 0.0), 2)
+        if mm == 0.0 and litros == 0.0:
             continue
         rend = best_rend.get(p.id)
-        eficiencia = float(rend) / mm if rend is not None else None
+        eficiencia = float(rend) / mm if rend is not None and mm > 0 else None
+        objetivo = (
+            p.superficie_ha * RegistroRiego.LITROS_OBJETIVO_ANUAL_POR_HA
+            if p.superficie_ha is not None
+            else None
+        )
+        porcentaje = round(litros / objetivo * 100, 1) if objetivo else None
         items.append(EficienciaHidricaParcela(
             parcela_id=p.id,
             parcela_nombre=p.nombre,
             variedad=p.variedad.value if p.variedad is not None else None,
             superficie_ha=p.superficie_ha,
             mm_aplicados_total=mm,
+            litros_totales=litros,
+            litros_objetivo_anual=objetivo,
+            porcentaje_cumplimiento=porcentaje,
             rendimiento_kg_ha=float(rend) if rend is not None else None,
             eficiencia_kg_por_mm=eficiencia,
         ))
@@ -771,6 +801,128 @@ async def estado_actual(
         )
         for row in rows
     ]
+
+
+
+# Una confirmación manual (CicloCampana) pisa el cálculo automático mientras
+# sea "reciente" — pasado ese umbral se la considera vieja y el motor
+# automático vuelve a tomar el control (evita que quede congelada para
+# siempre en un estado que ya se pasó de fecha).
+UMBRAL_VIGENCIA_MANUAL_DIAS = 45
+
+
+@router.get("/fenologia/estado-actual", response_model=list[FaseVariedadResponse])
+async def fenologia_estado_actual(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[FaseVariedadResponse]:
+    """Estado fenológico por variedad: automático por fecha, salvo override
+    manual reciente.
+
+    Agrupa los parrales activos por variedad y calcula, según la fecha de
+    hoy, en qué fase del ciclo debería estar cada una y qué tareas
+    recomienda el motor agronómico (app.core.fenologia). Si alguna parcela
+    de esa variedad tiene una confirmación manual (CicloCampana) de los
+    últimos `UMBRAL_VIGENCIA_MANUAL_DIAS` días, esa confirmación reemplaza
+    al cálculo automático para toda la variedad (fuente="manual").
+    Alimenta las notificaciones de inicio (mobile y web), el modo "Estado
+    fenológico" del mapa, y la página Ciclo de Campaña.
+    """
+    parcelas = list(
+        (await db.execute(
+            select(Parcela).where(
+                Parcela.is_active.is_(True),
+                Parcela.tipo == TipoParcela.parral,
+                Parcela.variedad.is_not(None),
+            )
+        )).scalars().all()
+    )
+
+    parcelas_por_variedad: dict[VariedadUva, list[str]] = defaultdict(list)
+    for p in parcelas:
+        if p.variedad is not None:
+            parcelas_por_variedad[p.variedad].append(p.nombre)
+
+    # Confirmación manual más reciente por variedad (join CicloCampana ->
+    # Parcela, ordenado desc: la primera fila vista por variedad ya es la
+    # más nueva).
+    parcela_ids = [p.id for p in parcelas]
+    ciclos_rows = (await db.execute(
+        select(CicloCampana, Parcela.variedad)
+        .join(Parcela, CicloCampana.parcela_id == Parcela.id)
+        .where(Parcela.id.in_(parcela_ids))
+        .order_by(CicloCampana.fecha_estado.desc())
+    )).all()
+    manual_por_variedad: dict[VariedadUva, CicloCampana] = {}
+    for ciclo, variedad in ciclos_rows:
+        if variedad is not None and variedad not in manual_por_variedad:
+            manual_por_variedad[variedad] = ciclo
+
+    hoy = date.today()
+    items: list[FaseVariedadResponse] = []
+    for variedad, nombres in parcelas_por_variedad.items():
+        fase = fenologia.calcular_fase(variedad, hoy)
+        if fase is None:
+            continue  # variedad sin calendario definido (ej. "otro")
+        proxima = fenologia.calcular_proxima_fase(variedad, hoy)
+
+        fuente = "automatico"
+        estado_fenologico = fenologia.ESTADO_POR_FASE[fase]
+        fase_label = fenologia.FASE_LABELS[fase]
+        tareas = fenologia.tareas_recomendadas(variedad, fase)
+        fecha_confirmacion: date | None = None
+
+        manual = manual_por_variedad.get(variedad)
+        if manual is not None and (hoy - manual.fecha_estado).days <= UMBRAL_VIGENCIA_MANUAL_DIAS:
+            fuente = "manual"
+            estado_fenologico = manual.estado_fenologico
+            fase_label = fenologia.ESTADO_LABELS[manual.estado_fenologico]
+            tareas = fenologia.tareas_recomendadas_por_estado(variedad, manual.estado_fenologico)
+            fecha_confirmacion = manual.fecha_estado
+
+        items.append(FaseVariedadResponse(
+            variedad=variedad.value,
+            tipo_uso=fenologia.TIPO_USO_POR_VARIEDAD.get(variedad, fenologia.TipoUso.otro).value,
+            fase=fase.value,
+            fase_label=fase_label,
+            estado_fenologico=estado_fenologico,
+            riesgo_oidio=fenologia.RIESGO_OIDIO_POR_VARIEDAD.get(variedad, fenologia.RiesgoSanitario.medio).value,
+            tareas_recomendadas=tareas,
+            proxima_fase=proxima[0].value if proxima else None,
+            proxima_fase_label=fenologia.FASE_LABELS[proxima[0]] if proxima else None,
+            proxima_fase_fecha=proxima[1] if proxima else None,
+            parcelas=sorted(nombres),
+            fuente=fuente,
+            fecha_confirmacion=fecha_confirmacion,
+        ))
+
+    items.sort(key=lambda x: x.variedad)
+    return items
+
+
+@router.delete("/fenologia/overrides")
+async def limpiar_overrides_fenologicos(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> dict[str, int]:
+    """Elimina las confirmaciones manuales de CicloCampana usadas como
+    override de fenología (fase de pruebas: estados cargados a mano en
+    parrales al azar para validar el motor automático).
+
+    Solo borra registros SIN `rendimiento_kg_ha` — ese campo es el historial
+    real de cosecha (usado por RendimientoHistoricoParcela y el dashboard de
+    rendimiento) y nunca se toca acá. Después de esto, `estado-actual` vuelve
+    a depender 100% del calendario automático hasta que se cargue una nueva
+    confirmación manual real.
+    """
+    result = await db.execute(
+        select(CicloCampana).where(CicloCampana.rendimiento_kg_ha.is_(None))
+    )
+    registros = list(result.scalars().all())
+    for r in registros:
+        await db.delete(r)
+    await db.flush()
+    return {"eliminados": len(registros)}
 
 
 @router.get("/campana/{campana_id}", response_model=CicloCampanaResponse)

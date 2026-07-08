@@ -199,8 +199,11 @@ class RegistroRiego(Base):
         Index("ix_registros_riego_parcela_fecha", "parcela_id", "fecha"),
     )
 
-    # 16,000 L/ha/h = 1.6 mm/h
+    # Cada valvula riega 1 ha y entrega 16,000 L/h => 1.6 mm/h sobre esa ha.
     MM_POR_HORA: float = 1.6
+    LITROS_POR_HORA_VALVULA: float = 16_000.0
+    # Referencia agronomica para el suelo de Media Agua: 6,000,000 L/ha/anio.
+    LITROS_OBJETIVO_ANUAL_POR_HA: float = 6_000_000.0
 
     def __init__(self, **kwargs: Any) -> None:
         inicio = kwargs.get("inicio")
@@ -210,6 +213,28 @@ class RegistroRiego(Base):
         if kwargs.get("mm_aplicados") is None and kwargs.get("duracion_horas") is not None:
             kwargs["mm_aplicados"] = round(kwargs["duracion_horas"] * 1.6, 2)
         super().__init__(**kwargs)
+
+    @property
+    def n_valvulas(self) -> int:
+        """Cantidad de valvulas abiertas en este riego.
+
+        El campo `valvula` guarda una lista separada por comas (ej: "1,2,3")
+        cuando se abrieron varias valvulas a la vez sobre el mismo parral.
+        """
+        if not self.valvula:
+            return 1
+        valvulas = [v for v in self.valvula.split(",") if v.strip()]
+        return len(valvulas) or 1
+
+    @property
+    def litros_aplicados(self) -> float:
+        """Litros totales entregados al parral en este registro.
+
+        Cada valvula cubre 1 ha y entrega LITROS_POR_HORA_VALVULA L/h, por lo
+        que el total es horas * litros/h/valvula * cantidad de valvulas
+        abiertas (no solo la duracion, como se calculaba antes).
+        """
+        return round(self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.n_valvulas, 2)
 
     parcela: Mapped[Parcela] = relationship(
         "Parcela", back_populates="registros_riego"
