@@ -32,3 +32,6 @@ Thumbs.db
 
 # ── Misc build artifacts seen in tree ────────────────────────────────────────
 uvicorn_out.txt
+
+# ── Database backups (contain real data, never commit) ────────────────────────
+pg_backups/
