@@ -17,6 +17,7 @@ from app.models.presupuesto import (
     MetaProduccion,
     Presupuesto,
 )
+from app.models.trabajador import RolTrabajador, Trabajador
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     TAREAS_POR_CLASIFICACION,
@@ -65,4 +66,6 @@ __all__ = [
     "ConceptoPresupuesto",
     "Presupuesto",
     "MetaProduccion",
+    "Trabajador",
+    "RolTrabajador",
 ]
