@@ -1,0 +1,8 @@
+docs/
+backend/venv312/
+backend/__pycache__/
+backend/.pytest_cache/
+frontend/node_modules/
+frontend/.next/
+.git/
+pg_backups/

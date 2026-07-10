@@ -11,6 +11,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://proyecto-gestion-los-lirios-production.up.railway.app"
       }
     },
     "production": {
