@@ -15,12 +15,15 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
-import { colors, fonts } from '../../lib/theme'
+import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
 import type { Parcela, RegistroTrabajo, UnidadMedida } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
 
 const TOP_5_TAREAS = ['Poda', 'Verde', 'Jornal Comun', 'Cosecha', 'Raleo']
 const UNIDADES: UnidadMedida[] = ['dias', 'plantas', 'melgas', 'metros', 'vines', 'cajas', 'gamelas', 'otros']
+const UNIDADES_PRIMARIAS: UnidadMedida[] = ['dias', 'melgas', 'plantas']
+const UNIDADES_OTRAS = UNIDADES.filter((u) => !UNIDADES_PRIMARIAS.includes(u))
+const TIPOS_PARCELA = Object.keys(parcelaLabels) as (keyof typeof parcelaLabels)[]
 
 function isoToday() { return new Date().toISOString().split('T')[0] }
 
@@ -37,7 +40,7 @@ function formatMonto(v: string | number) {
 
 const STEP_LABELS = ['Tarea', 'Detalle', 'Trabajadores', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
+function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel: () => void }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -59,6 +62,13 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
           </View>
         )
       })}
+      <TouchableOpacity
+        style={si.cancelBtn}
+        onPress={onCancel}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close" size={18} color={colors.ink60} />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -84,6 +94,10 @@ const si = StyleSheet.create({
   labelDone:   { color: colors.burdeos[600], fontWeight: '600' },
   line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 3 },
   lineDone: { backgroundColor: colors.burdeos[600] },
+  cancelBtn: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.hueso,
+    justifyContent: 'center', alignItems: 'center', marginLeft: 8, flexShrink: 0,
+  },
 })
 
 // ─── DatePickerModal ──────────────────────────────────────────────────────────
@@ -206,9 +220,10 @@ const dp = StyleSheet.create({
 // ─── Step 1: Tarea + Fecha ────────────────────────────────────────────────────
 
 function StepTareaFecha({
-  onNext,
+  onNext, onCancelar,
 }: {
   onNext: (tarea: string, fecha: string) => void
+  onCancelar: () => void
 }) {
   const [selTarea, setSelTarea] = useState('')
   const [fecha, setFecha] = useState(isoToday())
@@ -222,7 +237,7 @@ function StepTareaFecha({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} />
+      <StepIndicator current={0} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>¿Qué tarea?</Text>
 
@@ -315,21 +330,34 @@ function StepTareaFecha({
 // ─── Step 2: Detalle (ubicación + unidad + precio) ────────────────────────────
 
 function StepDetalle({
-  tarea, parcelas, onNext, onBack,
+  tarea, parcelas, onNext, onBack, onCancelar,
 }: {
   tarea: string
   parcelas: Parcela[]
   onNext: (parcela: Parcela | null, unidad: UnidadMedida, precio: number) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [search, setSearch] = useState('')
   const [parcela, setParcela] = useState<Parcela | null>(null)
   const [unidad, setUnidad] = useState<UnidadMedida>('dias')
   const [precio, setPrecio] = useState('')
+  const [ubicacionModalVisible, setUbicacionModalVisible] = useState(false)
+  const [unidadModalVisible, setUnidadModalVisible] = useState(false)
 
   const filtered = parcelas.filter((p) =>
     p.nombre.toLowerCase().includes(search.toLowerCase())
   )
+
+  const ubicacionSections = TIPOS_PARCELA
+    .map((tipo) => ({
+      title: parcelaLabels[tipo],
+      tipo,
+      data: filtered.filter((p) => p.tipo === tipo),
+    }))
+    .filter((s) => s.data.length > 0)
+
+  const unidadEsOtra = UNIDADES_OTRAS.includes(unidad)
 
   function handleNext() {
     if (!precio.trim() || isNaN(Number(precio))) {
@@ -341,66 +369,46 @@ function StepDetalle({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} />
+      <StepIndicator current={1} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Detalle</Text>
         <Text style={styles.stepSubtitle}>{tarea}</Text>
 
         <Text style={styles.fieldLabel}>UBICACIÓN</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar parcela..."
-          placeholderTextColor={colors.niebla}
-          value={search}
-          onChangeText={setSearch}
-        />
-        <View style={styles.parcelaList}>
-          {filtered.slice(0, 6).map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.parcelaItem, parcela?.id === p.id && styles.parcelaItemActive]}
-              onPress={() => setParcela(parcela?.id === p.id ? null : p)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.parcelaItemText, parcela?.id === p.id && { color: colors.blanco }]}>
-                  {p.nombre}
-                </Text>
-                {p.variedad && (
-                  <Text style={[styles.parcelaItemSub, parcela?.id === p.id && { color: colors.burdeos[200] }]}>
-                    {p.variedad.replace('_', ' ')}
-                  </Text>
-                )}
-              </View>
-              {parcela?.id === p.id && (
-                <Ionicons name="checkmark" size={16} color={colors.blanco} />
-              )}
-            </TouchableOpacity>
-          ))}
-          {filtered.length === 0 && (
-            <Text style={styles.emptyText}>Sin resultados</Text>
-          )}
-        </View>
-        <TouchableOpacity style={styles.ghostBtn} onPress={() => { setParcela(null); setSearch('') }}>
-          <Text style={styles.ghostBtnText}>Sin ubicación específica</Text>
+        <TouchableOpacity style={styles.dateBtn} onPress={() => setUbicacionModalVisible(true)}>
+          <Ionicons name="location-outline" size={16} color={colors.ink60} />
+          <Text style={styles.dateBtnText}>{parcela ? parcela.nombre : 'Sin ubicación específica'}</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.niebla} />
         </TouchableOpacity>
 
         <Text style={[styles.fieldLabel, { marginTop: 20 }]}>UNIDAD</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-          <View style={{ flexDirection: 'row', gap: 8, paddingBottom: 4 }}>
-            {UNIDADES.map((u) => (
-              <TouchableOpacity
-                key={u}
-                style={[styles.unidadChip, unidad === u && styles.unidadChipActive]}
-                onPress={() => setUnidad(u)}
-              >
-                <Text style={[styles.unidadChipText, unidad === u && styles.unidadChipTextActive]}>
-                  {UNIDAD_LABELS[u]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {UNIDADES_PRIMARIAS.map((u) => (
+            <TouchableOpacity
+              key={u}
+              style={[styles.unidadChip, unidad === u && styles.unidadChipActive]}
+              onPress={() => setUnidad(u)}
+            >
+              <Text style={[styles.unidadChipText, unidad === u && styles.unidadChipTextActive]}>
+                {UNIDAD_LABELS[u]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={[styles.unidadChip, styles.taskChipOtra, unidadEsOtra && styles.unidadChipActive]}
+            onPress={() => setUnidadModalVisible(true)}
+          >
+            <Text style={[styles.unidadChipText, unidadEsOtra && styles.unidadChipTextActive]}>
+              {unidadEsOtra ? UNIDAD_LABELS[unidad] : 'Otros'}
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={13}
+              color={unidadEsOtra ? colors.blanco : colors.ink60}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
+        </View>
 
         <Text style={[styles.fieldLabel, { marginTop: 16 }]}>PRECIO POR UNIDAD (ARS)</Text>
         <TextInput
@@ -421,6 +429,87 @@ function StepDetalle({
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal visible={ubicacionModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Ubicación</Text>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setUbicacionModalVisible(false)}>
+              <Ionicons name="close" size={20} color={colors.ink} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ padding: 16, paddingBottom: 8 }}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar parcela..."
+              placeholderTextColor={colors.niebla}
+              value={search}
+              onChangeText={setSearch}
+            />
+          </View>
+          <SectionList
+            sections={ubicacionSections}
+            keyExtractor={(item) => item.id}
+            stickySectionHeadersEnabled
+            ListHeaderComponent={() => (
+              <TouchableOpacity
+                style={[styles.listItem, !parcela && { backgroundColor: colors.crema }]}
+                onPress={() => { setParcela(null); setUbicacionModalVisible(false) }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.listItemTitle, { color: colors.ink60 }]}>Sin ubicación específica</Text>
+                {!parcela && <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />}
+              </TouchableOpacity>
+            )}
+            renderSectionHeader={({ section }) => (
+              <View style={[styles.sectionHeader, { borderLeftWidth: 3, borderLeftColor: parcelaColors[section.tipo] }]}>
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+              </View>
+            )}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => { setParcela(item); setUbicacionModalVisible(false) }}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.listItemTitle}>{item.nombre}</Text>
+                  {item.variedad && (
+                    <Text style={styles.parcelaItemSub}>{item.variedad.replace('_', ' ')}</Text>
+                  )}
+                </View>
+                {parcela?.id === item.id && (
+                  <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />
+                )}
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={() => <Text style={styles.emptyText}>Sin resultados</Text>}
+          />
+        </View>
+      </Modal>
+
+      <Modal visible={unidadModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Otras unidades</Text>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setUnidadModalVisible(false)}>
+              <Ionicons name="close" size={20} color={colors.ink} />
+            </TouchableOpacity>
+          </View>
+          {UNIDADES_OTRAS.map((u) => (
+            <TouchableOpacity
+              key={u}
+              style={[styles.listItem, { borderBottomWidth: 1, borderBottomColor: colors.hueso }]}
+              onPress={() => { setUnidad(u); setUnidadModalVisible(false) }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.listItemTitle}>{UNIDAD_LABELS[u]}</Text>
+              {unidad === u && <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -428,44 +517,51 @@ function StepDetalle({
 // ─── Step 3: Trabajadores ─────────────────────────────────────────────────────
 
 type Trabajador = { nombre: string; cantidad: number }
+type WorkerInput = { nombre: string; cantidad: string }
 
 function StepTrabajadores({
-  precio, onNext, onBack,
+  precio, onNext, onBack, onCancelar,
 }: {
   precio: number
   onNext: (trabajadores: Trabajador[]) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
-  const [workers, setWorkers] = useState<Trabajador[]>([{ nombre: '', cantidad: 1 }])
+  const [workers, setWorkers] = useState<WorkerInput[]>([{ nombre: '', cantidad: '1' }])
 
   function setNombre(idx: number, v: string) {
     setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: v } : w))
   }
-  function setCantidad(idx: number, delta: number) {
-    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, cantidad: Math.max(1, w.cantidad + delta) } : w))
+  function setCantidad(idx: number, v: string) {
+    const cleaned = v.replace(/[^0-9.]/g, '')
+    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, cantidad: cleaned } : w))
   }
   function addWorker() {
-    setWorkers((prev) => [...prev, { nombre: '', cantidad: 1 }])
+    setWorkers((prev) => [...prev, { nombre: '', cantidad: '1' }])
   }
   function removeWorker(idx: number) {
     setWorkers((prev) => prev.filter((_, i) => i !== idx))
   }
 
   function handleNext() {
-    const valid = workers.filter((w) => w.nombre.trim())
-    if (valid.length === 0) {
+    const conNombre = workers.filter((w) => w.nombre.trim())
+    if (conNombre.length === 0) {
       Alert.alert('Error', 'Ingresá al menos un trabajador con nombre.')
       return
     }
-    onNext(valid)
+    if (conNombre.some((w) => !Number(w.cantidad) || Number(w.cantidad) <= 0)) {
+      Alert.alert('Error', 'Ingresá una cantidad válida para cada trabajador.')
+      return
+    }
+    onNext(conNombre.map((w) => ({ nombre: w.nombre.trim(), cantidad: Number(w.cantidad) })))
   }
 
-  const totalCant = workers.reduce((s, w) => s + w.cantidad, 0)
+  const totalCant = workers.reduce((s, w) => s + (Number(w.cantidad) || 0), 0)
   const totalMonto = precio * totalCant
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} />
+      <StepIndicator current={2} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Trabajadores</Text>
 
@@ -482,21 +578,21 @@ function StepTrabajadores({
                 autoCapitalize="words"
               />
               <View style={styles.workerBottomRow}>
-                <View style={{ flex: 1 }}>
+                <View>
                   <Text style={styles.fieldLabel}>CANTIDAD</Text>
-                  <View style={styles.miniStepperRow}>
-                    <TouchableOpacity style={styles.miniStepperBtn} onPress={() => setCantidad(idx, -1)}>
-                      <Ionicons name="remove" size={16} color={colors.ink} />
-                    </TouchableOpacity>
-                    <Text style={styles.miniStepperValue}>{w.cantidad}</Text>
-                    <TouchableOpacity style={styles.miniStepperBtn} onPress={() => setCantidad(idx, 1)}>
-                      <Ionicons name="add" size={16} color={colors.ink} />
-                    </TouchableOpacity>
-                  </View>
+                  <TextInput
+                    style={styles.cantidadInput}
+                    value={w.cantidad}
+                    onChangeText={(v) => setCantidad(idx, v)}
+                    placeholder="0"
+                    placeholderTextColor={colors.niebla}
+                    keyboardType="decimal-pad"
+                    selectTextOnFocus
+                  />
                 </View>
                 <View style={styles.workerAmountBox}>
                   <Text style={styles.workerAmountLabel}>MONTO</Text>
-                  <Text style={styles.workerAmountValue}>{formatMonto(precio * w.cantidad)}</Text>
+                  <Text style={styles.workerAmountValue}>{formatMonto(precio * (Number(w.cantidad) || 0))}</Text>
                 </View>
               </View>
             </View>
@@ -540,7 +636,7 @@ function StepTrabajadores({
 
 function StepConfirmar({
   tarea, fecha, parcela, unidad, precio, trabajadores,
-  onSuccess, onBack,
+  onSuccess, onBack, onCancelar,
 }: {
   tarea: string
   fecha: string
@@ -550,6 +646,7 @@ function StepConfirmar({
   trabajadores: Trabajador[]
   onSuccess: () => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
   const totalCant = trabajadores.reduce((s, w) => s + w.cantidad, 0)
@@ -578,7 +675,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={3} />
+      <StepIndicator current={3} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar</Text>
 
@@ -693,7 +790,7 @@ function RecentList({ registros, onRefresh }: { registros: RegistroTrabajo[]; on
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'tarea_fecha' | 'detalle' | 'trabajadores' | 'confirmar' | 'success'
+type Step = 'list' | 'tarea_fecha' | 'detalle' | 'trabajadores' | 'confirmar'
 
 export default function TareasScreen() {
   const [step, setStep] = useState<Step>('list')
@@ -701,6 +798,7 @@ export default function TareasScreen() {
   const [registros, setRegistros] = useState<RegistroTrabajo[]>([])
   const [loadingParcelas, setLoadingParcelas] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
 
   const [selTarea, setSelTarea] = useState('')
   const [selFecha, setSelFecha] = useState(isoToday())
@@ -731,6 +829,12 @@ export default function TareasScreen() {
 
   useEffect(() => { loadParcelas(); loadRegistros() }, [loadParcelas, loadRegistros])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1800)
+    return () => clearTimeout(t)
+  }, [toast])
+
   function onRefresh() { setRefreshing(true); loadRegistros() }
 
   function resetWizard() {
@@ -739,10 +843,22 @@ export default function TareasScreen() {
     setStep('list')
   }
 
+  function handleCancelar() {
+    Alert.alert(
+      'Cancelar carga',
+      'Se van a perder los datos ingresados. ¿Querés salir?',
+      [
+        { text: 'Seguir cargando', style: 'cancel' },
+        { text: 'Salir', style: 'destructive', onPress: resetWizard },
+      ],
+    )
+  }
+
   if (step === 'tarea_fecha') {
     return (
       <StepTareaFecha
         onNext={(t, f) => { setSelTarea(t); setSelFecha(f); setStep('detalle') }}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -754,6 +870,7 @@ export default function TareasScreen() {
         parcelas={parcelas}
         onNext={(p, u, pr) => { setSelParcela(p); setSelUnidad(u); setSelPrecio(pr); setStep('trabajadores') }}
         onBack={() => setStep('tarea_fecha')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -764,6 +881,7 @@ export default function TareasScreen() {
         precio={selPrecio}
         onNext={(t) => { setSelTrabajadores(t); setStep('confirmar') }}
         onBack={() => setStep('detalle')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -777,46 +895,40 @@ export default function TareasScreen() {
         unidad={selUnidad}
         precio={selPrecio}
         trabajadores={selTrabajadores}
-        onSuccess={() => { setStep('success'); loadRegistros() }}
+        onSuccess={() => { resetWizard(); loadRegistros(); setToast('Tarea cargada ✓') }}
         onBack={() => setStep('trabajadores')}
+        onCancelar={handleCancelar}
       />
     )
   }
 
-  if (step === 'success') {
-    return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIcon}>
-          <Ionicons name="checkmark" size={40} color={colors.blanco} />
-        </View>
-        <Text style={[styles.successTitle, { fontFamily: fonts.display }]}>Guardado</Text>
-        <Text style={styles.successSub}>Los registros se cargaron al sistema</Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={resetWizard}>
-          <Text style={styles.primaryBtnText}>Nueva carga</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.burdeos[600]} />
-      }
-    >
-      <TouchableOpacity style={styles.newBtn} onPress={() => setStep('tarea_fecha')} activeOpacity={0.85}>
-        <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
-        <Text style={styles.newBtnText}>Nueva carga de tareas</Text>
-      </TouchableOpacity>
-
-      {loadingParcelas ? (
-        <ActivityIndicator color={colors.burdeos[600]} style={{ marginTop: 24 }} />
-      ) : (
-        <RecentList registros={registros} onRefresh={onRefresh} />
+    <View style={{ flex: 1 }}>
+      {toast && (
+        <View style={styles.toast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
       )}
-    </ScrollView>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.burdeos[600]} />
+        }
+      >
+        <TouchableOpacity style={styles.newBtn} onPress={() => setStep('tarea_fecha')} activeOpacity={0.85}>
+          <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+          <Text style={styles.newBtnText}>Nueva carga de tareas</Text>
+        </TouchableOpacity>
+
+        {loadingParcelas ? (
+          <ActivityIndicator color={colors.burdeos[600]} style={{ marginTop: 24 }} />
+        ) : (
+          <RecentList registros={registros} onRefresh={onRefresh} />
+        )}
+      </ScrollView>
+    </View>
   )
 }
 
@@ -871,29 +983,13 @@ const styles = StyleSheet.create({
   unidadChipText: { fontSize: 13, fontWeight: '600', color: colors.ink },
   unidadChipTextActive: { color: colors.blanco },
 
-  // parcela list
+  // parcela list (modal de ubicación)
   searchInput: {
     height: 46, backgroundColor: colors.blanco, borderRadius: 12,
     borderWidth: 1, borderColor: colors.hueso,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 8,
   },
-  parcelaList: {
-    backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso, overflow: 'hidden',
-  },
-  parcelaItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 14,
-    borderBottomWidth: 1, borderBottomColor: colors.hueso,
-  },
-  parcelaItemActive: { backgroundColor: colors.burdeos[600] },
-  parcelaItemText: { fontSize: 14, fontWeight: '600', color: colors.ink },
   parcelaItemSub: { fontSize: 12, color: colors.ink60, marginTop: 1, textTransform: 'capitalize' },
-  ghostBtn: {
-    marginTop: 8, paddingVertical: 12, alignItems: 'center',
-    borderRadius: 10, borderWidth: 1, borderColor: colors.hueso, backgroundColor: colors.blanco,
-  },
-  ghostBtnText: { color: colors.ink60, fontSize: 13, fontWeight: '500' },
 
   // worker card
   workerCard: {
@@ -904,12 +1000,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   workerBottomRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  miniStepperRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  miniStepperBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center',
+  cantidadInput: {
+    height: 44, minWidth: 72, backgroundColor: colors.hueso, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.hueso, textAlign: 'center',
+    fontSize: 20, fontWeight: '800', color: colors.ink, paddingHorizontal: 8,
   },
-  miniStepperValue: { fontSize: 22, fontWeight: '800', color: colors.ink, minWidth: 32, textAlign: 'center' },
   workerAmountBox: { flex: 1, alignItems: 'flex-end' },
   workerAmountLabel: { fontSize: 9, fontWeight: '700', color: colors.niebla, letterSpacing: 0.5, textTransform: 'uppercase' },
   workerAmountValue: { fontSize: 16, fontWeight: '800', color: colors.burdeos[600] },
@@ -1010,20 +1105,16 @@ const styles = StyleSheet.create({
   emptyStateTitle: { fontSize: 15, fontWeight: '600', color: colors.ink60, marginTop: 12 },
   emptyText: { color: colors.niebla, textAlign: 'center', paddingVertical: 24 },
 
-  // success
-  successContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: colors.hueso, padding: 32,
+  // toast
+  toast: {
+    position: 'absolute', top: 16, left: 20, right: 20, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.burdeos[600], borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 16,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
-  successIcon: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: colors.burdeos[600],
-    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    shadowColor: colors.burdeos[600],
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-  },
-  successTitle: { fontSize: 26, color: colors.ink, marginBottom: 8 },
-  successSub: { fontSize: 15, color: colors.ink60, marginBottom: 32, textAlign: 'center' },
+  toastText: { color: colors.blanco, fontSize: 14, fontWeight: '700' },
 
   // modal
   modalHeader: {
