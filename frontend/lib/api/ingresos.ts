@@ -1,46 +1,53 @@
 import api from '@/lib/api'
 
-export const PRODUCTO_INGRESO_VALUES = ['uva_fresca', 'pasa', 'mosto', 'otro'] as const
-export type ProductoIngreso = (typeof PRODUCTO_INGRESO_VALUES)[number]
-
-export const VARIEDAD_VALUES = [
-  'flame', 'red_globe', 'fiesta', 'bonarda',
-  'sultanina', 'syrah', 'aspirant', 'alfalfa', 'otro',
+export const DESTINO_INGRESO_VALUES = [
+  'uva_mesa', 'bodega', 'pasa', 'alfalfa', 'cebolla', 'sandia', 'alquiler', 'otro',
 ] as const
-export type VariedadUva = (typeof VARIEDAD_VALUES)[number]
+export type DestinoIngreso = (typeof DESTINO_INGRESO_VALUES)[number]
 
-export const PRODUCTO_INGRESO_LABELS: Record<ProductoIngreso, string> = {
-  uva_fresca: 'Uva Fresca',
+export const DESTINO_INGRESO_LABELS: Record<DestinoIngreso, string> = {
+  uva_mesa: 'Uva de Mesa',
+  bodega: 'Bodega',
   pasa: 'Pasa',
-  mosto: 'Mosto',
+  alfalfa: 'Alfalfa',
+  cebolla: 'Cebolla',
+  sandia: 'Sandía',
+  alquiler: 'Alquiler',
   otro: 'Otro',
 }
 
-export const VARIEDAD_LABELS: Record<VariedadUva, string> = {
-  flame: 'Flame',
-  red_globe: 'Red Globe',
-  fiesta: 'Fiesta',
-  bonarda: 'Bonarda',
-  sultanina: 'Sultanina',
-  syrah: 'Syrah',
-  aspirant: 'Aspirant',
-  alfalfa: 'Alfalfa',
-  otro: 'Otro',
+export const FORMA_PAGO_INGRESO_VALUES = [
+  'efectivo', 'transferencia', 'cheque', 'echeque', 'credito',
+] as const
+export type FormaPagoIngreso = (typeof FORMA_PAGO_INGRESO_VALUES)[number]
+
+export const FORMA_PAGO_INGRESO_LABELS: Record<FormaPagoIngreso, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  cheque: 'Cheque',
+  echeque: 'E-Cheque',
+  credito: 'Crédito',
 }
+
+// forma_pago values that carry cheque-specific fields (banco, n_cheque, f_pago, uso_cheque).
+export const FORMAS_PAGO_CHEQUE: readonly FormaPagoIngreso[] = ['cheque', 'echeque']
 
 export interface IngresoCreate {
   fecha: string
-  cliente: string
-  producto: ProductoIngreso
-  variedad?: VariedadUva
-  kg_totales?: number
-  precio_por_kg?: number
+  destino: DestinoIngreso
+  comprador: string
+  forma_pago: FormaPagoIngreso
+  estado?: string
+  cuenta_destino?: string
+  banco?: string
+  n_cheque?: string
+  f_pago?: string
+  uso_cheque?: string
   monto: number
   moneda: 'ars' | 'usd'
   tipo_cambio?: number
   origen: 'oficial' | 'no_oficial'
   finca: 'los_mimbres' | 'media_agua' | 'caucete'
-  forma_pago: 'efectivo' | 'transferencia' | 'cheque' | 'credito'
   descripcion?: string
 }
 
@@ -53,11 +60,13 @@ export interface IngresoResponse extends IngresoCreate {
 export interface IngresosFilter {
   fecha_desde?: string
   fecha_hasta?: string
-  cliente?: string
-  producto?: string
+  comprador?: string
+  destino?: string
+  forma_pago?: string
   origen?: string
   finca?: string
   moneda?: string
+  solo_cheques_disponibles?: boolean
   skip?: number
   limit?: number
 }

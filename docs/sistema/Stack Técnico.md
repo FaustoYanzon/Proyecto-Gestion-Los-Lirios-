@@ -41,6 +41,8 @@ tags: [sistema, stack]
 - **Expo 54**
 - **React Native 0.81**
 - **TypeScript**
+- **expo-updates** — actualizaciones OTA (desde 2026-07-12, ver [[2026-07-12-ota-y-ux-cargar-tarea]]). Canales por build profile: `development`/`preview`/`production`. `runtimeVersion` policy `appVersion`.
+- **react-native-web** — solo para poder correr `expo start --web` como preview de desarrollo/testing; el target real sigue siendo Android/iOS nativo.
 
 ## Herramientas de desarrollo
 
@@ -58,11 +60,31 @@ tags: [sistema, stack]
 | `1cac1b6d2e3d_add_referencia_id_to_egresos.py` | referencia_id en egresos |
 | `15b70dabafed_add_registros_cosecha.py` | Registros de cosecha |
 | `a3f8c2d1e9b7_push_tokens.py` | Tokens push (notificaciones) |
-| `a4244d685964_add_performance_indexes.py` | Índices de performance |
+| `a4244d685964_add_performance_indexes.py` | Índices de performance + entidad `Trabajador` |
 | `b7e2c1a4f9d3_add_token_version_to_users.py` | `token_version` en `users` (invalidación de sesión) |
+| `ac50bb4dc8a9_add_presupuestos_and_metas_produccion.py` | Presupuestos y metas de producción (dashboards D1-D4) |
+| `d4e7b2c9f1a5_add_kpi_views.py` | Vistas SQL para KPIs de dashboards |
+| `e8a1c4d7b3f2_add_comprador_view.py` | Vista de comprador |
+| `f2b6d9e4a8c1_add_mo_parcela_mes_view.py` | Vista mano de obra por parcela/mes — **head actual** |
+
+Cadena lineal, un solo head confirmado (`alembic heads`), sin conflictos.
 
 > ⚠️ No editar archivos de migración ya commiteados.
+> ✅ El venv de desarrollo corre Python 3.14.3, pero `backend/runtime.txt` fija `python-3.12` para el deploy real (Railway). Validado 2026-07-10 contra Python 3.12.10 (`venv312`), 11/11 tests passing — ya no es un riesgo abierto.
+
+## Deploy (producción desde 2026-07-10/11)
+
+| Servicio | Plataforma | URL |
+|---|---|---|
+| Backend | Railway | `proyecto-gestion-los-lirios-production.up.railway.app` |
+| Frontend | Vercel | `frontend-six-jade-79.vercel.app` |
+| Mobile | EAS (build `preview`, distribución interna) | ver [[2026-07-11-deploy-piloto-completado]] |
+
+Detalle completo (URLs, problemas resueltos, commits): [[2026-07-11-deploy-piloto-completado]].
 
 ## Ver también
 
 - [[Arquitectura]]
+- [[Checklist Deploy de Prueba (Semana Piloto)]]
+- [[2026-07-11-deploy-piloto-completado]]
+- [[2026-07-12-ota-y-ux-cargar-tarea]]

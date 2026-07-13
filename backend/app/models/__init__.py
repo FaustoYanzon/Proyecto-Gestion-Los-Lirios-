@@ -3,13 +3,13 @@ from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.push_token import PushToken
 from app.models.finanzas import (
     ClasificacionEgreso,
+    DestinoIngreso,
     Egreso,
     Finca,
     FormaPago,
     Ingreso,
     MonedaTipo,
     OrigenPago,
-    ProductoIngreso,
     TipoEgreso,
 )
 from app.models.presupuesto import (
@@ -45,7 +45,7 @@ __all__ = [
     "Finca",
     "FormaPago",
     "MonedaTipo",
-    "ProductoIngreso",
+    "DestinoIngreso",
     "TipoEgreso",
     "ClasificacionEgreso",
     "Egreso",

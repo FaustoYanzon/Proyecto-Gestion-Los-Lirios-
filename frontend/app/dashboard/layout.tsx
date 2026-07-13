@@ -88,6 +88,7 @@ const SUB_NAVS: SubNav[] = [
     items: [
       { href: '/dashboard/finanzas/egresos',     label: 'Egresos'     },
       { href: '/dashboard/finanzas/ingresos',    label: 'Ingresos'    },
+      { href: '/dashboard/finanzas/cheques',      label: 'Cheques'      },
       { href: '/dashboard/finanzas/presupuesto',  label: 'Presupuesto'  },
       { href: '/dashboard/finanzas/dashboard',    label: 'Dashboard'    },
       { href: '/dashboard/finanzas/mano-de-obra', label: 'Mano de Obra' },
@@ -132,6 +133,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname  = usePathname()
   const router    = useRouter()
   const user      = useAuthStore((s) => s.user)
+  const isLoading = useAuthStore((s) => s.isLoading)
   const clearUser = useAuthStore((s) => s.clearUser)
   const [cmdOpen, setCmdOpen] = useState(false)
 
@@ -157,6 +159,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
+
+  // Auth guard: without this, an expired/missing token left the user stranded
+  // on the current URL with a half-rendered dashboard instead of being sent to /login.
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login')
+    }
+  }, [isLoading, user, router])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white">
+        <div
+          className="h-8 w-8 rounded-full border-2 border-[#fbfaf6] animate-spin"
+          style={{ borderTopColor: '#7a1f2c' }}
+          role="status"
+          aria-label="Cargando"
+        />
+      </div>
+    )
+  }
+
+  if (!user) {
+    // Redirect is in flight (see effect above) — render nothing to avoid a content flash.
+    return null
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">

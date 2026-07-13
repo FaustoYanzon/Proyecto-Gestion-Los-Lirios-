@@ -57,7 +57,7 @@ export default function CampanaSwitcher() {
       {open && (
         <div
           className="absolute left-0 top-full mt-1.5 w-44 rounded-[10px]
-                     border border-[#fbfaf6] bg-white z-50 overflow-hidden"
+                     border border-[#fbfaf6] bg-white z-[1000] overflow-hidden"
           style={{ boxShadow: '0 4px 12px rgba(31,26,23,0.08)' }}
         >
           {campanas.map((c) => (

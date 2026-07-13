@@ -10,7 +10,6 @@ from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Index, Numeri
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.parcela import VariedadUva
 
 if TYPE_CHECKING:
     from app.models.parcela import Parcela
@@ -32,6 +31,7 @@ class FormaPago(str, enum.Enum):
     efectivo = "efectivo"
     transferencia = "transferencia"
     cheque = "cheque"
+    echeque = "echeque"
     credito = "credito"
 
 
@@ -40,10 +40,14 @@ class MonedaTipo(str, enum.Enum):
     usd = "usd"
 
 
-class ProductoIngreso(str, enum.Enum):
-    uva_fresca = "uva_fresca"
+class DestinoIngreso(str, enum.Enum):
+    uva_mesa = "uva_mesa"
+    bodega = "bodega"
     pasa = "pasa"
-    mosto = "mosto"
+    alfalfa = "alfalfa"
+    cebolla = "cebolla"
+    sandia = "sandia"
+    alquiler = "alquiler"
     otro = "otro"
 
 
@@ -146,27 +150,37 @@ class Egreso(Base):
 
 
 class Ingreso(Base):
+    """A cobro (collection) — one row per payment received, mirroring the
+    farm's "BD COBROS" ledger. Not a per-kg uva sale record: destino is the
+    income category (uva de mesa, bodega, pasa, ...), comprador is free text.
+    """
+
     __tablename__ = "ingresos"
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
-    cliente: Mapped[str] = mapped_column(String(200), nullable=False)
-    producto: Mapped[ProductoIngreso] = mapped_column(
-        SAEnum(ProductoIngreso), nullable=False
-    )
-    variedad: Mapped[VariedadUva | None] = mapped_column(
-        SAEnum(VariedadUva), nullable=True
-    )
-    kg_totales: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    precio_por_kg: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
+    destino: Mapped[DestinoIngreso] = mapped_column(SAEnum(DestinoIngreso), nullable=False)
+    comprador: Mapped[str] = mapped_column(String(200), nullable=False)
+    forma_pago: Mapped[FormaPago] = mapped_column(SAEnum(FormaPago), nullable=False)
+    # Free text on purpose: "estado" (NR/FACT/...) and "cuenta_destino" (caja,
+    # BSJ, or a person's name) come from an open-ended source spreadsheet —
+    # locking them to an enum would reject values Fausto hasn't used yet.
+    estado: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cuenta_destino: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Cheque-only fields — populated when forma_pago is cheque/echeque.
+    banco: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    n_cheque: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    f_pago: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # What the cheque was used for once spent. NULL/empty = still available.
+    # Drives the cheque tracking screen (/dashboard/finanzas/cheques).
+    uso_cheque: Mapped[str | None] = mapped_column(String(200), nullable=True)
     monto: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     moneda: Mapped[MonedaTipo] = mapped_column(SAEnum(MonedaTipo), nullable=False)
     tipo_cambio: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     origen: Mapped[OrigenPago] = mapped_column(SAEnum(OrigenPago), nullable=False)
     finca: Mapped[Finca] = mapped_column(SAEnum(Finca), nullable=False)
-    forma_pago: Mapped[FormaPago] = mapped_column(SAEnum(FormaPago), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
@@ -185,6 +199,7 @@ class Ingreso(Base):
         Index("ix_ingresos_fecha", "fecha"),
         Index("ix_ingresos_finca_fecha", "finca", "fecha"),
         Index("ix_ingresos_moneda_fecha", "moneda", "fecha"),
+        Index("ix_ingresos_forma_pago", "forma_pago"),
     )
 
     created_by_user: Mapped[User] = relationship("User", back_populates="ingresos")

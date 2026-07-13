@@ -6,9 +6,10 @@ import { Plus, X, Download } from 'lucide-react'
 import {
   getIngresos,
   deleteIngreso,
-  PRODUCTO_INGRESO_VALUES,
-  PRODUCTO_INGRESO_LABELS,
-  VARIEDAD_LABELS,
+  DESTINO_INGRESO_VALUES,
+  DESTINO_INGRESO_LABELS,
+  FORMA_PAGO_INGRESO_VALUES,
+  FORMA_PAGO_INGRESO_LABELS,
   type IngresosFilter,
   type IngresoResponse,
 } from '@/lib/api/ingresos'
@@ -68,14 +69,15 @@ function Sheet({ open, onClose, title, children }: SheetProps) {
 const FINCA_LABELS_I: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete' }
 
 function exportCSV(data: IngresoResponse[]) {
-  const headers = ['Fecha', 'Cliente', 'Producto', 'Variedad', 'Kg', '$/Kg', 'Monto', 'Moneda', 'Finca', 'Origen']
+  const headers = ['Fecha', 'Comprador', 'Destino', 'Estado', 'Forma de Pago', 'Banco', 'N° Cheque', 'Monto', 'Moneda', 'Finca', 'Origen']
   const rows = data.map((i) => [
     i.fecha,
-    i.cliente,
-    PRODUCTO_INGRESO_LABELS[i.producto] ?? i.producto,
-    i.variedad ? (VARIEDAD_LABELS[i.variedad] ?? i.variedad) : '',
-    i.kg_totales ?? '',
-    i.precio_por_kg ?? '',
+    i.comprador,
+    DESTINO_INGRESO_LABELS[i.destino] ?? i.destino,
+    i.estado ?? '',
+    FORMA_PAGO_INGRESO_LABELS[i.forma_pago] ?? i.forma_pago,
+    i.banco ?? '',
+    i.n_cheque ?? '',
     i.monto,
     i.moneda.toUpperCase(),
     FINCA_LABELS_I[i.finca] ?? i.finca,
@@ -195,26 +197,40 @@ export default function IngresosPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Cliente</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Comprador</label>
             <input
               type="text"
-              placeholder="Buscar cliente..."
-              value={filtros.cliente ?? ''}
-              onChange={(e) => handleFiltroChange('cliente', e.target.value)}
+              placeholder="Buscar comprador..."
+              value={filtros.comprador ?? ''}
+              onChange={(e) => handleFiltroChange('comprador', e.target.value)}
               className={inputCls}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Producto</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Destino</label>
             <select
-              value={filtros.producto ?? ''}
-              onChange={(e) => handleFiltroChange('producto', e.target.value)}
+              value={filtros.destino ?? ''}
+              onChange={(e) => handleFiltroChange('destino', e.target.value)}
               className={selectCls}
             >
               <option value="">Todos</option>
-              {PRODUCTO_INGRESO_VALUES.map((p) => (
-                <option key={p} value={p}>{PRODUCTO_INGRESO_LABELS[p]}</option>
+              {DESTINO_INGRESO_VALUES.map((d) => (
+                <option key={d} value={d}>{DESTINO_INGRESO_LABELS[d]}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Forma de Pago</label>
+            <select
+              value={filtros.forma_pago ?? ''}
+              onChange={(e) => handleFiltroChange('forma_pago', e.target.value)}
+              className={selectCls}
+            >
+              <option value="">Todas</option>
+              {FORMA_PAGO_INGRESO_VALUES.map((f) => (
+                <option key={f} value={f}>{FORMA_PAGO_INGRESO_LABELS[f]}</option>
               ))}
             </select>
           </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,32 +9,27 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   createIngreso,
   updateIngreso,
-  PRODUCTO_INGRESO_VALUES,
-  PRODUCTO_INGRESO_LABELS,
-  VARIEDAD_VALUES,
-  VARIEDAD_LABELS,
+  DESTINO_INGRESO_VALUES,
+  DESTINO_INGRESO_LABELS,
+  FORMA_PAGO_INGRESO_VALUES,
+  FORMA_PAGO_INGRESO_LABELS,
+  FORMAS_PAGO_CHEQUE,
   type IngresoResponse,
-  type ProductoIngreso,
-  type VariedadUva,
+  type FormaPagoIngreso,
 } from '@/lib/api/ingresos'
 
 const schema = z
   .object({
     fecha: z.string().min(1, 'Requerido'),
-    cliente: z.string().min(1, 'Requerido'),
-    producto: z.enum(PRODUCTO_INGRESO_VALUES, { error: 'Requerido' }),
-    variedad: z.preprocess(
-      (v) => (!v || v === '' ? undefined : v),
-      z.enum(VARIEDAD_VALUES).optional()
-    ),
-    kg_totales: z.preprocess(
-      (v) => (!v || v === '' ? undefined : Number(v)),
-      z.number().positive().optional()
-    ),
-    precio_por_kg: z.preprocess(
-      (v) => (!v || v === '' ? undefined : Number(v)),
-      z.number().positive().optional()
-    ),
+    destino: z.enum(DESTINO_INGRESO_VALUES, { error: 'Requerido' }),
+    comprador: z.string().min(1, 'Requerido'),
+    forma_pago: z.enum(FORMA_PAGO_INGRESO_VALUES, { error: 'Requerido' }),
+    estado: z.string().optional(),
+    cuenta_destino: z.string().optional(),
+    banco: z.string().optional(),
+    n_cheque: z.string().optional(),
+    f_pago: z.string().optional(),
+    uso_cheque: z.string().optional(),
     monto: z.coerce.number({ error: 'Requerido' }).positive('Debe ser mayor a 0'),
     moneda: z.enum(['ars', 'usd'] as const),
     tipo_cambio: z.preprocess(
@@ -43,7 +38,6 @@ const schema = z
     ),
     origen: z.enum(['oficial', 'no_oficial'] as const),
     finca: z.enum(['los_mimbres', 'media_agua', 'caucete'] as const, { error: 'Requerido' }),
-    forma_pago: z.enum(['efectivo', 'transferencia', 'cheque', 'credito'] as const, { error: 'Requerido' }),
     descripcion: z.string().optional(),
   })
   .refine((d) => d.moneda !== 'usd' || (d.tipo_cambio != null && d.tipo_cambio > 0), {
@@ -69,54 +63,50 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!ingreso
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const skipAutoCalc = useRef(isEdit)
 
   const {
     register,
     handleSubmit,
     watch,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
     defaultValues: isEdit
       ? {
           fecha: ingreso.fecha,
-          cliente: ingreso.cliente,
-          producto: ingreso.producto,
-          variedad: ingreso.variedad,
-          kg_totales: ingreso.kg_totales,
-          precio_por_kg: ingreso.precio_por_kg,
+          destino: ingreso.destino,
+          comprador: ingreso.comprador,
+          forma_pago: ingreso.forma_pago,
+          estado: ingreso.estado ?? '',
+          cuenta_destino: ingreso.cuenta_destino ?? '',
+          banco: ingreso.banco ?? '',
+          n_cheque: ingreso.n_cheque ?? '',
+          f_pago: ingreso.f_pago ?? '',
+          uso_cheque: ingreso.uso_cheque ?? '',
           monto: ingreso.monto,
           moneda: ingreso.moneda,
           tipo_cambio: ingreso.tipo_cambio,
           origen: ingreso.origen,
           finca: ingreso.finca,
-          forma_pago: ingreso.forma_pago,
           descripcion: ingreso.descripcion ?? '',
         }
       : {
           fecha: today,
           moneda: 'ars',
           origen: 'oficial',
+          estado: '',
+          cuenta_destino: '',
+          banco: '',
+          n_cheque: '',
+          f_pago: '',
+          uso_cheque: '',
           descripcion: '',
         },
   })
 
   const moneda = watch('moneda')
-  const kgTotales = watch('kg_totales')
-  const precioPorKg = watch('precio_por_kg')
-
-  // Auto-calculate monto from kg × price (skip on first render in edit mode)
-  useEffect(() => {
-    if (skipAutoCalc.current) {
-      skipAutoCalc.current = false
-      return
-    }
-    if (kgTotales && precioPorKg && kgTotales > 0 && precioPorKg > 0) {
-      setValue('monto', parseFloat((kgTotales * precioPorKg).toFixed(2)))
-    }
-  }, [kgTotales, precioPorKg, setValue])
+  const formaPago = watch('forma_pago') as FormaPagoIngreso | undefined
+  const esCheque = formaPago ? FORMAS_PAGO_CHEQUE.includes(formaPago) : false
 
   async function onSubmit(data: FormData) {
     try {
@@ -124,6 +114,12 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
       const payload = {
         ...data,
         tipo_cambio: data.moneda === 'usd' ? data.tipo_cambio : undefined,
+        // Cheque-only fields: clear them if the payment method changed away from cheque,
+        // so a stale n_cheque/banco doesn't linger on an efectivo/transferencia record.
+        banco: esCheque ? data.banco : undefined,
+        n_cheque: esCheque ? data.n_cheque : undefined,
+        f_pago: esCheque ? data.f_pago : undefined,
+        uso_cheque: esCheque ? data.uso_cheque : undefined,
       }
       if (isEdit) {
         await updateIngreso(ingreso.id, payload)
@@ -148,77 +144,96 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
           {errors.fecha && <p className={err}>{errors.fecha.message}</p>}
         </div>
 
-        {/* Cliente */}
+        {/* Comprador */}
         <div>
-          <label className={lbl}>Cliente / Comprador</label>
+          <label className={lbl}>Comprador</label>
           <input
             type="text"
-            placeholder="Ej: Campero, Cegupa..."
-            {...register('cliente')}
+            placeholder="Ej: Carrascosa, Casares..."
+            {...register('comprador')}
             className={field}
           />
-          {errors.cliente && <p className={err}>{errors.cliente.message}</p>}
+          {errors.comprador && <p className={err}>{errors.comprador.message}</p>}
         </div>
 
-        {/* Producto */}
+        {/* Destino */}
         <div>
-          <label className={lbl}>Producto</label>
-          <select {...register('producto')} className={field}>
+          <label className={lbl}>Destino</label>
+          <select {...register('destino')} className={field}>
             <option value="">Seleccionar...</option>
-            {PRODUCTO_INGRESO_VALUES.map((p) => (
-              <option key={p} value={p}>{PRODUCTO_INGRESO_LABELS[p]}</option>
+            {DESTINO_INGRESO_VALUES.map((d) => (
+              <option key={d} value={d}>{DESTINO_INGRESO_LABELS[d]}</option>
             ))}
           </select>
-          {errors.producto && <p className={err}>{errors.producto.message}</p>}
+          {errors.destino && <p className={err}>{errors.destino.message}</p>}
         </div>
 
-        {/* Variedad */}
+        {/* Estado */}
         <div>
-          <label className={lbl}>Variedad <span className="text-gray-400 font-normal">(opcional)</span></label>
-          <select {...register('variedad')} className={field}>
-            <option value="">Sin especificar</option>
-            {VARIEDAD_VALUES.filter(v => v !== 'alfalfa').map((v) => (
-              <option key={v} value={v}>{VARIEDAD_LABELS[v]}</option>
+          <label className={lbl}>Estado <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <input
+            type="text"
+            placeholder="Ej: NR, FACT..."
+            {...register('estado')}
+            className={field}
+          />
+        </div>
+
+        {/* Forma de pago */}
+        <div>
+          <label className={lbl}>Forma de Pago</label>
+          <select {...register('forma_pago')} className={field}>
+            <option value="">Seleccionar...</option>
+            {FORMA_PAGO_INGRESO_VALUES.map((f) => (
+              <option key={f} value={f}>{FORMA_PAGO_INGRESO_LABELS[f]}</option>
             ))}
           </select>
+          {errors.forma_pago && <p className={err}>{errors.forma_pago.message}</p>}
         </div>
 
-        {/* Kg totales */}
+        {/* Cuenta destino */}
         <div>
-          <label className={lbl}>Kg Totales <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <label className={lbl}>Cuenta Destino <span className="text-gray-400 font-normal">(opcional)</span></label>
           <input
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            {...register('kg_totales')}
+            type="text"
+            placeholder="Ej: Caja, BSJ..."
+            {...register('cuenta_destino')}
             className={field}
           />
-          {errors.kg_totales && <p className={err}>{errors.kg_totales.message}</p>}
         </div>
 
-        {/* Precio por kg */}
-        <div>
-          <label className={lbl}>Precio por Kg <span className="text-gray-400 font-normal">(opcional)</span></label>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            placeholder="0.0000"
-            {...register('precio_por_kg')}
-            className={field}
-          />
-          {errors.precio_por_kg && <p className={err}>{errors.precio_por_kg.message}</p>}
-        </div>
+        {/* Campos de cheque — solo si forma_pago es cheque/echeque */}
+        {esCheque && (
+          <>
+            <div>
+              <label className={lbl}>Banco</label>
+              <input type="text" {...register('banco')} className={field} />
+            </div>
+            <div>
+              <label className={lbl}>N° Cheque</label>
+              <input type="text" {...register('n_cheque')} className={field} />
+            </div>
+            <div>
+              <label className={lbl}>Fecha de Pago del Cheque</label>
+              <input type="date" {...register('f_pago')} className={field} />
+            </div>
+            <div>
+              <label className={lbl}>
+                Uso del Cheque <span className="text-gray-400 font-normal">(vacío = disponible)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Ej: en qué se usó..."
+                {...register('uso_cheque')}
+                className={field}
+              />
+            </div>
+          </>
+        )}
 
-        {/* Monto (auto-filled if kg × precio) */}
+        {/* Monto */}
         <div>
-          <label className={lbl}>
-            Monto Total
-            {kgTotales && precioPorKg ? (
-              <span className="ml-2 text-xs text-green-600 font-normal">auto-calculado</span>
-            ) : null}
-          </label>
+          <label className={lbl}>Monto Total</label>
           <input
             type="number"
             step="0.01"
@@ -276,19 +291,6 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
           {errors.finca && <p className={err}>{errors.finca.message}</p>}
         </div>
 
-        {/* Forma de pago */}
-        <div>
-          <label className={lbl}>Forma de Pago</label>
-          <select {...register('forma_pago')} className={field}>
-            <option value="">Seleccionar...</option>
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="cheque">Cheque</option>
-            <option value="credito">Crédito</option>
-          </select>
-          {errors.forma_pago && <p className={err}>{errors.forma_pago.message}</p>}
-        </div>
-
       </div>
 
       {/* Descripción */}
@@ -299,7 +301,7 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
         <textarea
           {...register('descripcion')}
           rows={3}
-          placeholder="Descripción del ingreso..."
+          placeholder="Detalle del ingreso..."
           className={field}
         />
       </div>

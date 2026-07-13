@@ -47,7 +47,7 @@ export default function FincaSwitcher() {
       {open && (
         <div
           className="absolute left-0 top-full mt-1.5 w-52 rounded-[10px]
-                     border border-[#fbfaf6] bg-white z-50 overflow-hidden"
+                     border border-[#fbfaf6] bg-white z-[1000] overflow-hidden"
           style={{ boxShadow: '0 4px 12px rgba(31,26,23,0.08)' }}
         >
           {FINCAS.map((f) => (

@@ -56,7 +56,7 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
   const clienteMap = new Map<string, number[]>()
   for (const ing of ingresos) {
     if (ing.moneda !== 'ars') continue
-    const key = ing.cliente.toUpperCase()
+    const key = ing.comprador.toUpperCase()
     if (!clienteMap.has(key)) clienteMap.set(key, Array(12).fill(0))
     const idx = campaignIdx(ing.fecha, anioInicio)
     if (idx >= 0) clienteMap.get(key)![idx] += Number(ing.monto)

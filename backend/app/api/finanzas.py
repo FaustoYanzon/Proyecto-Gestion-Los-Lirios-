@@ -9,15 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_gerencial_up
 from app.models.finanzas import (
     ClasificacionEgreso,
+    DestinoIngreso,
     Egreso,
     Finca,
+    FormaPago,
     Ingreso,
     MonedaTipo,
     OrigenPago,
-    ProductoIngreso,
     TipoEgreso,
 )
-from app.models.parcela import Parcela, VariedadUva
+from app.models.parcela import Parcela
 from app.models.produccion import CicloCampana
 from app.models.user import User
 from app.schemas.finanzas import (
@@ -32,7 +33,7 @@ from app.schemas.finanzas import (
     IngresoCreate,
     IngresoResponse,
     IngresoUpdate,
-    IngresosPorProducto,
+    IngresosPorDestino,
     ResumenAnualDashboard,
     ResumenEgresoPorTipo,
 )
@@ -188,11 +189,15 @@ async def delete_egreso(
 async def list_ingresos(
     fecha_desde: date | None = Query(None),
     fecha_hasta: date | None = Query(None),
-    cliente: str | None = Query(None),
-    producto: ProductoIngreso | None = Query(None),
+    comprador: str | None = Query(None),
+    destino: DestinoIngreso | None = Query(None),
+    forma_pago: FormaPago | None = Query(None),
     origen: OrigenPago | None = Query(None),
     finca: Finca | None = Query(None),
     moneda: MonedaTipo | None = Query(None),
+    solo_cheques_disponibles: bool = Query(
+        False, description="Cheques cobrados (forma_pago cheque/echeque) sin uso_cheque asignado."
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
@@ -203,16 +208,23 @@ async def list_ingresos(
         stmt = stmt.where(Ingreso.fecha >= fecha_desde)
     if fecha_hasta is not None:
         stmt = stmt.where(Ingreso.fecha <= fecha_hasta)
-    if cliente is not None:
-        stmt = stmt.where(Ingreso.cliente.ilike(f"%{cliente}%"))
-    if producto is not None:
-        stmt = stmt.where(Ingreso.producto == producto)
+    if comprador is not None:
+        stmt = stmt.where(Ingreso.comprador.ilike(f"%{comprador}%"))
+    if destino is not None:
+        stmt = stmt.where(Ingreso.destino == destino)
+    if forma_pago is not None:
+        stmt = stmt.where(Ingreso.forma_pago == forma_pago)
     if origen is not None:
         stmt = stmt.where(Ingreso.origen == origen)
     if finca is not None:
         stmt = stmt.where(Ingreso.finca == finca)
     if moneda is not None:
         stmt = stmt.where(Ingreso.moneda == moneda)
+    if solo_cheques_disponibles:
+        stmt = stmt.where(
+            Ingreso.forma_pago.in_([FormaPago.cheque, FormaPago.echeque]),
+            (Ingreso.uso_cheque.is_(None)) | (Ingreso.uso_cheque == ""),
+        )
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all())
@@ -305,31 +317,26 @@ async def dashboard_resumen_anual(
 
     zero = Decimal("0")
 
-    ing_agg: dict[tuple, dict[str, Decimal]] = {}
+    ing_agg: dict[DestinoIngreso, dict[str, Decimal]] = {}
     for i in ingresos:
-        key = (i.producto, i.variedad)
+        key = i.destino
         if key not in ing_agg:
-            ing_agg[key] = {"monto_ars": zero, "monto_usd": zero, "kg_totales": zero}
+            ing_agg[key] = {"monto_ars": zero, "monto_usd": zero}
         if i.moneda == MonedaTipo.ars:
             ing_agg[key]["monto_ars"] += i.monto
         else:
             ing_agg[key]["monto_usd"] += i.monto
-        if i.kg_totales is not None:
-            ing_agg[key]["kg_totales"] += i.kg_totales
 
     total_egresos_ars = sum((e.monto for e in egresos if e.moneda == MonedaTipo.ars), zero)
     total_egresos_usd = sum((e.monto for e in egresos if e.moneda == MonedaTipo.usd), zero)
     total_ingresos_ars = sum((i.monto for i in ingresos if i.moneda == MonedaTipo.ars), zero)
     total_ingresos_usd = sum((i.monto for i in ingresos if i.moneda == MonedaTipo.usd), zero)
 
-    ingresos_por_producto = [
-        IngresosPorProducto(
-            producto=key[0].value if hasattr(key[0], "value") else str(key[0]),
-            variedad=key[1].value if key[1] is not None and hasattr(key[1], "value") else (str(key[1]) if key[1] is not None else None),
-            kg_totales=data["kg_totales"],
+    ingresos_por_destino = [
+        IngresosPorDestino(
+            destino=key.value if hasattr(key, "value") else str(key),
             monto_ars=data["monto_ars"],
             monto_usd=data["monto_usd"],
-            precio_promedio_kg_ars=data["monto_ars"] / data["kg_totales"] if data["kg_totales"] > 0 else None,
         )
         for key, data in ing_agg.items()
     ]
@@ -342,7 +349,7 @@ async def dashboard_resumen_anual(
         total_ingresos_usd=total_ingresos_usd,
         total_egresos_usd=total_egresos_usd,
         saldo_usd=total_ingresos_usd - total_egresos_usd,
-        ingresos_por_producto=ingresos_por_producto,
+        ingresos_por_destino=ingresos_por_destino,
     )
 
 
