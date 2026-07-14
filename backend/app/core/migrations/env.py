@@ -6,11 +6,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
 from app.core.database import Base
-import app.models.user  # noqa: F401
-import app.models.parcela  # noqa: F401
-import app.models.finanzas  # noqa: F401
-import app.models.trabajador  # noqa: F401
-import app.models.produccion  # noqa: F401
+
+# Single source of truth for model registration: the aggregator imports every
+# model module. Importing modules one by one here caused presupuesto/push_token
+# to be missing from Base.metadata -> autogenerate would emit DROP TABLE for
+# their tables. Never list individual model modules here again.
+import app.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

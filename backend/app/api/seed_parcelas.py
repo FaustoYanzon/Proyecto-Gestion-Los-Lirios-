@@ -5,6 +5,9 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
 
+# Register every model before ORM use (see app/core/seed.py for rationale).
+import app.models  # noqa: F401,E402
+
 PARCELAS: list[dict] = [
     # Parrales
     {"nombre": "Parral 2",          "tipo": "parral", "variedad": "flame",     "superficie_ha": 3.0,  "cabezal_riego": "1"},

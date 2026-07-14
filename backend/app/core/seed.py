@@ -8,6 +8,11 @@ from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 
+# Standalone scripts must register EVERY model before touching the ORM:
+# User has relationships to produccion/finanzas models, and SQLAlchemy fails
+# at mapper-configuration time if any related model module was never imported.
+import app.models  # noqa: F401,E402
+
 # Bootstrap super-admin credentials come from the environment, never from source
 # control. Set these once when provisioning an environment:
 #   SUPER_ADMIN_EMAIL=admin@losliriossa.com

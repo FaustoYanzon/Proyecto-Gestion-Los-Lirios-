@@ -22,6 +22,9 @@ from app.models.parcela import Parcela
 from app.models.produccion import CultivoCosecha, DestinoCosecha, RegistroCosecha, TipoEnvase
 from app.models.user import User
 
+# Register every model before ORM use (see app/core/seed.py for rationale).
+import app.models  # noqa: F401,E402
+
 EXCEL_PATH = Path(__file__).parent.parent.parent / "data" / "BD_Produccion.xlsx"
 
 PARCEL_MAP: dict[str, str] = {
