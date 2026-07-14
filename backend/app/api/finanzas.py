@@ -230,6 +230,26 @@ async def list_ingresos(
     return list(result.scalars().all())
 
 
+CUENTAS_DESTINO_SEED = ("CAJA", "BSJ", "MP CAMILO", "GM", "GALICIA NICO", "NARANJA NICO")
+
+
+@router.get("/ingresos/cuentas-destino", response_model=list[str])
+async def list_cuentas_destino(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> list[str]:
+    """Known accounts plus any distinct value typed on a previous Ingreso —
+    feeds the "+ Agregar nueva..." combobox in IngresoForm, so a new value
+    typed once by anyone stays available for everyone afterward."""
+    result = await db.execute(
+        select(Ingreso.cuenta_destino)
+        .where(Ingreso.cuenta_destino.is_not(None), Ingreso.cuenta_destino != "")
+        .distinct()
+    )
+    existentes = {row[0] for row in result.all()}
+    return sorted(set(CUENTAS_DESTINO_SEED) | existentes)
+
+
 @router.get("/ingresos/{ingreso_id}", response_model=IngresoResponse)
 async def get_ingreso(
     ingreso_id: str,

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DESTINO_INGRESO_LABELS,
+  ESTADO_INGRESO_LABELS,
   FORMA_PAGO_INGRESO_LABELS,
   type IngresoResponse,
 } from '@/lib/api/ingresos'
@@ -104,7 +105,9 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">
                     {DESTINO_INGRESO_LABELS[ing.destino] ?? ing.destino}
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-gray-500">{ing.estado || '—'}</td>
+                  <td className="px-3 py-3 whitespace-nowrap text-gray-500">
+                    {ing.estado ? ESTADO_INGRESO_LABELS[ing.estado] : '—'}
+                  </td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">
                     {FORMA_PAGO_INGRESO_LABELS[ing.forma_pago] ?? ing.forma_pago}
                   </td>

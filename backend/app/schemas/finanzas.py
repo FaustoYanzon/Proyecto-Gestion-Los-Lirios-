@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from app.models.finanzas import (
     ClasificacionEgreso,
     DestinoIngreso,
+    EstadoIngreso,
     Finca,
     FormaPago,
     MonedaTipo,
@@ -72,7 +73,7 @@ class IngresoBase(BaseModel):
     destino: DestinoIngreso
     comprador: str
     forma_pago: FormaPago
-    estado: str | None = None
+    estado: EstadoIngreso | None = None
     cuenta_destino: str | None = None
     banco: str | None = None
     n_cheque: str | None = None
@@ -95,7 +96,7 @@ class IngresoUpdate(BaseModel):
     destino: DestinoIngreso | None = None
     comprador: str | None = None
     forma_pago: FormaPago | None = None
-    estado: str | None = None
+    estado: EstadoIngreso | None = None
     cuenta_destino: str | None = None
     banco: str | None = None
     n_cheque: str | None = None

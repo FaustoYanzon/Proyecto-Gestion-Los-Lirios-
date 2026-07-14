@@ -16,6 +16,14 @@ export const DESTINO_INGRESO_LABELS: Record<DestinoIngreso, string> = {
   otro: 'Otro',
 }
 
+export const ESTADO_INGRESO_VALUES = ['no_registrado', 'facturado'] as const
+export type EstadoIngreso = (typeof ESTADO_INGRESO_VALUES)[number]
+
+export const ESTADO_INGRESO_LABELS: Record<EstadoIngreso, string> = {
+  no_registrado: 'No Registrado',
+  facturado: 'Facturado',
+}
+
 export const FORMA_PAGO_INGRESO_VALUES = [
   'efectivo', 'transferencia', 'cheque', 'echeque', 'credito',
 ] as const
@@ -37,7 +45,7 @@ export interface IngresoCreate {
   destino: DestinoIngreso
   comprador: string
   forma_pago: FormaPagoIngreso
-  estado?: string
+  estado?: EstadoIngreso
   cuenta_destino?: string
   banco?: string
   n_cheque?: string
@@ -73,6 +81,11 @@ export interface IngresosFilter {
 
 export async function getIngresos(params: IngresosFilter): Promise<IngresoResponse[]> {
   const { data } = await api.get('/finanzas/ingresos/', { params })
+  return data
+}
+
+export async function getCuentasDestino(): Promise<string[]> {
+  const { data } = await api.get('/finanzas/ingresos/cuentas-destino')
   return data
 }
 

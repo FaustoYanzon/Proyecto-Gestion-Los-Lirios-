@@ -51,6 +51,11 @@ class DestinoIngreso(str, enum.Enum):
     otro = "otro"
 
 
+class EstadoIngreso(str, enum.Enum):
+    no_registrado = "no_registrado"
+    facturado = "facturado"
+
+
 class TipoEgreso(str, enum.Enum):
     sueldos_personal = "sueldos_personal"
     produccion = "produccion"
@@ -164,10 +169,11 @@ class Ingreso(Base):
     destino: Mapped[DestinoIngreso] = mapped_column(SAEnum(DestinoIngreso), nullable=False)
     comprador: Mapped[str] = mapped_column(String(200), nullable=False)
     forma_pago: Mapped[FormaPago] = mapped_column(SAEnum(FormaPago), nullable=False)
-    # Free text on purpose: "estado" (NR/FACT/...) and "cuenta_destino" (caja,
-    # BSJ, or a person's name) come from an open-ended source spreadsheet —
-    # locking them to an enum would reject values Fausto hasn't used yet.
-    estado: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    estado: Mapped[EstadoIngreso | None] = mapped_column(SAEnum(EstadoIngreso), nullable=True)
+    # Free text on purpose: "cuenta_destino" (caja, BSJ, or a person's name)
+    # comes from an open-ended source spreadsheet — locking it to an enum
+    # would reject values Fausto hasn't used yet. The frontend offers known
+    # values plus previously-typed ones via GET /finanzas/ingresos/cuentas-destino.
     cuenta_destino: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Cheque-only fields — populated when forma_pago is cheque/echeque.
     banco: Mapped[str | None] = mapped_column(String(100), nullable=True)

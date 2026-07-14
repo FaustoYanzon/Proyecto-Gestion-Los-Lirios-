@@ -5,12 +5,15 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createIngreso,
   updateIngreso,
+  getCuentasDestino,
   DESTINO_INGRESO_VALUES,
   DESTINO_INGRESO_LABELS,
+  ESTADO_INGRESO_VALUES,
+  ESTADO_INGRESO_LABELS,
   FORMA_PAGO_INGRESO_VALUES,
   FORMA_PAGO_INGRESO_LABELS,
   FORMAS_PAGO_CHEQUE,
@@ -18,13 +21,15 @@ import {
   type FormaPagoIngreso,
 } from '@/lib/api/ingresos'
 
+const CUSTOM_CUENTA_VALUE = '__nueva__'
+
 const schema = z
   .object({
     fecha: z.string().min(1, 'Requerido'),
     destino: z.enum(DESTINO_INGRESO_VALUES, { error: 'Requerido' }),
     comprador: z.string().min(1, 'Requerido'),
     forma_pago: z.enum(FORMA_PAGO_INGRESO_VALUES, { error: 'Requerido' }),
-    estado: z.string().optional(),
+    estado: z.enum(ESTADO_INGRESO_VALUES).optional().or(z.literal('')),
     cuenta_destino: z.string().optional(),
     banco: z.string().optional(),
     n_cheque: z.string().optional(),
@@ -63,6 +68,12 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!ingreso
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [customCuenta, setCustomCuenta] = useState('')
+
+  const { data: cuentasDestino = [] } = useQuery({
+    queryKey: ['cuentas-destino'],
+    queryFn: getCuentasDestino,
+  })
 
   const {
     register,
@@ -107,12 +118,21 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
   const moneda = watch('moneda')
   const formaPago = watch('forma_pago') as FormaPagoIngreso | undefined
   const esCheque = formaPago ? FORMAS_PAGO_CHEQUE.includes(formaPago) : false
+  const cuentaWatched = watch('cuenta_destino')
+  const isCustomCuenta = cuentaWatched === CUSTOM_CUENTA_VALUE
+  // Guarantees the select has a matching <option> for the record's current value
+  // even before the cuentas-destino query resolves (avoids silently blanking it).
+  const cuentaOptions = ingreso?.cuenta_destino && !cuentasDestino.includes(ingreso.cuenta_destino)
+    ? [ingreso.cuenta_destino, ...cuentasDestino]
+    : cuentasDestino
 
   async function onSubmit(data: FormData) {
     try {
       setSubmitError(null)
       const payload = {
         ...data,
+        estado: data.estado || undefined,
+        cuenta_destino: (isCustomCuenta ? customCuenta.trim() : data.cuenta_destino) || undefined,
         tipo_cambio: data.moneda === 'usd' ? data.tipo_cambio : undefined,
         // Cheque-only fields: clear them if the payment method changed away from cheque,
         // so a stale n_cheque/banco doesn't linger on an efectivo/transferencia record.
@@ -127,6 +147,7 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
         await createIngreso(payload)
       }
       queryClient.invalidateQueries({ queryKey: ['ingresos'] })
+      queryClient.invalidateQueries({ queryKey: ['cuentas-destino'] })
       onSuccess()
     } catch {
       setSubmitError('Error al guardar. Intente nuevamente.')
@@ -171,12 +192,12 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
         {/* Estado */}
         <div>
           <label className={lbl}>Estado <span className="text-gray-400 font-normal">(opcional)</span></label>
-          <input
-            type="text"
-            placeholder="Ej: NR, FACT..."
-            {...register('estado')}
-            className={field}
-          />
+          <select {...register('estado')} className={field}>
+            <option value="">Sin definir</option>
+            {ESTADO_INGRESO_VALUES.map((e) => (
+              <option key={e} value={e}>{ESTADO_INGRESO_LABELS[e]}</option>
+            ))}
+          </select>
         </div>
 
         {/* Forma de pago */}
@@ -194,12 +215,23 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
         {/* Cuenta destino */}
         <div>
           <label className={lbl}>Cuenta Destino <span className="text-gray-400 font-normal">(opcional)</span></label>
-          <input
-            type="text"
-            placeholder="Ej: Caja, BSJ..."
-            {...register('cuenta_destino')}
-            className={field}
-          />
+          <select {...register('cuenta_destino')} className={field}>
+            <option value="">Sin definir</option>
+            {cuentaOptions.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+            <option value={CUSTOM_CUENTA_VALUE}>+ Agregar nueva...</option>
+          </select>
+          {isCustomCuenta && (
+            <input
+              type="text"
+              placeholder="Nombre de la nueva cuenta"
+              value={customCuenta}
+              onChange={(e) => setCustomCuenta(e.target.value)}
+              className={`${field} mt-2`}
+              autoFocus
+            />
+          )}
         </div>
 
         {/* Campos de cheque — solo si forma_pago es cheque/echeque */}
