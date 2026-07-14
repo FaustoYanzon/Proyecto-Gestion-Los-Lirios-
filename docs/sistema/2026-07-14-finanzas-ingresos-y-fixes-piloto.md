@@ -75,6 +75,22 @@ Commit `604664b`.
 
 `frontend/lib/api/flujo.ts` seguía leyendo `ing.cliente` (campo eliminado del modelo nuevo) — rompía `npm run build`. Corregido a `ing.comprador` antes del primer deploy del día.
 
+## Segunda tanda del mismo día — refuerzos de robustez + UI de Inicio
+
+Cambios locales (hechos en una sesión previa de Claude Desktop directamente sobre el filesystem real, aplicados/commiteados/deployados en esta sesión de Claude Code — mismo patrón que el resto del día: primero se revisó el diff completo, se corrió `tsc`/`npm run build`/import de backend, y recién ahí se commiteó).
+
+**Backend — registro de modelos, único punto de verdad.** `backend/app/core/migrations/env.py` importaba los modelos uno por uno (`app.models.user`, `app.models.parcela`, ...) y se había ido desactualizando — le faltaban `presupuesto` y `push_token`, lo que hacía que `alembic revision --autogenerate` propusiera `DROP TABLE` para esas tablas si alguien corría un autogenerate sin darse cuenta. Ahora `env.py`, `core/seed.py`, `api/seed_cosecha.py` y `api/seed_parcelas.py` importan todos `app.models` (el agregador) en vez de módulos sueltos — un solo lugar que mantener sincronizado. Resuelve el "pendiente" que había quedado abierto en [[Bugs Conocidos]] sobre `Trabajador` faltante en el agregador.
+
+**Backup de Postgres apunta a producción.** `scripts/backup_postgres.ps1` y `scripts/BACKUP.md` reescritos: por default ahora hace `pg_dump` de la base de **Railway** (vía `DATABASE_PUBLIC_URL`, no `DATABASE_URL` — ese es el hostname interno de Railway y no resuelve desde afuera), con `-UrlKey DATABASE_URL -Label local` como opción para seguir respaldando la base local si hace falta. Nombres de archivo con label (`los_lirios_prod_*.dump` / `los_lirios_local_*.dump`), y el restore test de la guía ahora valida contra los totales conocidos post-migración (591 cosechas / 144 egresos / 370 presupuestos).
+
+⚠️ **Pendiente — requiere que Fausto lo haga a mano:** agregar `DATABASE_PUBLIC_URL=postgresql://postgres:<pass>@nozomi.proxy.rlwy.net:52538/railway` (valor real en Railway → servicio Postgres → Variables) a `backend/.env`, y después correr `install_backup_task.ps1` + `Start-ScheduledTask -TaskName 'LosLirios-PG-Backup'` para probarlo. Claude Code tiene prohibido explícitamente leer o modificar `backend/.env` (instrucción del propio `CLAUDE.md` del repo), así que este paso puntual no se ejecutó.
+
+**UI de Inicio simplificada.** `frontend/app/dashboard/page.tsx`: se sacaron las dos tarjetas KPI de "Jornales este mes" y "Egresos ARS este mes" (quedan Dirección/D1, mapa compacto, clima, alertas/fenología) y el mapa se achicó (`gridTemplateColumns` de `2.2fr 1fr` a `1.6fr 1fr`, alto máx. 380px). Menos ruido en la pantalla que más se usa a diario.
+
+**Error/loading boundaries + logos reales.** Nuevos `frontend/app/dashboard/error.tsx` (boundary a nivel de segmento — una pantalla rota ya no tira abajo toda la sidebar) y `dashboard/loading.tsx` (skeleton en vez de spinner). Resuelve el riesgo que estaba listado en [[Bugs Conocidos]] ("Sin error.tsx/loading.tsx"). `frontend/public/logo.svg`, `logo-mark.svg` y `frontend/app/favicon.ico` pasan de placeholder al logo real de Los Lirios.
+
+Commits: `6c014a8` (backend + backup), `07f4127` (frontend). Desplegado: Railway auto (confirmado por logs, sin migración nueva esta vez), Vercel manual (`vercel --prod`, mismo paso obligatorio de siempre en este proyecto).
+
 ## Ver también
 
 - [[Bugs Conocidos]]

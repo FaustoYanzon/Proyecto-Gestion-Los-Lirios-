@@ -42,8 +42,9 @@ Detalle completo: [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. Resumen:
 3. Costo por kg en dashboard de finanzas.
 4. Módulo de notificaciones (base existe en `notificaciones.py`).
 5. **Rutina de backup automático de PostgreSQL** — hoy solo hay backups manuales puntuales (el último, 2026-07-10, antes de arrancar el piloto: `pg_backups/loslirios_railway_20260710_pilot.dump`). Definir cadencia (diaria sugerida) y automatizarla, idealmente con un cron/Task Scheduler que corra `pg_dump` contra la URL pública de Railway.
-6. Error boundaries en frontend (`error.tsx`/`loading.tsx`) y refresh token — riesgos aceptados para esta prueba corta, pero conviene resolverlos antes de un uso productivo sostenido.
-7. Revisar si algún otro script standalone (`seed_cosecha.py`, futuros) tiene el mismo riesgo que tenía `seed.py`: depender de `app/models/__init__.py` sin que todos los modelos estén ahí registrados.
+6. ~~Error boundaries en frontend~~ — hecho 2026-07-14 (`dashboard/error.tsx`/`loading.tsx`). Refresh token sigue pendiente.
+7. ~~Revisar si algún otro script standalone tiene el mismo riesgo que `seed.py`~~ — hecho 2026-07-14: `env.py`/`seed.py`/`seed_cosecha.py`/`seed_parcelas.py` importan todos el agregador `app.models`.
+8. Activar el backup automático de producción: falta agregar `DATABASE_PUBLIC_URL` a `backend/.env` (paso manual, ver [[Bugs Conocidos]]) y correr `install_backup_task.ps1`.
 
 ## Ver también
 

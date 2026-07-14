@@ -24,8 +24,8 @@ tags: [sistema, bugs]
 - **Vercel NO auto-despliega en este proyecto.** Railway sí redespliega el backend solo en cada push a `main` (y corre `alembic upgrade head`), pero el frontend se quedó pegado en un deploy de 4 días hasta que se corrió `vercel --prod` a mano el 2026-07-14 — ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. **Acordarse de correr `vercel --prod` (o `npx vercel --prod --yes` desde `frontend/`) después de cualquier push que toque `frontend/`.** `vercel ls` muestra el último deploy y su antigüedad si hay dudas.
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
 - **Sin logging estructurado ni exception handler genérico** en el backend: los 500 no dejan rastro propio, solo lo que capture la plataforma de hosting. Con pocos usuarios de prueba es tolerable, pero conviene revisar logs de Railway a diario durante la semana.
-- **Sin `error.tsx`/`loading.tsx`/error boundaries** en el frontend (`app/` completo): una excepción no controlada en un render cae en la pantalla de error genérica de Next sin opción de reintentar.
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
+- **Backup automático de producción configurado pero sin activar**: `scripts/backup_postgres.ps1` ya apunta a Railway (`DATABASE_PUBLIC_URL`, ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]), pero falta el paso manual de agregar esa variable a `backend/.env` y correr `install_backup_task.ps1` — pendiente porque Claude Code tiene prohibido tocar `backend/.env`, lo tiene que hacer Fausto.
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
 - **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
 - **Dashboard finanzas sin costo por kg** todavía.
@@ -34,6 +34,10 @@ tags: [sistema, bugs]
 ---
 
 ## ✅ Resueltos
+
+**Segunda tanda, 2026-07-14** (detalle en [[2026-07-14-finanzas-ingresos-y-fixes-piloto]] § "Segunda tanda"):
+- **Registro de modelos frágil, uno por uno, en `alembic/env.py` y en los scripts standalone** (`seed.py`, `seed_cosecha.py`, `seed_parcelas.py`) — ya le faltaban `presupuesto`/`push_token` y podía volver a pasar con cualquier modelo nuevo. Ahora todos importan `app.models` (el agregador) como único punto de verdad. Cierra el "pendiente" que había quedado abierto más abajo sobre `Trabajador`.
+- **Sin `error.tsx`/`loading.tsx`/error boundaries** en el frontend: agregados a nivel de segmento en `frontend/app/dashboard/` (`error.tsx` + `loading.tsx`). Cubre `/dashboard` y todas sus subrutas; el resto del árbol de `app/` (login, etc.) sigue sin boundary propio.
 
 **Primeros bugs reales de la semana piloto, 2026-07-14** (detalle completo en [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]):
 - **Sesión se cerraba en F5/pestaña nueva, badge de usuario en "?":** root cause era que `frontend/app/providers.tsx` (el que realmente usa la app) nunca llamaba a `initAuth()` — el store quedaba en `isLoading: true` para siempre. Agregado el guard de auth en `dashboard/layout.tsx` (spinner + redirect a `/login`) y la llamada a `initAuth()` en `providers.tsx`.
@@ -54,7 +58,7 @@ tags: [sistema, bugs]
 - Suite de tests validada contra Python 3.12.10 (11/11 passing, coincide con `runtime.txt`).
 - `CORS`/`SECRET_KEY` de producción verificados y confirmados fuertes (`SECRET_KEY` de 64 bytes urlsafe generado nuevo, `ALLOWED_ORIGINS` apunta al dominio real de Vercel).
 - Mobile apuntaba a IP de LAN — corregido, `EXPO_PUBLIC_API_URL` fijo al dominio de Railway vía `eas.json`, build EAS distribuido a testers.
-- `app/models/__init__.py` (agregador "importar todos los modelos") no incluía `Trabajador`/`RolTrabajador`, aunque sí estaba en `backend/app/core/migrations/env.py` — las dos listas deberían coincidir. Rompía scripts standalone (`seed.py`, `seed_parcelas.py`) con `InvalidRequestError` al resolver `RegistroTrabajo.trabajador`; la app viva no se veía afectada porque `main.py` importa el router `trabajadores` directamente. Resuelto, commit `a8dea55`. Pendiente: revisar si otro modelo nuevo puede quedar afuera del mismo modo.
+- `app/models/__init__.py` (agregador "importar todos los modelos") no incluía `Trabajador`/`RolTrabajador`, aunque sí estaba en `backend/app/core/migrations/env.py` — las dos listas deberían coincidir. Rompía scripts standalone (`seed.py`, `seed_parcelas.py`) con `InvalidRequestError` al resolver `RegistroTrabajo.trabajador`; la app viva no se veía afectada porque `main.py` importa el router `trabajadores` directamente. Resuelto, commit `a8dea55`. Causa raíz (imports uno por uno en vez del agregador) cerrada definitivamente el 2026-07-14, commit `6c014a8` — ver arriba.
 - `mobile/package-lock.json` desincronizado + conflicto de peer dependency `react-dom`/`react` (`react-dom@19.2.7` exige `react@^19.2.7`, proyecto fija `react@19.1.0`) — resuelto con `"overrides": {"react-dom": "19.1.0"}` en `mobile/package.json`, commits `f47c213` y `2844b35`.
 
 ---
