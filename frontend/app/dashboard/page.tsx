@@ -5,10 +5,7 @@ import { useMemo } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import {
-  Cloud, ClipboardList, TrendingDown, ArrowRight,
-  BarChart3, Wallet, Users,
-} from 'lucide-react'
+import { Cloud, ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ReferenceLine,
@@ -16,10 +13,7 @@ import {
 import FincaMap from '@/components/map/FincaMap'
 import Alertas from '@/components/Alertas'
 import FenologiaNotificaciones from '@/components/FenologiaNotificaciones'
-import type { EgresoResponse } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiProduccionParcelas } from '@/lib/api/kpis'
-
-interface TrabajoItem { id: string }
 
 const now = new Date()
 const TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
@@ -60,35 +54,6 @@ interface ClimaActualResponse {
   _cached?: boolean
 }
 
-type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; color?: string }>
-
-function KpiCard({
-  label, icon: Icon, value, sub, isLoading,
-}: {
-  label: string; icon: LucideIcon; value: string | number
-  sub?: string; isLoading: boolean
-}) {
-  return (
-    <div
-      className="bg-white rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0"
-      style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">{label}</span>
-        <Icon size={16} strokeWidth={1.75} color="#a09584" />
-      </div>
-      {isLoading ? (
-        <div className="h-7 bg-[#fbfaf6] rounded animate-pulse w-20" />
-      ) : (
-        <>
-          <p className="text-xl font-bold text-[#1f1a17]">{value}</p>
-          {sub && <p className="text-xs text-[#a09584] mt-0.5">{sub}</p>}
-        </>
-      )}
-    </div>
-  )
-}
-
 function DireccionKpi({ label, value, hint, tone = 'neutral' }: {
   label: string; value: string; hint?: string; tone?: 'good' | 'bad' | 'neutral'
 }) {
@@ -103,6 +68,9 @@ function DireccionKpi({ label, value, hint, tone = 'neutral' }: {
   )
 }
 
+// Weather widget. Data source today: /clima/actual (Open-Meteo, 30 min cache).
+// Etapa 5: same slot will be fed by the Climagro (Pegasus) scraper — only the
+// backend source changes, this component keeps consuming /clima/actual.
 function ClimateCard() {
   const { data, isLoading, isError } = useQuery<ClimaActualResponse>({
     queryKey: ['clima-actual', 'los_mimbres'],
@@ -314,44 +282,16 @@ function DireccionSection() {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+// Inicio queda reducido a lo esencial: Dirección (D1), mapa compacto,
+// clima y notificaciones (alertas + fenología).
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const isGerencial = user?.role === 'super_admin' || user?.role === 'gerencial'
 
-  const today        = new Date()
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const toISO        = (d: Date) => d.toISOString().split('T')[0]
-
-  const todayLabel = today.toLocaleDateString('es-AR', {
+  const todayLabel = new Date().toLocaleDateString('es-AR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
-
-  const { data: trabajos, isLoading: loadingTrabajos } = useQuery({
-    queryKey: ['dashboard-trabajos', toISO(firstOfMonth)],
-    queryFn: async () => {
-      const { data } = await api.get<TrabajoItem[]>('/produccion/trabajo/', {
-        params: { fecha_desde: toISO(firstOfMonth), fecha_hasta: toISO(today), limit: 1000 },
-      })
-      return data
-    },
-  })
-
-  const { data: egresos, isLoading: loadingEgresos } = useQuery({
-    queryKey: ['dashboard-egresos', toISO(firstOfMonth)],
-    queryFn: async () => {
-      const { data } = await api.get<EgresoResponse[]>('/finanzas/egresos/', {
-        params: { fecha_desde: toISO(firstOfMonth), fecha_hasta: toISO(today), moneda: 'ars', limit: 1000 },
-      })
-      return data
-    },
-    enabled: isGerencial,
-    retry: false,
-  })
-
-  const totalEgreso = egresos?.reduce((s, e) => s + Number(e.monto), 0) ?? 0
-  const fmtARS = (n: number) =>
-    new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 
   const firstName = user?.full_name.split(' ')[0] ?? ''
 
@@ -368,12 +308,12 @@ export default function DashboardPage() {
       {/* Dirección (gerencial only) */}
       {isGerencial && <DireccionSection />}
 
-      {/* Grid mapa + sidebar */}
+      {/* Grid mapa compacto + sidebar clima/alertas */}
       <div
         className="grid gap-4"
-        style={{ gridTemplateColumns: '2.2fr 1fr', minHeight: 420 }}
+        style={{ gridTemplateColumns: '1.6fr 1fr', minHeight: 320, maxHeight: 380 }}
       >
-        {/* Mapa */}
+        {/* Mapa (reducido) */}
         <div
           className="rounded-[10px] overflow-hidden border border-[#fbfaf6]"
           style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
@@ -381,25 +321,9 @@ export default function DashboardPage() {
           <FincaMap compact height="100%" />
         </div>
 
-        {/* Sidebar derecho */}
+        {/* Sidebar derecho: clima + alertas */}
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
           <ClimateCard />
-          <KpiCard
-            label="Jornales este mes"
-            icon={ClipboardList}
-            value={trabajos?.length ?? '—'}
-            sub={`desde el 1/${firstOfMonth.getMonth() + 1}`}
-            isLoading={loadingTrabajos}
-          />
-          {isGerencial && (
-            <KpiCard
-              label="Egresos ARS este mes"
-              icon={TrendingDown}
-              value={loadingEgresos ? '—' : totalEgreso > 0 ? fmtARS(totalEgreso) : '$0'}
-              sub={`desde el 1/${firstOfMonth.getMonth() + 1}`}
-              isLoading={loadingEgresos}
-            />
-          )}
           <Alertas />
         </div>
       </div>

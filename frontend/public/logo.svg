@@ -1,98 +1,69 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 280" role="img" aria-label="Los Lirios SA">
   <title>Los Lirios SA</title>
 
-  <!-- Mountains (background) -->
-  <path d="M68,195 L110,78 L135,130 L163,55 L200,195 Z" fill="#c89a3a" opacity="0.35"/>
-  <path d="M85,195 L110,78 L126,112 Z" fill="#d4b060" opacity="0.2"/>
+  <!-- San Juan province silhouette (gold outline, background) -->
+  <path d="M118,28 L196,38 L216,74 L208,150 L172,178 L120,168 L96,120 L100,60 Z"
+        fill="none" stroke="#b08d3f" stroke-width="2.5" stroke-linejoin="round" opacity="0.9"/>
 
-  <!-- Decorative oval frame -->
-  <ellipse cx="140" cy="108" rx="88" ry="84" stroke="#c89a3a" stroke-width="1.2" fill="none" opacity="0.4"/>
+  <!-- Mountains inside the province (gold) -->
+  <path d="M114,142 L140,90 L152,114 L168,78 L198,142 Z" fill="#b08d3f" opacity="0.9"/>
+  <path d="M124,142 L140,90 L148,106 Z" fill="#d4b969"/>
 
-  <!-- Lily stem going right to vine -->
-  <path d="M87,138 C88,158 100,170 118,174" stroke="#c89a3a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-  <!-- Leaf on stem -->
-  <path d="M104,174 C109,162 124,160 122,170 C120,177 107,178 104,174 Z" fill="#c89a3a" opacity="0.7"/>
-
-  <!-- 6 lily petals, center at (87, 120) -->
-  <g transform="translate(87 120)">
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(-10 0 0)"/>
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(50 0 0)"/>
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(110 0 0)"/>
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(170 0 0)"/>
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(230 0 0)"/>
-    <ellipse cx="0" cy="-22" rx="7" ry="21" fill="#c89a3a" transform="rotate(290 0 0)"/>
-    <!-- Stamens -->
-    <line x1="1" y1="-5" x2="2" y2="-17" stroke="#c89a3a" stroke-width="1.3" stroke-linecap="round"/>
-    <line x1="4" y1="-3" x2="8" y2="-14" stroke="#c89a3a" stroke-width="1.3" stroke-linecap="round"/>
-    <line x1="-3" y1="-4" x2="-7" y2="-14" stroke="#c89a3a" stroke-width="1.3" stroke-linecap="round"/>
-    <circle cx="2"  cy="-17" r="1.8" fill="#5a1320"/>
-    <circle cx="8"  cy="-14" r="1.8" fill="#5a1320"/>
-    <circle cx="-7" cy="-14" r="1.8" fill="#5a1320"/>
-    <!-- Center -->
-    <circle cx="0" cy="0" r="5.5" fill="#9a3140" opacity="0.7"/>
+  <!-- Lily (left, white petals with gold linework) -->
+  <g stroke="#b08d3f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- back petals -->
+    <path d="M78,118 C58,96 54,68 68,46 C84,64 90,92 88,116 Z" fill="#fdfaf2"/>
+    <path d="M86,116 C84,86 96,58 118,44 C118,72 108,98 94,118 Z" fill="#fdfaf2"/>
+    <path d="M80,122 C56,118 38,104 32,82 C56,86 72,100 84,116 Z" fill="#fdfaf2"/>
+    <!-- front petal -->
+    <path d="M84,122 C74,140 56,152 36,152 C44,132 60,120 82,116 Z" fill="#fdfaf2"/>
+    <!-- stamens -->
+    <path d="M86,112 C90,98 96,86 104,76" fill="none" stroke-width="1.8"/>
+    <path d="M84,112 C82,98 80,86 76,74" fill="none" stroke-width="1.8"/>
+    <circle cx="104" cy="74" r="3" fill="#4a2145" stroke="none"/>
+    <circle cx="75" cy="72" r="3" fill="#4a2145" stroke="none"/>
   </g>
 
-  <!-- Vine connecting lily stem to grape stem -->
-  <path d="M118,174 C138,178 156,172 168,158" stroke="#5a1320" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Vine: from the lily down to the top of the grape cluster -->
+  <path d="M86,124 C94,150 118,162 156,158" stroke="#b08d3f" stroke-width="2.5"
+        fill="none" stroke-linecap="round"/>
+  <!-- Vine leaf (gold) -->
+  <path d="M116,164 C120,150 138,146 138,158 C136,168 120,170 116,164 Z" fill="#b08d3f" opacity="0.85"/>
+  <!-- Tendril curling off the vine -->
+  <path d="M150,158 C158,148 170,148 168,140 C166,134 158,136 160,142"
+        stroke="#b08d3f" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 
-  <!-- Grape stem -->
-  <path d="M168,108 C168,120 168,126 168,130" stroke="#5a1320" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  <!-- Grape tendril -->
-  <path d="M168,116 C175,110 184,114 181,121" stroke="#5a1320" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Grape cluster (deep purple) -->
+  <g fill="#4a2145">
+    <circle cx="155" cy="163" r="9"/>
+    <circle cx="173" cy="163" r="9"/>
+    <circle cx="146" cy="179" r="9"/>
+    <circle cx="164" cy="180" r="9"/>
+    <circle cx="182" cy="179" r="9"/>
+    <circle cx="155" cy="196" r="9"/>
+    <circle cx="173" cy="196" r="9"/>
+    <circle cx="164" cy="212" r="9"/>
+  </g>
+  <!-- Grape highlights -->
+  <g fill="#8a5580" opacity="0.55">
+    <circle cx="151.5" cy="159.5" r="2.8"/>
+    <circle cx="169.5" cy="159.5" r="2.8"/>
+    <circle cx="142.5" cy="175.5" r="2.8"/>
+    <circle cx="160.5" cy="176.5" r="2.8"/>
+    <circle cx="178.5" cy="175.5" r="2.8"/>
+    <circle cx="151.5" cy="192.5" r="2.8"/>
+    <circle cx="169.5" cy="192.5" r="2.8"/>
+    <circle cx="160.5" cy="208.5" r="2.8"/>
+  </g>
 
-  <!-- Row 1: 2 grapes (y=129) -->
-  <circle cx="159" cy="129" r="9" fill="#5a1320"/>
-  <circle cx="177" cy="129" r="9" fill="#5a1320"/>
-  <circle cx="155.5" cy="125.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="173.5" cy="125.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Row 2: 3 grapes (y=147) -->
-  <circle cx="150" cy="147" r="9" fill="#5a1320"/>
-  <circle cx="168" cy="147" r="9" fill="#5a1320"/>
-  <circle cx="186" cy="147" r="9" fill="#5a1320"/>
-  <circle cx="146.5" cy="143.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="164.5" cy="143.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="182.5" cy="143.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Row 3: 4 grapes / widest (y=165) -->
-  <circle cx="141" cy="165" r="9" fill="#5a1320"/>
-  <circle cx="159" cy="165" r="9" fill="#5a1320"/>
-  <circle cx="177" cy="165" r="9" fill="#5a1320"/>
-  <circle cx="195" cy="165" r="9" fill="#5a1320"/>
-  <circle cx="137.5" cy="161.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="155.5" cy="161.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="173.5" cy="161.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="191.5" cy="161.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Row 4: 3 grapes (y=183) -->
-  <circle cx="150" cy="183" r="9" fill="#5a1320"/>
-  <circle cx="168" cy="183" r="9" fill="#5a1320"/>
-  <circle cx="186" cy="183" r="9" fill="#5a1320"/>
-  <circle cx="146.5" cy="179.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="164.5" cy="179.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="182.5" cy="179.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Row 5: 2 grapes (y=201) -->
-  <circle cx="159" cy="201" r="9" fill="#5a1320"/>
-  <circle cx="177" cy="201" r="9" fill="#5a1320"/>
-  <circle cx="155.5" cy="197.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-  <circle cx="173.5" cy="197.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Row 6: 1 grape / tip (y=219) -->
-  <circle cx="168" cy="219" r="9" fill="#5a1320"/>
-  <circle cx="164.5" cy="215.5" r="2.8" fill="#9a4060" opacity="0.5"/>
-
-  <!-- Separator -->
-  <line x1="68" y1="237" x2="212" y2="237" stroke="#c89a3a" stroke-width="0.8"/>
-
-  <!-- Wordmark -->
-  <text
-    x="140" y="260"
-    text-anchor="middle"
-    font-family="Georgia, 'Times New Roman', serif"
-    font-size="21"
-    font-weight="400"
-    letter-spacing="4"
-    fill="#c89a3a"
-  >LOS LIRIOS SA</text>
+  <!-- Wordmark: LOS LIRIOS (purple) + SA (gold), separate text nodes
+       because some renderers drop styled tspans -->
+  <text x="32" y="256" text-anchor="start"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="20" font-weight="600" letter-spacing="2" fill="#4a2145"
+  >LOS LIRIOS</text>
+  <text x="248" y="256" text-anchor="end"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="20" font-weight="600" letter-spacing="2" fill="#b08d3f"
+  >SA</text>
 </svg>

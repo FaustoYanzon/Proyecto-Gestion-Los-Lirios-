@@ -1,50 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" role="img" aria-label="Los Lirios SA">
   <title>Los Lirios SA — marca</title>
 
-  <!-- Stem -->
-  <path d="M40 7 C40 11 41 15 41 19" stroke="#5a1320" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Lily (top-left, solid gold petals so the mark reads at small sizes
+       and survives the white-invert filter used in the sidebar) -->
+  <g fill="#b08d3f">
+    <path d="M26 40 C16 30 13 17 20 6 C28 15 31 28 30 40 Z"/>
+    <path d="M30 40 C30 26 36 13 46 6 C45 20 40 32 33 42 Z"/>
+    <path d="M26 43 C15 41 6 34 3 23 C14 25 22 32 28 40 Z"/>
+    <path d="M28 45 C24 54 15 60 5 61 C9 51 17 45 27 42 Z"/>
+  </g>
+  <!-- Stamens -->
+  <path d="M30 38 C33 31 37 25 42 20" fill="none" stroke="#b08d3f" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="42" cy="19" r="2.5" fill="#4a2145"/>
+
+  <!-- Stem from lily to the grape cluster -->
+  <path d="M29 45 C34 54 42 58 50 59" stroke="#b08d3f" stroke-width="2.5"
+        fill="none" stroke-linecap="round"/>
   <!-- Tendril -->
-  <path d="M41 12 C47 7 55 11 52 17" stroke="#5a1320" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path d="M50 52 C57 47 65 51 61 58" stroke="#b08d3f" stroke-width="2" fill="none" stroke-linecap="round"/>
 
-  <!-- Row 1: 2 -->
-  <circle cx="34" cy="27" r="7" fill="#5a1320"/>
-  <circle cx="46" cy="27" r="7" fill="#5a1320"/>
-  <circle cx="31.5" cy="24.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="43.5" cy="24.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-
-  <!-- Row 2: 3 -->
-  <circle cx="28" cy="39" r="7" fill="#5a1320"/>
-  <circle cx="40" cy="39" r="7" fill="#5a1320"/>
-  <circle cx="52" cy="39" r="7" fill="#5a1320"/>
-  <circle cx="25.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="37.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="49.5" cy="36.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-
-  <!-- Row 3: 4 (widest) -->
-  <circle cx="22" cy="51" r="7" fill="#5a1320"/>
-  <circle cx="34" cy="51" r="7" fill="#5a1320"/>
-  <circle cx="46" cy="51" r="7" fill="#5a1320"/>
-  <circle cx="58" cy="51" r="7" fill="#5a1320"/>
-  <circle cx="19.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="31.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="43.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="55.5" cy="48.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-
-  <!-- Row 4: 3 -->
-  <circle cx="28" cy="63" r="7" fill="#5a1320"/>
-  <circle cx="40" cy="63" r="7" fill="#5a1320"/>
-  <circle cx="52" cy="63" r="7" fill="#5a1320"/>
-  <circle cx="25.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="37.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="49.5" cy="60.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-
-  <!-- Row 5: 2 -->
-  <circle cx="34" cy="75" r="7" fill="#5a1320"/>
-  <circle cx="46" cy="75" r="7" fill="#5a1320"/>
-  <circle cx="31.5" cy="72.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-  <circle cx="43.5" cy="72.5" r="2.2" fill="#9a4060" opacity="0.55"/>
-
-  <!-- Row 6: 1 (tip) -->
-  <circle cx="40" cy="87" r="7" fill="#5a1320"/>
-  <circle cx="37.5" cy="84.5" r="2.2" fill="#9a4060" opacity="0.55"/>
+  <!-- Grape cluster (deep purple) -->
+  <g fill="#4a2145">
+    <circle cx="42" cy="64" r="7.5"/>
+    <circle cx="57" cy="64" r="7.5"/>
+    <circle cx="35" cy="76" r="7.5"/>
+    <circle cx="50" cy="77" r="7.5"/>
+    <circle cx="64" cy="76" r="7.5"/>
+    <circle cx="42" cy="89" r="7.5"/>
+    <circle cx="57" cy="89" r="7.5"/>
+    <circle cx="50" cy="93" r="7.5"/>
+  </g>
+  <!-- Grape highlights -->
+  <g fill="#8a5580" opacity="0.55">
+    <circle cx="39" cy="61" r="2.2"/>
+    <circle cx="54" cy="61" r="2.2"/>
+    <circle cx="32" cy="73" r="2.2"/>
+    <circle cx="47" cy="74" r="2.2"/>
+    <circle cx="61" cy="73" r="2.2"/>
+    <circle cx="39" cy="86" r="2.2"/>
+  </g>
 </svg>
