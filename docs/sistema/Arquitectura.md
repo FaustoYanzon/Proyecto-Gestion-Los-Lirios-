@@ -34,7 +34,7 @@ repo/
 | `auth.py` | `/auth` | Login, token refresh |
 | `users.py` | `/users` | CRUD usuarios, roles |
 | `parcelas.py` | `/parcelas` | CRUD parcelas + stats |
-| `finanzas.py` | `/finanzas` | Ingresos, egresos, flujo de caja |
+| `finanzas.py` | `/finanzas` | Ingresos (libro de cobros "BD COBROS", desde 2026-07-14), egresos, cheques, flujo de caja |
 | `produccion.py` | `/produccion` | Tareas, riego, fitosanitarios, campaña |
 
 ## Mobile — wizards de carga
@@ -83,7 +83,8 @@ Los 4 formularios multi-paso (`tareas.tsx`, `fito.tsx`/`fitosanitario.tsx`, `rie
 
 - **Backend:** Railway (`backend/railway.json`, Nixpacks, `startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`) + `backend/runtime.txt` (`python-3.12`, validado con 11/11 tests). URL: `https://proyecto-gestion-los-lirios-production.up.railway.app`. `DATABASE_URL` requiere el driver `+asyncpg` explícito (`postgresql+asyncpg://...`) — el que Railway autogenera para el plugin de Postgres es sync y rompe `alembic upgrade head`. Root Directory fijado a `backend` (monorepo). Sin Dockerfile ni docker-compose (no hace falta con Nixpacks).
 - Scripts locales encontrados (no aptos para prod tal cual): `start.bat` (dev, con `--reload`), `start-silent.ps1` (hosting local vía Task Scheduler de Windows).
-- **Frontend:** Vercel, sin `vercel.json` (no hace falta para Next.js). URL: `https://frontend-six-jade-79.vercel.app`. `NEXT_PUBLIC_API_URL` (`lib/api.ts:3`, default `http://localhost:8000`) fijada como variable de entorno de producción en Vercel. CORS confirmado (`ALLOWED_ORIGINS` en Railway apunta a este dominio).
+- **Frontend:** Vercel, sin `vercel.json` (no hace falta para Next.js). URL: `https://frontend-six-jade-79.vercel.app`. `NEXT_PUBLIC_API_URL` (`lib/api.ts:3`, default `http://localhost:8000`) fijada como variable de entorno de producción en Vercel. CORS confirmado (`ALLOWED_ORIGINS` en Railway apunta a este dominio). ⚠️ **Vercel NO auto-despliega en push a `main`** (a diferencia de Railway) — hay que correr `vercel --prod` a mano desde `frontend/` después de cada push que toque el frontend, o el deploy servido queda desactualizado sin avisar. Descubierto el 2026-07-14 (ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]) tras un deploy congelado 4 días.
+- **CLIs disponibles y autenticados en la máquina de Fausto** (útiles para diagnosticar/deployar sin salir de la terminal): `npx vercel` (`vercel ls`, `vercel --prod`, `vercel inspect`) y `npx @railway/cli` (`railway status`, `railway logs`, `railway run --service <nombre> -- <comando>` para ejecutar algo local con las env vars de un servicio Railway inyectadas — usar `DATABASE_PUBLIC_URL` del servicio Postgres para conectarse a la base de producción desde fuera de la red interna de Railway, `DATABASE_URL` es un hostname interno que no resuelve externamente).
 - **Mobile:** `EXPO_PUBLIC_API_URL` (`mobile/lib/api.ts`) fijada al dominio de Railway vía el campo `env` del profile `preview` en `eas.json` (las variables de shell local NO viajan a los builds en la nube de EAS). Desde 2026-07-12, la app tiene **EAS Update (OTA)** configurado — ver [[2026-07-12-ota-y-ux-cargar-tarea]] — así que cambios de puro JS/UI ya no requieren un nuevo build. Último build con reinstalación manual (el que activó el canal OTA): `https://expo.dev/accounts/faustoyanzon2411/projects/los-lirios/builds/66e747d7-e810-4f1c-a8cb-b5347c424e7b`.
 - **Backup:** manual pre-piloto en `pg_backups/loslirios_railway_20260710_pilot.dump` (carpeta gitignoreada). Sin rutina automática todavía — pendiente, ver [[Sistema de Gestión Agrícola]].
 - Ver checklist original (ahora resuelto): [[Checklist Deploy de Prueba (Semana Piloto)]]
@@ -100,6 +101,7 @@ python -m app.api.seed_parcelas        # seed parcelas
 
 ## Ver también
 
+- [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[Bugs Conocidos]]
 - [[Stack Técnico]]

@@ -65,7 +65,9 @@ tags: [sistema, stack]
 | `ac50bb4dc8a9_add_presupuestos_and_metas_produccion.py` | Presupuestos y metas de producción (dashboards D1-D4) |
 | `d4e7b2c9f1a5_add_kpi_views.py` | Vistas SQL para KPIs de dashboards |
 | `e8a1c4d7b3f2_add_comprador_view.py` | Vista de comprador |
-| `f2b6d9e4a8c1_add_mo_parcela_mes_view.py` | Vista mano de obra por parcela/mes — **head actual** |
+| `f2b6d9e4a8c1_add_mo_parcela_mes_view.py` | Vista mano de obra por parcela/mes |
+| `c1d3f7a9e2b4_redesign_ingresos_bd_cobros.py` | Ingresos: de venta-de-uva-por-kilo a libro de cobros "BD COBROS" (dropea y recrea la tabla, 259 filas viejas descartadas por decisión explícita); actualiza `vw_kpi_comprador` |
+| `f8a6e10ed72e_estado_ingreso_enum.py` | `ingresos.estado` de texto libre a enum (`no_registrado`/`facturado`) — **head actual** |
 
 Cadena lineal, un solo head confirmado (`alembic heads`), sin conflictos.
 
@@ -86,5 +88,6 @@ Detalle completo (URLs, problemas resueltos, commits): [[2026-07-11-deploy-pilot
 
 - [[Arquitectura]]
 - [[Checklist Deploy de Prueba (Semana Piloto)]]
+- [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[2026-07-12-ota-y-ux-cargar-tarea]]

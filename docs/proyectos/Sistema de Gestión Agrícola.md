@@ -14,7 +14,7 @@ Reemplazar/complementar los workflows manuales de Excel y Power BI con un sistem
 |---|---|---|---|
 | Auth / Usuarios | ✅ | ✅ | ✅ |
 | Parcelas | ✅ | ✅ | parcial |
-| Finanzas (ingresos/egresos) | ✅ | parcial | — |
+| Finanzas (ingresos/egresos/cheques) | ✅ | ✅ | — |
 | Producción (tareas/riego/fito) | ✅ | parcial | parcial |
 | Dashboards analíticos | — | en curso | — |
 | Deploy / infraestructura | ✅ producción (piloto) | ✅ producción (piloto) | ✅ build distribuido (piloto) |
@@ -25,6 +25,15 @@ Reemplazar/complementar los workflows manuales de Excel y Power BI con un sistem
 - **Backend: sólido.** Hardening de seguridad completado y verificado línea por línea (ver [[Arquitectura]] § Seguridad): secretos rotados y fuera de git, JWT migrado a PyJWT, rate limiting por IP + por username, invalidación de sesión vía `token_version`, autorización por rol server-side confirmada en rutas sensibles, suite de tests de regresión 11/11 passing **contra Python 3.12.10, la misma versión del deploy real**. Los 3 bugs críticos viejos y el dashboard de producción "roto" ya están resueltos (ver [[Bugs Conocidos]] § Resueltos). Bug adicional encontrado y resuelto durante el deploy: `app/models/__init__.py` no registraba el modelo `Trabajador`, rompiendo scripts standalone (`seed.py`).
 - **Frontend: funcionalmente completo para el alcance actual, en producción.** Dashboards de finanzas, mano de obra y producción reconstruidos (commit `8691260`, "Cambio 5": KPIs D1-D4, presupuestos, metas de producción). `npm run build` compila limpio. Rutas admin (usuarios/parcelas) y mapa ya no son stubs. Gaps: TareaForm sin campo `finca` ni selector de trabajador, sin error boundaries, lint con errores no fatales.
 - **Mobile: build de piloto distribuido, con OTA activado desde 2026-07-12.** Expo 54 / React Native 0.81, apunta al backend de Railway vía `eas.json`. `expo-updates` configurado (ver [[2026-07-12-ota-y-ux-cargar-tarea]]) — cambios de puro JS/UI ya se publican con `eas update`, sin rebuild ni reinstalación. Se rediseñaron 5 puntos de UX en el formulario de "Cargar Tarea" (ubicación agrupada por tipo, unidad con submenú, cantidad por teclado numérico, confirmación sin pantalla intermedia, cancelar wizard con "X").
+
+## Estado actual (2026-07-14 — primera semana piloto, primeros bugs reales)
+
+Detalle completo: [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. Resumen:
+
+- **Ingresos rediseñado** de venta-de-uva-por-kilo a libro general de cobros ("BD COBROS"), con `estado` (enum `no_registrado`/`facturado`) y `cuenta_destino` (combobox extensible, "+ Agregar nueva..."). Nueva pantalla de seguimiento de cheques (`/dashboard/finanzas/cheques`).
+- **Bug de sesión (F5/pestaña nueva) resuelto:** root cause era `app/providers.tsx` sin llamar a `initAuth()`. Agregado guard de auth en `dashboard/layout.tsx`.
+- **Históricos cargados a producción** (591 cosechas, 144 egresos, 370 presupuestos) — nunca se habían aplicado desde el deploy inicial, por eso el panel "Dirección" de KPIs en Inicio se veía vacío.
+- **Hallazgo operativo importante: Vercel no auto-despliega en este proyecto.** Railway sí. Cualquier cambio de frontend necesita `vercel --prod` manual después del push — de lo contrario el pilot sigue sirviendo una build vieja sin avisar.
 
 ## Próximos pasos
 
@@ -38,6 +47,7 @@ Reemplazar/complementar los workflows manuales de Excel y Power BI con un sistem
 
 ## Ver también
 
+- [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[2026-07-12-ota-y-ux-cargar-tarea]]
 - [[Arquitectura]]
