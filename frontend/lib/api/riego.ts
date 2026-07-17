@@ -82,6 +82,21 @@ export function calcMm(
   }
 }
 
+// Litros/duración acumulados hasta ahora para un riego en curso (sin fin
+// todavía) — mismo cálculo que calcMm pero contra el reloj, se llama en cada
+// tick del cronómetro en pantalla, no contra el servidor.
+export function calcEnCurso(
+  inicioISO: string, nValvulas: number,
+): { horas: number; mm: number; litros: number } {
+  const horas = Math.max(0, (Date.now() - new Date(inicioISO).getTime()) / 3600000)
+  const n = nValvulas > 0 ? nValvulas : 1
+  return {
+    horas: Math.round(horas * 100) / 100,
+    mm: Math.round(horas * MM_POR_HORA * 100) / 100,
+    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * n),
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RiegoCreate {
@@ -139,6 +154,28 @@ export interface RiegoFilter {
   limit?: number
 }
 
+// Riego "en curso": arrancó (inicio) pero todavía no se cerró (sin fin).
+export interface RiegoIniciarInput {
+  parcela_id: string
+  cabezal: string
+  valvula: string
+  responsable: string
+  fertilizante_nombre?: string
+  fertilizante_dosis_lt_ha?: number
+}
+
+export interface RiegoEnCurso {
+  id: string
+  fecha: string
+  parcela_id: string
+  cabezal: string
+  valvula: string
+  inicio: string
+  n_valvulas: number
+  responsable: string
+  fertilizante_nombre: string | null
+}
+
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 export async function getRiegos(params: RiegoFilter): Promise<RiegoResponse[]> {
@@ -158,4 +195,19 @@ export async function updateRiego(id: string, data: RiegoUpdate): Promise<RiegoR
 
 export async function deleteRiego(id: string): Promise<void> {
   await api.delete(`/produccion/riego/${id}`)
+}
+
+export async function getRiegosEnCurso(): Promise<RiegoEnCurso[]> {
+  const { data } = await api.get('/produccion/riego/en-curso')
+  return data
+}
+
+export async function iniciarRiego(data: RiegoIniciarInput): Promise<RiegoEnCurso> {
+  const { data: res } = await api.post('/produccion/riego/iniciar', data)
+  return res
+}
+
+export async function terminarRiego(id: string, fin?: string): Promise<RiegoResponse> {
+  const { data: res } = await api.post(`/produccion/riego/${id}/terminar`, fin ? { fin } : {})
+  return res
 }

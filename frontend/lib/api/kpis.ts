@@ -76,43 +76,44 @@ export async function getPresupuestoVsReal(params: {
   mes?: number
   concepto?: 'ingreso' | 'egreso'
   moneda?: 'ars' | 'usd'
+  finca?: string
 }): Promise<PresupuestoVsRealItem[]> {
   const { data } = await api.get('/kpis/presupuesto-vs-real', { params })
   return data
 }
 
-export async function getKpiProduccionParcelas(temporada?: number): Promise<ProduccionParcelaKpi[]> {
+export async function getKpiProduccionParcelas(temporada?: number, finca?: string): Promise<ProduccionParcelaKpi[]> {
   const { data } = await api.get('/kpis/produccion/parcelas', {
-    params: temporada != null ? { temporada } : {},
+    params: { ...(temporada != null ? { temporada } : {}), ...(finca ? { finca } : {}) },
   })
   return data
 }
 
-export async function getKpiProduccionVariedades(temporada?: number): Promise<ProduccionVariedadKpi[]> {
+export async function getKpiProduccionVariedades(temporada?: number, finca?: string): Promise<ProduccionVariedadKpi[]> {
   const { data } = await api.get('/kpis/produccion/variedades', {
-    params: temporada != null ? { temporada } : {},
+    params: { ...(temporada != null ? { temporada } : {}), ...(finca ? { finca } : {}) },
   })
   return data
 }
 
-export async function getKpiCompradores(temporada: number): Promise<CompradorKpi[]> {
-  const { data } = await api.get('/kpis/compradores', { params: { temporada } })
+export async function getKpiCompradores(temporada: number, finca?: string): Promise<CompradorKpi[]> {
+  const { data } = await api.get('/kpis/compradores', { params: { temporada, ...(finca ? { finca } : {}) } })
   return data
 }
 
-export async function getKpiManoObraMensual(temporada: number): Promise<ManoObraMensualKpi[]> {
-  const { data } = await api.get('/kpis/mano-obra/mensual', { params: { temporada } })
+export async function getKpiManoObraMensual(temporada: number, finca?: string): Promise<ManoObraMensualKpi[]> {
+  const { data } = await api.get('/kpis/mano-obra/mensual', { params: { temporada, ...(finca ? { finca } : {}) } })
   return data
 }
 
-export async function getKpiManoObraParcelas(temporada?: number): Promise<ManoObraParcelaKpi[]> {
+export async function getKpiManoObraParcelas(temporada?: number, finca?: string): Promise<ManoObraParcelaKpi[]> {
   const { data } = await api.get('/kpis/mano-obra/parcelas', {
-    params: temporada != null ? { temporada } : {},
+    params: { ...(temporada != null ? { temporada } : {}), ...(finca ? { finca } : {}) },
   })
   return data
 }
 
-export async function getKpiManoObraParcelasMes(temporada: number): Promise<ManoObraParcelaMesKpi[]> {
-  const { data } = await api.get('/kpis/mano-obra/parcelas-mes', { params: { temporada } })
+export async function getKpiManoObraParcelasMes(temporada: number, finca?: string): Promise<ManoObraParcelaMesKpi[]> {
+  const { data } = await api.get('/kpis/mano-obra/parcelas-mes', { params: { temporada, ...(finca ? { finca } : {}) } })
   return data
 }

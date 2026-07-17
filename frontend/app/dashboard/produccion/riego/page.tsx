@@ -12,6 +12,8 @@ import {
 import { getParcelas } from '@/lib/api/produccion'
 import RiegoTable from '@/components/produccion/RiegoTable'
 import RiegoForm from '@/components/produccion/RiegoForm'
+import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
+import IniciarRiegoForm from '@/components/produccion/IniciarRiegoForm'
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
@@ -82,6 +84,7 @@ export default function RiegoPage() {
   const [filtros, setFiltros] = useState<RiegoFilter>(EMPTY_FILTERS)
   const [modalOpen, setModalOpen] = useState(false)
   const [riegoEditar, setRiegoEditar] = useState<RiegoResponse | null>(null)
+  const [iniciarOpen, setIniciarOpen] = useState(false)
 
   const { data: riegos = [], isLoading } = useQuery({
     queryKey: ['riegos', filtros],
@@ -135,6 +138,13 @@ export default function RiegoPage() {
             </button>
           )}
           <button
+            onClick={() => setIniciarOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#7a1f2c] border border-[#7a1f2c] rounded-md hover:bg-[#faf6ec] transition-colors"
+          >
+            <Plus size={16} />
+            Iniciar riego
+          </button>
+          <button
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
           >
@@ -143,6 +153,8 @@ export default function RiegoPage() {
           </button>
         </div>
       </div>
+
+      <RiegosEnCurso parcelaNombre={parcelaNombre} />
 
       {/* Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
@@ -197,6 +209,14 @@ export default function RiegoPage() {
           parcelas={parcelas}
           onSuccess={closeModal}
           onCancel={closeModal}
+        />
+      </Sheet>
+
+      <Sheet open={iniciarOpen} onClose={() => setIniciarOpen(false)} title="Iniciar riego">
+        <IniciarRiegoForm
+          parcelas={parcelas}
+          onSuccess={() => setIniciarOpen(false)}
+          onCancel={() => setIniciarOpen(false)}
         />
       </Sheet>
     </div>

@@ -104,14 +104,14 @@ export default function ProduccionDashboardPage() {
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: parcelasKpi = [] } = useQuery({
-    queryKey: ['kpi-prod-parcelas', anio],
-    queryFn: () => getKpiProduccionParcelas(anio),
+    queryKey: ['kpi-prod-parcelas', anio, 'media_agua'],
+    queryFn: () => getKpiProduccionParcelas(anio, 'media_agua'),
     staleTime: 300_000,
   })
 
   const { data: variedadesKpi = [] } = useQuery({
-    queryKey: ['kpi-prod-variedades', anio],
-    queryFn: () => getKpiProduccionVariedades(anio),
+    queryKey: ['kpi-prod-variedades', anio, 'media_agua'],
+    queryFn: () => getKpiProduccionVariedades(anio, 'media_agua'),
     staleTime: 300_000,
   })
 
@@ -283,6 +283,13 @@ export default function ProduccionDashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            value="media_agua"
+            disabled
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-gray-50 text-gray-600 focus:outline-none"
+          >
+            <option value="media_agua">Media Agua</option>
+          </select>
           <select
             value={variedadFilter}
             onChange={(e) => setVariedadFilter(e.target.value)}
