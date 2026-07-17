@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -55,6 +55,7 @@ export default function CosechaScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [saving, setSaving] = useState(false)
+  const submittingRef = useRef(false)
   const [form, setForm] = useState<RegistroCosechaCreate>(emptyForm())
 
   // ── Data ────────────────────────────────────────────────────────────────────
@@ -122,10 +123,12 @@ export default function CosechaScreen() {
   }
 
   async function handleSave() {
+    if (submittingRef.current) return
     if (!form.destino || !form.fecha || form.kg_total <= 0) {
       Alert.alert('Campos requeridos', 'Completá destino, fecha y kg total')
       return
     }
+    submittingRef.current = true
     try {
       setSaving(true)
       await createCosecha(form)
@@ -134,6 +137,7 @@ export default function CosechaScreen() {
     } catch {
       Alert.alert('Error', 'No se pudo guardar el registro')
     } finally {
+      submittingRef.current = false
       setSaving(false)
     }
   }

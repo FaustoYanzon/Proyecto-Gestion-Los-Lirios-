@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -649,10 +649,13 @@ function StepConfirmar({
   onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
   const totalCant = trabajadores.reduce((s, w) => s + w.cantidad, 0)
   const total = precio * totalCant
 
   async function handleSubmit() {
+    if (submittingRef.current) return
+    submittingRef.current = true
     const payload = {
       fecha,
       parcela_id: parcela?.id ?? null,
@@ -669,6 +672,7 @@ function StepConfirmar({
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el registro.')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }

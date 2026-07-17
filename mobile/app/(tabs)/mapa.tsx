@@ -12,16 +12,25 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import type { Parcela, FaseVariedad } from '../../lib/types'
-import { FINCA_FEATURES } from '../../lib/kmlData'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
+// Único polígono que no es una fila de `parcelas` (es el contorno de toda la
+// finca) — extraído una vez del KML real (frontend/public/Los Lirios 2026.kml,
+// placemark "Finca"). Prácticamente no cambia, a diferencia de los parrales.
+const FINCA_OUTLINE: [number, number][] = [
+  [-32.02103353983581, -68.39024972191801],
+  [-32.02112802929084, -68.40075245858213],
+  [-32.03636257095692, -68.40782074280381],
+  [-32.03914072169965, -68.38977272146781],
+  [-32.02103353983581, -68.39024972191801],
+]
+
+// Paleta unificada con frontend/components/map/FincaMapInner.tsx (TYPE_STYLES).
 const TYPE_COLORS: Record<string, { stroke: string; fill: string }> = {
-  parral:   { stroke: '#5b21b6', fill: '#7c3aed' },
-  potrero:  { stroke: '#15803d', fill: '#22c55e' },
-  pasero:   { stroke: '#78350f', fill: '#a16207' },
-  cabezal:  { stroke: '#0e7490', fill: '#06b6d4' },
-  finca:    { stroke: '#15803d', fill: 'transparent' },
-  pipeline: { stroke: '#c47e2a', fill: 'transparent' },
+  parral:  { stroke: '#5a1320', fill: '#7a1f2c' },
+  potrero: { stroke: '#2d4a28', fill: '#3f5c3a' },
+  pasero:  { stroke: '#6b4420', fill: '#8a5a2b' },
+  cabezal: { stroke: '#2d5468', fill: '#3d6b86' },
 }
 
 const VAR_COLORS: Record<string, string> = {
@@ -34,9 +43,41 @@ const ESTADO_LABELS: Record<string, string> = {
   brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje',
   envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
 }
+// Unificado con FincaMapInner.tsx ESTADO_COLORS — antes estaban invertidos.
 const ESTADO_COLORS: Record<string, string> = {
-  brotacion: '#84cc16', floracion: '#f472b6', cuaje: '#fb923c',
-  envero: '#c084fc', madurez: '#facc15', cosecha: '#22c55e', latencia: '#94a3b8',
+  brotacion: '#eab308', floracion: '#ec4899', cuaje: '#f97316',
+  envero: '#a855f7', madurez: '#22c55e', cosecha: '#ef4444', latencia: '#6b7280',
+}
+
+// ── Cosecha / Riego (modos de color nuevos, mismos endpoints que el mapa web) ──
+
+interface CosechaResumenPorParcela {
+  parcela_id: string | null
+  kg_total: number
+}
+
+interface EficienciaHidricaParcela {
+  parcela_id: string
+  porcentaje_cumplimiento: number | null
+}
+
+// Mismo gradiente que cosechaColor() en FincaMapInner.tsx.
+function cosechaColor(kg: number, maxKg: number): string {
+  if (kg <= 0 || maxKg <= 0) return '#f3f4f6'
+  const t = Math.min(1, kg / maxKg)
+  const from = [220, 252, 231]
+  const to = [21, 128, 61]
+  const rgb = from.map((c, i) => Math.round(c + (to[i] - c) * t))
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
+}
+
+// Mismo semáforo que riegoColor() en FincaMapInner.tsx.
+function riegoColor(pct: number | null): string {
+  if (pct == null) return '#f3f4f6'
+  if (pct < 50) return '#dc2626'
+  if (pct < 85) return '#f59e0b'
+  if (pct <= 115) return '#16a34a'
+  return '#3d6b86'
 }
 
 interface EstadoActual {
@@ -57,8 +98,20 @@ interface ParcelPanel {
   loadingExtra: boolean
 }
 
-function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData, fenologia: FaseVariedad[]): string {
-  const featuresJSON = JSON.stringify(FINCA_FEATURES)
+function buildMapHTML(
+  parcelas: Parcela[], layers: GeoLayerData, fenologia: FaseVariedad[],
+  cosecha: CosechaResumenPorParcela[], riego: EficienciaHidricaParcela[],
+): string {
+  // Los polígonos de cada parcela vienen de la API (parcelas.coordenadas, ya
+  // poblada desde el KML real) — ya no de un snapshot hardcodeado. El único
+  // polígono que no es una parcela (el contorno de la finca) se dibuja aparte
+  // desde FINCA_OUTLINE.
+  const featuresJSON = JSON.stringify(
+    parcelas
+      .filter((p) => Array.isArray(p.coordenadas) && p.coordenadas.length > 0)
+      .map((p) => ({ name: p.nombre, type: p.tipo, coords: p.coordenadas }))
+  )
+  const fincaOutlineJSON = JSON.stringify(FINCA_OUTLINE)
   const parcelasJSON = JSON.stringify(
     parcelas.map((p) => ({
       id: p.id, nombre: p.nombre, tipo: p.tipo,
@@ -73,6 +126,16 @@ function buildMapHTML(parcelas: Parcela[], layers: GeoLayerData, fenologia: Fase
   const fenologiaJSON = JSON.stringify(
     Object.fromEntries(fenologia.map((f) => [f.variedad, f]))
   )
+  // Keyed by parcela_id, mismo criterio que el mapa web.
+  const cosechaByParcelaId = Object.fromEntries(
+    cosecha.filter((c) => c.parcela_id).map((c) => [c.parcela_id as string, c.kg_total])
+  )
+  const maxKg = Math.max(0, ...Object.values(cosechaByParcelaId))
+  const cosechaJSON = JSON.stringify(cosechaByParcelaId)
+  const riegoByParcelaId = Object.fromEntries(
+    riego.map((r) => [r.parcela_id, r.porcentaje_cumplimiento])
+  )
+  const riegoJSON = JSON.stringify(riegoByParcelaId)
 
   // Serialize each layer; null-safe (empty FeatureCollection → no features rendered)
   const acequiasJSON = JSON.stringify(layers.acequias)
@@ -169,7 +232,7 @@ html,body,#map { width:100%; height:100%; }
     <div class="lp-title">Infraestructura</div>
     <label class="lp-row"><input type="checkbox" id="cb-acequias" onchange="toggleLayer('acequias')"><span class="lp-line" style="background:#38bdf8"></span><span class="lp-lbl">Acequias</span></label>
     <label class="lp-row"><input type="checkbox" id="cb-lineaElectrica" onchange="toggleLayer('lineaElectrica')"><span class="lp-line" style="background:#facc15"></span><span class="lp-lbl">Línea eléctrica</span></label>
-    <label class="lp-row"><input type="checkbox" id="cb-canerias" onchange="toggleLayer('canerias')"><span class="lp-line" style="background:#1e3a8a"></span><span class="lp-lbl">Cañerías</span></label>
+    <label class="lp-row"><input type="checkbox" id="cb-canerias" checked onchange="toggleLayer('canerias')"><span class="lp-line" style="background:#1e3a8a"></span><span class="lp-lbl">Cañerías</span></label>
     <label class="lp-row"><input type="checkbox" id="cb-valvulas" onchange="toggleLayer('valvulas')"><span class="lp-dot" style="background:#1e3a8a"></span><span class="lp-lbl">Válvulas</span></label>
     <label class="lp-row"><input type="checkbox" id="cb-cuadrantesRiego" onchange="toggleLayer('cuadrantesRiego')"><span class="lp-poly" style="background:#d1d5db"></span><span class="lp-lbl">Cuadrantes</span></label>
   </div>
@@ -189,12 +252,16 @@ html,body,#map { width:100%; height:100%; }
 
 <script>
 const FEATURES = ${featuresJSON};
+const FINCA_OUTLINE = ${fincaOutlineJSON};
 const PARCELAS = ${parcelasJSON};
 const TYPE_COLORS = ${typeColorsJSON};
 const VAR_COLORS = ${varColorsJSON};
 const ESTADO_COLORS = ${estadoColorsJSON};
 const ESTADO_LABELS = ${estadoLabelsJSON};
 const FENOLOGIA = ${fenologiaJSON}; // keyed by variedad
+const COSECHA_BY_PARCELA = ${cosechaJSON}; // keyed by parcela_id -> kg_total
+const MAX_KG = ${maxKg};
+const RIEGO_BY_PARCELA = ${riegoJSON}; // keyed by parcela_id -> porcentaje_cumplimiento
 
 // Infrastructure GeoJSON data
 const GEO_DATA = {
@@ -217,7 +284,13 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
 function getStyle(f, selected) {
   const p = PARCELAS.find(p => p.nombre === f.name);
   let stroke, fill;
-  if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && FENOLOGIA[p.variedad]) {
+  if (colorMode === 'cosecha') {
+    const kg = (p && COSECHA_BY_PARCELA[p.id]) || 0;
+    stroke = '#166534'; fill = cosechaColor(kg, MAX_KG);
+  } else if (colorMode === 'riego') {
+    const pct = p ? RIEGO_BY_PARCELA[p.id] : null;
+    stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
+  } else if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && FENOLOGIA[p.variedad]) {
     const estado = FENOLOGIA[p.variedad].estado_fenologico;
     stroke = fill = ESTADO_COLORS[estado] || '#94a3b8';
   } else if (colorMode === 'variedad' && f.type === 'parral' && p && p.variedad) {
@@ -229,11 +302,26 @@ function getStyle(f, selected) {
   return {
     color: stroke, weight: selected ? 3 : 1.5,
     fillColor: fill,
-    fillOpacity: f.type === 'finca' ? 0.02
-      : f.type === 'parral' ? (selected ? 0.3 : 0.15)
-      : (selected ? 0.65 : 0.3),
-    dashArray: f.type === 'finca' ? '7,4' : undefined,
+    fillOpacity: selected ? 0.65 : 0.3,
   };
+}
+
+// Mismo gradiente que cosechaColor() del lado React (y de FincaMapInner.tsx web).
+function cosechaColor(kg, maxKg) {
+  if (kg <= 0 || maxKg <= 0) return '#f3f4f6';
+  const t = Math.min(1, kg / maxKg);
+  const from = [220, 252, 231], to = [21, 128, 61];
+  const rgb = from.map((c, i) => Math.round(c + (to[i] - c) * t));
+  return 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+}
+
+// Mismo semáforo que riegoColor() del lado React (y de FincaMapInner.tsx web).
+function riegoColor(pct) {
+  if (pct == null) return '#f3f4f6';
+  if (pct < 50) return '#dc2626';
+  if (pct < 85) return '#f59e0b';
+  if (pct <= 115) return '#16a34a';
+  return '#3d6b86';
 }
 
 function updateLegend() {
@@ -247,6 +335,16 @@ function updateLegend() {
     title.textContent = 'Variedad';
     const vars = [{k:'flame',label:'Flame'},{k:'red_globe',label:'Red Globe'},{k:'fiesta',label:'Fiesta'},{k:'bonarda',label:'Bonarda'},{k:'sultanina',label:'Sultanina'},{k:'syrah',label:'Syrah/Asp.'}];
     items.innerHTML = vars.map(v => '<div class="legend-item"><div class="legend-dot" style="background:'+(VAR_COLORS[v.k]||'#94a3b8')+'"></div><span class="legend-label">'+v.label+'</span></div>').join('');
+  } else if (colorMode === 'cosecha') {
+    title.textContent = 'Cosecha';
+    items.innerHTML =
+      '<div class="legend-item"><div class="legend-dot" style="background:#f3f4f6;border:1px solid #e5e7eb"></div><span class="legend-label">Sin datos</span></div>' +
+      '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG*0.3, MAX_KG)+'"></div><span class="legend-label">Bajo</span></div>' +
+      '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG, MAX_KG)+'"></div><span class="legend-label">Alto</span></div>';
+  } else if (colorMode === 'riego') {
+    title.textContent = 'Riego';
+    const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
+    items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
   } else {
     title.textContent = 'Fenología';
     const estados = ['brotacion','floracion','cuaje','envero','madurez','cosecha','latencia'];
@@ -261,8 +359,11 @@ function updateStyles() {
   });
 }
 
-const MODE_LABELS = { type: '&#9632; Por tipo', variedad: '&#9632; Por variedad', fenologia: '&#9632; Fenología' };
-const MODE_ORDER = ['type', 'variedad', 'fenologia'];
+const MODE_LABELS = {
+  type: '&#9632; Por tipo', variedad: '&#9632; Por variedad',
+  cosecha: '&#9632; Cosecha', riego: '&#9632; Riego', fenologia: '&#9632; Fenología',
+};
+const MODE_ORDER = ['type', 'variedad', 'cosecha', 'riego', 'fenologia'];
 
 function toggleMode() {
   colorMode = MODE_ORDER[(MODE_ORDER.indexOf(colorMode) + 1) % MODE_ORDER.length];
@@ -270,15 +371,9 @@ function toggleMode() {
   updateStyles(); updateLegend();
 }
 
+L.polygon(FINCA_OUTLINE, { color: '#2d4a28', weight: 2.5, fill: false, dashArray: '6,4', interactive: false }).addTo(map);
+
 FEATURES.forEach(f => {
-  if (f.geometry === 'line') {
-    L.polyline(f.coords, { color: '#c47e2a', weight: 1.5, opacity: 0.6, interactive: false }).addTo(map);
-    return;
-  }
-  if (f.type === 'finca') {
-    L.polygon(f.coords, { color: '#15803d', weight: 2.5, fill: false, dashArray: '8,5', interactive: false }).addTo(map);
-    return;
-  }
   const poly = L.polygon(f.coords, getStyle(f, false));
   poly.bindTooltip(f.name, { direction: 'center', opacity: 0.9, permanent: false });
   poly.on('click', () => {
@@ -391,7 +486,10 @@ function initExtraLayers() {
 
     var group = L.layerGroup([geoLayer]);
     layerGroups[cfg.key] = group;
-    // Layers are off by default; user enables them via panel
+    // Layers are off by default; user enables them via panel — except
+    // "canerias", which starts visible (reemplaza las líneas viejas
+    // hardcodeadas que se dibujaban siempre antes de este fix).
+    if (cfg.key === 'canerias') group.addTo(map);
   });
 }
 
@@ -643,21 +741,29 @@ export default function MapaScreen() {
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [estados, setEstados] = useState<EstadoActual[]>([])
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
+  const [cosecha, setCosecha] = useState<CosechaResumenPorParcela[]>([])
+  const [riego, setRiego] = useState<EficienciaHidricaParcela[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [panel, setPanel] = useState<ParcelPanel | null>(null)
   const webviewRef = useRef<InstanceType<typeof WebView>>(null)
 
   const loadData = useCallback(async () => {
+    const now = new Date()
+    const anio = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
     try {
-      const [parcelasRes, estadosRes, fenologiaRes] = await Promise.all([
+      const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes] = await Promise.all([
         api.get<Parcela[]>('/parcelas/mapa'),
         api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
         api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
+        api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
+        api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
       ])
       setParcelas(parcelasRes.data.filter((p) => p.is_active))
       setEstados(estadosRes.data)
       setFenologia(fenologiaRes.data)
+      setCosecha(cosechaRes.data)
+      setRiego(riegoRes.data)
     } catch { /* offline */ }
     finally { setLoading(false) }
   }, [])
@@ -737,7 +843,7 @@ export default function MapaScreen() {
     )
   }
 
-  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia)
+  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia, cosecha, riego)
 
   return (
     <View style={styles.container}>

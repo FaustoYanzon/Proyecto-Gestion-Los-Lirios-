@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import api from '../lib/api'
 import { getCache, CACHE_TTL } from '../lib/cache'
-import { colors, fonts } from '../lib/theme'
+import { colors } from '../lib/theme'
 import type { Parcela } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
 
@@ -30,7 +30,7 @@ function formatDateDisplay(iso: string) {
 
 const STEP_LABELS = ['Fecha / Resp.', 'Detalle', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2; onCancel: () => void }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -52,6 +52,13 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
           </View>
         )
       })}
+      <TouchableOpacity
+        style={si.cancelBtn}
+        onPress={onCancel}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close" size={18} color={colors.ink60} />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -76,6 +83,10 @@ const si = StyleSheet.create({
   labelDone:   { color: colors.tierra, fontWeight: '600' },
   line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 4 },
   lineDone: { backgroundColor: colors.tierra },
+  cancelBtn: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.hueso,
+    justifyContent: 'center', alignItems: 'center', marginLeft: 8, flexShrink: 0,
+  },
 })
 
 // ─── DatePickerModal ──────────────────────────────────────────────────────────
@@ -198,9 +209,11 @@ const dp = StyleSheet.create({
 function StepFechaResp({
   initialResponsable,
   onNext,
+  onCancelar,
 }: {
   initialResponsable: string
   onNext: (fecha: string, responsable: string) => void
+  onCancelar: () => void
 }) {
   const [fecha, setFecha] = useState(isoToday())
   const [responsable, setResponsable] = useState(initialResponsable)
@@ -208,7 +221,7 @@ function StepFechaResp({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} />
+      <StepIndicator current={0} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Fecha y Responsable</Text>
 
@@ -262,13 +275,14 @@ type DetalleData = {
 
 function StepDetalle({
   fecha, responsable, parcelas,
-  onNext, onBack,
+  onNext, onBack, onCancelar,
 }: {
   fecha: string
   responsable: string
   parcelas: Parcela[]
   onNext: (data: DetalleData) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [search, setSearch] = useState('')
   const [parcela, setParcela] = useState<Parcela | null>(null)
@@ -306,7 +320,7 @@ function StepDetalle({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} />
+      <StepIndicator current={1} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Detalle</Text>
 
@@ -449,7 +463,7 @@ function StepDetalle({
 
 function StepConfirmar({
   fecha, responsable, parcela, producto, dosis, motivo, diasCarencia, diasReingreso,
-  onSuccess, onBack,
+  onSuccess, onBack, onCancelar,
 }: {
   fecha: string
   responsable: string
@@ -461,8 +475,10 @@ function StepConfirmar({
   diasReingreso: number
   onSuccess: () => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
 
   function addDays(iso: string, days: number): string {
     const d = new Date(iso)
@@ -471,6 +487,8 @@ function StepConfirmar({
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return
+    submittingRef.current = true
     const dosisNum = parseFloat(dosis.replace(',', '.'))
     try {
       setLoading(true)
@@ -489,6 +507,7 @@ function StepConfirmar({
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
@@ -508,7 +527,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} />
+      <StepIndicator current={2} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar</Text>
 
@@ -547,12 +566,13 @@ function StepConfirmar({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'fecha_resp' | 'detalle' | 'confirmar' | 'success'
+type Step = 'fecha_resp' | 'detalle' | 'confirmar'
 
 export default function FitoScreen() {
   const user = useAuthStore((s) => s.user)
   const [step, setStep] = useState<Step>('fecha_resp')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [toast, setToast] = useState<string | null>(null)
 
   const [selFecha, setSelFecha] = useState(isoToday())
   const [selResponsable, setSelResponsable] = useState('')
@@ -571,11 +591,28 @@ export default function FitoScreen() {
 
   useEffect(() => { loadParcelas() }, [loadParcelas])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1800)
+    return () => clearTimeout(t)
+  }, [toast])
+
   function reset() {
     setSelFecha(isoToday())
     setSelResponsable('')
     setSelDetalle(null)
     setStep('fecha_resp')
+  }
+
+  function handleCancelar() {
+    Alert.alert(
+      'Cancelar carga',
+      'Se van a perder los datos ingresados. ¿Querés salir?',
+      [
+        { text: 'Seguir cargando', style: 'cancel' },
+        { text: 'Salir', style: 'destructive', onPress: reset },
+      ],
+    )
   }
 
   if (step === 'detalle') {
@@ -586,6 +623,7 @@ export default function FitoScreen() {
         parcelas={parcelas}
         onNext={(data) => { setSelDetalle(data); setStep('confirmar') }}
         onBack={() => setStep('fecha_resp')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -601,34 +639,27 @@ export default function FitoScreen() {
         motivo={selDetalle.motivo}
         diasCarencia={selDetalle.diasCarencia}
         diasReingreso={selDetalle.diasReingreso}
-        onSuccess={() => setStep('success')}
+        onSuccess={() => { reset(); loadParcelas(); setToast('Aplicación cargada ✓') }}
         onBack={() => setStep('detalle')}
+        onCancelar={handleCancelar}
       />
     )
   }
 
-  if (step === 'success') {
-    return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIcon}>
-          <Ionicons name="flask" size={36} color={colors.blanco} />
-        </View>
-        <Text style={[styles.successTitle, { fontFamily: fonts.display }]}>
-          Aplicación registrada
-        </Text>
-        <Text style={styles.successSub}>La fitosanitaria fue guardada correctamente</Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={reset}>
-          <Text style={styles.primaryBtnText}>Nueva aplicación</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
   return (
-    <StepFechaResp
-      initialResponsable={initialResponsable}
-      onNext={(f, r) => { setSelFecha(f); setSelResponsable(r); setStep('detalle') }}
-    />
+    <View style={{ flex: 1 }}>
+      {toast && (
+        <View style={styles.toast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
+      <StepFechaResp
+        initialResponsable={initialResponsable}
+        onNext={(f, r) => { setSelFecha(f); setSelResponsable(r); setStep('detalle') }}
+        onCancelar={handleCancelar}
+      />
+    </View>
   )
 }
 
@@ -732,19 +763,16 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
 
-  // success
-  successContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: colors.hueso, padding: 32,
+  // toast
+  toast: {
+    position: 'absolute', top: 16, left: 20, right: 20, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.tierra, borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 16,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
-  successIcon: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.tierra,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    shadowColor: colors.tierra,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-  },
-  successTitle: { fontSize: 26, color: colors.ink, marginBottom: 8 },
-  successSub: { fontSize: 15, color: colors.ink60, marginBottom: 32, textAlign: 'center' },
+  toastText: { color: colors.blanco, fontSize: 14, fontWeight: '700' },
 
   // modal
   modalHeader: {

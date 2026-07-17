@@ -107,6 +107,28 @@ export interface RiegoPayload {
   responsable: string
 }
 
+// Riego "en curso": arrancó (inicio) pero todavía no se cerró (sin fin).
+export interface RiegoIniciarPayload {
+  parcela_id: string
+  cabezal: string
+  valvula: string
+  responsable: string
+  fertilizante_nombre?: string
+  fertilizante_dosis_lt_ha?: number
+}
+
+export interface RiegoEnCurso {
+  id: string
+  fecha: string
+  parcela_id: string
+  cabezal: string
+  valvula: string
+  inicio: string
+  n_valvulas: number
+  responsable: string
+  fertilizante_nombre: string | null
+}
+
 export interface CicloFenologico {
   id: string
   parcela_id: string

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -12,11 +12,11 @@ import {
   Modal,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import api from '../../lib/api'
+import api, { getRiegosEnCurso, iniciarRiego, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
-import type { Parcela, RegistroRiego } from '../../lib/types'
+import type { Parcela, RegistroRiego, RiegoEnCurso } from '../../lib/types'
 import { CABEZAL_VALVULAS, getValvulasForParcela, calcRiegoTotales } from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
@@ -54,7 +54,7 @@ function formatDatetime(iso: string) {
 
 const STEP_LABELS = ['Parral', 'Horario', 'Detalle', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
+function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel: () => void }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -76,6 +76,13 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
           </View>
         )
       })}
+      <TouchableOpacity
+        style={si.cancelBtn}
+        onPress={onCancel}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close" size={18} color={colors.ink60} />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -101,6 +108,10 @@ const si = StyleSheet.create({
   labelDone:   { color: colors.cielo, fontWeight: '600' },
   line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 3 },
   lineDone: { backgroundColor: colors.cielo },
+  cancelBtn: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.hueso,
+    justifyContent: 'center', alignItems: 'center', marginLeft: 8, flexShrink: 0,
+  },
 })
 
 // ─── DatePickerModal ──────────────────────────────────────────────────────────
@@ -337,13 +348,14 @@ const tp = StyleSheet.create({
 const CABEZALES = Object.keys(CABEZAL_VALVULAS).sort()
 
 function StepUbicacion({
-  parcelas, initialCabezal, initialParcelaId, initialValvulas, onNext,
+  parcelas, initialCabezal, initialParcelaId, initialValvulas, onNext, onCancelar,
 }: {
   parcelas: Parcela[]
   initialCabezal: string | null
   initialParcelaId: string | null
   initialValvulas: string[]
   onNext: (cabezal: string, parcela: Parcela, valvulas: string[]) => void
+  onCancelar: () => void
 }) {
   const [cabezal, setCabezal] = useState<string | null>(initialCabezal)
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
@@ -384,7 +396,7 @@ function StepUbicacion({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} />
+      <StepIndicator current={0} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         <Text style={styles.fieldLabel}>1. CABEZAL</Text>
@@ -465,10 +477,53 @@ function StepUbicacion({
   )
 }
 
+// ─── Bifurcación: cargar ya hecho vs. iniciar ahora ───────────────────────────
+
+function StepModo({
+  onElegirRetroactivo, onElegirIniciar, onCancelar,
+}: {
+  onElegirRetroactivo: () => void
+  onElegirIniciar: () => void
+  onCancelar: () => void
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <View style={si.row}>
+        <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>¿Qué querés hacer?</Text>
+        <TouchableOpacity
+          style={si.cancelBtn}
+          onPress={onCancelar}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close" size={18} color={colors.ink60} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ padding: 16, gap: 12 }}>
+        <TouchableOpacity style={styles.modoCard} onPress={onElegirRetroactivo} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={26} color={colors.cielo} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modoCardTitle}>Ya se hizo</Text>
+            <Text style={styles.modoCardSub}>Cargar un riego que ya terminó, con inicio y fin conocidos.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.niebla} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.modoCard} onPress={onElegirIniciar} activeOpacity={0.8}>
+          <Ionicons name="play-circle-outline" size={26} color={colors.cielo} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modoCardTitle}>Iniciar ahora</Text>
+            <Text style={styles.modoCardSub}>Arranca el riego ya mismo, sin hora de fin — lo cerrás después.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.niebla} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
 // ─── Step 2: horario ──────────────────────────────────────────────────────────
 
 function StepHorario({
-  initialFechaInicio, initialHoraInicio, initialFechaFin, initialHoraFin, onNext, onBack,
+  initialFechaInicio, initialHoraInicio, initialFechaFin, initialHoraFin, onNext, onBack, onCancelar,
 }: {
   initialFechaInicio: string
   initialHoraInicio: string
@@ -476,6 +531,7 @@ function StepHorario({
   initialHoraFin: string
   onNext: (fechaInicio: string, horaInicio: string, fechaFin: string, horaFin: string) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [fechaInicio, setFechaInicio] = useState(initialFechaInicio || isoToday())
   const [horaInicio, setHoraInicio] = useState(initialHoraInicio)
@@ -498,7 +554,7 @@ function StepHorario({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} />
+      <StepIndicator current={1} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>¿Cuándo se regó?</Text>
 
@@ -567,7 +623,7 @@ function StepHorario({
 // ─── Step 3: fertirriego + responsable ────────────────────────────────────────
 
 function StepDetalle({
-  initialConFertirriego, initialProducto, initialDosis, initialResponsable, onNext, onBack,
+  initialConFertirriego, initialProducto, initialDosis, initialResponsable, onNext, onBack, onCancelar,
 }: {
   initialConFertirriego: boolean
   initialProducto: string
@@ -575,6 +631,7 @@ function StepDetalle({
   initialResponsable: string
   onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [conFertirriego, setConFertirriego] = useState(initialConFertirriego)
   const [producto, setProducto] = useState(initialProducto)
@@ -595,7 +652,7 @@ function StepDetalle({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} />
+      <StepIndicator current={2} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Fertiriego y responsable</Text>
 
@@ -676,20 +733,24 @@ interface RiegoDraft {
 }
 
 function StepConfirmar({
-  draft, onSuccess, onBack,
+  draft, onSuccess, onBack, onCancelar,
 }: {
   draft: RiegoDraft
   onSuccess: () => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
 
-  const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00`
-  const finISO = `${draft.fechaFin}T${draft.horaFin}:00`
+  const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00-03:00`
+  const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
   const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length)
 
   async function handleSubmit() {
+    if (submittingRef.current) return
     if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
+    submittingRef.current = true
     try {
       setLoading(true)
       await api.post('/produccion/riego/', {
@@ -708,6 +769,7 @@ function StepConfirmar({
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el riego.')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
@@ -729,7 +791,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={3} />
+      <StepIndicator current={3} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar riego</Text>
 
@@ -778,15 +840,138 @@ function StepConfirmar({
   )
 }
 
+// ─── Confirmar "iniciar ahora" (sin fin todavía) ──────────────────────────────
+
+interface IniciarDraft {
+  cabezal: string
+  parcela: Parcela
+  valvulas: string[]
+  conFertirriego: boolean
+  producto: string
+  dosis: string
+  responsable: string
+}
+
+function StepIniciarConfirmar({
+  draft, onSuccess, onBack, onCancelar,
+}: {
+  draft: IniciarDraft
+  onSuccess: () => void
+  onBack: () => void
+  onCancelar: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
+
+  async function handleSubmit() {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    try {
+      setLoading(true)
+      await iniciarRiego({
+        parcela_id: draft.parcela.id,
+        cabezal: draft.cabezal,
+        valvula: draft.valvulas.join(','),
+        responsable: draft.responsable,
+        fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
+        fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
+      })
+      onSuccess()
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo iniciar el riego.')
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
+    }
+  }
+
+  const rows: { label: string; value: string }[] = [
+    { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
+    { label: 'Parral', value: draft.parcela.nombre },
+    { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
+    {
+      label: 'Fertiriego',
+      value: draft.conFertirriego && draft.producto ? `${draft.producto} (${draft.dosis || '0'} L/ha)` : 'Sin fertiriego',
+    },
+    { label: 'Responsable', value: draft.responsable },
+  ]
+
+  return (
+    <View style={styles.stepContainer}>
+      <View style={si.row}>
+        <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>Iniciar riego</Text>
+        <TouchableOpacity
+          style={si.cancelBtn}
+          onPress={onCancelar}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close" size={18} color={colors.ink60} />
+        </TouchableOpacity>
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <View style={styles.previewCard}>
+          <Ionicons name="play" size={16} color={colors.cielo} />
+          <Text style={styles.previewText}>Arranca ahora — se cierra después desde &quot;En curso&quot;</Text>
+        </View>
+
+        <View style={[styles.summaryCard, { marginTop: 16 }]}>
+          {rows.map(({ label, value }, idx, arr) => (
+            <View
+              key={label}
+              style={[styles.summaryRow, idx < arr.length - 1 && styles.summaryRowBorder]}
+            >
+              <Text style={styles.summaryLabel}>{label}</Text>
+              <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right' }]} numberOfLines={2}>
+                {value}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack} disabled={loading}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 2 }, loading && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.blanco} size="small" />
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <Text style={styles.primaryBtnText}>Iniciar riego</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
 // ─── Recent riegos ────────────────────────────────────────────────────────────
 
+function formatTranscurrido(horas: number): string {
+  const totalMin = Math.floor(horas * 60)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return `${h}h ${m.toString().padStart(2, '0')}m`
+}
+
 function RecentRiegos({
-  riegos, parcelas, refreshing, onRefresh,
+  riegos, parcelas, refreshing, onRefresh, riegosEnCurso, onTerminar, terminandoId,
 }: {
   riegos: RegistroRiego[]
   parcelas: Parcela[]
   refreshing: boolean
   onRefresh: () => void
+  riegosEnCurso: RiegoEnCurso[]
+  onTerminar: (r: RiegoEnCurso, horas: number, litros: number) => void
+  terminandoId: string | null
 }) {
   function parcelaNombre(id: string) {
     return parcelas.find((p) => p.id === id)?.nombre ?? '—'
@@ -800,6 +985,35 @@ function RecentRiegos({
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cielo} />
       }
     >
+      {riegosEnCurso.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
+          {riegosEnCurso.map((r) => {
+            const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas) ?? { horas: 0, litros: 0 }
+            return (
+              <View key={r.id} style={styles.enCursoCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riegoNombre}>
+                    {parcelaNombre(r.parcela_id)} · Cab. {r.cabezal} · V{r.valvula.split(',').join('+')}
+                  </Text>
+                  <Text style={styles.enCursoStats}>
+                    {formatTranscurrido(totales.horas)} · {totales.litros.toLocaleString('es-AR')} L
+                  </Text>
+                  <Text style={styles.riegoResp}>{r.responsable}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.terminarBtn}
+                  onPress={() => onTerminar(r, totales.horas, totales.litros)}
+                  disabled={terminandoId === r.id}
+                >
+                  <Text style={styles.terminarBtnText}>Terminar</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          })}
+        </>
+      )}
+
       {riegos.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="water-outline" size={36} color={colors.hueso} />
@@ -845,7 +1059,8 @@ function RecentRiegos({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'ubicacion' | 'horario' | 'detalle' | 'confirmar' | 'success'
+type Step = 'list' | 'ubicacion' | 'modo' | 'horario' | 'detalle' | 'confirmar' | 'iniciar_confirmar'
+type Modo = 'retroactivo' | 'iniciar'
 
 const emptyDraft: RiegoDraft = {
   cabezal: '', parcela: null as unknown as Parcela, valvulas: [],
@@ -856,10 +1071,14 @@ const emptyDraft: RiegoDraft = {
 export default function RiegoScreen() {
   const user = useAuthStore((s) => s.user)
   const [step, setStep] = useState<Step>('list')
+  const [modo, setModo] = useState<Modo>('retroactivo')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [riegos, setRiegos] = useState<RegistroRiego[]>([])
+  const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
+  const [terminandoId, setTerminandoId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [draft, setDraft] = useState<RiegoDraft>(emptyDraft)
+  const [toast, setToast] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     const [cachedParcelas, cachedRiegos] = await Promise.all([
@@ -885,18 +1104,87 @@ export default function RiegoScreen() {
     finally { setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  const loadRiegosEnCurso = useCallback(async () => {
+    try {
+      setRiegosEnCurso(await getRiegosEnCurso())
+    } catch { /* offline */ }
+  }, [])
 
-  function onRefresh() { setRefreshing(true); loadData() }
+  useEffect(() => { loadData(); loadRiegosEnCurso() }, [loadData, loadRiegosEnCurso])
+
+  // Refetch cada 30s para detectar riegos iniciados/cerrados por otros
+  // usuarios/dispositivos — el cronómetro que se ve en cada card se calcula
+  // localmente (calcRiegoTotales contra "ahora"), no hace falta pegarle al
+  // servidor cada segundo para eso.
+  useEffect(() => {
+    const t = setInterval(loadRiegosEnCurso, 30_000)
+    return () => clearInterval(t)
+  }, [loadRiegosEnCurso])
+
+  // Tick de 1s puramente para forzar el re-render del cronómetro en pantalla
+  // mientras haya al menos un riego en curso.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (riegosEnCurso.length === 0) return
+    const t = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [riegosEnCurso.length])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1800)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  function onRefresh() { setRefreshing(true); loadData(); loadRiegosEnCurso() }
+
+  async function handleTerminar(r: RiegoEnCurso, horas: number, litros: number) {
+    Alert.alert(
+      'Terminar riego',
+      `Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados. ¿Confirmás?`,
+      [
+        { text: 'Seguir regando', style: 'cancel' },
+        {
+          text: 'Terminar', style: 'default',
+          onPress: async () => {
+            if (terminandoId) return
+            setTerminandoId(r.id)
+            try {
+              await terminarRiego(r.id)
+              await Promise.all([loadRiegosEnCurso(), loadData()])
+              setToast('Riego terminado ✓')
+            } catch (e: unknown) {
+              const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+              Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo terminar el riego.')
+            } finally {
+              setTerminandoId(null)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   function startWizard() {
     setDraft({ ...emptyDraft, responsable: user?.full_name ?? '' })
+    setModo('retroactivo')
     setStep('ubicacion')
   }
 
   function resetWizard() {
     setDraft(emptyDraft)
     setStep('list')
+  }
+
+  function handleCancelar() {
+    Alert.alert(
+      'Cancelar carga',
+      'Se van a perder los datos ingresados. ¿Querés salir?',
+      [
+        { text: 'Seguir cargando', style: 'cancel' },
+        { text: 'Salir', style: 'destructive', onPress: resetWizard },
+      ],
+    )
   }
 
   if (step === 'ubicacion') {
@@ -908,8 +1196,19 @@ export default function RiegoScreen() {
         initialValvulas={draft.valvulas}
         onNext={(cabezal, parcela, valvulas) => {
           setDraft((d) => ({ ...d, cabezal, parcela, valvulas }))
-          setStep('horario')
+          setStep('modo')
         }}
+        onCancelar={handleCancelar}
+      />
+    )
+  }
+
+  if (step === 'modo') {
+    return (
+      <StepModo
+        onElegirRetroactivo={() => { setModo('retroactivo'); setStep('horario') }}
+        onElegirIniciar={() => { setModo('iniciar'); setStep('detalle') }}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -926,6 +1225,7 @@ export default function RiegoScreen() {
           setStep('detalle')
         }}
         onBack={() => setStep('ubicacion')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -939,9 +1239,10 @@ export default function RiegoScreen() {
         initialResponsable={draft.responsable}
         onNext={(conFertirriego, producto, dosis, responsable) => {
           setDraft((d) => ({ ...d, conFertirriego, producto, dosis, responsable }))
-          setStep('confirmar')
+          setStep(modo === 'iniciar' ? 'iniciar_confirmar' : 'confirmar')
         }}
-        onBack={() => setStep('horario')}
+        onBack={() => setStep(modo === 'iniciar' ? 'modo' : 'horario')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -950,29 +1251,32 @@ export default function RiegoScreen() {
     return (
       <StepConfirmar
         draft={draft}
-        onSuccess={() => { setStep('success'); loadData() }}
+        onSuccess={() => { resetWizard(); loadData(); setToast('Riego cargado ✓') }}
         onBack={() => setStep('detalle')}
+        onCancelar={handleCancelar}
       />
     )
   }
 
-  if (step === 'success') {
+  if (step === 'iniciar_confirmar' && draft.parcela) {
     return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIcon}>
-          <Ionicons name="water" size={36} color={colors.blanco} />
-        </View>
-        <Text style={[styles.successTitle, { fontFamily: fonts.display }]}>Riego registrado</Text>
-        <Text style={styles.successSub}>Se guardó el registro correctamente</Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={resetWizard}>
-          <Text style={styles.primaryBtnText}>Nuevo riego</Text>
-        </TouchableOpacity>
-      </View>
+      <StepIniciarConfirmar
+        draft={draft}
+        onSuccess={() => { resetWizard(); loadRiegosEnCurso(); setToast('Riego iniciado ✓') }}
+        onBack={() => setStep('detalle')}
+        onCancelar={handleCancelar}
+      />
     )
   }
 
   return (
     <View style={{ flex: 1 }}>
+      {toast && (
+        <View style={styles.toast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
       <TouchableOpacity
         style={styles.newBtn}
         onPress={startWizard}
@@ -986,6 +1290,9 @@ export default function RiegoScreen() {
         parcelas={parcelas}
         refreshing={refreshing}
         onRefresh={onRefresh}
+        riegosEnCurso={riegosEnCurso}
+        onTerminar={handleTerminar}
+        terminandoId={terminandoId}
       />
     </View>
   )
@@ -1135,17 +1442,38 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyStateTitle: { fontSize: 14, color: colors.niebla, marginTop: 10 },
 
-  // success
-  successContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: colors.hueso, padding: 32,
+  // modo (bifurcación cargar ya hecho vs iniciar ahora)
+  modoCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: colors.blanco, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: colors.hueso,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
-  successIcon: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.cielo,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    shadowColor: colors.cielo,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+  modoCardTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  modoCardSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
+
+  // riegos en curso
+  enCursoCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.crema, borderRadius: 14, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.hueso,
   },
-  successTitle: { fontSize: 26, color: colors.ink, marginBottom: 8 },
-  successSub: { fontSize: 15, color: colors.ink60, marginBottom: 32, textAlign: 'center' },
+  enCursoStats: { fontSize: 13, color: colors.cielo, fontWeight: '700', fontFamily: fonts.mono, marginTop: 2 },
+  terminarBtn: {
+    backgroundColor: colors.cielo, borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 14, flexShrink: 0,
+  },
+  terminarBtnText: { color: colors.blanco, fontSize: 13, fontWeight: '700' },
+
+  // toast
+  toast: {
+    position: 'absolute', top: 16, left: 20, right: 20, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.cielo, borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 16,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
+  },
+  toastText: { color: colors.blanco, fontSize: 14, fontWeight: '700' },
 })

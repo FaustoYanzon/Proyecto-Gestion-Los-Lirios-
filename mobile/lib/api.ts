@@ -50,3 +50,21 @@ export async function createCosecha(payload: RegistroCosechaCreate): Promise<Reg
 export async function deleteCosecha(id: string): Promise<void> {
   await api.delete(`/produccion/cosecha/${id}`)
 }
+
+// ─── Riego en curso ───────────────────────────────────────────────────────────
+
+import type { RiegoEnCurso, RiegoIniciarPayload } from './types'
+
+export async function getRiegosEnCurso(): Promise<RiegoEnCurso[]> {
+  const { data } = await api.get<RiegoEnCurso[]>('/produccion/riego/en-curso')
+  return data
+}
+
+export async function iniciarRiego(payload: RiegoIniciarPayload): Promise<RiegoEnCurso> {
+  const { data } = await api.post<RiegoEnCurso>('/produccion/riego/iniciar', payload)
+  return data
+}
+
+export async function terminarRiego(id: string): Promise<void> {
+  await api.post(`/produccion/riego/${id}/terminar`, {})
+}

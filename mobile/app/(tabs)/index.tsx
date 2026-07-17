@@ -6,22 +6,20 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/authStore'
-import api from '../../lib/api'
+import api, { getRiegosEnCurso, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts } from '../../lib/theme'
-import type { RegistroTrabajo, FaseVariedad } from '../../lib/types'
-import { VARIEDAD_LABELS } from '../../lib/types'
+import type { FaseVariedad, RiegoEnCurso } from '../../lib/types'
+import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
 const NOTIF_ROTATION_INTERVAL_MS = 15 * 60 * 1000
-
-function isoToday() { return new Date().toISOString().split('T')[0] }
 
 function dateLabel() {
   return new Date().toLocaleDateString('es-AR', {
@@ -46,6 +44,49 @@ function ActionButton({
       <Ionicons name={icon} size={22} color={colors.blanco} />
       <Text style={styles.actionBtnText}>{label}</Text>
     </TouchableOpacity>
+  )
+}
+
+function formatTranscurrido(horas: number): string {
+  const totalMin = Math.floor(horas * 60)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return `${h}h ${m.toString().padStart(2, '0')}m`
+}
+
+function RiegosEnCursoInicio({
+  riegos, terminandoId, onTerminar,
+}: {
+  riegos: RiegoEnCurso[]
+  terminandoId: string | null
+  onTerminar: (r: RiegoEnCurso, horas: number, litros: number) => void
+}) {
+  if (riegos.length === 0) return null
+  return (
+    <View style={{ marginBottom: 24 }}>
+      <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
+      {riegos.map((r) => {
+        const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas) ?? { horas: 0, litros: 0 }
+        return (
+          <View key={r.id} style={styles.enCursoCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.enCursoTitle}>Cabezal {r.cabezal} · V{r.valvula.split(',').join('+')}</Text>
+              <Text style={styles.enCursoStats}>
+                {formatTranscurrido(totales.horas)} · {totales.litros.toLocaleString('es-AR')} L
+              </Text>
+              <Text style={styles.enCursoResp}>{r.responsable}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.terminarBtn}
+              onPress={() => onTerminar(r, totales.horas, totales.litros)}
+              disabled={terminandoId === r.id}
+            >
+              <Text style={styles.terminarBtnText}>Terminar</Text>
+            </TouchableOpacity>
+          </View>
+        )
+      })}
+    </View>
   )
 }
 
@@ -106,29 +147,12 @@ function FenologiaNotificaciones({
 export default function InicioScreen() {
   const user = useAuthStore((s) => s.user)
   const router = useRouter()
-  const [registros, setRegistros] = useState<RegistroTrabajo[]>([])
-  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [offline, setOffline] = useState(false)
   const [fases, setFases] = useState<FaseVariedad[]>([])
   const [loadingFases, setLoadingFases] = useState(true)
   const [notifIdx, setNotifIdx] = useState(0)
-
-  const loadRegistros = useCallback(async () => {
-    const today = isoToday()
-    try {
-      setOffline(false)
-      const { data } = await api.get<RegistroTrabajo[]>(
-        `/produccion/trabajo/?fecha_desde=${today}&fecha_hasta=${today}&limit=3`,
-      )
-      setRegistros(data)
-    } catch {
-      setOffline(true)
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
+  const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
+  const [terminandoId, setTerminandoId] = useState<string | null>(null)
 
   const loadFenologia = useCallback(async () => {
     const cached = await getCache<FaseVariedad[]>('fenologia', CACHE_TTL.fenologia)
@@ -138,10 +162,30 @@ export default function InicioScreen() {
       setFases(data)
       await setCache('fenologia', data)
     } catch { /* usa lo cacheado si existe */ }
-    finally { setLoadingFases(false) }
+    finally { setLoadingFases(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadRegistros(); loadFenologia() }, [loadRegistros, loadFenologia])
+  const loadRiegosEnCurso = useCallback(async () => {
+    try {
+      setRiegosEnCurso(await getRiegosEnCurso())
+    } catch { /* offline */ }
+  }, [])
+
+  useEffect(() => { loadFenologia(); loadRiegosEnCurso() }, [loadFenologia, loadRiegosEnCurso])
+
+  // Refetch cada 30s para detectar riegos iniciados/cerrados desde otra
+  // pantalla/dispositivo — el cronómetro de cada card es puramente local.
+  useEffect(() => {
+    const t = setInterval(loadRiegosEnCurso, 30_000)
+    return () => clearInterval(t)
+  }, [loadRiegosEnCurso])
+
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (riegosEnCurso.length === 0) return
+    const t = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [riegosEnCurso.length])
 
   // Rota la notificación fenológica mostrada: avanza cada vez que esta
   // pestaña gana foco (login, volver de otra pestaña) y además cada 15 min
@@ -162,7 +206,33 @@ export default function InicioScreen() {
     }, [fases.length]),
   )
 
-  function onRefresh() { setRefreshing(true); loadRegistros(); loadFenologia() }
+  function onRefresh() { setRefreshing(true); loadFenologia(); loadRiegosEnCurso() }
+
+  async function handleTerminar(r: RiegoEnCurso, horas: number, litros: number) {
+    Alert.alert(
+      'Terminar riego',
+      `Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados. ¿Confirmás?`,
+      [
+        { text: 'Seguir regando', style: 'cancel' },
+        {
+          text: 'Terminar', style: 'default',
+          onPress: async () => {
+            if (terminandoId) return
+            setTerminandoId(r.id)
+            try {
+              await terminarRiego(r.id)
+              await loadRiegosEnCurso()
+            } catch (e: unknown) {
+              const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+              Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo terminar el riego.')
+            } finally {
+              setTerminandoId(null)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   const firstName = user?.full_name?.split(' ')[0] ?? ''
 
@@ -178,13 +248,6 @@ export default function InicioScreen() {
         />
       }
     >
-      {offline && (
-        <View style={styles.offlineBanner}>
-          <Ionicons name="cloud-offline-outline" size={14} color="#92400e" />
-          <Text style={styles.offlineText}>Sin conexión</Text>
-        </View>
-      )}
-
       {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={[styles.dateText, { fontFamily: fonts.display }]}>
@@ -203,65 +266,25 @@ export default function InicioScreen() {
       {/* ── Action buttons ── */}
       <View style={styles.actionsGrid}>
         <ActionButton
-          label="Registrar tarea"
-          icon="clipboard-outline"
-          bg={colors.burdeos[600]}
-          onPress={() => router.push('/(tabs)/tareas')}
-        />
-        <ActionButton
-          label="Registrar riego"
-          icon="water-outline"
-          bg={colors.cielo}
-          onPress={() => router.push('/(tabs)/riego')}
-        />
-        <ActionButton
-          label="Aplicación fito"
-          icon="flask-outline"
-          bg={colors.verdeCampo}
-          onPress={() => router.push('/(tabs)/fitosanitario')}
-        />
-        <ActionButton
-          label="Registrar cosecha"
-          icon="basket-outline"
-          bg="#16a34a"
-          onPress={() => router.push('/(tabs)/cosecha')}
-        />
-        <ActionButton
           label="Ciclo Campaña"
           icon="leaf-outline"
-          bg="#7c3aed"
+          bg={colors.burdeos[600]}
           onPress={() => router.push('/(tabs)/campana')}
         />
       </View>
+
+      {/* ── Riegos en curso ── */}
+      <RiegosEnCursoInicio
+        riegos={riegosEnCurso}
+        terminandoId={terminandoId}
+        onTerminar={handleTerminar}
+      />
 
       {/* ── Climate mini ── */}
       <ClimateCardMini />
 
       {/* ── Tareas recomendadas (fenología automática) ── */}
       <FenologiaNotificaciones fases={fases} loading={loadingFases} idx={notifIdx} />
-
-      {/* ── Hoy ya registraste ── */}
-      <Text style={styles.sectionLabel}>HOY YA REGISTRASTE</Text>
-      {loading ? (
-        <ActivityIndicator color={colors.burdeos[600]} style={{ marginTop: 16 }} />
-      ) : registros.length === 0 ? (
-        <Text style={styles.emptyText}>Sin registros hoy todavía</Text>
-      ) : (
-        registros.map((r) => (
-          <View key={r.id} style={styles.registroRow}>
-            <View style={styles.registroDot} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.registroNombre}>{r.trabajador_nombre}</Text>
-              <Text style={styles.registroSub}>{r.tarea}</Text>
-            </View>
-            <Text style={styles.registroMonto}>
-              {Number(r.monto_total).toLocaleString('es-AR', {
-                style: 'currency', currency: 'ARS', maximumFractionDigits: 0,
-              })}
-            </Text>
-          </View>
-        ))
-      )}
     </ScrollView>
   )
 }
@@ -269,13 +292,6 @@ export default function InicioScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.hueso },
   content: { padding: 16, paddingBottom: 32 },
-  offlineBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#fef3c7', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 9,
-    marginBottom: 14, borderWidth: 1, borderColor: '#fbbf24',
-  },
-  offlineText: { color: '#92400e', fontSize: 13, fontWeight: '500' },
   header: { marginBottom: 24 },
   dateText: { fontSize: 13, color: colors.ink60, fontWeight: '600', marginBottom: 4 },
   greeting: { fontSize: 24, color: colors.ink },
@@ -288,6 +304,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
   },
   actionBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700', flex: 1 },
+
+  // riegos en curso
+  enCursoCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.crema, borderRadius: 14, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: colors.hueso,
+  },
+  enCursoTitle: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  enCursoStats: { fontSize: 13, color: colors.cielo, fontWeight: '700', fontFamily: fonts.mono, marginTop: 2 },
+  enCursoResp: { fontSize: 12, color: colors.ink60, marginTop: 1 },
+  terminarBtn: {
+    backgroundColor: colors.cielo, borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 14, flexShrink: 0,
+  },
+  terminarBtnText: { color: colors.blanco, fontSize: 13, fontWeight: '700' },
+
   climateCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: colors.crema, borderRadius: 14,
@@ -317,19 +349,4 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 12,
   },
-  emptyText: { fontSize: 14, color: colors.niebla, fontStyle: 'italic' },
-  registroRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.blanco, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
-  },
-  registroDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: colors.burdeos[600], flexShrink: 0,
-  },
-  registroNombre: { fontSize: 14, fontWeight: '600', color: colors.ink },
-  registroSub: { fontSize: 12, color: colors.ink60, marginTop: 1 },
-  registroMonto: { fontSize: 13, fontWeight: '700', color: colors.burdeos[600] },
 })

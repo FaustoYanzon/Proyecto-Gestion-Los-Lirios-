@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import api from '../../lib/api'
 import { getCache, CACHE_TTL } from '../../lib/cache'
-import { colors, fonts } from '../../lib/theme'
+import { colors } from '../../lib/theme'
 import type { Parcela, EstadoFenologico } from '../../lib/types'
 import { ESTADO_LABELS, ESTADO_COLORS } from '../../lib/types'
 
@@ -29,7 +29,7 @@ interface EstadoActual {
 
 const STEP_LABELS = ['Parcela', 'Estado', 'Confirmar']
 
-function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2; onCancel: () => void }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -51,6 +51,13 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
           </View>
         )
       })}
+      <TouchableOpacity
+        style={si.cancelBtn}
+        onPress={onCancel}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="close" size={18} color={colors.ink60} />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -75,16 +82,21 @@ const si = StyleSheet.create({
   labelDone:   { color: colors.verdeCampo, fontWeight: '600' },
   line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 4 },
   lineDone: { backgroundColor: colors.verdeCampo },
+  cancelBtn: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.hueso,
+    justifyContent: 'center', alignItems: 'center', marginLeft: 8, flexShrink: 0,
+  },
 })
 
 // ─── Step 1: lista de parrales ────────────────────────────────────────────────
 
 function StepParcela({
-  parcelas, estados, onSelect,
+  parcelas, estados, onSelect, onCancelar,
 }: {
   parcelas: Parcela[]
   estados: EstadoActual[]
   onSelect: (p: Parcela) => void
+  onCancelar: () => void
 }) {
   const parrales = parcelas.filter((p) => p.tipo === 'parral')
 
@@ -102,7 +114,7 @@ function StepParcela({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} />
+      <StepIndicator current={0} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
         <Text style={styles.stepTitle}>¿Qué parral?</Text>
         <Text style={styles.stepHint}>Ordenados por última actualización — más antiguos primero.</Text>
@@ -162,11 +174,12 @@ const FASES: EstadoFenologico[] = [
 ]
 
 function StepEstado({
-  parcela, onNext, onBack,
+  parcela, onNext, onBack, onCancelar,
 }: {
   parcela: Parcela
   onNext: (estado: EstadoFenologico, fotoUri: string | null) => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [selected, setSelected] = useState<EstadoFenologico | null>(null)
   const [fotoUri, setFotoUri] = useState<string | null>(null)
@@ -195,7 +208,7 @@ function StepEstado({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} />
+      <StepIndicator current={1} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Estado fenológico</Text>
         <Text style={styles.parcelaCtx}>{parcela.nombre}</Text>
@@ -257,24 +270,30 @@ function StepEstado({
 // ─── Step 3: confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  parcela, estado, fotoUri, onSuccess, onBack,
+  parcela, estado, fotoUri, onSuccess, onBack, onCancelar,
 }: {
   parcela: Parcela
   estado: EstadoFenologico
   fotoUri: string | null
   onSuccess: () => void
   onBack: () => void
+  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
   const today = new Date().toISOString().split('T')[0]
+  const anio = new Date().getMonth() >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
   const faseColor = ESTADO_COLORS[estado]
 
   async function handleSubmit() {
+    if (submittingRef.current) return
+    submittingRef.current = true
     try {
       setLoading(true)
-      await api.post('/produccion/campana/ciclo/', {
+      await api.post('/produccion/campana/', {
         parcela_id: parcela.id,
-        fecha: today,
+        anio,
+        fecha_estado: today,
         estado_fenologico: estado,
       })
       onSuccess()
@@ -282,13 +301,14 @@ function StepConfirmar({
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el estado.')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} />
+      <StepIndicator current={2} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar</Text>
 
@@ -348,7 +368,7 @@ function StepConfirmar({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'estado' | 'confirmar' | 'success'
+type Step = 'list' | 'estado' | 'confirmar'
 
 export default function CampanaScreen() {
   const [step, setStep] = useState<Step>('list')
@@ -356,6 +376,7 @@ export default function CampanaScreen() {
   const [estados, setEstados] = useState<EstadoActual[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
 
   const [selParcela, setSelParcela] = useState<Parcela | null>(null)
   const [selEstado, setSelEstado] = useState<EstadoFenologico | null>(null)
@@ -379,6 +400,12 @@ export default function CampanaScreen() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1800)
+    return () => clearTimeout(t)
+  }, [toast])
+
   function onRefresh() { setRefreshing(true); loadData() }
 
   function resetWizard() {
@@ -387,12 +414,24 @@ export default function CampanaScreen() {
     loadData()
   }
 
+  function handleCancelar() {
+    Alert.alert(
+      'Cancelar carga',
+      'Se van a perder los datos ingresados. ¿Querés salir?',
+      [
+        { text: 'Seguir cargando', style: 'cancel' },
+        { text: 'Salir', style: 'destructive', onPress: resetWizard },
+      ],
+    )
+  }
+
   if (step === 'estado' && selParcela) {
     return (
       <StepEstado
         parcela={selParcela}
         onNext={(estado, foto) => { setSelEstado(estado); setSelFoto(foto); setStep('confirmar') }}
         onBack={() => setStep('list')}
+        onCancelar={handleCancelar}
       />
     )
   }
@@ -403,24 +442,10 @@ export default function CampanaScreen() {
         parcela={selParcela}
         estado={selEstado}
         fotoUri={selFoto}
-        onSuccess={() => setStep('success')}
+        onSuccess={() => { resetWizard(); setToast('Estado guardado ✓') }}
         onBack={() => setStep('estado')}
+        onCancelar={handleCancelar}
       />
-    )
-  }
-
-  if (step === 'success') {
-    return (
-      <View style={styles.successContainer}>
-        <View style={styles.successIcon}>
-          <Ionicons name="leaf" size={36} color={colors.blanco} />
-        </View>
-        <Text style={[styles.successTitle, { fontFamily: fonts.display }]}>Estado guardado</Text>
-        <Text style={styles.successSub}>El estado fenológico fue registrado</Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={resetWizard}>
-          <Text style={styles.primaryBtnText}>Registrar otro</Text>
-        </TouchableOpacity>
-      </View>
     )
   }
 
@@ -433,11 +458,20 @@ export default function CampanaScreen() {
   }
 
   return (
-    <StepParcela
-      parcelas={parcelas}
-      estados={estados}
-      onSelect={(p) => { setSelParcela(p); setStep('estado') }}
-    />
+    <View style={{ flex: 1 }}>
+      {toast && (
+        <View style={styles.toast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
+      <StepParcela
+        parcelas={parcelas}
+        estados={estados}
+        onSelect={(p) => { setSelParcela(p); setStep('estado') }}
+        onCancelar={handleCancelar}
+      />
+    </View>
   )
 }
 
@@ -528,18 +562,17 @@ const styles = StyleSheet.create({
 
   emptyText: { fontSize: 14, color: colors.niebla, fontStyle: 'italic', paddingVertical: 12 },
 
-  // loading / success
+  // loading
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.hueso },
-  successContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: colors.hueso, padding: 32,
+
+  // toast
+  toast: {
+    position: 'absolute', top: 16, left: 20, right: 20, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.verdeCampo, borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 16,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
-  successIcon: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.verdeCampo,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
-    shadowColor: colors.verdeCampo,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-  },
-  successTitle: { fontSize: 26, color: colors.ink, marginBottom: 8 },
-  successSub: { fontSize: 15, color: colors.ink60, marginBottom: 32, textAlign: 'center' },
+  toastText: { color: colors.blanco, fontSize: 14, fontWeight: '700' },
 })
