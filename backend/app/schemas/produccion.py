@@ -136,6 +136,35 @@ class RegistroRiegoResponse(RegistroRiegoBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ── Riego en curso (inicio sin fin todavía) ───────────────────────────────────
+
+class RegistroRiegoIniciar(BaseModel):
+    parcela_id: str
+    cabezal: str
+    valvula: str
+    responsable: str
+    fertilizante_nombre: str | None = None
+    fertilizante_dosis_lt_ha: float | None = None
+
+
+class RegistroRiegoEnCursoResponse(BaseModel):
+    id: str
+    fecha: date
+    parcela_id: str
+    cabezal: str
+    valvula: str
+    inicio: datetime
+    n_valvulas: int
+    responsable: str
+    fertilizante_nombre: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegistroRiegoTerminar(BaseModel):
+    fin: datetime | None = None  # None => usar la hora del servidor
+
+
 # ── Registro Fitosanitario ────────────────────────────────────────────────────
 
 class RegistroFitosanitarioBase(BaseModel):

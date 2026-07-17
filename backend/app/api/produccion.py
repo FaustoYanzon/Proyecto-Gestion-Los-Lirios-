@@ -1,12 +1,13 @@
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, require_encargado_up
+from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
 from app.core import fenologia
 from app.models.finanzas import (
     ClasificacionEgreso,
@@ -53,7 +54,10 @@ from app.schemas.produccion import (
     RegistroFitosanitarioResponse,
     RegistroFitosanitarioUpdate,
     RegistroRiegoCreate,
+    RegistroRiegoEnCursoResponse,
+    RegistroRiegoIniciar,
     RegistroRiegoResponse,
+    RegistroRiegoTerminar,
     RegistroRiegoUpdate,
     RegistroTrabajoCreate,
     RegistroTrabajoResponse,
@@ -457,7 +461,7 @@ async def update_trabajo(
     registro_id: str,
     trabajo_data: RegistroTrabajoUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> RegistroTrabajo:
     result = await db.execute(select(RegistroTrabajo).where(RegistroTrabajo.id == registro_id))
     registro = result.scalar_one_or_none()
@@ -501,7 +505,7 @@ async def update_trabajo(
 async def delete_trabajo(
     registro_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(select(RegistroTrabajo).where(RegistroTrabajo.id == registro_id))
     registro = result.scalar_one_or_none()
@@ -533,7 +537,7 @@ async def list_riego(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[RegistroRiego]:
-    stmt = select(RegistroRiego).order_by(RegistroRiego.fecha.desc())
+    stmt = select(RegistroRiego).where(RegistroRiego.fin.is_not(None)).order_by(RegistroRiego.fecha.desc())
     if fecha_desde is not None:
         stmt = stmt.where(RegistroRiego.fecha >= fecha_desde)
     if fecha_hasta is not None:
@@ -546,6 +550,36 @@ async def list_riego(
         stmt = stmt.where(RegistroRiego.responsable.ilike(f"%{responsable}%"))
     stmt = stmt.offset(skip).limit(limit)
     return list((await db.execute(stmt)).scalars().all())
+
+
+# Static sub-routes must be defined before /{riego_id} to avoid shadowing
+@router.get("/riego/en-curso", response_model=list[RegistroRiegoEnCursoResponse])
+async def list_riego_en_curso(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[RegistroRiego]:
+    stmt = select(RegistroRiego).where(RegistroRiego.fin.is_(None)).order_by(RegistroRiego.inicio.desc())
+    return list((await db.execute(stmt)).scalars().all())
+
+
+@router.post("/riego/iniciar", response_model=RegistroRiegoEnCursoResponse, status_code=status.HTTP_201_CREATED)
+async def iniciar_riego(
+    riego_data: RegistroRiegoIniciar,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_up),
+) -> RegistroRiego:
+    now = datetime.now(timezone.utc)
+    riego = RegistroRiego(
+        fecha=now.astimezone(ZoneInfo("America/Argentina/San_Juan")).date(),
+        inicio=now,
+        fin=None,
+        created_by=current_user.id,
+        **riego_data.model_dump(),
+    )
+    db.add(riego)
+    await db.flush()
+    await db.refresh(riego)
+    return riego
 
 
 @router.get("/riego/{riego_id}", response_model=RegistroRiegoResponse)
@@ -582,7 +616,7 @@ async def update_riego(
     riego_id: str,
     riego_data: RegistroRiegoUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> RegistroRiego:
     result = await db.execute(select(RegistroRiego).where(RegistroRiego.id == riego_id))
     riego = result.scalar_one_or_none()
@@ -605,7 +639,7 @@ async def update_riego(
 async def delete_riego(
     riego_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(select(RegistroRiego).where(RegistroRiego.id == riego_id))
     riego = result.scalar_one_or_none()
@@ -613,6 +647,28 @@ async def delete_riego(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Riego not found")
     await db.delete(riego)
     await db.flush()
+
+
+@router.post("/riego/{riego_id}/terminar", response_model=RegistroRiegoResponse)
+async def terminar_riego(
+    riego_id: str,
+    body: RegistroRiegoTerminar,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> RegistroRiego:
+    riego = await db.get(RegistroRiego, riego_id)
+    if riego is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Riego not found")
+    if riego.fin is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este riego ya fue terminado")
+
+    riego.fin = body.fin or datetime.now(timezone.utc)
+    riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
+    riego.mm_aplicados = round(riego.duracion_horas * RegistroRiego.MM_POR_HORA, 2)
+
+    await db.flush()
+    await db.refresh(riego)
+    return riego
 
 
 # ── Fitosanitarios ─────────────────────────────────────────────────────────────
@@ -697,7 +753,7 @@ async def update_fitosanitario(
     fitosanitario_id: str,
     fito_data: RegistroFitosanitarioUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> RegistroFitosanitario:
     result = await db.execute(
         select(RegistroFitosanitario).where(RegistroFitosanitario.id == fitosanitario_id)
@@ -723,7 +779,7 @@ async def update_fitosanitario(
 async def delete_fitosanitario(
     fitosanitario_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(
         select(RegistroFitosanitario).where(RegistroFitosanitario.id == fitosanitario_id)
@@ -956,7 +1012,7 @@ async def update_campana(
     campana_id: str,
     campana_data: CicloCampanaUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> CicloCampana:
     result = await db.execute(select(CicloCampana).where(CicloCampana.id == campana_id))
     campana = result.scalar_one_or_none()
@@ -973,7 +1029,7 @@ async def update_campana(
 async def delete_campana(
     campana_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(select(CicloCampana).where(CicloCampana.id == campana_id))
     campana = result.scalar_one_or_none()
@@ -1174,7 +1230,7 @@ async def update_cosecha(
     cosecha_id: str,
     cosecha_data: RegistroCosechaUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> RegistroCosechaResponse:
     result = await db.execute(select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id))
     registro = result.scalar_one_or_none()
@@ -1204,7 +1260,7 @@ async def update_cosecha(
 async def delete_cosecha(
     cosecha_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id))
     registro = result.scalar_one_or_none()

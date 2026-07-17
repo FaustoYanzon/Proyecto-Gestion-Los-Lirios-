@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, Numeric, String
+from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -175,8 +175,10 @@ class RegistroRiego(Base):
     cabezal: Mapped[str] = mapped_column(String(20), nullable=False)
     valvula: Mapped[str] = mapped_column(String(20), nullable=False)
     inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    fin: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    duracion_horas: Mapped[float] = mapped_column(Float, nullable=False)
+    # NULL mientras el riego está "en curso" (arrancó pero todavía no se cerró
+    # con /riego/{id}/terminar) — se completa recién al terminar.
+    fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duracion_horas: Mapped[float | None] = mapped_column(Float, nullable=True)
     mm_aplicados: Mapped[float | None] = mapped_column(Float, nullable=True)
     fertilizante_nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)
     fertilizante_dosis_lt_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -197,6 +199,7 @@ class RegistroRiego(Base):
     __table_args__ = (
         Index("ix_registros_riego_fecha", "fecha"),
         Index("ix_registros_riego_parcela_fecha", "parcela_id", "fecha"),
+        Index("ix_registros_riego_en_curso", "cabezal", postgresql_where=text("fin IS NULL")),
     )
 
     # Cada valvula riega 1 ha y entrega 16,000 L/h => 1.6 mm/h sobre esa ha.
@@ -233,7 +236,12 @@ class RegistroRiego(Base):
         Cada valvula cubre 1 ha y entrega LITROS_POR_HORA_VALVULA L/h, por lo
         que el total es horas * litros/h/valvula * cantidad de valvulas
         abiertas (no solo la duracion, como se calculaba antes).
+
+        0.0 mientras el riego está en curso (duracion_horas todavía None) —
+        se completa recién al terminar.
         """
+        if self.duracion_horas is None:
+            return 0.0
         return round(self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.n_valvulas, 2)
 
     parcela: Mapped[Parcela] = relationship(

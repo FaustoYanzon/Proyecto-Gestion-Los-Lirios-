@@ -48,6 +48,7 @@ async def presupuesto_vs_real(
     mes: int | None = Query(None, ge=1, le=12),
     concepto: str | None = Query(None, pattern="^(ingreso|egreso)$"),
     moneda: str | None = Query(None, pattern="^(ars|usd)$"),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -62,6 +63,7 @@ async def presupuesto_vs_real(
 @router.get("/produccion/parcelas", response_model=list[ProduccionParcelaKpi])
 async def produccion_parcelas(
     temporada: int | None = Query(None),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -76,6 +78,7 @@ async def produccion_parcelas(
 @router.get("/produccion/variedades", response_model=list[ProduccionVariedadKpi])
 async def produccion_variedades(
     temporada: int | None = Query(None),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -90,6 +93,7 @@ async def produccion_variedades(
 @router.get("/compradores", response_model=list[CompradorKpi])
 async def compradores(
     temporada: int = Query(...),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -104,6 +108,7 @@ async def compradores(
 @router.get("/mano-obra/mensual", response_model=list[ManoObraMensualKpi])
 async def mano_obra_mensual(
     temporada: int = Query(...),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -118,6 +123,7 @@ async def mano_obra_mensual(
 @router.get("/mano-obra/parcelas-mes", response_model=list[ManoObraParcelaMesKpi])
 async def mano_obra_parcelas_mes(
     temporada: int = Query(...),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:
@@ -133,6 +139,7 @@ async def mano_obra_parcelas_mes(
 @router.get("/mano-obra/parcelas", response_model=list[ManoObraParcelaKpi])
 async def mano_obra_parcelas(
     temporada: int | None = Query(None),
+    finca: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[dict[str, Any]]:

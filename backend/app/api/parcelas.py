@@ -7,7 +7,6 @@ from app.api.deps import (
     get_db,
     require_any_role,
     require_gerencial_up,
-    require_super_admin,
 )
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.user import User
@@ -67,7 +66,7 @@ async def get_parcela(
 async def create_parcela(
     parcela_data: ParcelaCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_gerencial_up),
 ) -> Parcela:
     result = await db.execute(select(Parcela).where(Parcela.nombre == parcela_data.nombre))
     if result.scalar_one_or_none() is not None:
@@ -88,7 +87,7 @@ async def update_parcela(
     parcela_id: str,
     parcela_data: ParcelaUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_gerencial_up),
 ) -> Parcela:
     result = await db.execute(select(Parcela).where(Parcela.id == parcela_id))
     parcela = result.scalar_one_or_none()
@@ -115,7 +114,7 @@ async def update_parcela(
 async def deactivate_parcela(
     parcela_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_gerencial_up),
 ) -> Parcela:
     result = await db.execute(select(Parcela).where(Parcela.id == parcela_id))
     parcela = result.scalar_one_or_none()
