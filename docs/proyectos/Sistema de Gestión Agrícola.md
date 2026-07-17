@@ -35,6 +35,17 @@ Detalle completo: [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. Resumen:
 - **Históricos cargados a producción** (591 cosechas, 144 egresos, 370 presupuestos) — nunca se habían aplicado desde el deploy inicial, por eso el panel "Dirección" de KPIs en Inicio se veía vacío.
 - **Hallazgo operativo importante: Vercel no auto-despliega en este proyecto.** Railway sí. Cualquier cambio de frontend necesita `vercel --prod` manual después del push — de lo contrario el pilot sigue sirviendo una build vieja sin avisar.
 
+## Estado actual (2026-07-17 — 11 puntos de la primera semana piloto)
+
+Detalle completo: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]. Resumen:
+
+- **Riego: feature nueva "Riegos en curso"** — arrancar un riego con solo hora de inicio y cerrarlo después, con litros/tiempo calculados en vivo. Implementado en backend, web y mobile.
+- **Mapa mobile arreglado de raíz:** `parcelas.coordenadas` (existía en el schema, nunca se había poblado) es ahora la fuente única de geometría para web y mobile — se sacó el snapshot hardcodeado de mobile. Agregada la parcela "Pasero 3" que faltaba, unificados colores y modos de color entre plataformas.
+- **Históricos migrados de Excel borrados** (591 cosechas / 144 egresos / 370 presupuestos) por decisión de datos de Fausto — los va a re-analizar y recargar más adelante. No están disponibles hasta que eso pase.
+- **Permisos aclarados:** crear = `require_encargado_up`, editar/borrar = `require_gerencial_up`, consistente entre `produccion.py`, `parcelas.py` y `finanzas.py`.
+- **Filtro de Finca agregado** a los dashboards (cosmético, solo "Media Agua").
+- **Pendiente sin resolver:** error genérico al cargar riego mobile con 2+ válvulas — necesita reproducirse en el dispositivo antes de poder arreglarse (ver [[Bugs Conocidos]]).
+
 ## Próximos pasos
 
 1. **Semana de prueba piloto en curso** — revisar `railway logs` a diario (no hay logging estructurado ni exception handler genérico todavía), recolectar feedback de testers.
@@ -44,10 +55,11 @@ Detalle completo: [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. Resumen:
 5. **Rutina de backup automático de PostgreSQL** — hoy solo hay backups manuales puntuales (el último, 2026-07-10, antes de arrancar el piloto: `pg_backups/loslirios_railway_20260710_pilot.dump`). Definir cadencia (diaria sugerida) y automatizarla, idealmente con un cron/Task Scheduler que corra `pg_dump` contra la URL pública de Railway.
 6. ~~Error boundaries en frontend~~ — hecho 2026-07-14 (`dashboard/error.tsx`/`loading.tsx`). Refresh token sigue pendiente.
 7. ~~Revisar si algún otro script standalone tiene el mismo riesgo que `seed.py`~~ — hecho 2026-07-14: `env.py`/`seed.py`/`seed_cosecha.py`/`seed_parcelas.py` importan todos el agregador `app.models`.
-8. Activar el backup automático de producción: falta agregar `DATABASE_PUBLIC_URL` a `backend/.env` (paso manual, ver [[Bugs Conocidos]]) y correr `install_backup_task.ps1`.
+8. ~~Agregar `DATABASE_PUBLIC_URL` a `backend/.env`~~ — hecho 2026-07-17 (Fausto lo sacó de Railway vía `railway variables`, Claude Code lo agregó al archivo sin leer su contenido). **Sigue pendiente:** correr `install_backup_task.ps1` + `Start-ScheduledTask -TaskName 'LosLirios-PG-Backup'` para activar la rutina automática — el 2026-07-17 se tomaron varios backups manuales puntuales (`pg_backups/los_lirios_prod_*.dump`) pero la tarea programada todavía no se instaló.
 
 ## Ver también
 
+- [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[2026-07-12-ota-y-ux-cargar-tarea]]

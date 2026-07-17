@@ -35,7 +35,7 @@ repo/
 | `users.py` | `/users` | CRUD usuarios, roles |
 | `parcelas.py` | `/parcelas` | CRUD parcelas + stats |
 | `finanzas.py` | `/finanzas` | Ingresos (libro de cobros "BD COBROS", desde 2026-07-14), egresos, cheques, flujo de caja |
-| `produccion.py` | `/produccion` | Tareas, riego, fitosanitarios, campaña |
+| `produccion.py` | `/produccion` | Tareas, riego (incl. "riegos en curso" desde 2026-07-17: `GET /riego/en-curso`, `POST /riego/iniciar`, `POST /riego/{id}/terminar`), fitosanitarios, campaña |
 
 ## Mobile — wizards de carga
 
@@ -44,6 +44,12 @@ Los 4 formularios multi-paso (`tareas.tsx`, `fito.tsx`/`fitosanitario.tsx`, `rie
 ## Roles (jerarquía descendente)
 
 `super_admin` → `gerencial` → `encargado` → `regador` → `obrero`
+
+**Permisos en `produccion.py` (aclarado 2026-07-17):** crear registros (trabajo/riego/fitosanitarios/campaña/cosecha, incl. `POST /riego/iniciar` y `POST /riego/{id}/terminar`) usa `require_encargado_up` (encargado y regador cargan desde el campo); editar/borrar usa `require_gerencial_up`, igual que `finanzas.py`. `parcelas.py` (crear/editar/desactivar) también en `require_gerencial_up`. No existe ningún patrón de "dueño del registro" en el backend — toda la autorización es por rol, nunca por `created_by == current_user.id`.
+
+## Mapa — fuente única de geometría
+
+`parcelas.coordenadas` (columna `JSON`) es la fuente única de polígonos para web y mobile — poblada desde `frontend/public/Los Lirios 2026.kml` (2026-07-17, `scripts/poblar_coordenadas_parcelas.py`; estaba en `null` desde siempre pese a estar wireada end-to-end). El mapa web (`frontend/lib/kml.ts`) sigue leyendo el KML en vivo además de usar `coordenadas` vía API para los datos de atributos; el mapa mobile (`mobile/app/(tabs)/mapa.tsx`) dibuja exclusivamente desde `coordenadas` — ya no tiene snapshot propio (`mobile/lib/kmlData.ts` borrado). Si se agrega una parcela nueva al KML, hay que volver a correr el script de backfill para que aparezca en mobile.
 
 ## Fincas
 
@@ -101,6 +107,7 @@ python -m app.api.seed_parcelas        # seed parcelas
 
 ## Ver también
 
+- [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[Bugs Conocidos]]

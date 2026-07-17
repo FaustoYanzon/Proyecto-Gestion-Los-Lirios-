@@ -4,11 +4,15 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-07-14 (primeros bugs reales de la semana piloto, ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]])
+> Última revisión: 2026-07-17 (11 puntos reportados tras la primera semana piloto, ver [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]])
 
 ---
 
 ## 🔴 Abiertos — relevantes para el deploy de prueba
+
+### Error genérico al cargar riego mobile con 2+ válvulas — sin reproducir
+
+**Reportado:** 2026-07-17. **Estado:** hipótesis original descartada (overflow de `valvula String(20)` — el máximo real son 4 válvulas, 7 caracteres, muy por debajo del límite), no se encontró causa en el código de `riego.tsx`/backend. Como gran parte de ese flujo se reescribió el 2026-07-17 (timezone, guard anti doble-tap, bifurcación de riegos en curso), puede haberse resuelto de rebote — pero nunca se confirmó con el mensaje de error real. **Antes de tocar código de nuevo: reproducir en el dispositivo** (Riego → Registrar riego → Ya se hizo → 2+ válvulas → confirmar) y capturar el `detail` exacto que muestra el `Alert` (ya extrae el texto real del backend). Detalle: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]].
 
 ### TareaForm sin campo `finca` ni selector de `trabajador`
 
@@ -25,7 +29,7 @@ tags: [sistema, bugs]
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
 - **Sin logging estructurado ni exception handler genérico** en el backend: los 500 no dejan rastro propio, solo lo que capture la plataforma de hosting. Con pocos usuarios de prueba es tolerable, pero conviene revisar logs de Railway a diario durante la semana.
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
-- **Backup automático de producción configurado pero sin activar**: `scripts/backup_postgres.ps1` ya apunta a Railway (`DATABASE_PUBLIC_URL`, ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]), pero falta el paso manual de agregar esa variable a `backend/.env` y correr `install_backup_task.ps1` — pendiente porque Claude Code tiene prohibido tocar `backend/.env`, lo tiene que hacer Fausto.
+- **Backup automático de producción configurado pero sin activar**: `scripts/backup_postgres.ps1` ya apunta a Railway (`DATABASE_PUBLIC_URL`, ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]). La variable ya se agregó a `backend/.env` (2026-07-17, Fausto la sacó de Railway, Claude Code la agregó al archivo sin leer su contenido) — sigue faltando correr `install_backup_task.ps1` para activar la tarea programada.
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
 - **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
 - **Dashboard finanzas sin costo por kg** todavía.
@@ -34,6 +38,18 @@ tags: [sistema, bugs]
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-07-17** (detalle completo en [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]):
+- **Duplicados por doble-tap** en carga de tareas/riego mobile: `setLoading(true)` es estado de React, no sincrónico. Guard `useRef` síncrono agregado a los 5 wizards. 14 filas duplicadas de `registros_trabajo` borradas (`scripts/limpiar_duplicados.py`).
+- **Desfasaje horario -3h** en riego (mobile y web): el datetime se armaba sin offset de timezone, Postgres lo grababa asumiendo UTC. Ahora incluye `-03:00` explícito.
+- **Crash "Ciclo Campaña" mobile:** no era un crash, era un 404 silencioso — el submit apuntaba a `/produccion/campana/ciclo/` (no existe), corregido a `/produccion/campana/` + payload ajustado al schema real.
+- **Mapa mobile desactualizado:** causa raíz real era `parcelas.coordenadas` en `null` en las 36 filas de producción (nunca poblada), no un problema de código de mobile per se. Poblada desde el KML real + agregada la parcela "Pasero 3" que faltaba. `mapa.tsx` reescrito para dibujar desde la API, colores unificados con el web, sumados los modos Cosecha/Riego, sacadas las cañerías viejas hardcodeadas.
+- **Consistencia UX de formularios:** `riego.tsx`/`fito.tsx`/`campana.tsx` mobile unificados al patrón de `tareas.tsx` (toast + vuelta a lista + X de cancelar).
+- **Históricos migrados mal cargados:** decisión de datos de Fausto, no bug — borrados 591 `registros_cosecha`, 144 `egresos`, 370 `presupuestos` (marca `migracion_excel`). `ingresos` no se tocó.
+- **Filtro de Finca ausente en dashboards:** agregado (cosmético, solo "Media Agua" — ninguna tabla de producción tiene columna `finca` todavía).
+- **Permisos de crear vs editar/borrar aclarados:** crear (trabajo/riego/fito/campaña/cosecha) = `require_encargado_up`; editar/borrar = `require_gerencial_up`. `parcelas` bajó de `require_super_admin` a `require_gerencial_up`.
+- **Feature nueva: Riegos en curso** (backend + web + mobile) — ver detalle en el documento de la sesión.
+- Punto pendiente sin resolver de esta tanda: ver 🔴 arriba (error con 2+ válvulas).
 
 **Segunda tanda, 2026-07-14** (detalle en [[2026-07-14-finanzas-ingresos-y-fixes-piloto]] § "Segunda tanda"):
 - **Registro de modelos frágil, uno por uno, en `alembic/env.py` y en los scripts standalone** (`seed.py`, `seed_cosecha.py`, `seed_parcelas.py`) — ya le faltaban `presupuesto`/`push_token` y podía volver a pasar con cualquier modelo nuevo. Ahora todos importan `app.models` (el agregador) como único punto de verdad. Cierra el "pendiente" que había quedado abierto más abajo sobre `Trabajador`.
@@ -65,6 +81,7 @@ tags: [sistema, bugs]
 
 ## Ver también
 
+- [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
 - [[Arquitectura]]
