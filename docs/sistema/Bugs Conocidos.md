@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-07-17 (11 puntos reportados tras la primera semana piloto, ver [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]])
+> Última revisión: 2026-07-18 (egresos huérfanos corregidos, follow-up de la limpieza de duplicados del 2026-07-17, ver [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]])
 
 ---
 
@@ -38,6 +38,9 @@ tags: [sistema, bugs]
 ---
 
 ## ✅ Resueltos
+
+**2026-07-18 — Mano de Obra y Egresos no coincidían ($2.743.575 vs $3.817.725):**
+Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_duplicados.py` borró `registros_trabajo` por SQL directo sin borrar el `Egreso` vinculado (`fuente='trabajo_diario'`), a diferencia del endpoint real. 14 egresos huérfanos ($1.074.150, la diferencia exacta) borrados con `scripts/limpiar_egresos_huerfanos.py`. Fix solo de datos, sin cambios de código. Detalle: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]] § "Follow-up 2026-07-18".
 
 **Sesión del 2026-07-17** (detalle completo en [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]):
 - **Duplicados por doble-tap** en carga de tareas/riego mobile: `setLoading(true)` es estado de React, no sincrónico. Guard `useRef` síncrono agregado a los 5 wizards. 14 filas duplicadas de `registros_trabajo` borradas (`scripts/limpiar_duplicados.py`).
