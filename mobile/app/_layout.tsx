@@ -13,6 +13,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useAuthStore } from '../store/authStore'
 import { registerForPushNotifications } from '../lib/notifications'
 import { colors } from '../lib/theme'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -61,31 +62,33 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthGuard />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="estado-campana"
-          options={{
-            headerShown: true,
-            title: 'Estado Fenológico',
-            headerStyle: { backgroundColor: colors.burdeos[600] },
-            headerTintColor: colors.blanco,
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
-        <Stack.Screen
-          name="fito"
-          options={{
-            headerShown: true,
-            title: 'Aplicación Fitosanitaria',
-            headerStyle: { backgroundColor: colors.burdeos[600] },
-            headerTintColor: colors.blanco,
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
-      </Stack>
+      <ErrorBoundary>
+        <AuthGuard />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="estado-campana"
+            options={{
+              headerShown: true,
+              title: 'Estado Fenológico',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
+            name="fito"
+            options={{
+              headerShown: true,
+              title: 'Aplicación Fitosanitaria',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+        </Stack>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   )
 }

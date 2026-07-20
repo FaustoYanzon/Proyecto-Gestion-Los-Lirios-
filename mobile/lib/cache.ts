@@ -12,6 +12,7 @@ export const CACHE_TTL = {
   estados: 15 * 60 * 1000,   // 15 min
   tareas: 15 * 60 * 1000,
   riegos: 15 * 60 * 1000,
+  fitosanitarios: 15 * 60 * 1000,
   kpis: 15 * 60 * 1000,
   fenologia: 6 * 60 * 60 * 1000, // 6 horas: cambia una vez por día como mucho
 }

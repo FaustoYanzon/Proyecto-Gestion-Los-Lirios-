@@ -76,6 +76,21 @@ export interface CargaMasivaPayload {
   trabajadores: TrabajadorItem[]
 }
 
+export interface RegistroFitosanitario {
+  id: string
+  fecha: string
+  parcela_id: string
+  producto_nombre: string
+  dosis_lt_ha: number
+  motivo: string
+  dias_carencia: number
+  dias_reingreso: number
+  responsable: string
+  fecha_habilitacion_cosecha: string
+  fecha_habilitacion_reingreso: string
+  created_at: string
+}
+
 export interface RegistroRiego {
   id: string
   fecha: string

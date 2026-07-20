@@ -9,12 +9,13 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  RefreshControl,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import api from '../lib/api'
-import { getCache, CACHE_TTL } from '../lib/cache'
+import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import { colors } from '../lib/theme'
-import type { Parcela } from '../lib/types'
+import type { Parcela, RegistroFitosanitario } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
 
 const FAVORITOS = ['Mancozeb', 'Azufre', 'Karate', 'Cobre', 'Folpet']
@@ -564,14 +565,76 @@ function StepConfirmar({
   )
 }
 
+// ─── Recent registros ─────────────────────────────────────────────────────────
+
+function RecentList({
+  registros, parcelas, onRefresh,
+}: {
+  registros: RegistroFitosanitario[]
+  parcelas: Parcela[]
+  onRefresh: () => void
+}) {
+  async function handleDelete(id: string, producto: string) {
+    Alert.alert('Confirmar', `¿Eliminar la aplicación de ${producto}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar', style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/produccion/fitosanitarios/${id}`)
+            onRefresh()
+          } catch {
+            Alert.alert('Error', 'No se pudo eliminar el registro.')
+          }
+        },
+      },
+    ])
+  }
+
+  if (registros.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="flask-outline" size={36} color={colors.hueso} />
+        <Text style={styles.emptyStateTitle}>Sin registros recientes</Text>
+      </View>
+    )
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>REGISTROS RECIENTES</Text>
+      {registros.map((r) => {
+        const parcela = parcelas.find((p) => p.id === r.parcela_id)
+        return (
+          <View key={r.id} style={styles.registroCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.registroNombre}>{r.producto_nombre}</Text>
+              <Text style={styles.registroSub}>
+                {parcela?.nombre ?? 'Sin parcela'} · {formatDateDisplay(r.fecha)}
+              </Text>
+              <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_lt_ha} lt/ha</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleDelete(r.id, r.producto_nombre)} style={styles.deleteBtn}>
+              <Ionicons name="trash-outline" size={17} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'fecha_resp' | 'detalle' | 'confirmar'
+type Step = 'list' | 'fecha_resp' | 'detalle' | 'confirmar'
 
 export default function FitoScreen() {
   const user = useAuthStore((s) => s.user)
-  const [step, setStep] = useState<Step>('fecha_resp')
+  const [step, setStep] = useState<Step>('list')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [registros, setRegistros] = useState<RegistroFitosanitario[]>([])
+  const [loadingRegistros, setLoadingRegistros] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
   const [selFecha, setSelFecha] = useState(isoToday())
@@ -589,7 +652,18 @@ export default function FitoScreen() {
     } catch { /* offline */ }
   }, [])
 
-  useEffect(() => { loadParcelas() }, [loadParcelas])
+  const loadRegistros = useCallback(async () => {
+    const cached = await getCache<RegistroFitosanitario[]>('fitosanitarios', CACHE_TTL.fitosanitarios)
+    if (cached) { setRegistros(cached); setLoadingRegistros(false) }
+    try {
+      const { data } = await api.get<RegistroFitosanitario[]>('/produccion/fitosanitarios/?limit=10')
+      setRegistros(data)
+      await setCache('fitosanitarios', data)
+    } catch { /* offline */ }
+    finally { setLoadingRegistros(false); setRefreshing(false) }
+  }, [])
+
+  useEffect(() => { loadParcelas(); loadRegistros() }, [loadParcelas, loadRegistros])
 
   useEffect(() => {
     if (!toast) return
@@ -597,11 +671,13 @@ export default function FitoScreen() {
     return () => clearTimeout(t)
   }, [toast])
 
+  function onRefresh() { setRefreshing(true); loadRegistros() }
+
   function reset() {
     setSelFecha(isoToday())
     setSelResponsable('')
     setSelDetalle(null)
-    setStep('fecha_resp')
+    setStep('list')
   }
 
   function handleCancelar() {
@@ -639,8 +715,18 @@ export default function FitoScreen() {
         motivo={selDetalle.motivo}
         diasCarencia={selDetalle.diasCarencia}
         diasReingreso={selDetalle.diasReingreso}
-        onSuccess={() => { reset(); loadParcelas(); setToast('Aplicación cargada ✓') }}
+        onSuccess={() => { reset(); loadParcelas(); loadRegistros(); setToast('Aplicación cargada ✓') }}
         onBack={() => setStep('detalle')}
+        onCancelar={handleCancelar}
+      />
+    )
+  }
+
+  if (step === 'fecha_resp') {
+    return (
+      <StepFechaResp
+        initialResponsable={initialResponsable}
+        onNext={(f, r) => { setSelFecha(f); setSelResponsable(r); setStep('detalle') }}
         onCancelar={handleCancelar}
       />
     )
@@ -654,22 +740,65 @@ export default function FitoScreen() {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
-      <StepFechaResp
-        initialResponsable={initialResponsable}
-        onNext={(f, r) => { setSelFecha(f); setSelResponsable(r); setStep('detalle') }}
-        onCancelar={handleCancelar}
-      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tierra} />
+        }
+      >
+        <TouchableOpacity style={styles.newBtn} onPress={() => setStep('fecha_resp')} activeOpacity={0.85}>
+          <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+          <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
+        </TouchableOpacity>
+
+        {loadingRegistros ? (
+          <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />
+        ) : (
+          <RecentList registros={registros} parcelas={parcelas} onRefresh={onRefresh} />
+        )}
+      </ScrollView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.hueso },
   stepContainer: { flex: 1, backgroundColor: colors.hueso },
   stepTitle: { fontSize: 20, fontWeight: '800', color: colors.ink, marginBottom: 20 },
   fieldLabel: {
     fontSize: 11, fontWeight: '700', color: colors.ink60,
     letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
   },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.niebla,
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  },
+
+  // new btn
+  newBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.tierra, borderRadius: 14,
+    paddingVertical: 16, paddingHorizontal: 20,
+    marginBottom: 22, justifyContent: 'center',
+    shadowColor: colors.tierra,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+  },
+  newBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
+
+  // recent
+  registroCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.blanco, borderRadius: 14, padding: 14, marginBottom: 8,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  registroNombre: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  registroSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
+  registroDetalle: { fontSize: 12, color: colors.tierra, fontWeight: '600', marginTop: 5 },
+  deleteBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyStateTitle: { fontSize: 15, fontWeight: '600', color: colors.ink60, marginTop: 12 },
 
   // summary mini
   summaryMini: {
