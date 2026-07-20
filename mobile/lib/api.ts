@@ -6,7 +6,7 @@ export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.111
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
+  timeout: 30000,
 })
 
 api.interceptors.request.use(async (config) => {
@@ -20,6 +20,13 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // No response at all means the request never reached the server (dropped
+    // connection, DNS hiccup, momentary wifi flake) — retry once before
+    // surfacing it, since these are usually transient on mobile networks.
+    if (!error.response && !error.config?._retried) {
+      error.config._retried = true
+      return api(error.config)
+    }
     if (error.response?.status === 401) {
       await SecureStore.deleteItemAsync(TOKEN_KEY)
       // Navigation handled by auth store watcher

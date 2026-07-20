@@ -36,13 +36,17 @@ export default function LoginScreen() {
       setUser(user)
       router.replace('/(tabs)')
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      Alert.alert(
-        'Error de acceso',
-        status === 401
-          ? 'Email o contraseña incorrectos.'
-          : 'No se pudo conectar al servidor. Verificá la red.',
-      )
+      const err = e as { response?: { status?: number }; message?: string }
+      const status = err?.response?.status
+      let message = 'No se pudo conectar al servidor. Verificá la red.'
+      if (status === 401) {
+        message = 'Email o contraseña incorrectos.'
+      } else if (status === 429) {
+        message = 'Demasiados intentos. Esperá unos minutos y volvé a intentar.'
+      } else if (status !== undefined && status >= 500) {
+        message = 'El servidor tuvo un problema. Probá de nuevo en un momento.'
+      }
+      Alert.alert('Error de acceso', message)
     } finally {
       setLoading(false)
     }
