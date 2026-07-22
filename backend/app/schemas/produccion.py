@@ -4,10 +4,12 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 from app.models.finanzas import Finca
+from app.models.parcela import VariedadUva
 from app.models.produccion import (
     ClasificacionTarea,
     CultivoCosecha,
     DestinoCosecha,
+    EstadoCampana,
     EstadoFenologico,
     TipoEnvase,
     UnidadMedida,
@@ -263,6 +265,54 @@ class FaseVariedadResponse(BaseModel):
     parcelas: list[str]
     fuente: str  # "automatico" | "manual"
     fecha_confirmacion: date | None
+
+
+# ── Ciclo de Campaña (calendario único, ver app.core.ciclo_campana) ────────────
+# Sistema aparte de CicloCampana/EstadoActualResponse de arriba, que siguen
+# alimentando "tareas recomendadas" sin cambios. Este es el pedido nuevo: un
+# calendario único por fecha (igual para todas las variedades) con override
+# manual por variedad entera y cumplimiento de riego por parcela.
+
+class EstadoVariedadCampanaCreate(BaseModel):
+    variedad: VariedadUva
+    anio: int
+    estado_campana: EstadoCampana
+    fecha_confirmacion: date
+    observaciones: str | None = None
+
+
+class EstadoVariedadCampanaResponse(EstadoVariedadCampanaCreate):
+    id: str
+    created_by: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EstadoActualVariedad(BaseModel):
+    variedad: VariedadUva
+    estado_campana: EstadoCampana
+    estado_campana_label: str
+    fecha_inicio: date
+    riegos_esperados: int
+    fuente: str  # "automatico" | "manual"
+    fecha_confirmacion: date | None
+    observaciones: str | None
+    proxima_estado_campana: EstadoCampana
+    proxima_fecha: date
+    parcelas: list[str]
+
+
+class CumplimientoRiegoParcela(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    variedad: VariedadUva | None
+    estado_campana: EstadoCampana
+    estado_campana_label: str
+    riegos_esperados: int
+    mm_aplicados: float
+    riegos_equivalentes: float
+    cumplimiento_pct: float
 
 
 # ── Dashboard schemas ─────────────────────────────────────────────────────────

@@ -10,8 +10,8 @@ import {
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import api from '../../lib/api'
-import type { Parcela, FaseVariedad } from '../../lib/types'
+import api, { getCumplimientoRiego } from '../../lib/api'
+import type { Parcela, FaseVariedad, CumplimientoRiegoParcela } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
@@ -101,6 +101,7 @@ interface ParcelPanel {
 function buildMapHTML(
   parcelas: Parcela[], layers: GeoLayerData, fenologia: FaseVariedad[],
   cosecha: CosechaResumenPorParcela[], riego: EficienciaHidricaParcela[],
+  cumplimiento: CumplimientoRiegoParcela[],
 ): string {
   // Los polígonos de cada parcela vienen de la API (parcelas.coordenadas, ya
   // poblada desde el KML real) — ya no de un snapshot hardcodeado. El único
@@ -136,6 +137,10 @@ function buildMapHTML(
     riego.map((r) => [r.parcela_id, r.porcentaje_cumplimiento])
   )
   const riegoJSON = JSON.stringify(riegoByParcelaId)
+  const cumplimientoByParcelaId = Object.fromEntries(
+    cumplimiento.map((c) => [c.parcela_id, c.cumplimiento_pct])
+  )
+  const cumplimientoJSON = JSON.stringify(cumplimientoByParcelaId)
 
   // Serialize each layer; null-safe (empty FeatureCollection → no features rendered)
   const acequiasJSON = JSON.stringify(layers.acequias)
@@ -262,6 +267,7 @@ const FENOLOGIA = ${fenologiaJSON}; // keyed by variedad
 const COSECHA_BY_PARCELA = ${cosechaJSON}; // keyed by parcela_id -> kg_total
 const MAX_KG = ${maxKg};
 const RIEGO_BY_PARCELA = ${riegoJSON}; // keyed by parcela_id -> porcentaje_cumplimiento
+const CUMPLIMIENTO_BY_PARCELA = ${cumplimientoJSON}; // keyed by parcela_id -> cumplimiento_pct del estado de campaña actual
 
 // Infrastructure GeoJSON data
 const GEO_DATA = {
@@ -289,6 +295,9 @@ function getStyle(f, selected) {
     stroke = '#166534'; fill = cosechaColor(kg, MAX_KG);
   } else if (colorMode === 'riego') {
     const pct = p ? RIEGO_BY_PARCELA[p.id] : null;
+    stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
+  } else if (colorMode === 'cumplimiento') {
+    const pct = p ? CUMPLIMIENTO_BY_PARCELA[p.id] : null;
     stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
   } else if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && FENOLOGIA[p.variedad]) {
     const estado = FENOLOGIA[p.variedad].estado_fenologico;
@@ -345,6 +354,10 @@ function updateLegend() {
     title.textContent = 'Riego';
     const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
     items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
+  } else if (colorMode === 'cumplimiento') {
+    title.textContent = 'Cumpl. riego (estado)';
+    const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
+    items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
   } else {
     title.textContent = 'Fenología';
     const estados = ['brotacion','floracion','cuaje','envero','madurez','cosecha','latencia'];
@@ -361,9 +374,10 @@ function updateStyles() {
 
 const MODE_LABELS = {
   type: '&#9632; Por tipo', variedad: '&#9632; Por variedad',
-  cosecha: '&#9632; Cosecha', riego: '&#9632; Riego', fenologia: '&#9632; Fenología',
+  cosecha: '&#9632; Cosecha', riego: '&#9632; Riego', cumplimiento: '&#9632; Cumpl. riego',
+  fenologia: '&#9632; Fenología',
 };
-const MODE_ORDER = ['type', 'variedad', 'cosecha', 'riego', 'fenologia'];
+const MODE_ORDER = ['type', 'variedad', 'cosecha', 'riego', 'cumplimiento', 'fenologia'];
 
 function toggleMode() {
   colorMode = MODE_ORDER[(MODE_ORDER.indexOf(colorMode) + 1) % MODE_ORDER.length];
@@ -743,6 +757,7 @@ export default function MapaScreen() {
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
   const [cosecha, setCosecha] = useState<CosechaResumenPorParcela[]>([])
   const [riego, setRiego] = useState<EficienciaHidricaParcela[]>([])
+  const [cumplimiento, setCumplimiento] = useState<CumplimientoRiegoParcela[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [panel, setPanel] = useState<ParcelPanel | null>(null)
@@ -752,18 +767,20 @@ export default function MapaScreen() {
     const now = new Date()
     const anio = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
     try {
-      const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes] = await Promise.all([
+      const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.all([
         api.get<Parcela[]>('/parcelas/mapa'),
         api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
         api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
         api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
         api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
+        getCumplimientoRiego(),
       ])
       setParcelas(parcelasRes.data.filter((p) => p.is_active))
       setEstados(estadosRes.data)
       setFenologia(fenologiaRes.data)
       setCosecha(cosechaRes.data)
       setRiego(riegoRes.data)
+      setCumplimiento(cumplimientoRes)
     } catch { /* offline */ }
     finally { setLoading(false) }
   }, [])
@@ -843,7 +860,7 @@ export default function MapaScreen() {
     )
   }
 
-  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia, cosecha, riego)
+  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia, cosecha, riego, cumplimiento)
 
   return (
     <View style={styles.container}>

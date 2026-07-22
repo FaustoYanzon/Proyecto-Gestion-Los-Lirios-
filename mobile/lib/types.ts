@@ -217,6 +217,69 @@ export const ESTADO_COLORS: Record<EstadoFenologico, string> = {
   latencia: '#6b7280',
 }
 
+// ── Ciclo de Campaña (calendario único, GET /produccion/estado-campana/*) ──
+// Sistema aparte de EstadoFenologico de arriba, que sigue alimentando
+// "Tareas recomendadas" de Inicio sin cambios. Acá el estado es el mismo
+// para todas las variedades (calendario fijo), con override manual por
+// variedad entera.
+export type EstadoCampana =
+  | 'brotacion' | 'floracion' | 'cuaje' | 'cierre_racimo'
+  | 'envero' | 'cosecha' | 'post_cosecha'
+
+export const ESTADO_CAMPANA_LABELS: Record<EstadoCampana, string> = {
+  brotacion: 'Brotación',
+  floracion: 'Floración',
+  cuaje: 'Cuaje',
+  cierre_racimo: 'Cierre de Racimo',
+  envero: 'Envero',
+  cosecha: 'Cosecha',
+  post_cosecha: 'Post-Cosecha',
+}
+
+export const ESTADO_CAMPANA_COLORES: Record<EstadoCampana, string> = {
+  brotacion: '#eab308',
+  floracion: '#ec4899',
+  cuaje: '#f97316',
+  cierre_racimo: '#0ea5e9',
+  envero: '#a855f7',
+  cosecha: '#ef4444',
+  post_cosecha: '#6b7280',
+}
+
+export interface EstadoActualVariedad {
+  variedad: VariedadUva
+  estado_campana: EstadoCampana
+  estado_campana_label: string
+  fecha_inicio: string
+  riegos_esperados: number
+  fuente: 'automatico' | 'manual'
+  fecha_confirmacion: string | null
+  observaciones: string | null
+  proxima_estado_campana: EstadoCampana
+  proxima_fecha: string
+  parcelas: string[]
+}
+
+export interface CumplimientoRiegoParcela {
+  parcela_id: string
+  parcela_nombre: string
+  variedad: VariedadUva | null
+  estado_campana: EstadoCampana
+  estado_campana_label: string
+  riegos_esperados: number
+  mm_aplicados: number
+  riegos_equivalentes: number
+  cumplimiento_pct: number
+}
+
+export interface EstadoVariedadCampanaPayload {
+  variedad: VariedadUva
+  anio: number
+  estado_campana: EstadoCampana
+  fecha_confirmacion: string
+  observaciones?: string | null
+}
+
 export const CABEZAL_VALVULAS: Record<string, { descripcion: string; valvulas: string[] }> = {
   '1': { descripcion: 'Parrales 2,4,5,9,Sult.', valvulas: ['1', '2', '3', '4'] },
   '2': { descripcion: 'Parrales 6,7,10,11', valvulas: ['1', '2', '3', '4'] },

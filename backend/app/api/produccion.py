@@ -8,7 +8,7 @@ from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
-from app.core import fenologia
+from app.core import ciclo_campana, fenologia
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -25,7 +25,9 @@ from app.models.produccion import (
     ClasificacionTarea,
     CultivoCosecha,
     DestinoCosecha,
+    EstadoCampana,
     EstadoFenologico,
+    EstadoVariedadCampana,
     RegistroCosecha,
     RegistroFitosanitario,
     RegistroRiego,
@@ -43,8 +45,12 @@ from app.schemas.produccion import (
     CosechaResumenPorParcela,
     CosechaResumenPorSemana,
     CosechaTotalesResponse,
+    CumplimientoRiegoParcela,
     EficienciaHidricaParcela,
     EstadoActualResponse,
+    EstadoActualVariedad,
+    EstadoVariedadCampanaCreate,
+    EstadoVariedadCampanaResponse,
     FaseVariedadResponse,
     RegistroCargaMasiva,
     RegistroCosechaCreate,
@@ -1037,6 +1043,157 @@ async def delete_campana(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ciclo not found")
     await db.delete(campana)
     await db.flush()
+
+
+# ── Estado de Campaña (calendario único, ver app.core.ciclo_campana) ───────────
+# Sistema aparte de Ciclo Campaña de arriba (CicloCampana sigue existiendo tal
+# cual, solo para rendimiento_kg_ha e historial por parcela). Acá el estado se
+# calcula igual para todas las variedades por fecha de calendario, con
+# override manual por variedad ENTERA (no por parcela).
+
+def _campana_actual(hoy: date | None = None) -> int:
+    hoy = hoy or date.today()
+    return hoy.year if hoy.month >= 5 else hoy.year - 1
+
+
+async def _estados_actuales_por_variedad(
+    db: AsyncSession, hoy: date | None = None,
+) -> dict[VariedadUva, EstadoActualVariedad]:
+    hoy = hoy or date.today()
+    anio = _campana_actual(hoy)
+    estado_auto, fecha_inicio_auto, _ = ciclo_campana.estado_y_ventana_actual(hoy)
+    proxima_estado, proxima_fecha = ciclo_campana.calcular_proximo_estado(hoy)
+
+    # Parcelas activas por variedad (solo parrales, que son los que tienen
+    # ciclo fenológico/riego relevante para esto).
+    parcelas_rows = (await db.execute(
+        select(Parcela.variedad, Parcela.nombre).where(
+            Parcela.is_active.is_(True),
+            Parcela.tipo == TipoParcela.parral,
+            Parcela.variedad.is_not(None),
+        )
+    )).all()
+    parcelas_por_variedad: dict[VariedadUva, list[str]] = defaultdict(list)
+    for variedad, nombre in parcelas_rows:
+        parcelas_por_variedad[variedad].append(nombre)
+
+    # Override manual más reciente por variedad, para la campaña actual.
+    overrides_rows = (await db.execute(
+        select(EstadoVariedadCampana)
+        .where(EstadoVariedadCampana.anio == anio)
+        .order_by(EstadoVariedadCampana.fecha_confirmacion.desc())
+    )).scalars().all()
+    override_por_variedad: dict[VariedadUva, EstadoVariedadCampana] = {}
+    for o in overrides_rows:
+        if o.variedad not in override_por_variedad:
+            override_por_variedad[o.variedad] = o  # el primero es el más reciente
+
+    resultado: dict[VariedadUva, EstadoActualVariedad] = {}
+    for variedad, parcelas in parcelas_por_variedad.items():
+        override = override_por_variedad.get(variedad)
+        vigente = (
+            override is not None
+            and (hoy - override.fecha_confirmacion).days <= UMBRAL_VIGENCIA_MANUAL_DIAS
+        )
+        if vigente:
+            estado = override.estado_campana
+            fuente = "manual"
+            fecha_inicio = override.fecha_confirmacion
+            fecha_confirmacion = override.fecha_confirmacion
+            observaciones = override.observaciones
+        else:
+            estado = estado_auto
+            fuente = "automatico"
+            fecha_inicio = fecha_inicio_auto
+            fecha_confirmacion = None
+            observaciones = None
+
+        resultado[variedad] = EstadoActualVariedad(
+            variedad=variedad,
+            estado_campana=estado,
+            estado_campana_label=ciclo_campana.ESTADO_CAMPANA_LABELS[estado],
+            fecha_inicio=fecha_inicio,
+            riegos_esperados=ciclo_campana.riegos_esperados(estado),
+            fuente=fuente,
+            fecha_confirmacion=fecha_confirmacion,
+            observaciones=observaciones,
+            proxima_estado_campana=proxima_estado,
+            proxima_fecha=proxima_fecha,
+            parcelas=sorted(parcelas),
+        )
+    return resultado
+
+
+@router.get("/estado-campana/actual", response_model=list[EstadoActualVariedad])
+async def estado_campana_actual(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[EstadoActualVariedad]:
+    estados = await _estados_actuales_por_variedad(db)
+    return sorted(estados.values(), key=lambda e: e.variedad.value)
+
+
+@router.get("/estado-campana/cumplimiento-riego", response_model=list[CumplimientoRiegoParcela])
+async def estado_campana_cumplimiento_riego(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[CumplimientoRiegoParcela]:
+    hoy = date.today()
+    estados_por_variedad = await _estados_actuales_por_variedad(db, hoy)
+
+    parcelas = list((await db.execute(
+        select(Parcela).where(
+            Parcela.is_active.is_(True),
+            Parcela.tipo == TipoParcela.parral,
+        )
+    )).scalars().all())
+
+    items: list[CumplimientoRiegoParcela] = []
+    for p in parcelas:
+        estado_info = estados_por_variedad.get(p.variedad) if p.variedad else None
+        if estado_info is None:
+            continue
+        mm_total = await db.scalar(
+            select(func.coalesce(func.sum(RegistroRiego.mm_aplicados), 0.0)).where(
+                RegistroRiego.parcela_id == p.id,
+                RegistroRiego.fecha >= estado_info.fecha_inicio,
+                RegistroRiego.fecha <= hoy,
+            )
+        )
+        mm_total = float(mm_total or 0.0)
+        riegos_equivalentes = round(mm_total / ciclo_campana.MM_POR_RIEGO_ESTANDAR, 2)
+        cumplimiento_pct = round(
+            riegos_equivalentes / estado_info.riegos_esperados * 100, 1
+        )
+        items.append(CumplimientoRiegoParcela(
+            parcela_id=p.id,
+            parcela_nombre=p.nombre,
+            variedad=p.variedad,
+            estado_campana=estado_info.estado_campana,
+            estado_campana_label=estado_info.estado_campana_label,
+            riegos_esperados=estado_info.riegos_esperados,
+            mm_aplicados=round(mm_total, 2),
+            riegos_equivalentes=riegos_equivalentes,
+            cumplimiento_pct=cumplimiento_pct,
+        ))
+    return items
+
+
+@router.post(
+    "/estado-campana/",
+    response_model=EstadoVariedadCampanaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crear_estado_variedad_campana(
+    data: EstadoVariedadCampanaCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_gerencial_up),
+) -> EstadoVariedadCampana:
+    override = EstadoVariedadCampana(**data.model_dump(), created_by=current_user.id)
+    db.add(override)
+    await db.flush()
+    await db.refresh(override)
+    return override
 
 
 # ── Cosecha ────────────────────────────────────────────────────────────────────

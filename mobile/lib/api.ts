@@ -75,3 +75,27 @@ export async function iniciarRiego(payload: RiegoIniciarPayload): Promise<RiegoE
 export async function terminarRiego(id: string): Promise<void> {
   await api.post(`/produccion/riego/${id}/terminar`, {})
 }
+
+// ─── Estado de Campaña (calendario único) ─────────────────────────────────────
+
+import type {
+  CumplimientoRiegoParcela, EstadoActualVariedad, EstadoVariedadCampanaPayload,
+} from './types'
+
+export async function getEstadoCampanaActual(): Promise<EstadoActualVariedad[]> {
+  const { data } = await api.get<EstadoActualVariedad[]>('/produccion/estado-campana/actual')
+  return data
+}
+
+export async function getCumplimientoRiego(): Promise<CumplimientoRiegoParcela[]> {
+  const { data } = await api.get<CumplimientoRiegoParcela[]>(
+    '/produccion/estado-campana/cumplimiento-riego',
+  )
+  return data
+}
+
+export async function postEstadoVariedadCampana(
+  payload: EstadoVariedadCampanaPayload,
+): Promise<void> {
+  await api.post('/produccion/estado-campana/', payload)
+}

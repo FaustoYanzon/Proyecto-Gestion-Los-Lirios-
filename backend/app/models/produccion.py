@@ -10,6 +10,7 @@ from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index,
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.parcela import VariedadUva
 
 if TYPE_CHECKING:
     from app.models.parcela import Parcela
@@ -97,6 +98,22 @@ class EstadoFenologico(str, enum.Enum):
     madurez = "madurez"
     cosecha = "cosecha"
     latencia = "latencia"
+
+
+# Estados del calendario único de Ciclo de Campaña (app.core.ciclo_campana) —
+# sistema aparte de EstadoFenologico/CicloCampana de arriba, que sigue
+# alimentando las tareas recomendadas de Inicio sin cambios. No reutiliza
+# EstadoFenologico a propósito: los 7 valores no coinciden 1:1 (sin
+# madurez/latencia, con cierre_racimo/post_cosecha nuevos) y mezclar los dos
+# enums en la misma columna hubiera roto ESTADO_POR_FASE en fenologia.py.
+class EstadoCampana(str, enum.Enum):
+    brotacion = "brotacion"
+    floracion = "floracion"
+    cuaje = "cuaje"
+    cierre_racimo = "cierre_racimo"
+    envero = "envero"
+    cosecha = "cosecha"
+    post_cosecha = "post_cosecha"
 
 
 class RegistroTrabajo(Base):
@@ -349,6 +366,37 @@ class CicloCampana(Base):
     )
     created_by_user: Mapped[User] = relationship(
         "User", back_populates="ciclos_campana"
+    )
+
+
+class EstadoVariedadCampana(Base):
+    """Override manual del calendario único de Ciclo de Campaña
+    (app.core.ciclo_campana) — a nivel VARIEDAD entera, no por parcela: al
+    confirmar un estado a mano se aplica a todas las parcelas de esa
+    variedad. Tabla separada de CicloCampana a propósito (esa sigue siendo
+    el registro por parcela + historial de rendimiento, sin cambios)."""
+
+    __tablename__ = "estados_variedad_campana"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    variedad: Mapped[VariedadUva] = mapped_column(SAEnum(VariedadUva), nullable=False)
+    anio: Mapped[int] = mapped_column(Integer, nullable=False)
+    estado_campana: Mapped[EstadoCampana] = mapped_column(
+        SAEnum(EstadoCampana), nullable=False
+    )
+    fecha_confirmacion: Mapped[date] = mapped_column(Date, nullable=False)
+    observaciones: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_estados_variedad_campana_variedad_anio", "variedad", "anio"),
     )
 
 
