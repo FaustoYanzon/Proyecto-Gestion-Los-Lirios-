@@ -20,10 +20,14 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // No response at all means the request never reached the server (dropped
-    // connection, DNS hiccup, momentary wifi flake) — retry once before
-    // surfacing it, since these are usually transient on mobile networks.
-    if (!error.response && !error.config?._retried) {
+    // No response at all can mean the request never reached the server (dropped
+    // connection, DNS hiccup, momentary wifi flake) — but it can also mean a
+    // timeout where the request DID reach the server and was processed, and only
+    // the response got lost on the way back. Auto-retrying is only safe for
+    // idempotent methods (GET); retrying a POST here would silently create a
+    // duplicate record if the original write already succeeded.
+    const method = error.config?.method?.toLowerCase()
+    if (!error.response && !error.config?._retried && method === 'get') {
       error.config._retried = true
       return api(error.config)
     }
