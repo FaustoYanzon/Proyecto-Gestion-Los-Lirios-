@@ -307,3 +307,68 @@ export async function getEficienciaHidrica(anio: number): Promise<EficienciaHidr
   })
   return data
 }
+
+// ── Ciclo de Campaña (calendario único, GET /produccion/estado-campana/*) ──
+// Sistema aparte de EstadoActualItem/getEstadoActual de arriba (ese es el
+// viejo, por parcela, sigue existiendo solo por rendimiento_kg_ha). Este es
+// el nuevo: un único calendario por variedad, con riegos esperados por
+// estado — mismos tipos que mobile/lib/types.ts, mantenidos en paralelo.
+export type EstadoCampana =
+  | 'brotacion' | 'floracion' | 'cuaje' | 'cierre_racimo'
+  | 'envero' | 'cosecha' | 'post_cosecha'
+
+export const ESTADO_CAMPANA_LABELS: Record<EstadoCampana, string> = {
+  brotacion: 'Brotación',
+  floracion: 'Floración',
+  cuaje: 'Cuaje',
+  cierre_racimo: 'Cierre de Racimo',
+  envero: 'Envero',
+  cosecha: 'Cosecha',
+  post_cosecha: 'Post-Cosecha',
+}
+
+export const ESTADO_CAMPANA_COLORES: Record<EstadoCampana, string> = {
+  brotacion: '#eab308',
+  floracion: '#ec4899',
+  cuaje: '#f97316',
+  cierre_racimo: '#0ea5e9',
+  envero: '#a855f7',
+  cosecha: '#ef4444',
+  post_cosecha: '#6b7280',
+}
+
+export interface EstadoActualVariedadItem {
+  variedad: string
+  estado_campana: EstadoCampana
+  estado_campana_label: string
+  fecha_inicio: string
+  riegos_esperados: number
+  fuente: 'automatico' | 'manual'
+  fecha_confirmacion: string | null
+  observaciones: string | null
+  proxima_estado_campana: EstadoCampana
+  proxima_fecha: string
+  parcelas: string[]
+}
+
+export async function getEstadoCampanaActual(): Promise<EstadoActualVariedadItem[]> {
+  const { data } = await api.get<EstadoActualVariedadItem[]>('/produccion/estado-campana/actual')
+  return data
+}
+
+export interface CumplimientoRiegoParcela {
+  parcela_id: string
+  parcela_nombre: string
+  variedad: string | null
+  estado_campana: EstadoCampana
+  estado_campana_label: string
+  riegos_esperados: number
+  mm_aplicados: number
+  riegos_equivalentes: number
+  cumplimiento_pct: number
+}
+
+export async function getCumplimientoRiego(): Promise<CumplimientoRiegoParcela[]> {
+  const { data } = await api.get<CumplimientoRiegoParcela[]>('/produccion/estado-campana/cumplimiento-riego')
+  return data
+}

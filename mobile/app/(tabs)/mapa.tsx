@@ -10,8 +10,9 @@ import {
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import api, { getCumplimientoRiego } from '../../lib/api'
-import type { Parcela, FaseVariedad, CumplimientoRiegoParcela } from '../../lib/types'
+import api, { getCumplimientoRiego, getEstadoCampanaActual } from '../../lib/api'
+import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad } from '../../lib/types'
+import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
@@ -80,18 +81,12 @@ function riegoColor(pct: number | null): string {
   return '#3d6b86'
 }
 
-interface EstadoActual {
-  parcela_id: string
-  parcela_nombre: string
-  estado_fenologico: string | null
-  fecha_estado: string | null
-}
-
 interface ParcelPanel {
   parcela: Parcela
-  estado: EstadoActual | null
+  estadoCampana: EstadoActualVariedad | null
   fenologia: FaseVariedad | null
   mmTotal: number | null
+  m3Total: number | null
   riegoCount: number | null
   tareas: { tarea: string; fecha: string }[]
   fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]
@@ -538,11 +533,12 @@ setTimeout(function() { map.invalidateSize(); }, 200);
 function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () => void }) {
   const router = useRouter()
   const p = panel.parcela
-  // Prefer the automatic/override fenología engine (per-variedad) when available;
-  // fall back to the raw manual per-parral estado for parcelas without a variedad match.
-  const estado = panel.fenologia?.estado_fenologico ?? panel.estado?.estado_fenologico
-  const estadoColor = estado ? (ESTADO_COLORS[estado] ?? '#94a3b8') : null
-  const estadoLabel = panel.fenologia?.fase_label ?? (estado ? (ESTADO_LABELS[estado] ?? estado) : null)
+  // Ciclo de Campaña (calendario único, nuevo) — separado del motor de
+  // fenología automática (panel.fenologia, viejo, alimenta "tareas
+  // recomendadas" más abajo, no el estado que se muestra acá).
+  const estado = panel.estadoCampana?.estado_campana
+  const estadoColor = estado ? (ESTADO_CAMPANA_COLORES[estado] ?? '#94a3b8') : null
+  const estadoLabel = panel.estadoCampana?.estado_campana_label ?? null
 
   return (
     <View style={panelStyles.container}>
@@ -584,17 +580,20 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
             <View style={[panelStyles.estadoBadge, { backgroundColor: `${estadoColor}18`, borderColor: `${estadoColor}40` }]}>
               <View style={[panelStyles.estadoDot, { backgroundColor: estadoColor }]} />
               <Text style={[panelStyles.estadoLabel, { color: estadoColor }]}>{estadoLabel}</Text>
-              {(panel.fenologia?.fecha_confirmacion ?? panel.estado?.fecha_estado) && (
+              {panel.estadoCampana?.fecha_confirmacion && (
                 <Text style={panelStyles.estadoFecha}>
-                  {(panel.fenologia?.fecha_confirmacion ?? panel.estado?.fecha_estado ?? '').split('-').reverse().join('/')}
+                  {panel.estadoCampana.fecha_confirmacion.split('-').reverse().join('/')}
                 </Text>
               )}
             </View>
+            {panel.estadoCampana && (
+              <Text style={panelStyles.fuenteTag}>
+                {panel.estadoCampana.fuente === 'manual' ? '✎ Confirmado a mano' : '✦ Estimado automático'}
+                {' · '}{panel.estadoCampana.riegos_esperados} riego{panel.estadoCampana.riegos_esperados !== 1 ? 's' : ''} esperado{panel.estadoCampana.riegos_esperados !== 1 ? 's' : ''}
+              </Text>
+            )}
             {panel.fenologia && (
               <>
-                <Text style={panelStyles.fuenteTag}>
-                  {panel.fenologia.fuente === 'manual' ? '✎ Confirmado a mano' : '✦ Estimado automático'}
-                </Text>
                 {panel.fenologia.proxima_fase_label && (
                   <Text style={panelStyles.proximaFase}>
                     Próxima: {panel.fenologia.proxima_fase_label}
@@ -619,7 +618,12 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
               <Text style={panelStyles.emptyText}>Sin datos</Text>
             ) : (
               <View style={panelStyles.riegoRow}>
-                <Text style={panelStyles.mmValue}>{panel.mmTotal.toFixed(1)} mm</Text>
+                <Text style={panelStyles.mmValue}>
+                  {panel.m3Total != null ? `${panel.m3Total.toLocaleString('es-AR', { maximumFractionDigits: 1 })} m³` : `${panel.mmTotal.toFixed(1)} mm`}
+                </Text>
+                {panel.m3Total != null && (
+                  <Text style={panelStyles.riegoSub}>{panel.mmTotal.toFixed(1)} mm</Text>
+                )}
                 {panel.riegoCount != null && (
                   <Text style={panelStyles.riegoSub}>
                     {panel.riegoCount} riego{panel.riegoCount !== 1 ? 's' : ''}
@@ -753,7 +757,7 @@ const panelStyles = StyleSheet.create({
 
 export default function MapaScreen() {
   const [parcelas, setParcelas] = useState<Parcela[]>([])
-  const [estados, setEstados] = useState<EstadoActual[]>([])
+  const [estadoCampana, setEstadoCampana] = useState<EstadoActualVariedad[]>([])
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
   const [cosecha, setCosecha] = useState<CosechaResumenPorParcela[]>([])
   const [riego, setRiego] = useState<EficienciaHidricaParcela[]>([])
@@ -771,9 +775,9 @@ export default function MapaScreen() {
     // encargado+, y regador/obrero no lo tienen). Si Promise.all fallara por
     // un solo 403/500 de esas, el mapa entero quedaba en blanco (sin
     // parcelas ni polígonos) para esos roles o ante cualquier error puntual.
-    const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.allSettled([
+    const [parcelasRes, estadoCampanaRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.allSettled([
       api.get<Parcela[]>('/parcelas/mapa'),
-      api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
+      getEstadoCampanaActual(),
       api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
       api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
       api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
@@ -782,7 +786,7 @@ export default function MapaScreen() {
     if (parcelasRes.status === 'fulfilled') {
       setParcelas(parcelasRes.value.data.filter((p) => p.is_active))
     }
-    if (estadosRes.status === 'fulfilled') setEstados(estadosRes.value.data)
+    if (estadoCampanaRes.status === 'fulfilled') setEstadoCampana(estadoCampanaRes.value)
     if (fenologiaRes.status === 'fulfilled') setFenologia(fenologiaRes.value.data)
     if (cosechaRes.status === 'fulfilled') setCosecha(cosechaRes.value.data)
     if (riegoRes.status === 'fulfilled') setRiego(riegoRes.value.data)
@@ -793,7 +797,7 @@ export default function MapaScreen() {
   useEffect(() => { loadData() }, [loadData])
 
   async function fetchPanelExtras(parcelaId: string): Promise<{
-    mmTotal: number; riegoCount: number;
+    mmTotal: number; m3Total: number; riegoCount: number;
     tareas: { tarea: string; fecha: string }[];
     fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[];
   }> {
@@ -803,7 +807,7 @@ export default function MapaScreen() {
     const today = now.toISOString().split('T')[0]
     try {
       const [riegosRes, tareasRes, fitosRes] = await Promise.all([
-        api.get<{ mm_aplicados: number | null }[]>('/produccion/riego/', {
+        api.get<{ mm_aplicados: number | null; litros_aplicados: number | null }[]>('/produccion/riego/', {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
         }),
         api.get<{ tarea: string; fecha: string }[]>('/produccion/trabajo/', {
@@ -814,6 +818,8 @@ export default function MapaScreen() {
         }),
       ])
       const mmTotal = riegosRes.data.reduce((s, r) => s + (Number(r.mm_aplicados) || 0), 0)
+      const litrosTotal = riegosRes.data.reduce((s, r) => s + (Number(r.litros_aplicados) || 0), 0)
+      const m3Total = litrosTotal / 1000
       const riegoCount = riegosRes.data.length
       const tareaMap = new Map<string, string>()
       for (const t of tareasRes.data) {
@@ -822,20 +828,25 @@ export default function MapaScreen() {
       const tareas = Array.from(tareaMap.entries()).map(([tarea, fecha]) => ({ tarea, fecha }))
         .sort((a, b) => b.fecha.localeCompare(a.fecha))
       const fitos = [...fitosRes.data].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5)
-      return { mmTotal, riegoCount, tareas, fitos }
+      return { mmTotal, m3Total, riegoCount, tareas, fitos }
     } catch {
-      return { mmTotal: 0, riegoCount: 0, tareas: [], fitos: [] }
+      return { mmTotal: 0, m3Total: 0, riegoCount: 0, tareas: [], fitos: [] }
     }
   }
 
   async function handleParcelSelect(parcela: Parcela) {
-    const estado = estados.find((e) => e.parcela_id === parcela.id) ?? null
+    const estadoInfo = parcela.variedad
+      ? estadoCampana.find((e) => e.variedad === parcela.variedad) ?? null
+      : null
     const fase = parcela.variedad
       ? fenologia.find((f) => f.variedad === parcela.variedad) ?? null
       : null
-    setPanel({ parcela, estado, fenologia: fase, mmTotal: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true })
-    const { mmTotal, riegoCount, tareas, fitos } = await fetchPanelExtras(parcela.id)
-    setPanel((prev) => prev ? { ...prev, mmTotal, riegoCount, tareas, fitos, loadingExtra: false } : null)
+    setPanel({
+      parcela, estadoCampana: estadoInfo, fenologia: fase,
+      mmTotal: null, m3Total: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true,
+    })
+    const { mmTotal, m3Total, riegoCount, tareas, fitos } = await fetchPanelExtras(parcela.id)
+    setPanel((prev) => prev ? { ...prev, mmTotal, m3Total, riegoCount, tareas, fitos, loadingExtra: false } : null)
   }
 
   function handleMessage(event: WebViewMessageEvent) {

@@ -4,8 +4,11 @@ import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getCosechaResumenPorParcela } from '@/lib/api/cosecha'
-import { getEficienciaHidrica, getFenologiaEstadoActual } from '@/lib/api/produccion'
-import type { RiegoMapaInfo, FenologiaMapaInfo } from './FincaMapInner'
+import {
+  getEficienciaHidrica, getFenologiaEstadoActual,
+  getCumplimientoRiego, getEstadoCampanaActual,
+} from '@/lib/api/produccion'
+import type { RiegoMapaInfo, FenologiaMapaInfo, EstadoCampanaMapaInfo } from './FincaMapInner'
 
 const Inner = dynamic(() => import('./FincaMapInner'), {
   ssr: false,
@@ -71,6 +74,41 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     return map
   }, [fenologiaData])
 
+  // Ciclo de Campaña nuevo (calendario único por variedad, con riegos
+  // esperados por estado) — separado a propósito de `fenologiaByVariedad`
+  // de arriba (motor de tareas recomendadas, sistema viejo que sigue igual).
+  const { data: cumplimientoData = [] } = useQuery({
+    queryKey: ['cumplimiento-riego-mapa'],
+    queryFn: getCumplimientoRiego,
+    staleTime: 300_000,
+  })
+
+  const cumplimientoByParcelaId = useMemo((): Record<string, number | null> => {
+    const map: Record<string, number | null> = {}
+    for (const item of cumplimientoData) map[item.parcela_id] = item.cumplimiento_pct
+    return map
+  }, [cumplimientoData])
+
+  const { data: estadoCampanaData = [] } = useQuery({
+    queryKey: ['estado-campana-actual-mapa'],
+    queryFn: getEstadoCampanaActual,
+    staleTime: 300_000,
+  })
+
+  const estadoCampanaByVariedad = useMemo((): Record<string, EstadoCampanaMapaInfo> => {
+    const map: Record<string, EstadoCampanaMapaInfo> = {}
+    for (const item of estadoCampanaData) {
+      map[item.variedad] = {
+        estado_campana: item.estado_campana,
+        estado_campana_label: item.estado_campana_label,
+        fuente: item.fuente,
+        fecha_confirmacion: item.fecha_confirmacion,
+        riegos_esperados: item.riegos_esperados,
+      }
+    }
+    return map
+  }, [estadoCampanaData])
+
   return (
     <Inner
       compact={compact}
@@ -78,6 +116,8 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
       cosechaByParcelaId={cosechaByParcelaId}
       riegoByParcelaId={riegoByParcelaId}
       fenologiaByVariedad={fenologiaByVariedad}
+      cumplimientoByParcelaId={cumplimientoByParcelaId}
+      estadoCampanaByVariedad={estadoCampanaByVariedad}
     />
   )
 }
