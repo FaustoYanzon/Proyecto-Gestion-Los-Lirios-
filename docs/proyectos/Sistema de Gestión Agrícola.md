@@ -67,8 +67,8 @@ Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un es
 ### Ahora (bloqueantes o casi gratis)
 
 1. **`eas build --profile preview` nueva para el APK** — el crash de "Ciclo Campaña" en el standalone instalado sigue sin resolverse de raíz (solo mitigado con Error Boundary) y necesita una build nueva, no alcanza con OTA. Aprovechar esta build para **decidir de una vez el tema Play Store** (ver más abajo) en vez de volver a distribuir un APK suelto.
-2. **Activar el backup automático** — el script (`install_backup_task.ps1`) está listo desde el 2026-07-17 y nunca se instaló. Es correr un comando, cero riesgo, y hoy el pilot corre con datos reales sin ningún backup automático.
-3. **Guard anti doble-tap en `FitosanitarioForm.tsx`** (web) — mismo gap que tenían Tareas/Riego hasta hoy, mecánico, 10 minutos.
+2. ~~Activar el backup automático~~ — **hecho 2026-07-27**: tarea `LosLirios-PG-Backup` registrada y probada (dump real, copiado a OneDrive). Pendiente menor: el test de restore que pide `BACKUP.md` (necesita un Postgres local levantado).
+3. ~~Guard anti doble-tap en `FitosanitarioForm.tsx`~~ — **hecho 2026-07-27**.
 
 ### Corto plazo (antes de escalar a más usuarios/fincas)
 

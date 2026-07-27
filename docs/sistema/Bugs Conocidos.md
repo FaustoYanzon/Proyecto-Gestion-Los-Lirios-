@@ -25,10 +25,6 @@ tags: [sistema, bugs]
 **Efecto práctico:** los registros de tarea diaria cargados durante la prueba van a seguir sin `finca` persistida a nivel de registro (solo el egreso derivado la tiene) y sin vínculo al `Trabajador` nuevo.
 **Fix:** agregar selector de finca (default `media_agua` como hoy) y combo de trabajador con búsqueda sobre `GET /trabajadores/?is_active=true`, manteniendo `trabajador_nombre` como fallback legacy.
 
-### `FitosanitarioForm.tsx` (web) sin guard anti doble-tap
-
-**Detectado:** 2026-07-27, de paso al arreglar el mismo gap en `TareaForm`/`RiegoForm`/`IniciarRiegoForm`. **Estado:** no reportado como bug real todavía (nadie duplicó datos de fitosanitarios), pero tiene el mismo patrón exacto (`disabled={isSubmitting}` nada más, sin `useRef` síncrono) — mismo fix mecánico si se quiere cerrar la clase de bug del todo. Detalle: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
-
 ---
 
 ## 🟡 Riesgos conocidos, aceptables para una prueba corta (no bloquean, documentar)
@@ -37,7 +33,7 @@ tags: [sistema, bugs]
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
 - **Sin logging estructurado ni exception handler genérico** en el backend: los 500 no dejan rastro propio, solo lo que capture la plataforma de hosting. Con pocos usuarios de prueba es tolerable, pero conviene revisar logs de Railway a diario durante la semana.
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
-- **Backup automático de producción configurado pero sin activar**: `scripts/backup_postgres.ps1` ya apunta a Railway (`DATABASE_PUBLIC_URL`, ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]). La variable ya se agregó a `backend/.env` (2026-07-17, Fausto la sacó de Railway, Claude Code la agregó al archivo sin leer su contenido) — sigue faltando correr `install_backup_task.ps1` para activar la tarea programada.
+- ~~Backup automático de producción configurado pero sin activar~~ — **activado 2026-07-27**: `install_backup_task.ps1` corrido, tarea `LosLirios-PG-Backup` registrada (diaria 21:00), probada con `Start-ScheduledTask` (dump real creado y copiado a OneDrive). **Sigue pendiente:** el test de restore que pide `scripts/BACKUP.md` (requiere un Postgres local corriendo, no se hizo todavía) — un backup no está "verificado" hasta que se prueba restaurarlo al menos una vez. También sigue siendo un backup que depende de que la PC de Fausto esté prendida a las 21:00 — si el piloto se vuelve permanente, migrar a un cron de Railway o GitHub Actions (ya anotado en `BACKUP.md` § Known limitations).
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
 - **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
 - **Dashboard finanzas sin costo por kg** todavía.
@@ -56,6 +52,7 @@ tags: [sistema, bugs]
 - **"Terminar" ya no está disponible desde Inicio** (web + mobile), solo desde la pantalla/página de Riego. Agregado el panel "Riegos en curso" al Inicio web.
 - **Falso "no se pudo terminar el riego"** cuando la escritura sí había llegado al servidor (confirmado en logs, 200 OK) pero la respuesta se perdió en el camino — ahora se verifica contra el servidor antes de mostrar error.
 - **Cumplimiento de riego por estado fenológico completado en web** (backend y mobile ya existían desde el 2026-07-20/22, quedaba pendiente el mapa web — estaba empezado sin commitear y a medio conectar). Litros del panel de detalle también en m³.
+- **Fast-follow mismo día:** backup automático activado (tarea `LosLirios-PG-Backup`, diaria 21:00, probada) y guard anti doble-tap agregado a `FitosanitarioForm.tsx` (último form web que le faltaba).
 
 **2026-07-23 — recurrencia de duplicados, causa distinta a la del 07-17:**
 El interceptor de retry agregado el 2026-07-20 en `mobile/lib/api.ts` (para tolerar wifi rural) reintentaba automáticamente cualquier request sin `error.response`, incluidos POST — un timeout no distingue "nunca llegó al servidor" de "se procesó y se perdió la respuesta". Corregido a retry GET-only. 19 pares de `registros_trabajo` duplicados limpiados. Detalle completo solo en memoria de proyecto (no se había documentado en la bóveda en su momento — la sesión del 2026-07-27 lo nota como pendiente resuelto).
