@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -65,6 +65,7 @@ function extractTime(dt: string): string {
 export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!riego
+  const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [conFertilizante, setConFertilizante] = useState(!!riego?.fertilizante_nombre)
 
@@ -144,6 +145,8 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       setValvulasError('Seleccioná al menos una válvula')
       return
     }
+    if (submittingRef.current) return
+    submittingRef.current = true
     try {
       setSubmitError(null)
       const inicio = `${data.fecha_inicio}T${data.hora_inicio}:00-03:00`
@@ -174,6 +177,8 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       onSuccess()
     } catch {
       setSubmitError('Error al guardar. Intente nuevamente.')
+    } finally {
+      submittingRef.current = false
     }
   }
 

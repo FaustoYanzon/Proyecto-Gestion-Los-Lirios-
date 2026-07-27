@@ -59,7 +59,16 @@ BACKUP_DIR = ROOT / "pg_backups"
 DUP_WINDOW_SECONDS = 60
 
 TRABAJO_KEY_COLS = ["trabajador_nombre", "tarea", "parcela_id", "fecha", "cantidad", "precio_unitario"]
-RIEGO_KEY_COLS = ["cabezal", "parcela_id", "valvula", "inicio", "fin", "responsable"]
+# NOTA (2026-07-27): antes esta clave incluía inicio/fin exactos, lo cual
+# nunca agrupaba los duplicados del flujo "iniciar riego" (POST
+# /riego/iniciar) porque `inicio` se genera con el reloj del servidor en
+# cada request — dos clicks duplicados producen dos timestamps distintos
+# (milisegundos de diferencia) y nunca calzaban como "misma clave". Se
+# reemplazó inicio/fin por `fecha` (estable, no depende de precisión de
+# reloj) para que el clustering por created_at haga el trabajo de detectar
+# duplicados temporales, tanto para el flujo retroactivo (inicio/fin
+# elegidos a mano, coinciden igual) como para "iniciar riego".
+RIEGO_KEY_COLS = ["cabezal", "parcela_id", "valvula", "responsable", "fecha"]
 FITOSANITARIO_KEY_COLS = ["parcela_id", "fecha", "producto_nombre", "dosis_lt_ha", "responsable"]
 COSECHA_KEY_COLS = ["parcela_id", "fecha", "destino", "kg_total", "n_remito"]
 

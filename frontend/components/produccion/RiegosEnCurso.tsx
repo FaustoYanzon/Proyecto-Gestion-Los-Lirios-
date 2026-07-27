@@ -69,7 +69,7 @@ export default function RiegosEnCurso({ parcelaNombre }: { parcelaNombre: (id: s
                     {parcelaNombre(r.parcela_id)} · Cabezal {r.cabezal} · V{r.valvula.split(',').join('+')}
                   </p>
                   <p className="text-blue-700 font-mono">
-                    {formatTranscurrido(horas)} · {litros.toLocaleString('es-AR')} L
+                    {formatTranscurrido(horas)}
                     <span className="text-gray-400 font-sans ml-2">{r.responsable}</span>
                   </p>
                 </div>

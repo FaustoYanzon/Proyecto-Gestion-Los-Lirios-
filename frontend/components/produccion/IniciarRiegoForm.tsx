@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -36,6 +36,7 @@ const err = 'mt-1 text-xs text-red-600'
 
 export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
+  const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [conFertilizante, setConFertilizante] = useState(false)
   const [selectedValvulas, setSelectedValvulas] = useState<Set<number>>(new Set())
@@ -78,6 +79,8 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
       setValvulasError('Seleccioná al menos una válvula')
       return
     }
+    if (submittingRef.current) return
+    submittingRef.current = true
     try {
       setSubmitError(null)
       await iniciarRiego({
@@ -92,6 +95,8 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
       onSuccess()
     } catch {
       setSubmitError('Error al iniciar el riego. Intente nuevamente.')
+    } finally {
+      submittingRef.current = false
     }
   }
 

@@ -72,7 +72,7 @@ function RiegosEnCursoInicio({
             <View style={{ flex: 1 }}>
               <Text style={styles.enCursoTitle}>Cabezal {r.cabezal} · V{r.valvula.split(',').join('+')}</Text>
               <Text style={styles.enCursoStats}>
-                {formatTranscurrido(totales.horas)} · {totales.litros.toLocaleString('es-AR')} L
+                {formatTranscurrido(totales.horas)}
               </Text>
               <Text style={styles.enCursoResp}>{r.responsable}</Text>
             </View>

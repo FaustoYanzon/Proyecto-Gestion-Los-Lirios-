@@ -997,7 +997,7 @@ function RecentRiegos({
                     {parcelaNombre(r.parcela_id)} · Cab. {r.cabezal} · V{r.valvula.split(',').join('+')}
                   </Text>
                   <Text style={styles.enCursoStats}>
-                    {formatTranscurrido(totales.horas)} · {totales.litros.toLocaleString('es-AR')} L
+                    {formatTranscurrido(totales.horas)}
                   </Text>
                   <Text style={styles.riegoResp}>{r.responsable}</Text>
                 </View>

@@ -67,6 +67,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
   const queryClient = useQueryClient()
   const isEdit = !!registro
   const firstRender = useRef(true)
+  const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [customTask, setCustomTask] = useState('')
 
@@ -121,6 +122,8 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
       : null
 
   async function onSubmit(data: FormData) {
+    if (submittingRef.current) return
+    submittingRef.current = true
     try {
       setSubmitError(null)
       const tareaFinal = isCustomTask ? customTask.trim() : data.tarea
@@ -154,6 +157,8 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
       onSuccess()
     } catch {
       setSubmitError('Error al guardar. Intente nuevamente.')
+    } finally {
+      submittingRef.current = false
     }
   }
 
