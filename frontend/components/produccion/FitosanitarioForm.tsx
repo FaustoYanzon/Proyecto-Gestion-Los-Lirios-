@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -46,6 +46,7 @@ function addDays(dateStr: string, days: number): string {
 export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
   const isEdit = !!registro
+  const submittingRef = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const {
@@ -79,6 +80,8 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
   const parcelasActivas = parcelas.filter((p) => p.is_active && p.tipo === 'parral')
 
   async function onSubmit(data: FormData) {
+    if (submittingRef.current) return
+    submittingRef.current = true
     try {
       setSubmitError(null)
       if (isEdit) {
@@ -90,6 +93,8 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
       onSuccess()
     } catch {
       setSubmitError('Error al guardar. Intente nuevamente.')
+    } finally {
+      submittingRef.current = false
     }
   }
 
