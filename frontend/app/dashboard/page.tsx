@@ -13,7 +13,9 @@ import {
 import FincaMap from '@/components/map/FincaMap'
 import Alertas from '@/components/Alertas'
 import FenologiaNotificaciones from '@/components/FenologiaNotificaciones'
+import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
 import { getPresupuestoVsReal, getKpiProduccionParcelas } from '@/lib/api/kpis'
+import { getParcelasMapa } from '@/lib/api/produccion'
 
 const now = new Date()
 const TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
@@ -295,6 +297,16 @@ export default function DashboardPage() {
 
   const firstName = user?.full_name.split(' ')[0] ?? ''
 
+  const { data: parcelas = [] } = useQuery({
+    queryKey: ['parcelas-mapa'],
+    queryFn: getParcelasMapa,
+    staleTime: 5 * 60_000,
+  })
+
+  function parcelaNombre(id: string): string {
+    return parcelas.find((p) => p.id === id)?.nombre ?? id
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -321,10 +333,11 @@ export default function DashboardPage() {
           <FincaMap compact height="100%" />
         </div>
 
-        {/* Sidebar derecho: clima + alertas */}
+        {/* Sidebar derecho: clima + alertas + riegos en curso */}
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
           <ClimateCard />
           <Alertas />
+          <RiegosEnCurso parcelaNombre={parcelaNombre} showTerminar={false} />
         </div>
       </div>
 

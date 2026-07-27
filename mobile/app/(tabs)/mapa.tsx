@@ -766,23 +766,28 @@ export default function MapaScreen() {
   const loadData = useCallback(async () => {
     const now = new Date()
     const anio = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-    try {
-      const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.all([
-        api.get<Parcela[]>('/parcelas/mapa'),
-        api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
-        api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
-        api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
-        api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
-        getCumplimientoRiego(),
-      ])
-      setParcelas(parcelasRes.data.filter((p) => p.is_active))
-      setEstados(estadosRes.data)
-      setFenologia(fenologiaRes.data)
-      setCosecha(cosechaRes.data)
-      setRiego(riegoRes.data)
-      setCumplimiento(cumplimientoRes)
-    } catch { /* offline */ }
-    finally { setLoading(false) }
+    // allSettled a propósito: los polígonos solo necesitan `parcelas` — el
+    // resto son capas de color/info opcionales (algunas requieren rol
+    // encargado+, y regador/obrero no lo tienen). Si Promise.all fallara por
+    // un solo 403/500 de esas, el mapa entero quedaba en blanco (sin
+    // parcelas ni polígonos) para esos roles o ante cualquier error puntual.
+    const [parcelasRes, estadosRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.allSettled([
+      api.get<Parcela[]>('/parcelas/mapa'),
+      api.get<EstadoActual[]>('/produccion/campana/estado-actual/'),
+      api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
+      api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
+      api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
+      getCumplimientoRiego(),
+    ])
+    if (parcelasRes.status === 'fulfilled') {
+      setParcelas(parcelasRes.value.data.filter((p) => p.is_active))
+    }
+    if (estadosRes.status === 'fulfilled') setEstados(estadosRes.value.data)
+    if (fenologiaRes.status === 'fulfilled') setFenologia(fenologiaRes.value.data)
+    if (cosechaRes.status === 'fulfilled') setCosecha(cosechaRes.value.data)
+    if (riegoRes.status === 'fulfilled') setRiego(riegoRes.value.data)
+    if (cumplimientoRes.status === 'fulfilled') setCumplimiento(cumplimientoRes.value)
+    setLoading(false)
   }, [])
 
   useEffect(() => { loadData() }, [loadData])

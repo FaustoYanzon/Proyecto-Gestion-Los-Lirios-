@@ -6,16 +6,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
 } from 'react-native'
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/authStore'
-import api, { getRiegosEnCurso, terminarRiego } from '../../lib/api'
+import api, { getRiegosEnCurso } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts } from '../../lib/theme'
-import type { FaseVariedad, RiegoEnCurso } from '../../lib/types'
+import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
 import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
@@ -55,11 +54,10 @@ function formatTranscurrido(horas: number): string {
 }
 
 function RiegosEnCursoInicio({
-  riegos, terminandoId, onTerminar,
+  riegos, parcelaNombre,
 }: {
   riegos: RiegoEnCurso[]
-  terminandoId: string | null
-  onTerminar: (r: RiegoEnCurso, horas: number, litros: number) => void
+  parcelaNombre: (id: string) => string
 }) {
   if (riegos.length === 0) return null
   return (
@@ -70,19 +68,14 @@ function RiegosEnCursoInicio({
         return (
           <View key={r.id} style={styles.enCursoCard}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.enCursoTitle}>Cabezal {r.cabezal} · V{r.valvula.split(',').join('+')}</Text>
+              <Text style={styles.enCursoTitle}>
+                Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
+              </Text>
               <Text style={styles.enCursoStats}>
                 {formatTranscurrido(totales.horas)}
               </Text>
               <Text style={styles.enCursoResp}>{r.responsable}</Text>
             </View>
-            <TouchableOpacity
-              style={styles.terminarBtn}
-              onPress={() => onTerminar(r, totales.horas, totales.litros)}
-              disabled={terminandoId === r.id}
-            >
-              <Text style={styles.terminarBtnText}>Terminar</Text>
-            </TouchableOpacity>
           </View>
         )
       })}
@@ -152,7 +145,21 @@ export default function InicioScreen() {
   const [loadingFases, setLoadingFases] = useState(true)
   const [notifIdx, setNotifIdx] = useState(0)
   const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
-  const [terminandoId, setTerminandoId] = useState<string | null>(null)
+  const [parcelas, setParcelas] = useState<Parcela[]>([])
+
+  function parcelaNombre(id: string) {
+    return parcelas.find((p) => p.id === id)?.nombre ?? '—'
+  }
+
+  const loadParcelas = useCallback(async () => {
+    const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
+    if (cached) setParcelas(cached)
+    try {
+      const { data } = await api.get<Parcela[]>('/parcelas/mapa')
+      setParcelas(data)
+      await setCache('parcelas', data)
+    } catch { /* usa lo cacheado si existe */ }
+  }, [])
 
   const loadFenologia = useCallback(async () => {
     const cached = await getCache<FaseVariedad[]>('fenologia', CACHE_TTL.fenologia)
@@ -171,7 +178,7 @@ export default function InicioScreen() {
     } catch { /* offline */ }
   }, [])
 
-  useEffect(() => { loadFenologia(); loadRiegosEnCurso() }, [loadFenologia, loadRiegosEnCurso])
+  useEffect(() => { loadFenologia(); loadRiegosEnCurso(); loadParcelas() }, [loadFenologia, loadRiegosEnCurso, loadParcelas])
 
   // Refetch cada 30s para detectar riegos iniciados/cerrados desde otra
   // pantalla/dispositivo — el cronómetro de cada card es puramente local.
@@ -206,33 +213,7 @@ export default function InicioScreen() {
     }, [fases.length]),
   )
 
-  function onRefresh() { setRefreshing(true); loadFenologia(); loadRiegosEnCurso() }
-
-  async function handleTerminar(r: RiegoEnCurso, horas: number, litros: number) {
-    Alert.alert(
-      'Terminar riego',
-      `Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados. ¿Confirmás?`,
-      [
-        { text: 'Seguir regando', style: 'cancel' },
-        {
-          text: 'Terminar', style: 'default',
-          onPress: async () => {
-            if (terminandoId) return
-            setTerminandoId(r.id)
-            try {
-              await terminarRiego(r.id)
-              await loadRiegosEnCurso()
-            } catch (e: unknown) {
-              const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-              Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo terminar el riego.')
-            } finally {
-              setTerminandoId(null)
-            }
-          },
-        },
-      ],
-    )
-  }
+  function onRefresh() { setRefreshing(true); loadFenologia(); loadRiegosEnCurso(); loadParcelas() }
 
   const firstName = user?.full_name?.split(' ')[0] ?? ''
 
@@ -276,8 +257,7 @@ export default function InicioScreen() {
       {/* ── Riegos en curso ── */}
       <RiegosEnCursoInicio
         riegos={riegosEnCurso}
-        terminandoId={terminandoId}
-        onTerminar={handleTerminar}
+        parcelaNombre={parcelaNombre}
       />
 
       {/* ── Climate mini ── */}

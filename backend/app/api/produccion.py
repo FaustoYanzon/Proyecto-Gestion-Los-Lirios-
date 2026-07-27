@@ -211,6 +211,7 @@ async def dashboard_eficiencia_hidrica(
             RegistroRiego.parcela_id.in_(parcela_ids),
             RegistroRiego.fecha >= start,
             RegistroRiego.fecha <= end,
+            RegistroRiego.duracion_horas.is_not(None),  # riegos en curso (sin terminar) no aportan aun
         )
     )).all()
     litros_por_parcela: dict[str, float] = defaultdict(float)

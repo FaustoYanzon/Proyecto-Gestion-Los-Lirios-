@@ -994,7 +994,7 @@ function RecentRiegos({
               <View key={r.id} style={styles.enCursoCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.riegoNombre}>
-                    {parcelaNombre(r.parcela_id)} · Cab. {r.cabezal} · V{r.valvula.split(',').join('+')}
+                    Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
                   </Text>
                   <Text style={styles.enCursoStats}>
                     {formatTranscurrido(totales.horas)}

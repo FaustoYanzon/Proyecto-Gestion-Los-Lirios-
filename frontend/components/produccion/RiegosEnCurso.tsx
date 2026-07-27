@@ -12,7 +12,12 @@ function formatTranscurrido(horas: number): string {
   return `${h}h ${m.toString().padStart(2, '0')}m`
 }
 
-export default function RiegosEnCurso({ parcelaNombre }: { parcelaNombre: (id: string) => string }) {
+interface Props {
+  parcelaNombre: (id: string) => string
+  showTerminar?: boolean
+}
+
+export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Props) {
   const queryClient = useQueryClient()
   const [terminandoId, setTerminandoId] = useState<string | null>(null)
 
@@ -66,7 +71,7 @@ export default function RiegosEnCurso({ parcelaNombre }: { parcelaNombre: (id: s
                 <Droplets size={18} className="text-blue-500 flex-shrink-0" />
                 <div className="text-sm min-w-0">
                   <p className="font-medium text-gray-900 truncate">
-                    {parcelaNombre(r.parcela_id)} · Cabezal {r.cabezal} · V{r.valvula.split(',').join('+')}
+                    Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
                   </p>
                   <p className="text-blue-700 font-mono">
                     {formatTranscurrido(horas)}
@@ -74,13 +79,15 @@ export default function RiegosEnCurso({ parcelaNombre }: { parcelaNombre: (id: s
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => handleTerminar(r.id, horas, litros)}
-                disabled={terminandoId === r.id}
-                className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
-              >
-                Terminar
-              </button>
+              {showTerminar && (
+                <button
+                  onClick={() => handleTerminar(r.id, horas, litros)}
+                  disabled={terminandoId === r.id}
+                  className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
+                >
+                  Terminar
+                </button>
+              )}
             </div>
           )
         })}
