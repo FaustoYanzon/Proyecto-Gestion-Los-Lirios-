@@ -20,6 +20,7 @@ interface Props {
 export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Props) {
   const queryClient = useQueryClient()
   const [terminandoId, setTerminandoId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Refetch cada 30s para detectar riegos iniciados/cerrados por otros
   // usuarios — el cronómetro en pantalla es puramente client-side (no hace
@@ -44,10 +45,25 @@ export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Pr
       `¿Terminar este riego? Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados.`
     )) return
     setTerminandoId(id)
+    setError(null)
     try {
       await terminarRiego(id)
       queryClient.invalidateQueries({ queryKey: ['riegos-en-curso'] })
       queryClient.invalidateQueries({ queryKey: ['riegos'] })
+    } catch {
+      // La escritura puede haber llegado al servidor igual aunque la
+      // respuesta no vuelva (hipo de red) — antes de mostrar error,
+      // confirmamos contra el servidor si el riego ya no figura como en
+      // curso (= sí se terminó) para no generar falsas alarmas.
+      const sigueEnCurso = await getRiegosEnCurso()
+        .then((lista) => lista.some((x) => x.id === id))
+        .catch(() => true)
+      if (!sigueEnCurso) {
+        queryClient.invalidateQueries({ queryKey: ['riegos-en-curso'] })
+        queryClient.invalidateQueries({ queryKey: ['riegos'] })
+      } else {
+        setError('No se pudo terminar el riego. Intentá de nuevo.')
+      }
     } finally {
       setTerminandoId(null)
     }
@@ -59,6 +75,9 @@ export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Pr
         <Timer size={16} className="text-blue-600" />
         Riegos en curso
       </h2>
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md mb-2">{error}</p>
+      )}
       <div className="space-y-2">
         {enCurso.map((r) => {
           const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas)

@@ -1154,8 +1154,20 @@ export default function RiegoScreen() {
               await Promise.all([loadRiegosEnCurso(), loadData()])
               setToast('Riego terminado ✓')
             } catch (e: unknown) {
-              const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-              Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo terminar el riego.')
+              // La escritura puede haber llegado al servidor igual aunque la
+              // respuesta no vuelva (hipo de red) — antes de mostrar error,
+              // confirmamos contra el servidor si el riego ya no figura como
+              // en curso (= sí se terminó) para no generar falsas alarmas.
+              const sigueEnCurso = await getRiegosEnCurso()
+                .then((lista) => lista.some((x) => x.id === r.id))
+                .catch(() => true)
+              if (!sigueEnCurso) {
+                await Promise.all([loadRiegosEnCurso(), loadData()])
+                setToast('Riego terminado ✓')
+              } else {
+                const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+                Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo terminar el riego.')
+              }
             } finally {
               setTerminandoId(null)
             }
