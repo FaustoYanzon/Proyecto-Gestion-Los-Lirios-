@@ -50,19 +50,49 @@ Detalle completo: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]. Resum
 
 Fausto notó que Mano de Obra (producción, $2.743.575) y Egresos (finanzas, $3.817.725) no coincidían. Causa: `limpiar_duplicados.py` (2026-07-17) borró `registros_trabajo` duplicados por SQL directo sin borrar el `Egreso` vinculado que genera cada uno (`_build_egreso_for_trabajo`), a diferencia del endpoint real `delete_trabajo`. Quedaron 14 egresos huérfanos por exactamente $1.074.150, la diferencia exacta. Corregido con `scripts/limpiar_egresos_huerfanos.py` (backup + dry-run + `--commit`) — ambos totales coinciden ahora en $2.743.575. Fix **solo de base de datos**, sin cambios de código, ya visible en producción sin necesidad de deploy. Detalle: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]] § "Follow-up 2026-07-18".
 
-## Próximos pasos
+## Estado actual (2026-07-27 — duplicados web, mapa mobile, cumplimiento de riego)
 
-1. **Semana de prueba piloto en curso** — revisar `railway logs` a diario (no hay logging estructurado ni exception handler genérico todavía), recolectar feedback de testers.
-2. Completar `TareaForm` **web** (campo `finca` + selector de trabajador) si la prueba va a validar el flujo completo de mano de obra — el mobile (`tareas.tsx`) no tiene selector de `Trabajador` tampoco, solo texto libre para el nombre.
-3. Costo por kg en dashboard de finanzas.
-4. Módulo de notificaciones (base existe en `notificaciones.py`).
-5. **Rutina de backup automático de PostgreSQL** — hoy solo hay backups manuales puntuales (el último, 2026-07-10, antes de arrancar el piloto: `pg_backups/loslirios_railway_20260710_pilot.dump`). Definir cadencia (diaria sugerida) y automatizarla, idealmente con un cron/Task Scheduler que corra `pg_dump` contra la URL pública de Railway.
-6. ~~Error boundaries en frontend~~ — hecho 2026-07-14 (`dashboard/error.tsx`/`loading.tsx`). Refresh token sigue pendiente.
-7. ~~Revisar si algún otro script standalone tiene el mismo riesgo que `seed.py`~~ — hecho 2026-07-14: `env.py`/`seed.py`/`seed_cosecha.py`/`seed_parcelas.py` importan todos el agregador `app.models`.
-8. ~~Agregar `DATABASE_PUBLIC_URL` a `backend/.env`~~ — hecho 2026-07-17 (Fausto lo sacó de Railway vía `railway variables`, Claude Code lo agregó al archivo sin leer su contenido). **Sigue pendiente:** correr `install_backup_task.ps1` + `Start-ScheduledTask -TaskName 'LosLirios-PG-Backup'` para activar la rutina automática — el 2026-07-17 se tomaron varios backups manuales puntuales (`pg_backups/los_lirios_prod_*.dump`) pero la tarea programada todavía no se instaló.
+Detalle completo: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]. Resumen:
+
+- **Duplicados en tareas/riego web resueltos** — el guard anti doble-tap del 2026-07-17 nunca se había replicado del mobile al web. Limpiados en producción.
+- **Mapa mobile funcionando de nuevo** — causa real era un `TypeError` en `dashboard_eficiencia_hidrica` con cualquier riego en curso, que tumbaba los 6 endpoints del mapa a la vez (`Promise.all`). Cambiado a `Promise.allSettled` — de paso corrige que `regador`/`obrero` tenían el mapa roto *siempre*, no solo con este bug.
+- **"Cumplimiento de riego por estado fenológico" completado en web** — quedaba pendiente desde el 2026-07-20/22 (estaba empezado sin commitear). Ahora la capa de color y el panel de detalle por variedad funcionan igual en web y mobile.
+- **UX de "riegos en curso" pulida**: litros solo se muestran al terminar (no en vivo), "Terminar" solo desde la pantalla de Riego (no desde Inicio), falso error al terminar corregido con verificación contra el servidor.
+- Sesión trabajada en paralelo con otra instancia de Claude Code sobre los mismos archivos (sin coordinación previa) — convergieron al mismo resultado sin conflicto destructivo, pero es una práctica a evitar si no es intencional.
+
+## Próximos pasos (actualizado 2026-07-27)
+
+Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un estado bastante estable. Orden sugerido:
+
+### Ahora (bloqueantes o casi gratis)
+
+1. **`eas build --profile preview` nueva para el APK** — el crash de "Ciclo Campaña" en el standalone instalado sigue sin resolverse de raíz (solo mitigado con Error Boundary) y necesita una build nueva, no alcanza con OTA. Aprovechar esta build para **decidir de una vez el tema Play Store** (ver más abajo) en vez de volver a distribuir un APK suelto.
+2. **Activar el backup automático** — el script (`install_backup_task.ps1`) está listo desde el 2026-07-17 y nunca se instaló. Es correr un comando, cero riesgo, y hoy el pilot corre con datos reales sin ningún backup automático.
+3. **Guard anti doble-tap en `FitosanitarioForm.tsx`** (web) — mismo gap que tenían Tareas/Riego hasta hoy, mecánico, 10 minutos.
+
+### Corto plazo (antes de escalar a más usuarios/fincas)
+
+4. **Reproducir el bug de riego con 2+ válvulas** en el dispositivo (nunca se logró capturar el error real) — ver [[Bugs Conocidos]].
+5. **Idempotencia real en el backend** (columna `idempotency_key` + `UniqueConstraint` parcial en los 4 modelos de producción) — diferida desde el 2026-07-23. Hoy la protección contra duplicados es 100% del lado cliente (guards `useRef`); cualquier vector nuevo (dos dispositivos, un retry futuro, un bug) puede volver a duplicar datos sin que el backend lo impida.
+6. Completar `TareaForm` **web** (campo `finca` + selector de `Trabajador`) y el equivalente en mobile (`tareas.tsx` solo tiene texto libre para el nombre) — el backend y el modelo `Trabajador` ya existen, falta conectar el frontend.
+7. Refresh token (hoy el JWT expira y desloguea sin aviso).
+8. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway).
+
+### Roadmap (features nuevas)
+
+9. Costo por kg en dashboard de finanzas.
+10. Módulo de notificaciones (base ya existe en `notificaciones.py`).
+11. Responsividad mobile del frontend **web** (solo 11/43 componentes con breakpoints) — si algún encargado va a usar el navegador desde el celular en vez de la app.
+12. Integraciones Fase 5: Climagro (clima real), bot de WhatsApp (carga de egresos), agente ARCA (boletas), termógrafo IoT.
+
+### Decisión pendiente: publicar en Google Play Store
+
+Evaluado el 2026-07-27 a pedido de Fausto — ver conversación de esa fecha para el análisis completo. Resumen: **conviene**, específicamente vía el track **"Internal testing"** de Play Console (no publicación pública completa) — resuelve dos fricciones reales que ya causaron confusión en esta misma sesión: instalación por sideload de APK (requiere habilitar "orígenes desconocidos" a mano) y actualizaciones OTA que a veces necesitan cerrar/reabrir la app dos veces para aplicarse. Internal testing da instalación por link + actualizaciones automáticas reales de Play Store, sin pasar por revisión pública ni necesitar una ficha de tienda pulida. `eas build` ya soporta generar el `.aab` que pide Play Store; `eas update` (OTA) se sigue usando igual para cambios de puro JS entre versiones nativas — no es una cosa u la otra. Costo: USD 25 única vez (cuenta de developer, la tiene que crear Fausto con su propia cuenta de Google) + un poco de configuración inicial (ficha mínima, cuestionario de seguridad de datos, ícono). Buen momento para hacerlo: junto con la build nueva del punto 1, ya que hace falta de todos modos.
 
 ## Ver también
 
+- [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
+- [[2026-07-20-login-mobile-y-ciclo-campana]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]

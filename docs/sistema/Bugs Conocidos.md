@@ -4,11 +4,15 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-07-18 (egresos huérfanos corregidos, follow-up de la limpieza de duplicados del 2026-07-17, ver [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]])
+> Última revisión: 2026-07-27 (duplicados web, mapa mobile en blanco, cumplimiento de riego, ver [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]])
 
 ---
 
 ## 🔴 Abiertos — relevantes para el deploy de prueba
+
+### "Ciclo Campaña" crashea el APK standalone instalado (no en Expo Go) — necesita build nueva
+
+**Reportado:** 2026-07-20/21. **Estado:** el botón cierra la app de golpe en el APK que los testers tienen instalado, pero el mismo código (mismo commit, mismo bundle) **no crashea corriendo vía Expo Go** — evidencia fuerte de un módulo nativo mal enlazado en esa build específica (compilada en julio), no un bug de JS. Se agregó un Error Boundary global (`mobile/components/ErrorBoundary.tsx`) como mitigación — si vuelve a pasar, muestra una pantalla de recuperación en vez de cerrar la app entera — pero **no resuelve la causa real**. Fix pendiente: correr `eas build --profile preview` para regenerar el APK con los módulos nativos bien enlazados y redistribuirlo (reinstalación completa, no alcanza con `eas update`/OTA). Detalle: [[2026-07-20-login-mobile-y-ciclo-campana]].
 
 ### Error genérico al cargar riego mobile con 2+ válvulas — sin reproducir
 
@@ -20,6 +24,10 @@ tags: [sistema, bugs]
 **Impacto:** El backend ya soporta `finca` explícita por registro (fix del 2026-06-08) y ya existe el modelo `Trabajador` + router `/trabajadores`, pero el frontend nunca fue actualizado: el formulario sigue mandando `trabajador_nombre` como texto libre (línea ~282-285) y no envía `finca` (cero referencias en el schema ni en `lib/api/produccion.ts`). Cero referencias a `/trabajadores/` en todo el frontend.
 **Efecto práctico:** los registros de tarea diaria cargados durante la prueba van a seguir sin `finca` persistida a nivel de registro (solo el egreso derivado la tiene) y sin vínculo al `Trabajador` nuevo.
 **Fix:** agregar selector de finca (default `media_agua` como hoy) y combo de trabajador con búsqueda sobre `GET /trabajadores/?is_active=true`, manteniendo `trabajador_nombre` como fallback legacy.
+
+### `FitosanitarioForm.tsx` (web) sin guard anti doble-tap
+
+**Detectado:** 2026-07-27, de paso al arreglar el mismo gap en `TareaForm`/`RiegoForm`/`IniciarRiegoForm`. **Estado:** no reportado como bug real todavía (nadie duplicó datos de fitosanitarios), pero tiene el mismo patrón exacto (`disabled={isSubmitting}` nada más, sin `useRef` síncrono) — mismo fix mecánico si se quiere cerrar la clase de bug del todo. Detalle: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
 
 ---
 
@@ -34,10 +42,23 @@ tags: [sistema, bugs]
 - **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
 - **Dashboard finanzas sin costo por kg** todavía.
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
+- **Sin idempotencia real del lado backend**: hoy los duplicados se previenen solo con guards del lado cliente (`useRef` síncrono contra doble-tap en los forms/wizards). Un backend sin `UniqueConstraint`/idempotency key sigue siendo vulnerable a cualquier duplicación que no pase por esos guards (reintentos de red, dos dispositivos, bugs futuros). Diferido explícitamente el 2026-07-23 — ver [[Sistema de Gestión Agrícola]] § Próximos pasos.
+- **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
 
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-07-27** (detalle completo en [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]):
+- **Duplicados en tareas/riego web:** el guard `useRef` anti doble-tap del 2026-07-17 nunca se había replicado del mobile al web. Agregado a `TareaForm.tsx`, `RiegoForm.tsx`, `IniciarRiegoForm.tsx`. De paso, `scripts/limpiar_duplicados.py` no detectaba duplicados del flujo "iniciar riego" (agrupaba por `inicio` exacto, que el servidor genera distinto en cada request) — clave corregida. 4 filas de `registros_trabajo` + 3 de `registros_riego` limpiadas en producción.
+- **Mapa mobile sin ningún parral:** `GET /produccion/dashboard/eficiencia-hidrica` tiraba `TypeError` con cualquier riego en curso (no filtraba `duracion_horas = None`), y como el mapa pide 6 endpoints con `Promise.all`, ese único 500 tumbaba todo. Fix backend + cambiado a `Promise.allSettled` en mobile (de paso se encontró que 2 de esos 6 endpoints le devuelven 403 siempre a `regador`/`obrero`, rompiéndoles el mapa incluso sin el bug de arriba).
+- **Litros del riego en curso ya no se actualizan segundo a segundo** — solo el cronómetro; el total se muestra una vez, al terminar.
+- **"Terminar" ya no está disponible desde Inicio** (web + mobile), solo desde la pantalla/página de Riego. Agregado el panel "Riegos en curso" al Inicio web.
+- **Falso "no se pudo terminar el riego"** cuando la escritura sí había llegado al servidor (confirmado en logs, 200 OK) pero la respuesta se perdió en el camino — ahora se verifica contra el servidor antes de mostrar error.
+- **Cumplimiento de riego por estado fenológico completado en web** (backend y mobile ya existían desde el 2026-07-20/22, quedaba pendiente el mapa web — estaba empezado sin commitear y a medio conectar). Litros del panel de detalle también en m³.
+
+**2026-07-23 — recurrencia de duplicados, causa distinta a la del 07-17:**
+El interceptor de retry agregado el 2026-07-20 en `mobile/lib/api.ts` (para tolerar wifi rural) reintentaba automáticamente cualquier request sin `error.response`, incluidos POST — un timeout no distingue "nunca llegó al servidor" de "se procesó y se perdió la respuesta". Corregido a retry GET-only. 19 pares de `registros_trabajo` duplicados limpiados. Detalle completo solo en memoria de proyecto (no se había documentado en la bóveda en su momento — la sesión del 2026-07-27 lo nota como pendiente resuelto).
 
 **2026-07-18 — Mano de Obra y Egresos no coincidían ($2.743.575 vs $3.817.725):**
 Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_duplicados.py` borró `registros_trabajo` por SQL directo sin borrar el `Egreso` vinculado (`fuente='trabajo_diario'`), a diferencia del endpoint real. 14 egresos huérfanos ($1.074.150, la diferencia exacta) borrados con `scripts/limpiar_egresos_huerfanos.py`. Fix solo de datos, sin cambios de código. Detalle: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]] § "Follow-up 2026-07-18".
@@ -84,6 +105,8 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
+- [[2026-07-20-login-mobile-y-ciclo-campana]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]

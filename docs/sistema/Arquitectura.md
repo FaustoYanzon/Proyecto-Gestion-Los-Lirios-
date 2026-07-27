@@ -35,7 +35,14 @@ repo/
 | `users.py` | `/users` | CRUD usuarios, roles |
 | `parcelas.py` | `/parcelas` | CRUD parcelas + stats |
 | `finanzas.py` | `/finanzas` | Ingresos (libro de cobros "BD COBROS", desde 2026-07-14), egresos, cheques, flujo de caja |
-| `produccion.py` | `/produccion` | Tareas, riego (incl. "riegos en curso" desde 2026-07-17: `GET /riego/en-curso`, `POST /riego/iniciar`, `POST /riego/{id}/terminar`), fitosanitarios, campaña |
+| `produccion.py` | `/produccion` | Tareas, riego (incl. "riegos en curso" desde 2026-07-17: `GET /riego/en-curso`, `POST /riego/iniciar`, `POST /riego/{id}/terminar`), fitosanitarios, campaña (viejo, por parcela), estado-campaña (nuevo desde 2026-07-22, calendario único por variedad — ver sección dedicada abajo) |
+
+## Ciclo de Campaña — dos sistemas separados a propósito (desde 2026-07-22)
+
+- **`app.core.fenologia`** (viejo, sin cambios): calendario **por variedad** (fechas reales INTA San Juan/Pocito donde hay dato, resto interpolado), alimenta el widget "Tareas recomendadas" de Inicio (`GET /produccion/fenologia/estado-actual`) y las alertas de riesgo de oídio. Usa el enum `EstadoFenologico` (7 valores, incluye `madurez`/`latencia`) y la tabla `CicloCampana` (por parcela, incluye `rendimiento_kg_ha` — historial real de cosecha, sigue viva solo por esto).
+- **`app.core.ciclo_campana`** (nuevo): calendario **único, igual para todas las variedades** — Brotación (20/9), Floración (20/10), Cuaje (10/11), Cierre de Racimo (5/12), Envero (5/1), Cosecha (1/2), Post-Cosecha (1/5) — cada uno con una cantidad de riegos esperados (1/1/3/4/4/3/1) para medir cumplimiento. Enum `EstadoCampana` y tabla `EstadoVariedadCampana` (override manual **por variedad entera**, no por parcela) son independientes del sistema viejo — a propósito, para no romper `fenologia.py` ni migrar el enum viejo con datos reales. Endpoints: `GET /produccion/estado-campana/actual` y `/cumplimiento-riego` (ver: cualquier usuario autenticado), `POST /produccion/estado-campana/` (editar: solo `gerencial`/`super_admin`).
+- 1 riego "estándar" = 24h × `RegistroRiego.MM_POR_HORA` (1.6mm/h) = 38.4mm = 384.000 L/ha. El mapa (mobile y web, ambos desde 2026-07-27) colorea por `cumplimiento_pct` = riegos equivalentes aplicados ÷ riegos esperados del estado actual — modo aparte del modo "Riego" viejo (objetivo anual 6M L/ha/año), no lo reemplaza.
+- Detalle completo de la sesión original: [[2026-07-20-login-mobile-y-ciclo-campana]]. Espejo web completado: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
 
 ## Mobile — wizards de carga
 
@@ -50,6 +57,8 @@ Los 4 formularios multi-paso (`tareas.tsx`, `fito.tsx`/`fitosanitario.tsx`, `rie
 ## Mapa — fuente única de geometría
 
 `parcelas.coordenadas` (columna `JSON`) es la fuente única de polígonos para web y mobile — poblada desde `frontend/public/Los Lirios 2026.kml` (2026-07-17, `scripts/poblar_coordenadas_parcelas.py`; estaba en `null` desde siempre pese a estar wireada end-to-end). El mapa web (`frontend/lib/kml.ts`) sigue leyendo el KML en vivo además de usar `coordenadas` vía API para los datos de atributos; el mapa mobile (`mobile/app/(tabs)/mapa.tsx`) dibuja exclusivamente desde `coordenadas` — ya no tiene snapshot propio (`mobile/lib/kmlData.ts` borrado). Si se agrega una parcela nueva al KML, hay que volver a correr el script de backfill para que aparezca en mobile.
+
+**Patrón: `Promise.allSettled`, no `Promise.all`, para cargar datos de mapa (desde 2026-07-27).** `mapa.tsx` pide 6 endpoints en paralelo; los polígonos solo dependen de `parcelas` (`require_any_role`), el resto son capas de color/info opcionales — 2 de ellas exigen `require_encargado_up` y le devuelven 403 a `regador`/`obrero` siempre. Con `Promise.all`, un solo fallo (403 de rol, o un 500 puntual) tumbaba el mapa entero, incluidos los polígonos que no tenían nada que ver. Con `allSettled` cada fuente se aplica de forma independiente si resuelve. Aplica el mismo criterio a cualquier pantalla que combine una fuente "crítica" con fuentes "opcionales" en paralelo.
 
 ## Fincas
 
@@ -107,6 +116,7 @@ python -m app.api.seed_parcelas        # seed parcelas
 
 ## Ver también
 
+- [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]
 - [[2026-07-11-deploy-piloto-completado]]
