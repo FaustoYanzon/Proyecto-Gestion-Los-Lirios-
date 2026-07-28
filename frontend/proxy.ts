@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const publicRoutes = ['/login']
+// /login: solo para usuarios sin sesión (si hay token, se manda a /dashboard).
+// /privacy: siempre pública, incluso con sesión iniciada — la pide Play Store
+// y tiene que ser accesible sin depender de si quien la visita está logueado.
+const unauthOnlyRoutes = ['/login']
+const alwaysPublicRoutes = ['/privacy']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -13,13 +17,17 @@ export function proxy(request: NextRequest) {
     )
   }
 
-  const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route))
+  if (alwaysPublicRoutes.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next()
+  }
 
-  if (!isPublicRoute && !token) {
+  const isUnauthOnlyRoute = unauthOnlyRoutes.some((route) => pathname.startsWith(route))
+
+  if (!isUnauthOnlyRoute && !token) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (isPublicRoute && token) {
+  if (isUnauthOnlyRoute && token) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

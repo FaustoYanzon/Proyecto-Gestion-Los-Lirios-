@@ -20,7 +20,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://proyecto-gestion-los-lirios-production.up.railway.app"
+      }
     }
   },
   "submit": {

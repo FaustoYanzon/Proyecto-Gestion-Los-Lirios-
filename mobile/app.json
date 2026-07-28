@@ -27,10 +27,9 @@
       "package": "com.loslirios.app",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png",
