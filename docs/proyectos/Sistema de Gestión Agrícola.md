@@ -85,12 +85,13 @@ Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un es
 11. Responsividad mobile del frontend **web** (solo 11/43 componentes con breakpoints) — si algún encargado va a usar el navegador desde el celular en vez de la app.
 12. Integraciones Fase 5: Climagro (clima real), bot de WhatsApp (carga de egresos), agente ARCA (boletas), termógrafo IoT.
 
-### Decisión pendiente: publicar en Google Play Store
+### En curso: publicar en Google Play Store (track Internal testing)
 
-Evaluado el 2026-07-27 a pedido de Fausto — ver conversación de esa fecha para el análisis completo. Resumen: **conviene**, específicamente vía el track **"Internal testing"** de Play Console (no publicación pública completa) — resuelve dos fricciones reales que ya causaron confusión en esta misma sesión: instalación por sideload de APK (requiere habilitar "orígenes desconocidos" a mano) y actualizaciones OTA que a veces necesitan cerrar/reabrir la app dos veces para aplicarse. Internal testing da instalación por link + actualizaciones automáticas reales de Play Store, sin pasar por revisión pública ni necesitar una ficha de tienda pulida. `eas build` ya soporta generar el `.aab` que pide Play Store; `eas update` (OTA) se sigue usando igual para cambios de puro JS entre versiones nativas — no es una cosa u la otra. Costo: USD 25 única vez (cuenta de developer, la tiene que crear Fausto con su propia cuenta de Google) + un poco de configuración inicial (ficha mínima, cuestionario de seguridad de datos, ícono). Buen momento para hacerlo: junto con la build nueva del punto 1, ya que hace falta de todos modos.
+Decidido y arrancado el 2026-07-27. Checklist completo con lo ya hecho (build de producción lanzado, política de privacidad publicada, assets gráficos generados) y lo pendiente del lado de Fausto (cuenta de developer, ficha de la app, testers): [[Play Store — checklist de publicación]].
 
 ## Ver también
 
+- [[Play Store — checklist de publicación]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-20-login-mobile-y-ciclo-campana]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
