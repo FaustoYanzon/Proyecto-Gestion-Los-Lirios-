@@ -6,6 +6,12 @@ tags: [sistema, mobile, deploy, playstore]
 
 > Decisión tomada el 2026-07-27: publicar `Los Lirios SA` (mobile) en Google Play, track **Internal testing** (no producción pública) — resuelve la fricción de sideload de APK y las actualizaciones OTA que a veces necesitaban cerrar/reabrir la app dos veces. Detalle de la decisión: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
 
+## Estado (2026-07-27, fin de sesión)
+
+- ✅ Build de producción terminado (`versionCode 2`, `.aab`). Descargado en `C:\Users\faust\Downloads\los-lirios-v1.0.0-2.aab`, listo para subir a Play Console. También queda en `https://expo.dev/artifacts/eas/BgoOZs2pWr63ibS0_2_PswVFC6w9MC9uOdQFXGSnCnc.aab` por si se pierde el local.
+- ✅ Capturas recibidas en `C:\Users\faust\OneDrive\Pictures\Fotos App Mobile\` (4 fotos, cuenta de Camilo). 3 sirven tal cual para la ficha: Mapa (confirma que el fix del mapa mobile quedó bien — se ven los polígonos), Inicio, Riego. **La cuarta (Tareas) muestra nombres y sueldos reales de empleados** (Franco $61.875, Javier $86.625, etc.) — no la subiría a la ficha de la store sin que Fausto lo decida a propósito. Como es "Internal testing" (no público, solo visible para los testers invitados vía link), el riesgo es bajo, pero es una decisión suya, no mía.
+- 🕓 Cuenta de Google Play Developer creada (`administracion@losliriossa.com`), **verificación de identidad en curso** — Google puede tardar de horas a algunos días. Mientras tanto se puede seguir armando la ficha de la app (nombre, descripción, capturas, content rating, data safety) — lo que probablemente quede bloqueado hasta que la verificación termine es el paso final de publicar el release a Internal testing.
+
 ## Ya hecho (lado código/CI)
 
 - `mobile/eas.json` — profile `production` con `EXPO_PUBLIC_API_URL` explícito (mismo bug que el de login OTA del 2026-07-20 si se omite: `eas build` sí lee `eas.json`, pero sin el `env` cae al `.env` local con la IP LAN de desarrollo).
@@ -27,7 +33,7 @@ tags: [sistema, mobile, deploy, playstore]
    - **Descripción completa** (borrador abajo).
    - **Ícono de la app**: subir `mobile/assets/play-store/icon-512.png`.
    - **Gráfico destacado (feature graphic)**: subir `mobile/assets/play-store/feature-graphic-1024x500.png`.
-   - **Capturas de pantalla** (mínimo 2, teléfono): **necesito que las saques vos** desde el celular — no tengo forma de capturar pantallas de la app corriendo. 2-4 alcanzan: Inicio, Riego (con el panel "riegos en curso"), Mapa, y algún dashboard.
+   - **Capturas de pantalla** (mínimo 2, teléfono): ✅ recibidas — usar Mapa, Inicio y Riego de `C:\Users\faust\OneDrive\Pictures\Fotos App Mobile\`. La cuarta (Tareas) tiene sueldos/nombres reales de empleados, decisión tuya si la subís o no (ver nota arriba).
    - **Categoría**: Negocios (Business).
    - **Datos de contacto**: `administracion@losliriossa.com`.
    - **Política de privacidad**: `https://frontend-six-jade-79.vercel.app/privacy`
