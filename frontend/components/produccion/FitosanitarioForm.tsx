@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFitosanitario, updateFitosanitario, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 const schema = z.object({
   fecha: z.string().min(1, 'Requerido'),
@@ -47,6 +48,7 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
   const queryClient = useQueryClient()
   const isEdit = !!registro
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const {
@@ -87,7 +89,7 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
       if (isEdit) {
         await updateFitosanitario(registro.id, data)
       } else {
-        await createFitosanitario(data)
+        await createFitosanitario({ ...data, idempotency_key: idempotencyKeyRef.current })
       }
       queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
       onSuccess()

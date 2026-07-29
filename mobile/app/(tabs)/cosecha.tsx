@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { getCosechas, createCosecha, deleteCosecha } from '../../lib/api'
+import { newIdempotencyKey } from '../../lib/idempotency'
 import type { RegistroCosecha, RegistroCosechaCreate, DestinoCosecha, CultivoCosecha, TipoEnvase } from '../../lib/types'
 import { DESTINO_LABELS, CULTIVO_LABELS, DESTINO_COLORS } from '../../lib/types'
 
@@ -56,6 +57,9 @@ export default function CosechaScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [saving, setSaving] = useState(false)
   const submittingRef = useRef(false)
+  // Regenerado cada vez que se abre el modal (una carga = un envío lógico
+  // nuevo); se reutiliza si el usuario reintenta el mismo envío.
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [form, setForm] = useState<RegistroCosechaCreate>(emptyForm())
 
   // ── Data ────────────────────────────────────────────────────────────────────
@@ -115,6 +119,7 @@ export default function CosechaScreen() {
 
   function openModal() {
     setForm(emptyForm())
+    idempotencyKeyRef.current = newIdempotencyKey()
     setModalVisible(true)
   }
 
@@ -131,7 +136,7 @@ export default function CosechaScreen() {
     submittingRef.current = true
     try {
       setSaving(true)
-      await createCosecha(form)
+      await createCosecha({ ...form, idempotency_key: idempotencyKeyRef.current })
       closeModal()
       await fetchData()
     } catch {

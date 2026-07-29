@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import api, { getRiegosEnCurso, iniciarRiego, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
+import { newIdempotencyKey } from '../../lib/idempotency'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 import type { Parcela, RegistroRiego, RiegoEnCurso } from '../../lib/types'
@@ -742,6 +743,7 @@ function StepConfirmar({
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
 
   const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00-03:00`
   const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
@@ -763,6 +765,7 @@ function StepConfirmar({
         responsable: draft.responsable,
         fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
         fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
+        idempotency_key: idempotencyKeyRef.current,
       })
       onSuccess()
     } catch (e: unknown) {
@@ -862,6 +865,7 @@ function StepIniciarConfirmar({
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
 
   async function handleSubmit() {
     if (submittingRef.current) return
@@ -875,6 +879,7 @@ function StepIniciarConfirmar({
         responsable: draft.responsable,
         fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
         fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
+        idempotency_key: idempotencyKeyRef.current,
       })
       onSuccess()
     } catch (e: unknown) {

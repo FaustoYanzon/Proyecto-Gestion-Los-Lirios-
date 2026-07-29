@@ -19,6 +19,7 @@ import {
   type UnidadMedida,
   type ParcelaItem,
 } from '@/lib/api/produccion'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 const CLASIFICACION_BADGE: Record<string, string> = {
   verano:    'bg-orange-50 text-orange-700 border border-orange-200',
@@ -44,7 +45,14 @@ const schema = z.object({
         cantidad: z.coerce.number().positive('Debe ser > 0'),
       })
     )
-    .min(1, 'Agregar al menos un trabajador'),
+    .min(1, 'Agregar al menos un trabajador')
+    .refine(
+      (trabajadores) => {
+        const nombres = trabajadores.map((t) => t.trabajador_nombre.trim().toLowerCase())
+        return new Set(nombres).size === nombres.length
+      },
+      { message: 'Hay un trabajador cargado más de una vez. Sacá el duplicado antes de continuar.' }
+    ),
 })
 
 type FormData = z.infer<typeof schema>
@@ -68,6 +76,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
   const isEdit = !!registro
   const firstRender = useRef(true)
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [customTask, setCustomTask] = useState('')
 
@@ -151,6 +160,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           precio_unitario: data.precio_unitario,
           detalle: data.detalle || undefined,
           trabajadores: data.trabajadores,
+          idempotency_key: idempotencyKeyRef.current,
         })
       }
       queryClient.invalidateQueries({ queryKey: ['trabajos'] })

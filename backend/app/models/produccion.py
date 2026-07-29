@@ -141,6 +141,12 @@ class RegistroTrabajo(Base):
     trabajador_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("trabajadores.id"), nullable=True
     )
+    # Generado por el cliente (UUID), una vez por envío lógico del form/wizard —
+    # permite que un reintento (el usuario re-tocando "Guardar" después de una
+    # respuesta lenta) devuelva el registro ya creado en vez de duplicarlo. Se
+    # combina con trabajador_nombre porque /trabajo/masivo crea varias filas
+    # (una por trabajador) compartiendo la misma key en un solo envío.
+    idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
@@ -158,6 +164,12 @@ class RegistroTrabajo(Base):
         Index("ix_registros_trabajo_fecha", "fecha"),
         Index("ix_registros_trabajo_parcela_fecha", "parcela_id", "fecha"),
         Index("ix_registros_trabajo_trabajador_id", "trabajador_id"),
+        Index(
+            "uq_registros_trabajo_idempotency",
+            "idempotency_key", "trabajador_nombre",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -200,6 +212,8 @@ class RegistroRiego(Base):
     fertilizante_nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)
     fertilizante_dosis_lt_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
     responsable: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Ver nota en RegistroTrabajo.idempotency_key.
+    idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
@@ -217,6 +231,12 @@ class RegistroRiego(Base):
         Index("ix_registros_riego_fecha", "fecha"),
         Index("ix_registros_riego_parcela_fecha", "parcela_id", "fecha"),
         Index("ix_registros_riego_en_curso", "cabezal", postgresql_where=text("fin IS NULL")),
+        Index(
+            "uq_registros_riego_idempotency",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     # Cada valvula riega 1 ha y entrega 16,000 L/h => 1.6 mm/h sobre esa ha.
@@ -287,6 +307,8 @@ class RegistroFitosanitario(Base):
     fecha_habilitacion_cosecha: Mapped[date] = mapped_column(Date, nullable=False)
     fecha_habilitacion_reingreso: Mapped[date] = mapped_column(Date, nullable=False)
     responsable: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Ver nota en RegistroTrabajo.idempotency_key.
+    idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
@@ -303,6 +325,12 @@ class RegistroFitosanitario(Base):
     __table_args__ = (
         Index("ix_registros_fitosanitarios_fecha", "fecha"),
         Index("ix_registros_fitosanitarios_parcela_fecha", "parcela_id", "fecha"),
+        Index(
+            "uq_registros_fitosanitarios_idempotency",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -471,6 +499,8 @@ class RegistroCosecha(Base):
     imagen_remito_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Ver nota en RegistroTrabajo.idempotency_key.
+    idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
@@ -505,6 +535,12 @@ class RegistroCosecha(Base):
         Index("ix_registros_cosecha_fecha", "fecha"),
         Index("ix_registros_cosecha_temporada", "temporada"),
         Index("ix_registros_cosecha_parcela_temporada", "parcela_id", "temporada"),
+        Index(
+            "uq_registros_cosecha_idempotency",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     parcela: Mapped["Parcela | None"] = relationship(

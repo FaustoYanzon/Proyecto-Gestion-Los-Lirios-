@@ -310,6 +310,27 @@ async def create_trabajo_masivo(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> list[RegistroTrabajo]:
+    # Reintento del mismo envío lógico (p. ej. el usuario re-tocó "Confirmar"
+    # después de una respuesta lenta, ya con el guard de doble-tap liberado) —
+    # devolver lo ya creado en vez de duplicar el lote entero.
+    if carga.idempotency_key:
+        existing = await db.execute(
+            select(RegistroTrabajo).where(RegistroTrabajo.idempotency_key == carga.idempotency_key)
+        )
+        existing_rows = list(existing.scalars())
+        if existing_rows:
+            return existing_rows
+
+    nombres_vistos: dict[str, str] = {}
+    for item in carga.trabajadores:
+        key = item.trabajador_nombre.strip().lower()
+        if key in nombres_vistos:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'"{item.trabajador_nombre}" está cargado más de una vez en esta carga.',
+            )
+        nombres_vistos[key] = item.trabajador_nombre
+
     clasificacion = _get_clasificacion(carga.tarea)
     parcela_nombre: str | None = None
     if carga.parcela_id:
@@ -330,6 +351,7 @@ async def create_trabajo_masivo(
             unidad_medida=carga.unidad_medida,
             precio_unitario=carga.precio_unitario,
             detalle=carga.detalle,
+            idempotency_key=carga.idempotency_key,
             created_by=current_user.id,
         )
         db.add(registro)
@@ -438,6 +460,14 @@ async def create_trabajo(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroTrabajo:
+    if trabajo_data.idempotency_key:
+        existing = await db.execute(
+            select(RegistroTrabajo).where(RegistroTrabajo.idempotency_key == trabajo_data.idempotency_key)
+        )
+        existing_row = existing.scalars().first()
+        if existing_row:
+            return existing_row
+
     data = trabajo_data.model_dump()
     finca = data.pop("finca")  # not a DB field — used only for egreso generation
     trabajador_id = data.get("trabajador_id")
@@ -575,6 +605,14 @@ async def iniciar_riego(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroRiego:
+    if riego_data.idempotency_key:
+        existing = await db.execute(
+            select(RegistroRiego).where(RegistroRiego.idempotency_key == riego_data.idempotency_key)
+        )
+        existing_row = existing.scalars().first()
+        if existing_row:
+            return existing_row
+
     now = datetime.now(timezone.utc)
     riego = RegistroRiego(
         fecha=now.astimezone(ZoneInfo("America/Argentina/San_Juan")).date(),
@@ -608,6 +646,14 @@ async def create_riego(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroRiego:
+    if riego_data.idempotency_key:
+        existing = await db.execute(
+            select(RegistroRiego).where(RegistroRiego.idempotency_key == riego_data.idempotency_key)
+        )
+        existing_row = existing.scalars().first()
+        if existing_row:
+            return existing_row
+
     data = riego_data.model_dump()
     data["created_by"] = current_user.id
     # duracion_horas computed by RegistroRiego.__init__
@@ -745,6 +791,16 @@ async def create_fitosanitario(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroFitosanitario:
+    if fito_data.idempotency_key:
+        existing = await db.execute(
+            select(RegistroFitosanitario).where(
+                RegistroFitosanitario.idempotency_key == fito_data.idempotency_key
+            )
+        )
+        existing_row = existing.scalars().first()
+        if existing_row:
+            return existing_row
+
     data = fito_data.model_dump()
     data["created_by"] = current_user.id
     # fecha_habilitacion_* computed by RegistroFitosanitario.__init__
@@ -1372,6 +1428,14 @@ async def create_cosecha(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> RegistroCosechaResponse:
+    if cosecha_data.idempotency_key:
+        existing = await db.execute(
+            select(RegistroCosecha).where(RegistroCosecha.idempotency_key == cosecha_data.idempotency_key)
+        )
+        existing_row = existing.scalars().first()
+        if existing_row:
+            return await _enrich_cosecha(existing_row, db)
+
     data = cosecha_data.model_dump()
     data["created_by"] = current_user.id
     f = cosecha_data.fecha

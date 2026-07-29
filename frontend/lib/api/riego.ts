@@ -110,6 +110,7 @@ export interface RiegoCreate {
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   responsable: string
+  idempotency_key?: string
 }
 
 export interface RiegoUpdate {
@@ -162,6 +163,7 @@ export interface RiegoIniciarInput {
   responsable: string
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
+  idempotency_key?: string
 }
 
 export interface RiegoEnCurso {

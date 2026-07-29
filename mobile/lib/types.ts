@@ -130,6 +130,7 @@ export interface RiegoIniciarPayload {
   responsable: string
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
+  idempotency_key?: string
 }
 
 export interface RiegoEnCurso {
@@ -392,6 +393,7 @@ export interface RegistroCosechaCreate {
   tara_kg?: number | null
   kg_total: number
   observaciones?: string | null
+  idempotency_key?: string
 }
 
 export const DESTINO_LABELS: Record<DestinoCosecha, string> = {

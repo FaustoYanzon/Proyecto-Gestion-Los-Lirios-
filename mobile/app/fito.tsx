@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import api from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
+import { newIdempotencyKey } from '../lib/idempotency'
 import { colors } from '../lib/theme'
 import type { Parcela, RegistroFitosanitario } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
@@ -480,6 +481,7 @@ function StepConfirmar({
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
 
   function addDays(iso: string, days: number): string {
     const d = new Date(iso)
@@ -502,6 +504,7 @@ function StepConfirmar({
         dias_carencia: diasCarencia,
         dias_reingreso: diasReingreso,
         responsable,
+        idempotency_key: idempotencyKeyRef.current,
       })
       onSuccess()
     } catch (e: unknown) {

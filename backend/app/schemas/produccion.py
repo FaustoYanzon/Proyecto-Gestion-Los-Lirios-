@@ -44,6 +44,7 @@ class RegistroTrabajoCreate(RegistroTrabajoBase):
     finca: Finca = Finca.media_agua
     # If provided, overrides trabajador_nombre with the linked Trabajador's full name.
     trabajador_id: str | None = None
+    idempotency_key: str | None = None
 
 
 class RegistroCargaMasiva(BaseModel):
@@ -55,6 +56,7 @@ class RegistroCargaMasiva(BaseModel):
     precio_unitario: Decimal
     detalle: str | None = None
     trabajadores: list[TrabajadorItem]
+    idempotency_key: str | None = None
 
 
 class RegistroTrabajoUpdate(BaseModel):
@@ -111,7 +113,7 @@ class RegistroRiegoBase(BaseModel):
 
 
 class RegistroRiegoCreate(RegistroRiegoBase):
-    pass
+    idempotency_key: str | None = None
 
 
 class RegistroRiegoUpdate(BaseModel):
@@ -147,6 +149,7 @@ class RegistroRiegoIniciar(BaseModel):
     responsable: str
     fertilizante_nombre: str | None = None
     fertilizante_dosis_lt_ha: float | None = None
+    idempotency_key: str | None = None
 
 
 class RegistroRiegoEnCursoResponse(BaseModel):
@@ -181,7 +184,7 @@ class RegistroFitosanitarioBase(BaseModel):
 
 
 class RegistroFitosanitarioCreate(RegistroFitosanitarioBase):
-    pass
+    idempotency_key: str | None = None
 
 
 class RegistroFitosanitarioUpdate(BaseModel):
@@ -369,7 +372,7 @@ class RegistroCosechaBase(BaseModel):
 
 
 class RegistroCosechaCreate(RegistroCosechaBase):
-    pass
+    idempotency_key: str | None = None
 
 
 class RegistroCosechaUpdate(BaseModel):

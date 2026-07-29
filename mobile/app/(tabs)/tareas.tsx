@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
+import { newIdempotencyKey } from '../../lib/idempotency'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
 import type { Parcela, RegistroTrabajo, UnidadMedida } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
@@ -553,6 +554,15 @@ function StepTrabajadores({
       Alert.alert('Error', 'Ingresá una cantidad válida para cada trabajador.')
       return
     }
+    const nombresVistos = new Set<string>()
+    for (const w of conNombre) {
+      const key = w.nombre.trim().toLowerCase()
+      if (nombresVistos.has(key)) {
+        Alert.alert('Error', `"${w.nombre.trim()}" está cargado más de una vez. Sacá el duplicado antes de continuar.`)
+        return
+      }
+      nombresVistos.add(key)
+    }
     onNext(conNombre.map((w) => ({ nombre: w.nombre.trim(), cantidad: Number(w.cantidad) })))
   }
 
@@ -650,6 +660,11 @@ function StepConfirmar({
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
+  // Generado una sola vez al entrar a este paso y reutilizado en cualquier
+  // reintento (el usuario puede volver a tocar "Confirmar" si la primera
+  // respuesta tarda) — así el backend puede reconocer que es el mismo envío
+  // lógico y no crear una fila duplicada.
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
   const totalCant = trabajadores.reduce((s, w) => s + w.cantidad, 0)
   const total = precio * totalCant
 
@@ -663,6 +678,7 @@ function StepConfirmar({
       unidad_medida: unidad,
       precio_unitario: precio,
       trabajadores: trabajadores.map((w) => ({ trabajador_nombre: w.nombre, cantidad: w.cantidad })),
+      idempotency_key: idempotencyKeyRef.current,
     }
     try {
       setLoading(true)

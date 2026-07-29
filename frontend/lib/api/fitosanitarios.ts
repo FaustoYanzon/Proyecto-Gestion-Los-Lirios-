@@ -9,6 +9,7 @@ export interface FitosanitarioCreate {
   dias_carencia: number
   dias_reingreso: number
   responsable: string
+  idempotency_key?: string
 }
 
 export interface FitosanitarioUpdate {

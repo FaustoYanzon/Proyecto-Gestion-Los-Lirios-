@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { getValvulas, iniciarRiego } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
+import { newIdempotencyKey } from '@/lib/idempotency'
 
 const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
@@ -37,6 +38,7 @@ const err = 'mt-1 text-xs text-red-600'
 export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient()
   const submittingRef = useRef(false)
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [conFertilizante, setConFertilizante] = useState(false)
   const [selectedValvulas, setSelectedValvulas] = useState<Set<number>>(new Set())
@@ -90,6 +92,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         responsable: data.responsable,
         fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
         fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
+        idempotency_key: idempotencyKeyRef.current,
       })
       queryClient.invalidateQueries({ queryKey: ['riegos-en-curso'] })
       onSuccess()

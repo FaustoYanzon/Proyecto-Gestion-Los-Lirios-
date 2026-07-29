@@ -50,6 +50,7 @@ export interface RegistroCargaMasiva {
   precio_unitario: number
   detalle?: string
   trabajadores: TrabajadorItem[]
+  idempotency_key?: string
 }
 
 export interface RegistroTrabajoCreate {
