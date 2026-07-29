@@ -73,10 +73,11 @@ Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un es
 ### Corto plazo (antes de escalar a más usuarios/fincas)
 
 4. **Reproducir el bug de riego con 2+ válvulas** en el dispositivo (nunca se logró capturar el error real) — ver [[Bugs Conocidos]].
-5. **Idempotencia real en el backend** (columna `idempotency_key` + `UniqueConstraint` parcial en los 4 modelos de producción) — diferida desde el 2026-07-23. Hoy la protección contra duplicados es 100% del lado cliente (guards `useRef`); cualquier vector nuevo (dos dispositivos, un retry futuro, un bug) puede volver a duplicar datos sin que el backend lo impida.
+5. ~~Idempotencia real en el backend~~ — **hecho 2026-07-29**, tras un cuarto incidente de duplicados: `idempotency_key` + índice único parcial en los 4 modelos de producción, los 6 endpoints de creación devuelven el registro existente ante un reintento en vez de duplicar. Detalle: [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]. Pendiente menor no bloqueante: extender `backend/tests/test_produccion_idempotency.py` a riego/fito/cosecha (falta resolver una fixture de `Parcela` para tests).
 6. Completar `TareaForm` **web** (campo `finca` + selector de `Trabajador`) y el equivalente en mobile (`tareas.tsx` solo tiene texto libre para el nombre) — el backend y el modelo `Trabajador` ya existen, falta conectar el frontend.
 7. Refresh token (hoy el JWT expira y desloguea sin aviso).
 8. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway).
+9. **Crear `EXPO_PUBLIC_API_URL` como variable EAS hosteada para el entorno `production`** (ya existe para `preview` desde el 07-20/22). Sin eso, `eas update --environment production` no aporta nada real y depende de qué `EXPO_PUBLIC_API_URL` haya exportada en la shell de quien publica — causó que el 2026-07-29 se publicara por error un update de producción con la IP LAN de dev grabada adentro (corregido en el momento, ver [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]).
 
 ### Roadmap (features nuevas)
 
@@ -92,6 +93,7 @@ Decidido y arrancado el 2026-07-27. Checklist completo con lo ya hecho (build de
 ## Ver también
 
 - [[Play Store — checklist de publicación]]
+- [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-20-login-mobile-y-ciclo-campana]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]

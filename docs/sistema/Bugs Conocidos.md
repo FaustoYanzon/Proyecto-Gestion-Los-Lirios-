@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-07-27 (duplicados web, mapa mobile en blanco, cumplimiento de riego, ver [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]])
+> Última revisión: 2026-07-29 (cuarto incidente de duplicados — idempotencia real cerrada, ver [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]])
 
 ---
 
@@ -38,12 +38,19 @@ tags: [sistema, bugs]
 - **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
 - **Dashboard finanzas sin costo por kg** todavía.
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
-- **Sin idempotencia real del lado backend**: hoy los duplicados se previenen solo con guards del lado cliente (`useRef` síncrono contra doble-tap en los forms/wizards). Un backend sin `UniqueConstraint`/idempotency key sigue siendo vulnerable a cualquier duplicación que no pase por esos guards (reintentos de red, dos dispositivos, bugs futuros). Diferido explícitamente el 2026-07-23 — ver [[Sistema de Gestión Agrícola]] § Próximos pasos.
 - **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
 
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-07-29 — cuarto incidente de duplicados, causa distinta a las tres anteriores (idempotencia real cerrada):**
+Volvieron a aparecer duplicados en `registros_trabajo`, visibles en mobile y web. Verificado contra el código (no contra las notas viejas) que los 3 fixes anteriores (guard `useRef` mobile 07-17, retry GET-only 07-23, guard `useRef` web 07-27) seguían intactos, sin regresión. Diagnóstico contra datos reales de producción: 29 grupos de duplicados en `registros_trabajo` (32 filas), 0 en riego/fito/cosecha — el gap entre cada par era consistentemente de 2.6 a 7.5 segundos, no milisegundos, lo que descarta "mismo trabajador cargado dos veces en un mismo request" (eso daría timestamps casi idénticos) y confirma que son dos requests HTTP separados: el encargado tocó "Guardar", la respuesta tardó unos segundos, no vio confirmación a tiempo y volvió a tocar "Guardar" ya con el guard `useRef` liberado (porque el primer request ya había terminado). Ningún guard de doble-tap puede distinguir eso de una carga nueva legítima — exactamente el riesgo de "sin idempotencia real del lado backend" que estaba documentado y diferido desde el 2026-07-23.
+- **Cerrado de una vez:** `idempotency_key` (UUID generado por el cliente, uno por envío lógico del form/wizard) + índice único parcial en los 4 modelos de producción (`RegistroTrabajo`, `RegistroRiego`, `RegistroFitosanitario`, `RegistroCosecha`). Los 6 endpoints de creación (`trabajo/`, `trabajo/masivo`, `riego/`, `riego/iniciar`, `fitosanitarios/`, `cosecha/`) devuelven el registro ya existente ante un reintento con la misma key, en vez de duplicar. Mobile (5 wizards) y web (4 forms) generan la key una sola vez al entrar al formulario/step de confirmación y la reutilizan en cualquier reintento.
+- **Bonus encontrado durante el diagnóstico de código:** ni el wizard mobile ni el form web ni el backend (`create_trabajo_masivo`) impedían que el mismo trabajador quedara cargado dos veces dentro de una misma carga con varios trabajadores — un envío 100% legítimo (sin doble-tap) generaría dos filas idénticas. No era la causa de este incidente puntual (confirmado por los timestamps), pero se cerró igual: bloqueo de nombre repetido en mobile, web y backend (400 si el backend lo detecta, defensa en profundidad).
+- **Limpieza en producción:** 32 filas de `registros_trabajo` (y sus `Egreso` vinculados en cascada) del 2026-07-29 borradas con `scripts/limpiar_duplicados.py --commit`, backup previo automático.
+- **Nuevo:** `backend/tests/test_produccion_idempotency.py` — primera cobertura de test automatizado para `produccion.py` (antes solo existía `test_auth.py`). Cubre reintento con misma key (simple y masivo) y rechazo de nombre repetido en carga masiva, contra la DB de test en memoria.
+- Pendiente, no bloqueante: el mismo test para `registros_riego`/`registros_fitosanitarios`/`registros_cosecha` necesita una fixture de `Parcela` para la suite de tests que no se resolvió en esta sesión (un intento directo con `TestSessionLocal` dio `no such table: parcelas` en el entorno de test, causa no identificada, no relacionada con el código de producción — el patrón de esos 3 endpoints es idéntico al de `registros_trabajo`, que sí está cubierto).
 
 **Sesión del 2026-07-27** (detalle completo en [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]):
 - **Duplicados en tareas/riego web:** el guard `useRef` anti doble-tap del 2026-07-17 nunca se había replicado del mobile al web. Agregado a `TareaForm.tsx`, `RiegoForm.tsx`, `IniciarRiegoForm.tsx`. De paso, `scripts/limpiar_duplicados.py` no detectaba duplicados del flujo "iniciar riego" (agrupaba por `inicio` exacto, que el servidor genera distinto en cada request) — clave corregida. 4 filas de `registros_trabajo` + 3 de `registros_riego` limpiadas en producción.
@@ -102,6 +109,7 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-20-login-mobile-y-ciclo-campana]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
