@@ -17,6 +17,16 @@ api.interceptors.request.use(async (config) => {
   return config
 })
 
+function hasIdempotencyKey(config: import('axios').InternalAxiosRequestConfig | undefined): boolean {
+  if (!config?.data) return false
+  try {
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data
+    return typeof body?.idempotency_key === 'string' && body.idempotency_key.length > 0
+  } catch {
+    return false
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -24,10 +34,16 @@ api.interceptors.response.use(
     // connection, DNS hiccup, momentary wifi flake) — but it can also mean a
     // timeout where the request DID reach the server and was processed, and only
     // the response got lost on the way back. Auto-retrying is only safe for
-    // idempotent methods (GET); retrying a POST here would silently create a
-    // duplicate record if the original write already succeeded.
+    // idempotent methods (GET) — retrying a plain POST here could silently
+    // create a duplicate if the original write already succeeded. A write that
+    // carries an idempotency_key is also safe to retry: the backend recognizes
+    // the key and returns the record it already created instead of duplicating
+    // it (2026-07-29, confirmed against a real "response lost, save actually
+    // succeeded" case — the form was showing a false error on a write that had
+    // gone through fine).
     const method = error.config?.method?.toLowerCase()
-    if (!error.response && !error.config?._retried && method === 'get') {
+    const retryable = method === 'get' || (method !== 'get' && hasIdempotencyKey(error.config))
+    if (!error.response && !error.config?._retried && retryable) {
       error.config._retried = true
       return api(error.config)
     }
