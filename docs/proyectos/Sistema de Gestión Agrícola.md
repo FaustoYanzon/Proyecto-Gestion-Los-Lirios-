@@ -78,6 +78,7 @@ Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un es
 7. Refresh token (hoy el JWT expira y desloguea sin aviso).
 8. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway).
 9. **Crear `EXPO_PUBLIC_API_URL` como variable EAS hosteada para el entorno `production`** (ya existe para `preview` desde el 07-20/22). Sin eso, `eas update --environment production` no aporta nada real y depende de qué `EXPO_PUBLIC_API_URL` haya exportada en la shell de quien publica — causó que el 2026-07-29 se publicara por error un update de producción con la IP LAN de dev grabada adentro (corregido en el momento, ver [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]).
+10. **`PUT /users/{id}` no soporta cambiar `email`** (solo `full_name`/`role`/`is_active`/`password`) — descubierto el 2026-07-29 al necesitar cambiarle el email a Camilo (`camiloyanzon@hotmail.com` → `camilotrabajofinca@gmail.com`, para que Play Console lo acepte como tester). Se resolvió con un UPDATE directo en producción, no por la app — ver [[Play Store — checklist de publicación]]. Agregar `email` a `UserUpdate` (con el chequeo de unicidad que ya tiene la columna) si esto vuelve a hacer falta.
 
 ### Roadmap (features nuevas)
 
