@@ -21,6 +21,13 @@ import type { Parcela, RegistroTrabajo, UnidadMedida } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
 
 const TOP_5_TAREAS = ['Poda', 'Verde', 'Jornal Comun', 'Cosecha', 'Raleo']
+const TEMPORADAS: { value: string; label: string }[] = [
+  { value: 'verano', label: 'Verano' },
+  { value: 'invierno', label: 'Invierno' },
+  { value: 'primavera', label: 'Primavera' },
+  { value: 'otono', label: 'Otoño' },
+  { value: 'general', label: 'General' },
+]
 const UNIDADES: UnidadMedida[] = ['dias', 'plantas', 'melgas', 'metros', 'vines', 'cajas', 'gamelas', 'otros']
 const UNIDADES_PRIMARIAS: UnidadMedida[] = ['dias', 'melgas', 'plantas']
 const UNIDADES_OTRAS = UNIDADES.filter((u) => !UNIDADES_PRIMARIAS.includes(u))
@@ -223,18 +230,39 @@ const dp = StyleSheet.create({
 function StepTareaFecha({
   onNext, onCancelar,
 }: {
-  onNext: (tarea: string, fecha: string) => void
+  onNext: (tarea: string, fecha: string, clasificacion?: string) => void
   onCancelar: () => void
 }) {
   const [selTarea, setSelTarea] = useState('')
+  const [selClasificacion, setSelClasificacion] = useState<string | undefined>(undefined)
   const [fecha, setFecha] = useState(isoToday())
   const [dateVisible, setDateVisible] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
+  const [nuevaModalVisible, setNuevaModalVisible] = useState(false)
+  const [nuevaNombre, setNuevaNombre] = useState('')
+  const [nuevaTemporada, setNuevaTemporada] = useState('general')
 
   const sections = TAREAS_POR_TEMPORADA.map((t) => ({
     title: t.temporada,
     data: t.tareas as unknown as string[],
   }))
+
+  function elegirTareaCatalogo(t: string) {
+    setSelTarea(t)
+    setSelClasificacion(undefined)
+    setModalVisible(false)
+  }
+
+  function confirmarNuevaTarea() {
+    if (!nuevaNombre.trim()) {
+      Alert.alert('Error', 'Ingresá el nombre de la nueva tarea.')
+      return
+    }
+    setSelTarea(nuevaNombre.trim())
+    setSelClasificacion(nuevaTemporada)
+    setNuevaModalVisible(false)
+    setModalVisible(false)
+  }
 
   return (
     <View style={styles.stepContainer}>
@@ -247,7 +275,7 @@ function StepTareaFecha({
             <TouchableOpacity
               key={t}
               style={[styles.taskChip, selTarea === t && styles.taskChipSelected]}
-              onPress={() => setSelTarea(t)}
+              onPress={() => { setSelTarea(t); setSelClasificacion(undefined) }}
               activeOpacity={0.75}
             >
               <Text style={[styles.taskChipText, selTarea === t && styles.taskChipTextSelected]}>{t}</Text>
@@ -266,7 +294,10 @@ function StepTareaFecha({
         {selTarea ? (
           <View style={styles.selectedTag}>
             <Ionicons name="checkmark-circle" size={16} color={colors.burdeos[600]} />
-            <Text style={styles.selectedTagText}>{selTarea}</Text>
+            <Text style={styles.selectedTagText}>
+              {selTarea}
+              {selClasificacion ? ` · ${TEMPORADAS.find((t) => t.value === selClasificacion)?.label}` : ''}
+            </Text>
           </View>
         ) : null}
 
@@ -287,7 +318,7 @@ function StepTareaFecha({
           style={[styles.primaryBtn, { marginTop: 24 }, !selTarea && { opacity: 0.4 }]}
           onPress={() => {
             if (!selTarea) { Alert.alert('Error', 'Seleccioná una tarea.'); return }
-            onNext(selTarea, fecha)
+            onNext(selTarea, fecha, selClasificacion)
           }}
         >
           <Text style={styles.primaryBtnText}>Continuar</Text>
@@ -305,6 +336,16 @@ function StepTareaFecha({
           <SectionList
             sections={sections}
             keyExtractor={(item) => item}
+            ListHeaderComponent={() => (
+              <TouchableOpacity
+                style={[styles.listItem, { backgroundColor: colors.crema }]}
+                onPress={() => setNuevaModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.listItemTitle, { color: colors.burdeos[600] }]}>+ Nueva tarea...</Text>
+                <Ionicons name="add-circle-outline" size={18} color={colors.burdeos[600]} />
+              </TouchableOpacity>
+            )}
             renderSectionHeader={({ section }) => (
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionHeaderText}>{section.title}</Text>
@@ -313,7 +354,7 @@ function StepTareaFecha({
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.listItem}
-                onPress={() => { setSelTarea(item); setModalVisible(false) }}
+                onPress={() => elegirTareaCatalogo(item)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.listItemTitle}>{item}</Text>
@@ -322,6 +363,47 @@ function StepTareaFecha({
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
+        </View>
+      </Modal>
+
+      <Modal visible={nuevaModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Nueva tarea</Text>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setNuevaModalVisible(false)}>
+              <Ionicons name="close" size={20} color={colors.ink} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ padding: 16 }}>
+            <Text style={styles.fieldLabel}>NOMBRE DE LA TAREA</Text>
+            <TextInput
+              style={styles.input}
+              value={nuevaNombre}
+              onChangeText={setNuevaNombre}
+              placeholder="Ej: Deschuponado, Guía, Empalme..."
+              placeholderTextColor={colors.niebla}
+              autoFocus
+            />
+
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>TEMPORADA</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+              {TEMPORADAS.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[styles.unidadChip, nuevaTemporada === t.value && styles.unidadChipActive]}
+                  onPress={() => setNuevaTemporada(t.value)}
+                >
+                  <Text style={[styles.unidadChipText, nuevaTemporada === t.value && styles.unidadChipTextActive]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.primaryBtn} onPress={confirmarNuevaTarea}>
+              <Text style={styles.primaryBtnText}>Usar esta tarea</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -335,7 +417,7 @@ function StepDetalle({
 }: {
   tarea: string
   parcelas: Parcela[]
-  onNext: (parcela: Parcela | null, unidad: UnidadMedida, precio: number) => void
+  onNext: (parcela: Parcela | null, unidad: UnidadMedida, precio: number, detalle: string) => void
   onBack: () => void
   onCancelar: () => void
 }) {
@@ -343,6 +425,7 @@ function StepDetalle({
   const [parcela, setParcela] = useState<Parcela | null>(null)
   const [unidad, setUnidad] = useState<UnidadMedida>('dias')
   const [precio, setPrecio] = useState('')
+  const [detalle, setDetalle] = useState('')
   const [ubicacionModalVisible, setUbicacionModalVisible] = useState(false)
   const [unidadModalVisible, setUnidadModalVisible] = useState(false)
 
@@ -365,7 +448,7 @@ function StepDetalle({
       Alert.alert('Error', 'Ingresá un precio válido.')
       return
     }
-    onNext(parcela, unidad, Number(precio))
+    onNext(parcela, unidad, Number(precio), detalle.trim())
   }
 
   return (
@@ -419,6 +502,18 @@ function StepDetalle({
           placeholder="0"
           placeholderTextColor={colors.niebla}
           keyboardType="numeric"
+        />
+
+        <Text style={[styles.fieldLabel, { marginTop: 4 }]}>
+          OBSERVACIONES <Text style={{ textTransform: 'none', fontWeight: '400' }}>(opcional)</Text>
+        </Text>
+        <TextInput
+          style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 12 }]}
+          value={detalle}
+          onChangeText={setDetalle}
+          placeholder="Observaciones..."
+          placeholderTextColor={colors.niebla}
+          multiline
         />
 
         <View style={styles.actionRow}>
@@ -645,7 +740,7 @@ function StepTrabajadores({
 // ─── Step 4: Confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  tarea, fecha, parcela, unidad, precio, trabajadores,
+  tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores,
   onSuccess, onBack, onCancelar,
 }: {
   tarea: string
@@ -653,6 +748,8 @@ function StepConfirmar({
   parcela: Parcela | null
   unidad: UnidadMedida
   precio: number
+  detalle: string
+  clasificacion?: string
   trabajadores: Trabajador[]
   onSuccess: () => void
   onBack: () => void
@@ -677,6 +774,8 @@ function StepConfirmar({
       tarea,
       unidad_medida: unidad,
       precio_unitario: precio,
+      detalle: detalle || undefined,
+      clasificacion: clasificacion || undefined,
       trabajadores: trabajadores.map((w) => ({ trabajador_nombre: w.nombre, cantidad: w.cantidad })),
       idempotency_key: idempotencyKeyRef.current,
     }
@@ -702,10 +801,14 @@ function StepConfirmar({
         <View style={styles.summaryCard}>
           {[
             { label: 'Tarea',     value: tarea },
+            ...(clasificacion
+              ? [{ label: 'Temporada', value: TEMPORADAS.find((t) => t.value === clasificacion)?.label ?? clasificacion }]
+              : []),
             { label: 'Fecha',     value: formatDateDisplay(fecha) },
             { label: 'Ubicación', value: parcela?.nombre ?? 'Sin ubicación' },
             { label: 'Unidad',    value: UNIDAD_LABELS[unidad] },
             { label: 'Precio',    value: formatMonto(precio) },
+            ...(detalle ? [{ label: 'Observaciones', value: detalle }] : []),
           ].map(({ label, value }, idx, arr) => (
             <View
               key={label}
@@ -821,10 +924,12 @@ export default function TareasScreen() {
   const [toast, setToast] = useState<string | null>(null)
 
   const [selTarea, setSelTarea] = useState('')
+  const [selClasificacion, setSelClasificacion] = useState<string | undefined>(undefined)
   const [selFecha, setSelFecha] = useState(isoToday())
   const [selParcela, setSelParcela] = useState<Parcela | null>(null)
   const [selUnidad, setSelUnidad] = useState<UnidadMedida>('dias')
   const [selPrecio, setSelPrecio] = useState(0)
+  const [selDetalle, setSelDetalle] = useState('')
   const [selTrabajadores, setSelTrabajadores] = useState<Trabajador[]>([])
 
   const loadParcelas = useCallback(async () => {
@@ -858,8 +963,8 @@ export default function TareasScreen() {
   function onRefresh() { setRefreshing(true); loadRegistros() }
 
   function resetWizard() {
-    setSelTarea(''); setSelFecha(isoToday()); setSelParcela(null)
-    setSelUnidad('dias'); setSelPrecio(0); setSelTrabajadores([])
+    setSelTarea(''); setSelClasificacion(undefined); setSelFecha(isoToday()); setSelParcela(null)
+    setSelUnidad('dias'); setSelPrecio(0); setSelDetalle(''); setSelTrabajadores([])
     setStep('list')
   }
 
@@ -877,7 +982,7 @@ export default function TareasScreen() {
   if (step === 'tarea_fecha') {
     return (
       <StepTareaFecha
-        onNext={(t, f) => { setSelTarea(t); setSelFecha(f); setStep('detalle') }}
+        onNext={(t, f, c) => { setSelTarea(t); setSelFecha(f); setSelClasificacion(c); setStep('detalle') }}
         onCancelar={handleCancelar}
       />
     )
@@ -888,7 +993,7 @@ export default function TareasScreen() {
       <StepDetalle
         tarea={selTarea}
         parcelas={parcelas}
-        onNext={(p, u, pr) => { setSelParcela(p); setSelUnidad(u); setSelPrecio(pr); setStep('trabajadores') }}
+        onNext={(p, u, pr, d) => { setSelParcela(p); setSelUnidad(u); setSelPrecio(pr); setSelDetalle(d); setStep('trabajadores') }}
         onBack={() => setStep('tarea_fecha')}
         onCancelar={handleCancelar}
       />
@@ -914,6 +1019,8 @@ export default function TareasScreen() {
         parcela={selParcela}
         unidad={selUnidad}
         precio={selPrecio}
+        detalle={selDetalle}
+        clasificacion={selClasificacion}
         trabajadores={selTrabajadores}
         onSuccess={() => { resetWizard(); loadRegistros(); setToast('Tarea cargada ✓') }}
         onBack={() => setStep('trabajadores')}
