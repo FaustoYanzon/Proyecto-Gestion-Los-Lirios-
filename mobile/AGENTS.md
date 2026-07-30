@@ -44,8 +44,10 @@ grep -a -o "https://proyecto-gestion-los-lirios-production[a-zA-Z0-9./_-]*" dist
 grep -aoE "192\.168\.[0-9]+\.[0-9]+" dist/_expo/static/js/android/entry-*.hbc   # debe salir vacío
 ```
 
-**Fix de fondo pendiente:** crear `EXPO_PUBLIC_API_URL` como variable hosteada
-en EAS para el entorno `production` (`eas env:create --environment production
---name EXPO_PUBLIC_API_URL --value https://proyecto-gestion-los-lirios-production.up.railway.app`),
-igual que ya existe para `preview` — así deja de depender de qué haya en la
-shell de quien corre el publish.
+**Resuelto de raíz (fecha de esta sesión):** ya existe `EXPO_PUBLIC_API_URL`
+como variable hosteada en EAS para `production` (`eas env:list --environment
+production` la confirma), igual que ya existía para `preview` desde antes.
+Con esto, `eas update --branch production --environment production` alcanza
+por sí solo — ya no depende de qué haya en la shell de quien publica. La forma
+robusta de forzarla inline sigue funcionando igual si hiciera falta, pero deja
+de ser necesaria en el caso normal.
