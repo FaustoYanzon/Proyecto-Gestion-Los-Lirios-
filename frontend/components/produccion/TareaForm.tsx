@@ -79,6 +79,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
   const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [customTask, setCustomTask] = useState('')
+  const [customClasificacion, setCustomClasificacion] = useState('general')
 
   const {
     register,
@@ -150,6 +151,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           detalle: data.detalle || undefined,
           trabajador_nombre: data.trabajadores[0].trabajador_nombre,
           cantidad: data.trabajadores[0].cantidad,
+          clasificacion: isCustomTask ? customClasificacion : undefined,
         })
       } else {
         await createTrabajoMasivo({
@@ -161,6 +163,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           detalle: data.detalle || undefined,
           trabajadores: data.trabajadores,
           idempotency_key: idempotencyKeyRef.current,
+          clasificacion: isCustomTask ? customClasificacion : undefined,
         })
       }
       queryClient.invalidateQueries({ queryKey: ['trabajos'] })
@@ -204,22 +207,35 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
 
       {/* Custom task input */}
       {isCustomTask && (
-        <div>
-          <label className={label}>Nombre de la nueva tarea</label>
-          <input
-            type="text"
-            placeholder="Ej: Deschuponado, Guía, Empalme..."
-            value={customTask}
-            onChange={(e) => setCustomTask(e.target.value)}
-            className={field}
-            autoFocus
-          />
-          <p className="mt-1 text-xs text-gray-400">Se guardará como tarea de clasificación General.</p>
+        <div className="space-y-3">
+          <div>
+            <label className={label}>Nombre de la nueva tarea</label>
+            <input
+              type="text"
+              placeholder="Ej: Deschuponado, Guía, Empalme..."
+              value={customTask}
+              onChange={(e) => setCustomTask(e.target.value)}
+              className={field}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className={label}>Temporada</label>
+            <select
+              value={customClasificacion}
+              onChange={(e) => setCustomClasificacion(e.target.value)}
+              className={field}
+            >
+              {Object.entries(TEMPORADA_LABELS).map(([value, text]) => (
+                <option key={value} value={value}>{text}</option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
-      {/* Season badge */}
-      {clasificacion && (
+      {/* Season badge (solo tareas del catálogo fijo — la nueva usa el selector de arriba) */}
+      {!isCustomTask && clasificacion && (
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Temporada:</span>
           <span

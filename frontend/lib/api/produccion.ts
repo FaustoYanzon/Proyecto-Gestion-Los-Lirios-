@@ -51,6 +51,9 @@ export interface RegistroCargaMasiva {
   detalle?: string
   trabajadores: TrabajadorItem[]
   idempotency_key?: string
+  // Solo para tareas nuevas/personalizadas (fuera de CLASIFICACION_POR_TAREA)
+  // — el backend ignora este valor y clasifica automático si no se manda.
+  clasificacion?: string
 }
 
 export interface RegistroTrabajoCreate {
@@ -62,6 +65,7 @@ export interface RegistroTrabajoCreate {
   unidad_medida: UnidadMedida
   precio_unitario: number
   detalle?: string
+  clasificacion?: string
 }
 
 export interface RegistroTrabajoUpdate {
@@ -73,6 +77,7 @@ export interface RegistroTrabajoUpdate {
   unidad_medida?: UnidadMedida
   precio_unitario?: number
   detalle?: string
+  clasificacion?: string
 }
 
 export interface RegistroTrabajoResponse {

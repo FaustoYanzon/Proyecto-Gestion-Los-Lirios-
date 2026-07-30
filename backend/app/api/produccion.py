@@ -331,7 +331,7 @@ async def create_trabajo_masivo(
             )
         nombres_vistos[key] = item.trabajador_nombre
 
-    clasificacion = _get_clasificacion(carga.tarea)
+    clasificacion = carga.clasificacion or _get_clasificacion(carga.tarea)
     parcela_nombre: str | None = None
     if carga.parcela_id:
         p = await db.get(Parcela, carga.parcela_id)
@@ -476,7 +476,7 @@ async def create_trabajo(
         if t is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
         data["trabajador_nombre"] = t.nombre_completo
-    data["clasificacion"] = _get_clasificacion(trabajo_data.tarea)
+    data["clasificacion"] = trabajo_data.clasificacion or _get_clasificacion(trabajo_data.tarea)
     data["created_by"] = current_user.id
     registro = RegistroTrabajo(**data)
     db.add(registro)
@@ -506,7 +506,7 @@ async def update_trabajo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
 
     update_data = trabajo_data.model_dump(exclude_unset=True)
-    if "tarea" in update_data:
+    if "clasificacion" not in update_data and "tarea" in update_data:
         update_data["clasificacion"] = _get_clasificacion(update_data["tarea"])
     for field, value in update_data.items():
         setattr(registro, field, value)

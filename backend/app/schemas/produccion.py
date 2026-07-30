@@ -45,6 +45,11 @@ class RegistroTrabajoCreate(RegistroTrabajoBase):
     # If provided, overrides trabajador_nombre with the linked Trabajador's full name.
     trabajador_id: str | None = None
     idempotency_key: str | None = None
+    # Solo relevante para tareas nuevas/personalizadas (fuera de
+    # CLASIFICACION_POR_TAREA) — permite que el cliente elija la temporada en
+    # vez de caer siempre en "general". Se ignora si el cliente no lo manda;
+    # las tareas del catálogo fijo siguen clasificándose automáticamente.
+    clasificacion: ClasificacionTarea | None = None
 
 
 class RegistroCargaMasiva(BaseModel):
@@ -57,6 +62,7 @@ class RegistroCargaMasiva(BaseModel):
     detalle: str | None = None
     trabajadores: list[TrabajadorItem]
     idempotency_key: str | None = None
+    clasificacion: ClasificacionTarea | None = None  # ver RegistroTrabajoCreate
 
 
 class RegistroTrabajoUpdate(BaseModel):
@@ -69,6 +75,7 @@ class RegistroTrabajoUpdate(BaseModel):
     unidad_medida: UnidadMedida | None = None
     precio_unitario: Decimal | None = None
     detalle: str | None = None
+    clasificacion: ClasificacionTarea | None = None  # ver RegistroTrabajoCreate
 
 
 class RegistroTrabajoResponse(RegistroTrabajoBase):
