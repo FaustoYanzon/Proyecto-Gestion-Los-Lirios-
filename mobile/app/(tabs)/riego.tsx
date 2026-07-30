@@ -55,7 +55,11 @@ function formatDatetime(iso: string) {
 
 const STEP_LABELS = ['Parral', 'Horario', 'Detalle', 'Confirmar']
 
-function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel: () => void }) {
+function StepIndicator({
+  current, onCancel, disabled,
+}: {
+  current: 0 | 1 | 2 | 3; onCancel: () => void; disabled?: boolean
+}) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -78,8 +82,9 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel
         )
       })}
       <TouchableOpacity
-        style={si.cancelBtn}
+        style={[si.cancelBtn, disabled && { opacity: 0.4 }]}
         onPress={onCancel}
+        disabled={disabled}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Ionicons name="close" size={18} color={colors.ink60} />
@@ -794,7 +799,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={3} onCancel={onCancelar} />
+      <StepIndicator current={3} onCancel={onCancelar} disabled={loading} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar riego</Text>
 
@@ -907,8 +912,9 @@ function StepIniciarConfirmar({
       <View style={si.row}>
         <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>Iniciar riego</Text>
         <TouchableOpacity
-          style={si.cancelBtn}
+          style={[si.cancelBtn, loading && { opacity: 0.4 }]}
           onPress={onCancelar}
+          disabled={loading}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="close" size={18} color={colors.ink60} />
