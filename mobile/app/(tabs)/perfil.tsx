@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TextInput,
   Image,
+  Switch,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
@@ -16,6 +17,9 @@ import * as SecureStore from 'expo-secure-store'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
+import {
+  isBiometricAvailable, isBiometricEnabled, setBiometricEnabled, authenticateWithBiometrics,
+} from '../../lib/biometric'
 
 const AVATAR_KEY = 'loslirios_avatar'
 
@@ -56,12 +60,25 @@ export default function PerfilScreen() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [showCurrentPwd, setShowCurrentPwd] = useState(false)
   const [showNewPwd, setShowNewPwd] = useState(false)
+  const [bioAvailable, setBioAvailable] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
 
   useEffect(() => {
     SecureStore.getItemAsync(AVATAR_KEY).then((uri) => {
       if (uri) setAvatarUri(uri)
     })
+    isBiometricAvailable().then(setBioAvailable)
+    isBiometricEnabled().then(setBioEnabled)
   }, [])
+
+  async function toggleBiometric(value: boolean) {
+    if (value) {
+      const confirmed = await authenticateWithBiometrics('Confirmá tu huella para activar el ingreso rápido')
+      if (!confirmed) return
+    }
+    await setBiometricEnabled(value)
+    setBioEnabled(value)
+  }
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -171,6 +188,16 @@ export default function PerfilScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>Nombre completo</Text>
             <Text style={styles.infoValue}>{user?.full_name ?? '—'}</Text>
+          </View>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <View style={styles.infoIcon}>
+            <Ionicons name="at-outline" size={16} color="#6b7280" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoLabel}>Usuario</Text>
+            <Text style={styles.infoValue}>{user?.username ?? '—'}</Text>
           </View>
         </View>
         <View style={styles.divider} />
@@ -289,6 +316,21 @@ export default function PerfilScreen() {
           </View>
         )}
       </View>
+
+      {/* Huella dactilar */}
+      {bioAvailable && (
+        <View style={styles.card}>
+          <View style={styles.pwdHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={styles.infoIcon}>
+                <Ionicons name="finger-print-outline" size={16} color="#6b7280" />
+              </View>
+              <Text style={styles.cardTitle}>INGRESO CON HUELLA</Text>
+            </View>
+            <Switch value={bioEnabled} onValueChange={toggleBiometric} />
+          </View>
+        </View>
+      )}
 
       {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>

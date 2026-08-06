@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -13,34 +13,80 @@ import {
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { login } from '../../lib/auth'
+import {
+  login, fetchCurrentUser, getRememberedUsername, setRememberedUsername, hasStoredSession,
+} from '../../lib/auth'
+import {
+  isBiometricAvailable, isBiometricEnabled, setBiometricEnabled, authenticateWithBiometrics,
+} from '../../lib/biometric'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [recordarme, setRecordarme] = useState(false)
+  const [showBiometricBtn, setShowBiometricBtn] = useState(false)
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
 
+  useEffect(() => {
+    getRememberedUsername().then((remembered) => {
+      if (remembered) {
+        setUsername(remembered)
+        setRecordarme(true)
+      }
+    })
+    Promise.all([hasStoredSession(), isBiometricEnabled(), isBiometricAvailable()]).then(
+      ([hasSession, bioEnabled, bioAvailable]) => {
+        setShowBiometricBtn(hasSession && bioEnabled && bioAvailable)
+      }
+    )
+  }, [])
+
+  async function offerBiometricActivation() {
+    const available = await isBiometricAvailable()
+    const alreadyEnabled = await isBiometricEnabled()
+    if (!available || alreadyEnabled) return
+    Alert.alert(
+      'Ingreso con huella dactilar',
+      '¿Querés activar el ingreso rápido con huella? Te va a servir para entrar sin escribir la contraseña, incluso con señal débil.',
+      [
+        { text: 'No, gracias', style: 'cancel' },
+        {
+          text: 'Activar',
+          onPress: async () => {
+            const confirmed = await authenticateWithBiometrics('Confirmá tu huella para activar el ingreso rápido')
+            if (confirmed) {
+              await setBiometricEnabled(true)
+              Alert.alert('Listo', 'La próxima vez vas a poder ingresar con tu huella.')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   async function handleLogin() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Ingresá email y contraseña.')
+    if (!username.trim() || !password.trim()) {
+      Alert.alert('Error', 'Ingresá usuario y contraseña.')
       return
     }
     try {
       setLoading(true)
-      const user = await login(email.trim(), password)
+      const user = await login(username.trim(), password)
+      await setRememberedUsername(recordarme ? username.trim() : null)
       setUser(user)
       router.replace('/(tabs)')
+      offerBiometricActivation()
     } catch (e: unknown) {
       const err = e as { response?: { status?: number }; message?: string }
       const status = err?.response?.status
       let message = 'No se pudo conectar al servidor. Verificá la red.'
       if (status === 401) {
-        message = 'Email o contraseña incorrectos.'
+        message = 'Usuario o contraseña incorrectos.'
       } else if (status === 429) {
         message = 'Demasiados intentos. Esperá unos minutos y volvé a intentar.'
       } else if (status !== undefined && status >= 500) {
@@ -52,8 +98,23 @@ export default function LoginScreen() {
     }
   }
 
-  function handleFaceId() {
-    Alert.alert('Face ID', 'Autenticación biométrica disponible en próxima versión.')
+  async function handleBiometricLogin() {
+    const confirmed = await authenticateWithBiometrics('Ingresá con tu huella')
+    if (!confirmed) return
+    setLoading(true)
+    try {
+      const user = await fetchCurrentUser()
+      if (!user) throw new Error('no session')
+      setUser(user)
+      router.replace('/(tabs)')
+    } catch {
+      Alert.alert(
+        'No se pudo ingresar',
+        'Tu sesión expiró. Iniciá sesión con tu usuario y contraseña.'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -83,16 +144,16 @@ export default function LoginScreen() {
             Bienvenido
           </Text>
 
-          <Text style={styles.label}>EMAIL</Text>
+          <Text style={styles.label}>USUARIO</Text>
           <TextInput
             style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="usuario@losliriossa.com"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="nombre.apellido"
             placeholderTextColor={colors.niebla}
-            keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
+            autoCorrect={false}
+            autoComplete="username"
             returnKeyType="next"
           />
 
@@ -122,6 +183,19 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
+            style={styles.recordarmeRow}
+            onPress={() => setRecordarme((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={recordarme ? 'checkbox' : 'square-outline'}
+              size={19}
+              color={recordarme ? colors.burdeos[600] : colors.niebla}
+            />
+            <Text style={styles.recordarmeText}>Recordar usuario</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.submitBtn, loading && { opacity: 0.6 }]}
             onPress={handleLogin}
             disabled={loading}
@@ -135,22 +209,24 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Divider ── */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>O</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* ── Face ID ── */}
-        <TouchableOpacity
-          style={styles.faceIdBtn}
-          onPress={handleFaceId}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="finger-print-outline" size={22} color={colors.burdeos[600]} />
-          <Text style={styles.faceIdText}>Ingresar con Face ID</Text>
-        </TouchableOpacity>
+        {/* ── Huella dactilar (solo si ya está activada en este dispositivo) ── */}
+        {showBiometricBtn && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>O</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <TouchableOpacity
+              style={styles.faceIdBtn}
+              onPress={handleBiometricLogin}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="finger-print-outline" size={22} color={colors.burdeos[600]} />
+              <Text style={styles.faceIdText}>Ingresar con huella dactilar</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         {/* ── Footer ── */}
         <Text style={styles.footer}>Los Lirios SA · Desde 1991</Text>
@@ -193,9 +269,13 @@ const styles = StyleSheet.create({
   },
   pwdRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
   eyeBtn: { width: 48, height: 50, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
+  recordarmeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, alignSelf: 'flex-start',
+  },
+  recordarmeText: { fontSize: 13, color: colors.ink60, fontWeight: '500' },
   submitBtn: {
     height: 52, backgroundColor: colors.burdeos[600], borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center', marginTop: 24,
+    justifyContent: 'center', alignItems: 'center', marginTop: 20,
     shadowColor: colors.burdeos[700],
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },

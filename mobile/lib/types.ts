@@ -3,6 +3,7 @@ export type UserRole = 'super_admin' | 'gerencial' | 'encargado' | 'regador' | '
 export interface User {
   id: string
   email: string
+  username: string
   full_name: string
   role: UserRole
   is_active: boolean
@@ -51,6 +52,7 @@ export interface RegistroTrabajo {
   fecha: string
   parcela_id: string | null
   trabajador_nombre: string
+  trabajador_id: string | null
   tarea: string
   clasificacion: string
   cantidad: string
@@ -64,6 +66,7 @@ export interface RegistroTrabajo {
 export interface TrabajadorItem {
   trabajador_nombre: string
   cantidad: number
+  trabajador_id?: string
 }
 
 export interface CargaMasivaPayload {
@@ -74,6 +77,19 @@ export interface CargaMasivaPayload {
   precio_unitario: number
   detalle?: string
   trabajadores: TrabajadorItem[]
+}
+
+// Trabajador (catálogo real, GET/POST /trabajadores/) — distinto de
+// TrabajadorItem arriba, que es solo el par nombre+cantidad de una carga.
+export type RolTrabajador = 'obrero' | 'tractorista' | 'encargado_cuadrilla' | 'otro'
+
+export interface Trabajador {
+  id: string
+  nombre_completo: string
+  dni: string | null
+  rol: RolTrabajador
+  telefono: string | null
+  is_active: boolean
 }
 
 export interface RegistroFitosanitario {

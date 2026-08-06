@@ -17,7 +17,7 @@ import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
-import type { Parcela, RegistroTrabajo, UnidadMedida } from '../../lib/types'
+import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
 
 const TOP_5_TAREAS = ['Poda', 'Verde', 'Jornal Comun', 'Cosecha', 'Raleo']
@@ -612,21 +612,27 @@ function StepDetalle({
 
 // ─── Step 3: Trabajadores ─────────────────────────────────────────────────────
 
-type Trabajador = { nombre: string; cantidad: number }
-type WorkerInput = { nombre: string; cantidad: string }
+type Trabajador = { nombre: string; cantidad: number; trabajadorId?: string }
+type WorkerInput = { nombre: string; cantidad: string; trabajadorId?: string }
 
 function StepTrabajadores({
-  precio, onNext, onBack, onCancelar,
+  precio, trabajadoresDb, onNext, onBack, onCancelar,
 }: {
   precio: number
+  trabajadoresDb: TrabajadorDb[]
   onNext: (trabajadores: Trabajador[]) => void
   onBack: () => void
   onCancelar: () => void
 }) {
   const [workers, setWorkers] = useState<WorkerInput[]>([{ nombre: '', cantidad: '1' }])
+  const [focusedIdx, setFocusedIdx] = useState<number | null>(null)
 
   function setNombre(idx: number, v: string) {
-    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: v } : w))
+    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: v, trabajadorId: undefined } : w))
+  }
+  function selectTrabajador(idx: number, t: TrabajadorDb) {
+    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: t.nombre_completo, trabajadorId: t.id } : w))
+    setFocusedIdx(null)
   }
   function setCantidad(idx: number, v: string) {
     const cleaned = v.replace(/[^0-9.]/g, '')
@@ -658,7 +664,7 @@ function StepTrabajadores({
       }
       nombresVistos.add(key)
     }
-    onNext(conNombre.map((w) => ({ nombre: w.nombre.trim(), cantidad: Number(w.cantidad) })))
+    onNext(conNombre.map((w) => ({ nombre: w.nombre.trim(), cantidad: Number(w.cantidad), trabajadorId: w.trabajadorId })))
   }
 
   const totalCant = workers.reduce((s, w) => s + (Number(w.cantidad) || 0), 0)
@@ -678,10 +684,32 @@ function StepTrabajadores({
                 style={styles.input}
                 value={w.nombre}
                 onChangeText={(v) => setNombre(idx, v)}
+                onFocus={() => setFocusedIdx(idx)}
                 placeholder="Nombre del trabajador"
                 placeholderTextColor={colors.niebla}
                 autoCapitalize="words"
               />
+              {focusedIdx === idx && w.nombre.trim() && !w.trabajadorId && (
+                (() => {
+                  const matches = trabajadoresDb
+                    .filter((t) => t.nombre_completo.toLowerCase().includes(w.nombre.trim().toLowerCase()))
+                    .slice(0, 5)
+                  if (matches.length === 0) return null
+                  return (
+                    <View style={styles.suggestBox}>
+                      {matches.map((t) => (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={styles.suggestItem}
+                          onPress={() => selectTrabajador(idx, t)}
+                        >
+                          <Text style={styles.suggestItemText}>{t.nombre_completo}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )
+                })()
+              )}
               <View style={styles.workerBottomRow}>
                 <View>
                   <Text style={styles.fieldLabel}>CANTIDAD</Text>
@@ -689,6 +717,7 @@ function StepTrabajadores({
                     style={styles.cantidadInput}
                     value={w.cantidad}
                     onChangeText={(v) => setCantidad(idx, v)}
+                    onFocus={() => setFocusedIdx(null)}
                     placeholder="0"
                     placeholderTextColor={colors.niebla}
                     keyboardType="decimal-pad"
@@ -740,7 +769,7 @@ function StepTrabajadores({
 // ─── Step 4: Confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores,
+  tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores, trabajadoresDb,
   onSuccess, onBack, onCancelar,
 }: {
   tarea: string
@@ -751,6 +780,7 @@ function StepConfirmar({
   detalle: string
   clasificacion?: string
   trabajadores: Trabajador[]
+  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -765,21 +795,47 @@ function StepConfirmar({
   const totalCant = trabajadores.reduce((s, w) => s + w.cantidad, 0)
   const total = precio * totalCant
 
+  // Si no se eligió una sugerencia, intenta matchear por nombre exacto contra
+  // el catálogo cargado; si tampoco matchea, crea un Trabajador nuevo para que
+  // quede disponible la próxima vez (en vez de quedar como texto libre suelto).
+  async function resolveTrabajadorId(nombre: string, currentId?: string): Promise<string | undefined> {
+    if (currentId) return currentId
+    const trimmed = nombre.trim().toLowerCase()
+    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
+    if (exact) return exact.id
+    try {
+      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: nombre.trim() })
+      return data.id
+    } catch {
+      return undefined
+    }
+  }
+
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
-    const payload = {
-      fecha,
-      parcela_id: parcela?.id ?? null,
-      tarea,
-      unidad_medida: unidad,
-      precio_unitario: precio,
-      detalle: detalle || undefined,
-      clasificacion: clasificacion || undefined,
-      trabajadores: trabajadores.map((w) => ({ trabajador_nombre: w.nombre, cantidad: w.cantidad })),
-      idempotency_key: idempotencyKeyRef.current,
-    }
     try {
+      const resueltos = await Promise.all(
+        trabajadores.map(async (w) => ({
+          ...w,
+          trabajadorId: await resolveTrabajadorId(w.nombre, w.trabajadorId),
+        }))
+      )
+      const payload = {
+        fecha,
+        parcela_id: parcela?.id ?? null,
+        tarea,
+        unidad_medida: unidad,
+        precio_unitario: precio,
+        detalle: detalle || undefined,
+        clasificacion: clasificacion || undefined,
+        trabajadores: resueltos.map((w) => ({
+          trabajador_nombre: w.nombre,
+          cantidad: w.cantidad,
+          trabajador_id: w.trabajadorId,
+        })),
+        idempotency_key: idempotencyKeyRef.current,
+      }
       setLoading(true)
       await api.post('/produccion/trabajo/masivo', payload)
       onSuccess()
@@ -931,6 +987,17 @@ export default function TareasScreen() {
   const [selPrecio, setSelPrecio] = useState(0)
   const [selDetalle, setSelDetalle] = useState('')
   const [selTrabajadores, setSelTrabajadores] = useState<Trabajador[]>([])
+  const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
+
+  const loadTrabajadoresDb = useCallback(async () => {
+    const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
+    if (cached) setTrabajadoresDb(cached)
+    try {
+      const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
+      setTrabajadoresDb(data)
+      await setCache('trabajadores', data)
+    } catch { /* offline */ }
+  }, [])
 
   const loadParcelas = useCallback(async () => {
     const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
@@ -952,7 +1019,7 @@ export default function TareasScreen() {
     finally { setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadParcelas(); loadRegistros() }, [loadParcelas, loadRegistros])
+  useEffect(() => { loadParcelas(); loadRegistros(); loadTrabajadoresDb() }, [loadParcelas, loadRegistros, loadTrabajadoresDb])
 
   useEffect(() => {
     if (!toast) return
@@ -1004,6 +1071,7 @@ export default function TareasScreen() {
     return (
       <StepTrabajadores
         precio={selPrecio}
+        trabajadoresDb={trabajadoresDb}
         onNext={(t) => { setSelTrabajadores(t); setStep('confirmar') }}
         onBack={() => setStep('detalle')}
         onCancelar={handleCancelar}
@@ -1022,7 +1090,8 @@ export default function TareasScreen() {
         detalle={selDetalle}
         clasificacion={selClasificacion}
         trabajadores={selTrabajadores}
-        onSuccess={() => { resetWizard(); loadRegistros(); setToast('Tarea cargada ✓') }}
+        trabajadoresDb={trabajadoresDb}
+        onSuccess={() => { resetWizard(); loadRegistros(); loadTrabajadoresDb(); setToast('Tarea cargada ✓') }}
         onBack={() => setStep('trabajadores')}
         onCancelar={handleCancelar}
       />
@@ -1136,6 +1205,12 @@ const styles = StyleSheet.create({
   workerAmountLabel: { fontSize: 9, fontWeight: '700', color: colors.niebla, letterSpacing: 0.5, textTransform: 'uppercase' },
   workerAmountValue: { fontSize: 16, fontWeight: '800', color: colors.burdeos[600] },
   removeWorkerBtn: { padding: 4, marginLeft: 8, alignSelf: 'flex-start' },
+  suggestBox: {
+    backgroundColor: colors.blanco, borderRadius: 10, borderWidth: 1, borderColor: colors.hueso,
+    marginTop: -8, marginBottom: 14, overflow: 'hidden',
+  },
+  suggestItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.hueso },
+  suggestItemText: { fontSize: 14, color: colors.ink, fontWeight: '500' },
 
   addWorkerBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

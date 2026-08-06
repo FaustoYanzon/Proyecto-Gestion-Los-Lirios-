@@ -9,12 +9,14 @@ interface CacheEntry<T> {
 
 export const CACHE_TTL = {
   parcelas: 60 * 60 * 1000,  // 1 hora
+  trabajadores: 60 * 60 * 1000,  // 1 hora, igual que parcelas
   estados: 15 * 60 * 1000,   // 15 min
   tareas: 15 * 60 * 1000,
   riegos: 15 * 60 * 1000,
   fitosanitarios: 15 * 60 * 1000,
   kpis: 15 * 60 * 1000,
   fenologia: 6 * 60 * 60 * 1000, // 6 horas: cambia una vez por día como mucho
+  clima: 30 * 60 * 1000, // igual al TTL del cache del backend (Open-Meteo)
 }
 
 export async function getCache<T>(key: string, ttlMs: number): Promise<T | null> {

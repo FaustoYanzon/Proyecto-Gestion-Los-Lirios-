@@ -83,13 +83,70 @@ function RiegosEnCursoInicio({
   )
 }
 
+// Fuente: /clima/actual (Open-Meteo vía backend, cache de 30 min). Evaluado
+// scrapear Climagro (estación real en la finca) el 2026-08-05 y descartado
+// por ahora — sin API, requiere login+parseo de HTML, mantenimiento frágil.
+interface ClimaActualMini {
+  current: {
+    temperature_2m: number
+    wind_speed_10m: number
+    relative_humidity_2m: number
+    weather_code: number
+  }
+}
+
+function wmoDescriptionMini(code: number): string {
+  if (code === 0) return 'Despejado'
+  if (code <= 2) return 'Parcialmente nublado'
+  if (code === 3) return 'Nublado'
+  if (code <= 49) return 'Niebla'
+  if (code <= 69 || code === 80 || code === 81 || code === 82) return 'Lluvia'
+  if (code <= 79) return 'Nieve'
+  if (code <= 99) return 'Tormenta'
+  return 'Variable'
+}
+
+function wmoIconNameMini(code: number): keyof typeof Ionicons.glyphMap {
+  if (code === 0) return 'sunny-outline'
+  if (code <= 2) return 'partly-sunny-outline'
+  if (code === 3) return 'cloudy-outline'
+  if (code <= 49) return 'cloud-outline'
+  if (code <= 69 || code === 80 || code === 81 || code === 82) return 'rainy-outline'
+  if (code <= 79) return 'snow-outline'
+  if (code <= 99) return 'thunderstorm-outline'
+  return 'cloud-outline'
+}
+
 function ClimateCardMini() {
+  const [clima, setClima] = useState<ClimaActualMini | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      const cached = await getCache<ClimaActualMini>('clima', CACHE_TTL.clima)
+      if (cached) { setClima(cached); setLoading(false) }
+      try {
+        const { data } = await api.get<ClimaActualMini>('/clima/actual', { params: { finca: 'media_agua' } })
+        setClima(data)
+        await setCache('clima', data)
+      } catch { /* usa lo cacheado si existe, si no queda oculto */ }
+      finally { setLoading(false) }
+    })()
+  }, [])
+
+  if (loading && !clima) return null
+  if (!clima) return null
+
+  const temp = Math.round(clima.current.temperature_2m)
+  const wind = Math.round(clima.current.wind_speed_10m)
+  const humidity = Math.round(clima.current.relative_humidity_2m)
+
   return (
     <View style={styles.climateCard}>
-      <Ionicons name="partly-sunny-outline" size={18} color={colors.cielo} />
+      <Ionicons name={wmoIconNameMini(clima.current.weather_code)} size={18} color={colors.cielo} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.climateTemp}>22° · Despejado</Text>
-        <Text style={styles.climateSub}>Los Mimbres — Fase 5</Text>
+        <Text style={styles.climateTemp}>{temp}° · {wmoDescriptionMini(clima.current.weather_code)}</Text>
+        <Text style={styles.climateSub}>Media Agua · viento {wind} km/h · humedad {humidity}%</Text>
       </View>
     </View>
   )

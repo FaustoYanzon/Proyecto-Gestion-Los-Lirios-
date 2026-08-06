@@ -27,7 +27,9 @@
       "package": "com.loslirios.app",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ],
       "versionCode": 2
     },
@@ -38,6 +40,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Los Lirios SA usa Face ID para un ingreso rápido y seguro."
+        }
+      ],
       [
         "expo-notifications",
         {

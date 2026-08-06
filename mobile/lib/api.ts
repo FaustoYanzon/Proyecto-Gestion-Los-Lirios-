@@ -2,6 +2,7 @@ import axios from 'axios'
 import * as SecureStore from 'expo-secure-store'
 
 export const TOKEN_KEY = 'loslirios_token'
+export const REFRESH_TOKEN_KEY = 'loslirios_refresh_token'
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.111:8000'
 
 const api = axios.create({
@@ -27,6 +28,29 @@ function hasIdempotencyKey(config: import('axios').InternalAxiosRequestConfig | 
   }
 }
 
+// Single-flight: concurrent 401s while the access token is expired share one
+// POST /auth/refresh instead of each firing its own. Bare axios (not `api`)
+// on purpose — avoids recursing back through these same interceptors.
+let refreshPromise: Promise<string | null> | null = null
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY)
+  if (!refreshToken) return null
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
+      .then(async ({ data }) => {
+        await SecureStore.setItemAsync(TOKEN_KEY, data.access_token)
+        return data.access_token as string
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -48,7 +72,18 @@ api.interceptors.response.use(
       return api(error.config)
     }
     if (error.response?.status === 401) {
+      const url = error.config?.url
+      const isAuthEndpoint = url === '/auth/login' || url === '/auth/refresh'
+      if (!isAuthEndpoint && !error.config?._refreshed) {
+        error.config._refreshed = true
+        const newToken = await refreshAccessToken()
+        if (newToken) {
+          error.config.headers.Authorization = `Bearer ${newToken}`
+          return api(error.config)
+        }
+      }
       await SecureStore.deleteItemAsync(TOKEN_KEY)
+      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
       // Navigation handled by auth store watcher
     }
     return Promise.reject(error)
