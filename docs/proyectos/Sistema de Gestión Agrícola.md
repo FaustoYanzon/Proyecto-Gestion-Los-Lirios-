@@ -60,39 +60,45 @@ Detalle completo: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - **UX de "riegos en curso" pulida**: litros solo se muestran al terminar (no en vivo), "Terminar" solo desde la pantalla de Riego (no desde Inicio), falso error al terminar corregido con verificación contra el servidor.
 - Sesión trabajada en paralelo con otra instancia de Claude Code sobre los mismos archivos (sin coordinación previa) — convergieron al mismo resultado sin conflicto destructivo, pero es una práctica a evitar si no es intencional.
 
-## Próximos pasos (actualizado 2026-07-27)
+## Próximos pasos (actualizado 2026-08-05, segunda tanda)
 
-Con los bugs agudos de datos/UX de esta semana cerrados, el pilot está en un estado bastante estable. Orden sugerido:
+Con los bugs agudos de datos/UX cerrados y varios gaps de UX/auth del backend cerrados esta sesión, el pilot sigue estable. Orden sugerido:
 
 ### Ahora (bloqueantes o casi gratis)
 
-1. **`eas build --profile preview` nueva para el APK** — el crash de "Ciclo Campaña" en el standalone instalado sigue sin resolverse de raíz (solo mitigado con Error Boundary) y necesita una build nueva, no alcanza con OTA. Aprovechar esta build para **decidir de una vez el tema Play Store** (ver más abajo) en vez de volver a distribuir un APK suelto.
-2. ~~Activar el backup automático~~ — **hecho 2026-07-27**: tarea `LosLirios-PG-Backup` registrada y probada (dump real, copiado a OneDrive). Pendiente menor: el test de restore que pide `BACKUP.md` (necesita un Postgres local levantado).
-3. ~~Guard anti doble-tap en `FitosanitarioForm.tsx`~~ — **hecho 2026-07-27**.
+1. **Cola de envíos offline para mobile** — decisión tomada con Fausto el 2026-08-05: documentar como próximo cambio explícito, no improvisarlo. Hoy los selectores de parcela/trabajador funcionan sin conexión (cache), pero el `POST` final de Confirmar todavía necesita señal en el momento — si un operario pierde señal justo al confirmar, no hay cola de reintento y se pierde lo tipeado. Los 6 endpoints de creación ya soportan `idempotency_key`, así que la cola es viable sin riesgo de duplicar — pero es una feature con bastante superficie (detección de conectividad, persistencia local, UI de "pendiente de sincronizar", reintento con backoff, manejo de conflictos si el registro referenciado ya no existe) que merece su propia sesión, bien probada, en vez de ir pegada a otro cambio. Detalle de la decisión: [[2026-08-05-login-username-biometria-clima]].
+2. **`eas build` nueva pendiente por el módulo de huella dactilar** — `expo-local-authentication` es nativo, el login por huella (hecho 2026-08-05) no se puede distribuir por `eas update`. Aprovechar este build para cualquier otro cambio nativo pendiente.
+3. ~~Backup automático: fallos silenciosos en las corridas de catch-up~~ — encontrado el 2026-08-05 al fin correr el test de restore (el mecanismo en sí funciona, probado). De los últimos 15 días, 7 dumps generados fuera del horario de 21:00 quedaron en 0 bytes/truncados sin dejar rastro en `backup.log`. **Pendiente evaluado con Fausto, no ejecutado todavía:** verificación real de integridad (`pg_restore --list`) + revisar el trigger de arranque. Ver [[Bugs Conocidos]].
+4. ~~Verificar estado de Play Store~~ — **hecho 2026-08-05**: se encontró que la ficha completa (armada el 07-29) nunca se había enviado a revisión, solo quedó guardada como borrador. Enviados los 8 cambios pendientes con confirmación de Fausto — Google ya los tiene "en proceso de revisión" (hasta 7 días). Camilo lo agrega Fausto directamente.
+5. ~~`eas build --profile preview` nueva para el APK~~ — **hecho**: el crash de "Ciclo Campaña" en el standalone se confirmó resuelto (con el build de producción `v1.0.0-2`) el 2026-08-05.
+6. ~~Login por email en vez de usuario, sin "recordarme" funcional, sin huella~~ — **hecho 2026-08-05**: `username` nuevo (columna + login), "Recordarme" conectado en web y mobile, huella dactilar real en mobile (pendiente el build nativo, punto 2 de arriba). Detalle: [[2026-08-05-login-username-biometria-clima]].
+7. ~~Widget de clima poco profesional / hardcodeado en mobile~~ — **hecho 2026-08-05**: enriquecido Open-Meteo (viento, humedad, UV, sensación térmica) en vez de scrapear Climagro (evaluado y descartado por ahora, ver detalle). Bug de finca corregido (`los_mimbres`→`media_agua`), widget mobile conectado a datos reales (antes era texto fijo).
 
 ### Corto plazo (antes de escalar a más usuarios/fincas)
 
-4. **Reproducir el bug de riego con 2+ válvulas** en el dispositivo (nunca se logró capturar el error real) — ver [[Bugs Conocidos]].
+4. ~~Reproducir el bug de riego con 2+ válvulas~~ — **confirmado resuelto** el 2026-08-05 (sin causa puntual identificada, se resolvió de rebote con alguna reescritura previa de `riego.tsx`).
 5. ~~Idempotencia real en el backend~~ — **hecho 2026-07-29**, tras un cuarto incidente de duplicados: `idempotency_key` + índice único parcial en los 4 modelos de producción, los 6 endpoints de creación devuelven el registro existente ante un reintento en vez de duplicar. Detalle: [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]. Pendiente menor no bloqueante: extender `backend/tests/test_produccion_idempotency.py` a riego/fito/cosecha (falta resolver una fixture de `Parcela` para tests).
-6. Completar `TareaForm` **web** (campo `finca` + selector de `Trabajador`) y el equivalente en mobile (`tareas.tsx` solo tiene texto libre para el nombre) — el backend y el modelo `Trabajador` ya existen, falta conectar el frontend.
-7. Refresh token (hoy el JWT expira y desloguea sin aviso).
-8. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway).
-9. **Crear `EXPO_PUBLIC_API_URL` como variable EAS hosteada para el entorno `production`** (ya existe para `preview` desde el 07-20/22). Sin eso, `eas update --environment production` no aporta nada real y depende de qué `EXPO_PUBLIC_API_URL` haya exportada en la shell de quien publica — causó que el 2026-07-29 se publicara por error un update de producción con la IP LAN de dev grabada adentro (corregido en el momento, ver [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]).
-10. **`PUT /users/{id}` no soporta cambiar `email`** (solo `full_name`/`role`/`is_active`/`password`) — descubierto el 2026-07-29 al necesitar cambiarle el email a Camilo (`camiloyanzon@hotmail.com` → `camilotrabajofinca@gmail.com`, para que Play Console lo acepte como tester). Se resolvió con un UPDATE directo en producción, no por la app — ver [[Play Store — checklist de publicación]]. Agregar `email` a `UserUpdate` (con el chequeo de unicidad que ya tiene la columna) si esto vuelve a hacer falta.
+6. ~~Completar `TareaForm` web (selector de `Trabajador`) y el equivalente en mobile~~ — **hecho 2026-08-05**: combobox con sugerencias contra `GET /trabajadores/`, crea el `Trabajador` nuevo automáticamente si no matchea ninguno. El campo `finca` se dio por resuelto por decisión de negocio (solo Media Agua, ya es el default del backend). Detalle: [[2026-08-05-trabajador-combobox-refresh-token-backup-check]].
+7. ~~Refresh token~~ — **hecho 2026-08-05**: `POST /auth/refresh`, 30 días, ligado a `token_version`; web y mobile reintentan silenciosamente ante un 401 por expiración.
+8. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway). Evaluar Sentry (u similar) en vez de solo logs de Railway — propuesto el 2026-08-05, no decidido todavía.
+9. ~~Crear `EXPO_PUBLIC_API_URL` como variable EAS hosteada para el entorno `production`~~ — **hecho 2026-07-30** (sesión sin documentar en su momento, encontrada el 2026-08-05).
+10. ~~`PUT /users/{id}` no soporta cambiar `email`~~ — **hecho 2026-08-05**: agregado a `UserUpdate` con el mismo chequeo de unicidad de `/auth/register`.
 
 ### Roadmap (features nuevas)
 
-9. Costo por kg en dashboard de finanzas.
-10. Módulo de notificaciones (base ya existe en `notificaciones.py`).
-11. Responsividad mobile del frontend **web** (solo 11/43 componentes con breakpoints) — si algún encargado va a usar el navegador desde el celular en vez de la app.
-12. Integraciones Fase 5: Climagro (clima real), bot de WhatsApp (carga de egresos), agente ARCA (boletas), termógrafo IoT.
+11. Costo por kg en dashboard de finanzas.
+12. Módulo de notificaciones (base ya existe en `notificaciones.py`).
+13. Responsividad mobile del frontend **web** (solo 11/43 componentes con breakpoints) — si algún encargado va a usar el navegador desde el celular en vez de la app.
+14. Integraciones Fase 5: Climagro (clima real), bot de WhatsApp (carga de egresos), agente ARCA (boletas), termógrafo IoT.
 
 ### En curso: publicar en Google Play Store (track Internal testing)
 
-Decidido y arrancado el 2026-07-27. Checklist completo con lo ya hecho (build de producción lanzado, política de privacidad publicada, assets gráficos generados) y lo pendiente del lado de Fausto (cuenta de developer, ficha de la app, testers): [[Play Store — checklist de publicación]].
+Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29, ficha enviada a revisión de Google el 2026-08-05 (hasta 7 días). Pendiente: confirmar el resultado de la revisión y que Camilo haya quedado agregado como tester. Checklist completo: [[Play Store — checklist de publicación]].
 
 ## Ver también
 
+- [[2026-08-05-login-username-biometria-clima]]
+- [[2026-08-05-trabajador-combobox-refresh-token-backup-check]]
 - [[Play Store — checklist de publicación]]
 - [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]

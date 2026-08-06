@@ -4,26 +4,15 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-07-29 (cuarto incidente de duplicados — idempotencia real cerrada, ver [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]])
+> Última revisión: 2026-08-05 (combobox de Trabajador, refresh token, email en UserUpdate — ver [[2026-08-05-trabajador-combobox-refresh-token-backup-check]])
 
 ---
 
 ## 🔴 Abiertos — relevantes para el deploy de prueba
 
-### "Ciclo Campaña" crashea el APK standalone instalado (no en Expo Go) — necesita build nueva
+### Backup automático: fallos silenciosos en las corridas de catch-up (StartWhenAvailable)
 
-**Reportado:** 2026-07-20/21. **Estado:** el botón cierra la app de golpe en el APK que los testers tienen instalado, pero el mismo código (mismo commit, mismo bundle) **no crashea corriendo vía Expo Go** — evidencia fuerte de un módulo nativo mal enlazado en esa build específica (compilada en julio), no un bug de JS. Se agregó un Error Boundary global (`mobile/components/ErrorBoundary.tsx`) como mitigación — si vuelve a pasar, muestra una pantalla de recuperación en vez de cerrar la app entera — pero **no resuelve la causa real**. Fix pendiente: correr `eas build --profile preview` para regenerar el APK con los módulos nativos bien enlazados y redistribuirlo (reinstalación completa, no alcanza con `eas update`/OTA). Detalle: [[2026-07-20-login-mobile-y-ciclo-campana]].
-
-### Error genérico al cargar riego mobile con 2+ válvulas — sin reproducir
-
-**Reportado:** 2026-07-17. **Estado:** hipótesis original descartada (overflow de `valvula String(20)` — el máximo real son 4 válvulas, 7 caracteres, muy por debajo del límite), no se encontró causa en el código de `riego.tsx`/backend. Como gran parte de ese flujo se reescribió el 2026-07-17 (timezone, guard anti doble-tap, bifurcación de riegos en curso), puede haberse resuelto de rebote — pero nunca se confirmó con el mensaje de error real. **Antes de tocar código de nuevo: reproducir en el dispositivo** (Riego → Registrar riego → Ya se hizo → 2+ válvulas → confirmar) y capturar el `detail` exacto que muestra el `Alert` (ya extrae el texto real del backend). Detalle: [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]].
-
-### TareaForm sin campo `finca` ni selector de `trabajador`
-
-**Archivo:** `frontend/components/produccion/TareaForm.tsx`
-**Impacto:** El backend ya soporta `finca` explícita por registro (fix del 2026-06-08) y ya existe el modelo `Trabajador` + router `/trabajadores`, pero el frontend nunca fue actualizado: el formulario sigue mandando `trabajador_nombre` como texto libre (línea ~282-285) y no envía `finca` (cero referencias en el schema ni en `lib/api/produccion.ts`). Cero referencias a `/trabajadores/` en todo el frontend.
-**Efecto práctico:** los registros de tarea diaria cargados durante la prueba van a seguir sin `finca` persistida a nivel de registro (solo el egreso derivado la tiene) y sin vínculo al `Trabajador` nuevo.
-**Fix:** agregar selector de finca (default `media_agua` como hoy) y combo de trabajador con búsqueda sobre `GET /trabajadores/?is_active=true`, manteniendo `trabajador_nombre` como fallback legacy.
+**Encontrado:** 2026-08-05, al fin correr el test de restore que pedía `BACKUP.md` desde que se activó el backup (2026-07-27). **Estado:** el mecanismo de restore en sí funciona (probado con `los_lirios_prod_20260803_2100.dump`, conteos consistentes). Pero de los últimos 15 días, 7 dumps generados fuera del horario exacto de 21:00 (corridas de catch-up al prender la PC después de perderse la de las 21:00) quedaron en **0 bytes o truncados**, y **ninguno de esos 7 casos aparece en `backup.log`** — ni `OK` ni `FAIL`. La instrucción de "revisar el log semanalmente" no los detecta porque simplemente no dejan rastro. Hipótesis: algo en el arranque (red/Wi-Fi no lista, o el proceso cortado por Windows) mata `pg_dump`/PowerShell antes de que el `try/catch` del script llegue a loguear el fallo. El backup más reciente confiable verificado al momento de este hallazgo tenía 2 días de antigüedad. **Fix pendiente, evaluado con Fausto pero no ejecutado:** verificación real de integridad del dump (ej. `pg_restore --list`, no solo el chequeo de tamaño >10KB que ya existe) + revisar el trigger de arranque. Detalle: [[2026-08-05-trabajador-combobox-refresh-token-backup-check]].
 
 ---
 
@@ -43,6 +32,22 @@ tags: [sistema, bugs]
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-05:**
+- **`TareaForm` sin selector de `Trabajador` (texto libre) — resuelto.** Combobox con sugerencias contra `GET /trabajadores/` (web y mobile); si el nombre tipeado no matchea ninguno existente, se crea el `Trabajador` nuevo automáticamente al confirmar en vez de quedar como texto libre suelto. El backend ya soportaba `trabajador_id` de punta a punta desde antes (nadie lo había conectado desde el frontend) — cero cambios de backend. El campo `finca` que faltaba en el mismo formulario se dio por resuelto por decisión de negocio: solo se trabaja con Media Agua, que ya es el default del backend.
+- **Sin refresh token — resuelto.** `POST /auth/refresh` nuevo + refresh token emitido en el login (30 días, ligado a `token_version`). Web y mobile reintentan silenciosamente ante un 401 por expiración en vez de deslogear de una.
+- **`PUT /users/{id}` no soportaba cambiar `email` — resuelto.** Agregado a `UserUpdate` con el mismo chequeo de unicidad que ya tenía `/auth/register`.
+- Detalle completo (incluye el hallazgo real de esta sesión sobre el backup) en [[2026-08-05-trabajador-combobox-refresh-token-backup-check]].
+
+**Confirmados resueltos por Fausto el 2026-08-05 (arreglados en la sesión intermedia del 2026-07-30, sin causa puntual documentada):**
+- **"Ciclo Campaña" crasheaba el APK standalone** — confirmado resuelto con el build de producción `v1.0.0-2`.
+- **Error genérico al cargar riego con 2+ válvulas** — confirmado resuelto, sin causa puntual identificada (se resolvió de rebote con alguna reescritura de `riego.tsx` o con el fix del 07-30 de "no disparar error/éxito falso al cancelar riego con la X mid-submit").
+
+**Sesión del 2026-07-30 (hecha por Fausto directo, sin Claude Code — encontrada sin documentar el 2026-08-05):**
+- Selector de temporada al crear una tarea nueva/personalizada (backend + web + mobile) — antes quedaba siempre en "general".
+- Campo Observaciones agregado al wizard de tareas en mobile (ya viajaba en el schema, mobile no lo enviaba).
+- `EXPO_PUBLIC_API_URL` creada como variable hosteada en EAS para `production` — cierra el mismo riesgo que ya se había cerrado para `preview` el 07-20/22.
+- Fix: cancelar un riego con la X mientras el submit seguía en curso disparaba un error/éxito falso fuera de contexto.
 
 **Sesión del 2026-07-29 — cuarto incidente de duplicados, causa distinta a las tres anteriores (idempotencia real cerrada):**
 Volvieron a aparecer duplicados en `registros_trabajo`, visibles en mobile y web. Verificado contra el código (no contra las notas viejas) que los 3 fixes anteriores (guard `useRef` mobile 07-17, retry GET-only 07-23, guard `useRef` web 07-27) seguían intactos, sin regresión. Diagnóstico contra datos reales de producción: 29 grupos de duplicados en `registros_trabajo` (32 filas), 0 en riego/fito/cosecha — el gap entre cada par era consistentemente de 2.6 a 7.5 segundos, no milisegundos, lo que descarta "mismo trabajador cargado dos veces en un mismo request" (eso daría timestamps casi idénticos) y confirma que son dos requests HTTP separados: el encargado tocó "Guardar", la respuesta tardó unos segundos, no vio confirmación a tiempo y volvió a tocar "Guardar" ya con el guard `useRef` liberado (porque el primer request ya había terminado). Ningún guard de doble-tap puede distinguir eso de una carga nueva legítima — exactamente el riesgo de "sin idempotencia real del lado backend" que estaba documentado y diferido desde el 2026-07-23.
@@ -109,6 +114,7 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-08-05-trabajador-combobox-refresh-token-backup-check]]
 - [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-20-login-mobile-y-ciclo-campana]]

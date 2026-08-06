@@ -35,6 +35,14 @@ tags: [sistema, mobile, deploy, playstore]
   - **Link de opt-in para mandar a los testers:** `https://play.google.com/apps/internaltest/4701122264001326317`
 - **Pendiente:** nada bloqueante del lado técnico. Fausto tiene que 1) mandarles el link de opt-in a los testers (Rafael, y a sí mismo) para que instalen desde ahí, 2) resolver el tema de la cuenta de Google de Camilo si lo quiere sumar como tester, 3) esperar la revisión de Google de la ficha/contenido (puede tardar horas/días, no bloquea que los testers ya invitados instalen mientras tanto).
 
+## Actualización 2026-08-05 — la ficha nunca se había enviado a revisión
+
+Al revisar Play Console se encontró que todo el contenido armado el 07-29 (ficha, las 10 declaraciones de "Contenido de la app", categoría de tienda) había quedado guardado como borrador — **nunca se había hecho clic en "Enviar a revisión"**. Por eso la app seguía mostrando `com.loslirios.app (unreviewed)` una semana después: no era Google demorado, el proceso nunca había arrancado (no bloqueaba a los testers ya invitados, sí bloquea pasar a producción pública).
+
+Con confirmación explícita de Fausto, se enviaron los 8 cambios pendientes a revisión (ficha es-419, calificación de contenido/IARC, público objetivo 18+, política de privacidad, declaración de anuncios, Data Safety, apps de salud, categoría de tienda). Play Console confirma "Tus cambios están en proceso de revisión" — plazo típico de Google: hasta 7 días.
+
+Lista de testers verificada en la misma sesión: solo `administracion@losliriossa.com` y `ri3215015@gmail.com` (Rafael), 2 usuarios. Camilo (`camilotrabajofinca@gmail.com`) todavía no estaba — Fausto se encargó de agregarlo él mismo.
+
 ## Estado (2026-07-27, fin de sesión)
 
 - ✅ Build de producción terminado (`versionCode 2`, `.aab`). Descargado en `C:\Users\faust\Downloads\los-lirios-v1.0.0-2.aab`, listo para subir a Play Console. También queda en `https://expo.dev/artifacts/eas/BgoOZs2pWr63ibS0_2_PswVFC6w9MC9uOdQFXGSnCnc.aab` por si se pierde el local.
