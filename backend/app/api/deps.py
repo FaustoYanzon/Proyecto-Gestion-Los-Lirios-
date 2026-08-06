@@ -22,6 +22,10 @@ async def get_current_user(
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
+    # A refresh token is a valid JWT but must never be accepted as a bearer
+    # access token — it's only meant to be redeemed at POST /auth/refresh.
+    if payload.get("type") == "refresh":
+        raise credentials_exception
 
     email: str | None = payload.get("sub")
     if email is None:

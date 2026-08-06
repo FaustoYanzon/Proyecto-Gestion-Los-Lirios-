@@ -59,8 +59,10 @@ async def create_super_admin() -> None:
             print("Super admin already exists — skipping.")
             return
 
+        username = os.getenv("SUPER_ADMIN_USERNAME", email.split("@")[0]).strip().lower()
         user = User(
             email=email,
+            username=username,
             hashed_password=get_password_hash(password),
             full_name=os.getenv("SUPER_ADMIN_NAME", "Fausto"),
             role=UserRole.super_admin,

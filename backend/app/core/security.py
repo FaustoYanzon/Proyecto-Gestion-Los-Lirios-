@@ -29,6 +29,17 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+def create_refresh_token(data: dict) -> str:
+    to_encode = data.copy()
+    # "type" lets get_current_user reject a refresh token presented as a
+    # bearer access token, and lets /auth/refresh reject an access token
+    # presented as a refresh token.
+    to_encode["type"] = "refresh"
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode["exp"] = expire
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_access_token(token: str) -> dict | None:
     try:
         # algorithms is pinned to our single allowed algorithm. This is the

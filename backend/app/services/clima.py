@@ -38,8 +38,25 @@ async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
     if kind == "actual":
         params = {
             **common,
-            "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code",
-            "daily": "temperature_2m_max,temperature_2m_min,et0_fao_evapotranspiration",
+            "current": ",".join([
+                "temperature_2m",
+                "apparent_temperature",
+                "relative_humidity_2m",
+                "precipitation",
+                "wind_speed_10m",
+                "wind_direction_10m",
+                "wind_gusts_10m",
+                "cloud_cover",
+                "weather_code",
+            ]),
+            "daily": ",".join([
+                "temperature_2m_max",
+                "temperature_2m_min",
+                "et0_fao_evapotranspiration",
+                "uv_index_max",
+                "sunrise",
+                "sunset",
+            ]),
             "forecast_days": 1,
         }
     else:  # pronostico
@@ -52,6 +69,7 @@ async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
                 "wind_speed_10m_max",
                 "weather_code",
                 "et0_fao_evapotranspiration",
+                "uv_index_max",
             ]),
             "forecast_days": 7,
         }

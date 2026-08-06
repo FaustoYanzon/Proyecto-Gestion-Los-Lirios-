@@ -99,10 +99,15 @@ async def create_user():
         password: str = "Password123!",
         role: UserRole = UserRole.super_admin,
         is_active: bool = True,
+        username: str | None = None,
     ) -> User:
         async with TestSessionLocal() as session:
+            # Defaults to the email string itself so every existing test that
+            # logs in with an email keeps working unchanged — login compares
+            # against `username`, and here username == email unless overridden.
             user = User(
                 email=email,
+                username=username or email,
                 hashed_password=get_password_hash(password),
                 full_name="Test User",
                 role=role,

@@ -26,6 +26,20 @@ async def test_login_success_returns_token(client, create_user):
     body = resp.json()
     assert body["token_type"] == "bearer"
     assert body["access_token"]
+    assert body["refresh_token"]
+
+
+async def test_login_is_by_username_not_email(client, create_user):
+    # 2026-08-05: login moved from email to a separate `username` credential.
+    # When they differ, only the username works — email is no longer accepted.
+    await create_user(email="camilo@test.com", username="camilov", password="Password123!")
+    assert (await _login(client, "camilov", "Password123!")).status_code == 200
+    assert (await _login(client, "camilo@test.com", "Password123!")).status_code == 401
+
+
+async def test_login_username_is_case_insensitive(client, create_user):
+    await create_user(email="a@test.com", username="miuser", password="Password123!")
+    assert (await _login(client, "MiUser", "Password123!")).status_code == 200
 
 
 async def test_login_wrong_password_is_401(client, create_user):
@@ -69,6 +83,7 @@ async def test_register_forbidden_for_non_super_admin(client, create_user):
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": "new@test.com",
+            "username": "newuser",
             "full_name": "New",
             "role": "obrero",
             "password": "Password123!",
@@ -85,6 +100,7 @@ async def test_register_allowed_for_super_admin(client, create_user):
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": "new@test.com",
+            "username": "newuser",
             "full_name": "New",
             "role": "obrero",
             "password": "Password123!",
@@ -92,6 +108,7 @@ async def test_register_allowed_for_super_admin(client, create_user):
     )
     assert resp.status_code == 201
     assert resp.json()["email"] == "new@test.com"
+    assert resp.json()["username"] == "newuser"
 
 
 # --- Session invalidation (token_version) ------------------------------------
@@ -118,6 +135,63 @@ async def test_change_password_invalidates_old_token(client, create_user):
     # New credentials work and old ones do not.
     assert (await _login(client, "a@test.com", "NewPassword456!")).status_code == 200
     assert (await _login(client, "a@test.com", "Password123!")).status_code == 401
+
+
+# --- Refresh token ------------------------------------------------------------
+
+
+async def test_refresh_returns_new_access_token(client, create_user):
+    await create_user(email="a@test.com", password="Password123!")
+    login_body = (await _login(client, "a@test.com", "Password123!")).json()
+
+    resp = await client.post("/auth/refresh", json={"refresh_token": login_body["refresh_token"]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["access_token"]
+    # Note: content can coincide with the original access token if both are
+    # issued within the same second (JWT "exp" has second precision and the
+    # rest of the payload is identical) — not asserted here for that reason.
+
+    # The new access token actually works.
+    me = await client.get("/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "a@test.com"
+
+
+async def test_refresh_rejects_garbage_token(client):
+    resp = await client.post("/auth/refresh", json={"refresh_token": "not-a-real-token"})
+    assert resp.status_code == 401
+
+
+async def test_access_token_rejected_by_refresh_endpoint(client, create_user):
+    await create_user(email="a@test.com", password="Password123!")
+    access_token = (await _login(client, "a@test.com", "Password123!")).json()["access_token"]
+
+    resp = await client.post("/auth/refresh", json={"refresh_token": access_token})
+    assert resp.status_code == 401
+
+
+async def test_refresh_token_rejected_as_bearer_access_token(client, create_user):
+    await create_user(email="a@test.com", password="Password123!")
+    refresh_token = (await _login(client, "a@test.com", "Password123!")).json()["refresh_token"]
+
+    resp = await client.get("/auth/me", headers={"Authorization": f"Bearer {refresh_token}"})
+    assert resp.status_code == 401
+
+
+async def test_password_change_invalidates_refresh_token(client, create_user):
+    await create_user(email="a@test.com", password="Password123!")
+    login_body = (await _login(client, "a@test.com", "Password123!")).json()
+    auth = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    await client.post(
+        "/auth/change-password",
+        headers=auth,
+        json={"current_password": "Password123!", "new_password": "NewPassword456!"},
+    )
+
+    resp = await client.post("/auth/refresh", json={"refresh_token": login_body["refresh_token"]})
+    assert resp.status_code == 401
 
 
 # --- Per-username failed-login throttle --------------------------------------

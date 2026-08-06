@@ -45,6 +45,20 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     update_data = user_data.model_dump(exclude_unset=True)
+    if "email" in update_data and update_data["email"] != user.email:
+        existing = await db.execute(select(User).where(User.email == update_data["email"]))
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered",
+            )
+    if "username" in update_data and update_data["username"] != user.username:
+        existing = await db.execute(select(User).where(User.username == update_data["username"]))
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already registered",
+            )
     if "password" in update_data:
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
 
