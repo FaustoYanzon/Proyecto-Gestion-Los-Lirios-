@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-05 (combobox de Trabajador, refresh token, email en UserUpdate — ver [[2026-08-05-trabajador-combobox-refresh-token-backup-check]])
+> Última revisión: 2026-08-06 (login por username + huella dactilar, clima enriquecido, deploy completo — ver [[2026-08-05-login-username-biometria-clima]] y [[2026-08-05-trabajador-combobox-refresh-token-backup-check]])
 
 ---
 

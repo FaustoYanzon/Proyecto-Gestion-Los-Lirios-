@@ -29,9 +29,13 @@ Fausto preguntó si convenía scrapear Climagro/"Pegasus" (mismo scraper, sin se
 
 **Cola de envíos offline** — decisión tomada con Fausto: se explicó el comportamiento actual (los selectores de parcela/trabajador funcionan sin conexión vía cache, pero el `POST` final de Confirmar todavía necesita señal en el momento — si falla, se pierde lo tipeado, sin cola de reintento) y **se decidió a propósito no construirla ahora**, para hacerla en una sesión dedicada, bien profunda y probada, en vez de agregada de apuro a esta. Ver [[Sistema de Gestión Agrícola]] § Próximos pasos, nuevo punto 1.
 
-## Pendiente de deploy
+## Deploy (2026-08-06)
 
-Nada de esta sesión (username, huella, clima) se desplegó todavía — todo local, tests/type-check en verde. El cambio de huella necesita `eas build` nuevo (módulo nativo), no `eas update`.
+Commits `f220020` (backend), `c5f3b7e` (frontend), `b98d6cf` (mobile), `bcd7d4e` (docs) — junto con el resto de la sesión anterior del mismo día (combobox de Trabajador, refresh token, email en UserUpdate). Pusheados a `main`.
+
+- **Backend:** Railway auto-desplegó y corrió la migración `a1f4c8d02e6b` sola contra producción — confirmado en logs: `Running upgrade 6605bdca4963 -> a1f4c8d02e6b, add username to users`, arranque limpio sin errores.
+- **Frontend:** `vercel --prod` — build limpio, alias `https://frontend-six-jade-79.vercel.app` actualizado.
+- **Mobile:** `eas build --profile production --platform android` — terminado (`versionCode` 2→3, autoincrementado). Incorpora `expo-local-authentication` (módulo nativo, no sale por OTA). `.aab`: `https://expo.dev/artifacts/eas/rSVupA2WAADyMsm9ecOFvrIZ5WHsMIoKyBycsPnmQfY.aab`. Fausto lo descargó y subió a mano a Play Console (pesa >10MB, no se puede automatizar por navegador). **Versión 3 (1.0.0) publicada en Internal testing el 2026-08-06 a las 15:36** (con Claude in Chrome, confirmación explícita de Fausto antes de publicar) — única advertencia: falta archivo de mapeo R8/Proguard, no bloqueante, mismo aviso que en la publicación original.
 
 ## Ver también
 
