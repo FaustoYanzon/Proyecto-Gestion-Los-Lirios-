@@ -14,6 +14,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export interface UserResponse {
   id: string
   email: string
+  username: string
   full_name: string
   role: UserRole
   is_active: boolean
@@ -22,12 +23,15 @@ export interface UserResponse {
 
 export interface UserCreate {
   email: string
+  username: string
   full_name: string
   role: UserRole
   password: string
 }
 
 export interface UserUpdate {
+  email?: string
+  username?: string
   full_name?: string
   role?: UserRole
   is_active?: boolean

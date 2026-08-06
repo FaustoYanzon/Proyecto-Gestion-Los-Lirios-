@@ -29,14 +29,20 @@ const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err   = 'mt-1 text-xs text-red-600'
 
+const usernamePattern = /^[a-z0-9_.-]{3,50}$/
+const usernameField = z.string().toLowerCase().regex(usernamePattern, "3-50 caracteres: letras, números, '.', '_' o '-'")
+
 const createSchema = z.object({
   email:     z.string().email('Email inválido'),
+  username:  usernameField,
   full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   role:      z.enum(ROLE_VALUES),
   password:  z.string().min(8, 'Mínimo 8 caracteres'),
 })
 
 const editSchema = z.object({
+  email:     z.string().email('Email inválido'),
+  username:  usernameField,
   full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   role:      z.enum(ROLE_VALUES),
   is_active: z.boolean(),
@@ -86,7 +92,7 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<CreateData>({
     resolver: zodResolver(createSchema) as Resolver<CreateData>,
-    defaultValues: { email: '', full_name: '', role: 'obrero', password: '' },
+    defaultValues: { email: '', username: '', full_name: '', role: 'obrero', password: '' },
   })
 
   async function onSubmit(data: CreateData) {
@@ -97,7 +103,11 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
       onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setSubmitError(detail === 'Email already registered' ? 'Ya existe un usuario con ese email.' : 'Error al crear el usuario.')
+      setSubmitError(
+        detail === 'Email already registered' ? 'Ya existe un usuario con ese email.'
+        : detail === 'Username already registered' ? 'Ya existe un usuario con ese nombre de usuario.'
+        : 'Error al crear el usuario.'
+      )
     }
   }
 
@@ -107,6 +117,11 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
         <label className={label}>Nombre completo</label>
         <input type="text" {...register('full_name')} className={field} placeholder="Juan Pérez" />
         {errors.full_name && <p className={err}>{errors.full_name.message}</p>}
+      </div>
+      <div>
+        <label className={label}>Usuario (para ingresar al sistema)</label>
+        <input type="text" {...register('username')} className={field} placeholder="juan.perez" autoCapitalize="none" />
+        {errors.username && <p className={err}>{errors.username.message}</p>}
       </div>
       <div>
         <label className={label}>Email</label>
@@ -147,6 +162,8 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<EditData>({
     resolver: zodResolver(editSchema) as Resolver<EditData>,
     defaultValues: {
+      email:     user.email,
+      username:  user.username,
       full_name: user.full_name,
       role:      user.role,
       is_active: user.is_active,
@@ -158,6 +175,8 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
     try {
       setSubmitError(null)
       const payload: Parameters<typeof updateUser>[1] = {
+        email:     data.email,
+        username:  data.username,
         full_name: data.full_name,
         role:      data.role,
         is_active: data.is_active,
@@ -166,8 +185,13 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
       await updateUser(user.id, payload)
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       onSuccess()
-    } catch {
-      setSubmitError('Error al guardar los cambios.')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setSubmitError(
+        detail === 'Email already registered' ? 'Ya existe un usuario con ese email.'
+        : detail === 'Username already registered' ? 'Ya existe un usuario con ese nombre de usuario.'
+        : 'Error al guardar los cambios.'
+      )
     }
   }
 
@@ -178,8 +202,15 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
         <input type="text" {...register('full_name')} className={field} />
         {errors.full_name && <p className={err}>{errors.full_name.message}</p>}
       </div>
-      <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600">
-        <span className="font-medium text-gray-700">Email: </span>{user.email}
+      <div>
+        <label className={label}>Usuario (para ingresar al sistema)</label>
+        <input type="text" {...register('username')} className={field} autoCapitalize="none" />
+        {errors.username && <p className={err}>{errors.username.message}</p>}
+      </div>
+      <div>
+        <label className={label}>Email</label>
+        <input type="email" {...register('email')} className={field} />
+        {errors.email && <p className={err}>{errors.email.message}</p>}
       </div>
       <div>
         <label className={label}>Rol</label>
@@ -258,6 +289,7 @@ export default function UsuariosPage() {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Usuario</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Rol</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
@@ -271,7 +303,7 @@ export default function UsuariosPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: isSuperAdmin ? 6 : 5 }).map((_, j) => (
+                    {Array.from({ length: isSuperAdmin ? 7 : 6 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-gray-200 rounded animate-pulse" />
                       </td>
@@ -280,7 +312,7 @@ export default function UsuariosPage() {
                 ))
               ) : usuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 6 : 5} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={isSuperAdmin ? 7 : 6} className="px-4 py-10 text-center text-gray-400">
                     No hay usuarios registrados
                   </td>
                 </tr>
@@ -288,6 +320,7 @@ export default function UsuariosPage() {
                 usuarios.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{u.full_name}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap font-mono text-xs">{u.username}</td>
                     <td className="px-4 py-3 text-gray-600">{u.email}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ROLE_BADGE[u.role] ?? 'bg-gray-100 text-gray-600'}`}>

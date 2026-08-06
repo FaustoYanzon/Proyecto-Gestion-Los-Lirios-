@@ -40,6 +40,7 @@ export const UNIDAD_LABELS: Record<UnidadMedida, string> = {
 export interface TrabajadorItem {
   trabajador_nombre: string
   cantidad: number
+  trabajador_id?: string
 }
 
 export interface RegistroCargaMasiva {
@@ -60,6 +61,7 @@ export interface RegistroTrabajoCreate {
   fecha: string
   parcela_id?: string
   trabajador_nombre: string
+  trabajador_id?: string
   tarea: string
   cantidad: number
   unidad_medida: UnidadMedida
@@ -72,6 +74,7 @@ export interface RegistroTrabajoUpdate {
   fecha?: string
   parcela_id?: string
   trabajador_nombre?: string
+  trabajador_id?: string
   tarea?: string
   cantidad?: number
   unidad_medida?: UnidadMedida
@@ -85,6 +88,7 @@ export interface RegistroTrabajoResponse {
   fecha: string
   parcela_id: string | null
   trabajador_nombre: string
+  trabajador_id: string | null
   clasificacion: string
   tarea: string
   cantidad: number

@@ -25,6 +25,36 @@ function hasIdempotencyKey(config: import('axios').InternalAxiosRequestConfig | 
   }
 }
 
+// Single-flight: concurrent 401s while the access token is expired share one
+// POST /auth/refresh instead of each firing its own. Bare axios (not `api`)
+// on purpose — avoids recursing back through these same interceptors.
+let refreshPromise: Promise<string | null> | null = null
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) return null
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken })
+      .then(({ data }) => {
+        localStorage.setItem('access_token', data.access_token)
+        return data.access_token as string
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+function logoutAndRedirect() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  document.cookie = 'auth_token=; Max-Age=0; path=/'
+  window.location.href = '/login'
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -42,9 +72,17 @@ api.interceptors.response.use(
       return api(error.config)
     }
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('access_token')
-      document.cookie = 'auth_token=; Max-Age=0; path=/'
-      window.location.href = '/login'
+      const url = error.config?.url
+      const isAuthEndpoint = url === '/auth/login' || url === '/auth/refresh'
+      if (!isAuthEndpoint && !error.config?._refreshed) {
+        error.config._refreshed = true
+        const newToken = await refreshAccessToken()
+        if (newToken) {
+          error.config.headers.Authorization = `Bearer ${newToken}`
+          return api(error.config)
+        }
+      }
+      logoutAndRedirect()
     }
     return Promise.reject(error)
   }

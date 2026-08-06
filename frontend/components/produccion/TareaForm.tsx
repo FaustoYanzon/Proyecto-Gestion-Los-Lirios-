@@ -5,7 +5,7 @@ import { useForm, useFieldArray, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   TAREAS_POR_TEMPORADA,
   CLASIFICACION_POR_TAREA,
@@ -19,6 +19,7 @@ import {
   type UnidadMedida,
   type ParcelaItem,
 } from '@/lib/api/produccion'
+import { getTrabajadores, createTrabajador, type TrabajadorResponse } from '@/lib/api/trabajadores'
 import { newIdempotencyKey } from '@/lib/idempotency'
 
 const CLASIFICACION_BADGE: Record<string, string> = {
@@ -42,6 +43,7 @@ const schema = z.object({
     .array(
       z.object({
         trabajador_nombre: z.string().min(1, 'Requerido'),
+        trabajador_id: z.string().optional(),
         cantidad: z.coerce.number().positive('Debe ser > 0'),
       })
     )
@@ -85,6 +87,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
     register,
     handleSubmit,
     watch,
+    setValue,
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
@@ -98,7 +101,11 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           precio_unitario: registro.precio_unitario,
           detalle: registro.detalle ?? '',
           trabajadores: [
-            { trabajador_nombre: registro.trabajador_nombre, cantidad: registro.cantidad },
+            {
+              trabajador_nombre: registro.trabajador_nombre,
+              trabajador_id: registro.trabajador_id ?? undefined,
+              cantidad: registro.cantidad,
+            },
           ],
         }
       : {
@@ -108,11 +115,36 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           unidad_medida: 'dias' as UnidadMedida,
           precio_unitario: undefined,
           detalle: '',
-          trabajadores: [{ trabajador_nombre: '', cantidad: undefined as unknown as number }],
+          trabajadores: [{ trabajador_nombre: '', trabajador_id: undefined, cantidad: undefined as unknown as number }],
         },
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'trabajadores' })
+
+  const { data: trabajadoresDb = [] } = useQuery({
+    queryKey: ['trabajadores'],
+    queryFn: getTrabajadores,
+    staleTime: 60_000,
+  })
+
+  // Si el nombre tipeado no coincide con ningún trabajador existente (ni el
+  // usuario eligió una sugerencia), se crea uno nuevo al confirmar para que
+  // quede disponible la próxima vez, en vez de quedar como texto libre suelto.
+  async function resolveTrabajadorId(nombre: string, currentId?: string): Promise<string | undefined> {
+    if (currentId) return currentId
+    const trimmed = nombre.trim()
+    const exact = trabajadoresDb.find(
+      (t) => t.nombre_completo.trim().toLowerCase() === trimmed.toLowerCase()
+    )
+    if (exact) return exact.id
+    try {
+      const creado = await createTrabajador(trimmed)
+      queryClient.invalidateQueries({ queryKey: ['trabajadores'] })
+      return creado.id
+    } catch {
+      return undefined
+    }
+  }
 
   const tareaWatched = watch('tarea')
   const isCustomTask = tareaWatched === CUSTOM_TASK_VALUE
@@ -141,6 +173,12 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
         setSubmitError('Ingresá el nombre de la nueva tarea.')
         return
       }
+      const trabajadoresResueltos = await Promise.all(
+        data.trabajadores.map(async (t) => ({
+          ...t,
+          trabajador_id: await resolveTrabajadorId(t.trabajador_nombre, t.trabajador_id),
+        }))
+      )
       if (isEdit) {
         await updateTrabajo(registro.id, {
           fecha: data.fecha,
@@ -149,8 +187,9 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           unidad_medida: data.unidad_medida,
           precio_unitario: data.precio_unitario,
           detalle: data.detalle || undefined,
-          trabajador_nombre: data.trabajadores[0].trabajador_nombre,
-          cantidad: data.trabajadores[0].cantidad,
+          trabajador_nombre: trabajadoresResueltos[0].trabajador_nombre,
+          trabajador_id: trabajadoresResueltos[0].trabajador_id,
+          cantidad: trabajadoresResueltos[0].cantidad,
           clasificacion: isCustomTask ? customClasificacion : undefined,
         })
       } else {
@@ -161,7 +200,7 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           unidad_medida: data.unidad_medida,
           precio_unitario: data.precio_unitario,
           detalle: data.detalle || undefined,
-          trabajadores: data.trabajadores,
+          trabajadores: trabajadoresResueltos,
           idempotency_key: idempotencyKeyRef.current,
           clasificacion: isCustomTask ? customClasificacion : undefined,
         })
@@ -309,8 +348,14 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
           {fields.map((f, i) => (
             <div key={f.id} className="flex items-start gap-2">
               <div className="flex-1">
-                <input
-                  {...register(`trabajadores.${i}.trabajador_nombre`)}
+                <TrabajadorCombobox
+                  value={watch(`trabajadores.${i}.trabajador_nombre`) ?? ''}
+                  trabajadorId={watch(`trabajadores.${i}.trabajador_id`)}
+                  trabajadores={trabajadoresDb}
+                  onChange={(nombre, trabajadorId) => {
+                    setValue(`trabajadores.${i}.trabajador_nombre`, nombre, { shouldValidate: true })
+                    setValue(`trabajadores.${i}.trabajador_id`, trabajadorId)
+                  }}
                   placeholder="Nombre del trabajador"
                   className={field}
                 />
@@ -398,5 +443,77 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
         </button>
       </div>
     </form>
+  )
+}
+
+// ─── Combobox de Trabajador ─────────────────────────────────────────────────
+// Input libre con sugerencias contra la tabla de trabajadores. Si se elige una
+// sugerencia queda vinculado (trabajador_id); si no coincide con ninguno, se
+// crea un Trabajador nuevo al confirmar el formulario (ver resolveTrabajadorId).
+
+function TrabajadorCombobox({
+  value,
+  trabajadorId,
+  trabajadores,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string
+  trabajadorId?: string
+  trabajadores: TrabajadorResponse[]
+  onChange: (nombre: string, trabajadorId?: string) => void
+  placeholder: string
+  className: string
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const trimmed = value.trim().toLowerCase()
+  const matches = trimmed
+    ? trabajadores.filter((t) => t.nombre_completo.toLowerCase().includes(trimmed)).slice(0, 6)
+    : []
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value, undefined); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className={trabajadorId ? className + ' pr-16' : className}
+      />
+      {trabajadorId && (
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded pointer-events-none">
+          existente
+        </span>
+      )}
+      {open && matches.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
+          {matches.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => { onChange(t.nombre_completo, t.id); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+            >
+              {t.nombre_completo}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

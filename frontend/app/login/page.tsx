@@ -1,16 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
-import { login } from '@/lib/auth'
+import { login, getRememberedUsername, setRememberedUsername } from '@/lib/auth'
 import { useAuthStore } from '@/store/authStore'
 
 const schema = z.object({
-  email:      z.string().min(1, { message: 'Ingrese su email' }).email({ message: 'Ingrese un email válido' }),
+  username:   z.string().min(1, { message: 'Ingrese su usuario' }),
   password:   z.string().min(1, { message: 'Ingrese su contraseña' }),
   recordarme: z.boolean().optional(),
 })
@@ -22,18 +22,32 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } =
-    useForm<LoginFormData>({ resolver: zodResolver(schema) })
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } =
+    useForm<LoginFormData>({
+      resolver: zodResolver(schema),
+      defaultValues: { username: '', recordarme: false },
+    })
+
+  // Leído después de montar (no en el render inicial) para no desincronizar
+  // el HTML del servidor con el del cliente — localStorage no existe en SSR.
+  useEffect(() => {
+    const remembered = getRememberedUsername()
+    if (remembered) {
+      setValue('username', remembered)
+      setValue('recordarme', true)
+    }
+  }, [setValue])
 
   async function onSubmit(data: LoginFormData) {
     setError(null)
     try {
-      const user = await login(data.email, data.password)
+      const user = await login(data.username, data.password)
+      setRememberedUsername(data.recordarme ? data.username : null)
       setUser(user)
       router.push('/dashboard')
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status
-      setError(status === 401 ? 'Email o contraseña incorrectos' : 'Error al iniciar sesión. Intente nuevamente.')
+      setError(status === 401 ? 'Usuario o contraseña incorrectos' : 'Error al iniciar sesión. Intente nuevamente.')
     }
   }
 
@@ -98,22 +112,23 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {/* Email */}
+            {/* Usuario */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5a544c] mb-1.5">
-                Email
+                Usuario
               </label>
               <input
-                type="email"
-                autoComplete="email"
-                placeholder="nombre@losliriossa.com"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                placeholder="nombre.apellido"
                 className="w-full rounded-[10px] border border-[#fbfaf6] px-3.5 py-2.5 text-sm
                            text-[#1f1a17] placeholder:text-[#a09584] hover:border-[#a09584]
                            focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-[#7a1f2c]
                            transition-colors bg-white"
-                {...register('email')}
+                {...register('username')}
               />
-              {errors.email && <p className="mt-1.5 text-xs text-[#a3293a]">{errors.email.message}</p>}
+              {errors.username && <p className="mt-1.5 text-xs text-[#a3293a]">{errors.username.message}</p>}
             </div>
 
             {/* Contraseña */}

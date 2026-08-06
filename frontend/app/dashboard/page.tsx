@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Cloud, ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
+import { Cloud, CloudRain, CloudFog, CloudLightning, Sun, CloudSun, Wind, Droplets, Sunrise, ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ReferenceLine,
@@ -44,14 +44,43 @@ function wmoDescription(code: number): string {
   return 'Variable'
 }
 
+function wmoIcon(code: number) {
+  if (code === 0) return Sun
+  if (code <= 2) return CloudSun
+  if (code === 3) return Cloud
+  if (code <= 49) return CloudFog
+  if (code <= 69 || code === 80 || code === 81 || code === 82) return CloudRain
+  if (code <= 99) return CloudLightning
+  return Cloud
+}
+
+// Grados → punto cardinal abreviado (N/NE/E/SE/S/SO/O/NO)
+function windDirectionLabel(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+  return dirs[Math.round(deg / 45) % 8]
+}
+
+function uvLevel(uv: number): { label: string; color: string } {
+  if (uv < 3) return { label: 'Bajo', color: '#3f5c3a' }
+  if (uv < 6) return { label: 'Moderado', color: '#b8860b' }
+  if (uv < 8) return { label: 'Alto', color: '#c96a1f' }
+  if (uv < 11) return { label: 'Muy alto', color: '#a3293a' }
+  return { label: 'Extremo', color: '#7a1f2c' }
+}
+
 interface ClimaActualResponse {
   current: {
     temperature_2m: number
+    apparent_temperature: number
+    relative_humidity_2m: number
+    wind_speed_10m: number
+    wind_direction_10m: number
     weather_code: number
   }
   daily: {
     temperature_2m_max: number[]
     temperature_2m_min: number[]
+    uv_index_max: number[]
   }
   _cached?: boolean
 }
@@ -70,15 +99,19 @@ function DireccionKpi({ label, value, hint, tone = 'neutral' }: {
   )
 }
 
-// Weather widget. Data source today: /clima/actual (Open-Meteo, 30 min cache).
-// Etapa 5: same slot will be fed by the Climagro (Pegasus) scraper — only the
-// backend source changes, this component keeps consuming /clima/actual.
+// Weather widget. Data source: /clima/actual (Open-Meteo, 30 min cache, sin
+// API key). Media Agua no tiene estación propia expuesta por API — Open-Meteo
+// interpola por coordenadas exactas, con resolución de pocos km. Evaluado
+// scrapear Climagro (estación real en la finca) el 2026-08-05 y descartado
+// por ahora: requiere login+parseo de HTML sin API, mantenimiento frágil.
+// Revisar de nuevo solo si el dato de Open-Meteo se demuestra insuficiente
+// para decisiones de riego.
 function ClimateCard() {
   const { data, isLoading, isError } = useQuery<ClimaActualResponse>({
-    queryKey: ['clima-actual', 'los_mimbres'],
+    queryKey: ['clima-actual', 'media_agua'],
     queryFn: async () => {
       const { data } = await api.get<ClimaActualResponse>('/clima/actual', {
-        params: { finca: 'los_mimbres' },
+        params: { finca: 'media_agua' },
       })
       return data
     },
@@ -87,20 +120,27 @@ function ClimateCard() {
     retry: 1,
   })
 
-  const temp = data ? Math.round(data.current.temperature_2m) : null
-  const desc = data ? wmoDescription(data.current.weather_code) : null
-  const max  = data?.daily.temperature_2m_max[0] != null ? Math.round(data.daily.temperature_2m_max[0]) : null
-  const min  = data?.daily.temperature_2m_min[0] != null ? Math.round(data.daily.temperature_2m_min[0]) : null
+  const temp   = data ? Math.round(data.current.temperature_2m) : null
+  const feels  = data ? Math.round(data.current.apparent_temperature) : null
+  const desc   = data ? wmoDescription(data.current.weather_code) : null
+  const Icon   = data ? wmoIcon(data.current.weather_code) : Cloud
+  const max    = data?.daily.temperature_2m_max[0] != null ? Math.round(data.daily.temperature_2m_max[0]) : null
+  const min    = data?.daily.temperature_2m_min[0] != null ? Math.round(data.daily.temperature_2m_min[0]) : null
+  const wind   = data ? Math.round(data.current.wind_speed_10m) : null
+  const windDir = data ? windDirectionLabel(data.current.wind_direction_10m) : null
+  const humidity = data ? Math.round(data.current.relative_humidity_2m) : null
+  const uv = data?.daily.uv_index_max[0] != null ? Math.round(data.daily.uv_index_max[0]) : null
+  const uvInfo = uv !== null ? uvLevel(uv) : null
 
   return (
     <div
-      className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0"
+      className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full sm:w-72"
       style={{ backgroundColor: '#faf6ec', boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
     >
       <div className="flex items-center gap-2 mb-3">
-        <Cloud size={16} strokeWidth={1.75} color="#3d6b86" />
+        <Icon size={16} strokeWidth={1.75} color="#3d6b86" />
         <span className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">
-          Clima — Los Mimbres
+          Clima — Media Agua
         </span>
       </div>
 
@@ -120,13 +160,34 @@ function ClimateCard() {
           <div className="flex items-end gap-3">
             <span className="text-3xl font-bold text-[#1f1a17]">{temp}°</span>
             <div className="text-xs text-[#5a544c] mb-1">
-              <p>{desc}</p>
+              <p>{desc}{feels !== null && feels !== temp ? ` · Sensación ${feels}°` : ''}</p>
               {max !== null && min !== null && (
                 <p className="text-[#a09584]">Máx {max}° · Mín {min}°</p>
               )}
             </div>
           </div>
-          <p className="text-xs text-[#a09584] mt-2">
+
+          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[#f0ead8]">
+            <div className="flex flex-col items-center gap-1">
+              <Wind size={14} strokeWidth={1.75} color="#5a544c" />
+              <span className="text-xs font-semibold text-[#1f1a17]">{wind} km/h</span>
+              <span className="text-[10px] text-[#a09584]">{windDir}</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <Droplets size={14} strokeWidth={1.75} color="#5a544c" />
+              <span className="text-xs font-semibold text-[#1f1a17]">{humidity}%</span>
+              <span className="text-[10px] text-[#a09584]">Humedad</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <Sunrise size={14} strokeWidth={1.75} color="#5a544c" />
+              <span className="text-xs font-semibold" style={{ color: uvInfo?.color ?? '#1f1a17' }}>
+                UV {uv}
+              </span>
+              <span className="text-[10px] text-[#a09584]">{uvInfo?.label}</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#a09584] mt-3">
             {data?._cached ? 'Actualizado hace menos de 30 min' : 'Actualizado ahora'}
           </p>
         </>
