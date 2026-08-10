@@ -74,6 +74,16 @@ try {
     $size = (Get-Item $dumpFile).Length
     if ($size -lt 10KB) { throw "Dump suspiciously small ($size bytes) - treating as failure" }
 
+    # Integrity check: a size check alone misses 0-byte/truncated dumps from
+    # catch-up runs that got killed mid-write but still landed above 10KB, or
+    # whose truncation left the file non-empty but unreadable by pg_restore.
+    # `pg_restore --list` parses the archive's TOC without touching a database -
+    # cheap, and a genuine failure here means the dump can't be restored at all.
+    $pgRestore = Join-Path (Split-Path $pgDump) 'pg_restore.exe'
+    if (-not (Test-Path $pgRestore)) { throw "pg_restore.exe not found next to pg_dump at $pgRestore" }
+    & $pgRestore --list $dumpFile | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "pg_restore --list failed on $dumpFile (exit $LASTEXITCODE) - dump is corrupt/truncated despite passing the size check" }
+
     # --- Offsite copy (OneDrive syncs it off the machine) --------------------
     Copy-Item $dumpFile -Destination $OffsiteDir -Force
 

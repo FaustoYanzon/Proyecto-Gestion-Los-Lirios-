@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons'
 import api from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import { newIdempotencyKey } from '../lib/idempotency'
+import { enqueue } from '../lib/offlineQueue'
+import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
 import { colors } from '../lib/theme'
 import type { Parcela, RegistroFitosanitario } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
@@ -493,23 +495,34 @@ function StepConfirmar({
     if (submittingRef.current) return
     submittingRef.current = true
     const dosisNum = parseFloat(dosis.replace(',', '.'))
+    const payload = {
+      fecha,
+      parcela_id: parcela?.id,
+      producto_nombre: producto,
+      dosis_lt_ha: dosisNum,
+      motivo,
+      dias_carencia: diasCarencia,
+      dias_reingreso: diasReingreso,
+      responsable,
+      idempotency_key: idempotencyKeyRef.current,
+    }
     try {
       setLoading(true)
-      await api.post('/produccion/fitosanitarios/', {
-        fecha,
-        parcela_id: parcela?.id,
-        producto_nombre: producto,
-        dosis_lt_ha: dosisNum,
-        motivo,
-        dias_carencia: diasCarencia,
-        dias_reingreso: diasReingreso,
-        responsable,
-        idempotency_key: idempotencyKeyRef.current,
-      })
+      await api.post('/produccion/fitosanitarios/', payload)
       onSuccess()
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
+      const err = e as { response?: { data?: { detail?: string } } }
+      if (!err.response) {
+        await enqueue('/produccion/fitosanitarios/', payload)
+        Alert.alert(
+          'Guardado localmente',
+          'No hay conexión ahora. La aplicación se va a sincronizar sola apenas vuelva la señal.'
+        )
+        onSuccess()
+      } else {
+        const detail = err.response?.data?.detail
+        Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
+      }
     } finally {
       submittingRef.current = false
       setLoading(false)
@@ -754,6 +767,8 @@ export default function FitoScreen() {
           <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
           <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
         </TouchableOpacity>
+
+        <OfflineQueueBanner />
 
         {loadingRegistros ? (
           <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />

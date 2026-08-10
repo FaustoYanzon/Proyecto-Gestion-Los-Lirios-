@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons'
 import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
+import { enqueue } from '../../lib/offlineQueue'
+import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
 import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
@@ -814,34 +816,49 @@ function StepConfirmar({
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
+    const resueltos = await Promise.all(
+      trabajadores.map(async (w) => ({
+        ...w,
+        trabajadorId: await resolveTrabajadorId(w.nombre, w.trabajadorId),
+      }))
+    )
+    const payload = {
+      fecha,
+      parcela_id: parcela?.id ?? null,
+      tarea,
+      unidad_medida: unidad,
+      precio_unitario: precio,
+      detalle: detalle || undefined,
+      clasificacion: clasificacion || undefined,
+      trabajadores: resueltos.map((w) => ({
+        trabajador_nombre: w.nombre,
+        cantidad: w.cantidad,
+        trabajador_id: w.trabajadorId,
+      })),
+      idempotency_key: idempotencyKeyRef.current,
+    }
     try {
-      const resueltos = await Promise.all(
-        trabajadores.map(async (w) => ({
-          ...w,
-          trabajadorId: await resolveTrabajadorId(w.nombre, w.trabajadorId),
-        }))
-      )
-      const payload = {
-        fecha,
-        parcela_id: parcela?.id ?? null,
-        tarea,
-        unidad_medida: unidad,
-        precio_unitario: precio,
-        detalle: detalle || undefined,
-        clasificacion: clasificacion || undefined,
-        trabajadores: resueltos.map((w) => ({
-          trabajador_nombre: w.nombre,
-          cantidad: w.cantidad,
-          trabajador_id: w.trabajadorId,
-        })),
-        idempotency_key: idempotencyKeyRef.current,
-      }
       setLoading(true)
       await api.post('/produccion/trabajo/masivo', payload)
       onSuccess()
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el registro.')
+      const err = e as { response?: { data?: { detail?: string } } }
+      if (!err.response) {
+        // Sin respuesta del servidor (ya después del retry automático del
+        // interceptor) — puede ser que nunca llegó, o que se procesó y se
+        // perdió la respuesta. El idempotency_key ya viaja en el payload,
+        // así que encolar es seguro: cuando sincronice, el backend deduplica
+        // si el request original sí había llegado a procesarse.
+        await enqueue('/produccion/trabajo/masivo', payload)
+        Alert.alert(
+          'Guardado localmente',
+          'No hay conexión ahora. El registro se va a sincronizar solo apenas vuelva la señal.'
+        )
+        onSuccess()
+      } else {
+        const detail = err.response?.data?.detail
+        Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el registro.')
+      }
     } finally {
       submittingRef.current = false
       setLoading(false)
@@ -1117,6 +1134,8 @@ export default function TareasScreen() {
           <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
           <Text style={styles.newBtnText}>Nueva carga de tareas</Text>
         </TouchableOpacity>
+
+        <OfflineQueueBanner />
 
         {loadingParcelas ? (
           <ActivityIndicator color={colors.burdeos[600]} style={{ marginTop: 24 }} />

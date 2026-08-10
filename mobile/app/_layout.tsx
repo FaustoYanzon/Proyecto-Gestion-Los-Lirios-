@@ -12,6 +12,7 @@ import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono'
 import * as SplashScreen from 'expo-splash-screen'
 import { useAuthStore } from '../store/authStore'
 import { registerForPushNotifications } from '../lib/notifications'
+import { initOfflineSync } from '../lib/offlineSync'
 import { colors } from '../lib/theme'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
@@ -49,6 +50,8 @@ export default function RootLayout() {
   })
 
   useEffect(() => { initAuth() }, [])
+
+  useEffect(() => initOfflineSync(), [])
 
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync()

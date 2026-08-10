@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons'
 import api, { getRiegosEnCurso, iniciarRiego, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
+import { enqueue } from '../../lib/offlineQueue'
+import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 import type { Parcela, RegistroRiego, RiegoEnCurso } from '../../lib/types'
@@ -758,24 +760,35 @@ function StepConfirmar({
     if (submittingRef.current) return
     if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
     submittingRef.current = true
+    const payload = {
+      fecha: draft.fechaInicio,
+      parcela_id: draft.parcela.id,
+      cabezal: draft.cabezal,
+      valvula: draft.valvulas.join(','),
+      inicio: inicioISO,
+      fin: finISO,
+      responsable: draft.responsable,
+      fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
+      fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
+      idempotency_key: idempotencyKeyRef.current,
+    }
     try {
       setLoading(true)
-      await api.post('/produccion/riego/', {
-        fecha: draft.fechaInicio,
-        parcela_id: draft.parcela.id,
-        cabezal: draft.cabezal,
-        valvula: draft.valvulas.join(','),
-        inicio: inicioISO,
-        fin: finISO,
-        responsable: draft.responsable,
-        fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
-        fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
-        idempotency_key: idempotencyKeyRef.current,
-      })
+      await api.post('/produccion/riego/', payload)
       onSuccess()
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el riego.')
+      const err = e as { response?: { data?: { detail?: string } } }
+      if (!err.response) {
+        await enqueue('/produccion/riego/', payload)
+        Alert.alert(
+          'Guardado localmente',
+          'No hay conexión ahora. El riego se va a sincronizar solo apenas vuelva la señal.'
+        )
+        onSuccess()
+      } else {
+        const detail = err.response?.data?.detail
+        Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar el riego.')
+      }
     } finally {
       submittingRef.current = false
       setLoading(false)
@@ -1308,6 +1321,9 @@ export default function RiegoScreen() {
         <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
         <Text style={styles.newBtnText}>Registrar riego</Text>
       </TouchableOpacity>
+      <View style={{ marginHorizontal: 16 }}>
+        <OfflineQueueBanner />
+      </View>
       <RecentRiegos
         riegos={riegos}
         parcelas={parcelas}
