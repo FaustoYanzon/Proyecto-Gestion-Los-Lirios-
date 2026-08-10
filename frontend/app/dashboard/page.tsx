@@ -134,7 +134,7 @@ function ClimateCard() {
 
   return (
     <div
-      className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full sm:w-72"
+      className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full"
       style={{ backgroundColor: '#faf6ec', boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
     >
       <div className="flex items-center gap-2 mb-3">
@@ -384,7 +384,7 @@ export default function DashboardPage() {
       {/* Grid mapa compacto + sidebar clima/alertas */}
       <div
         className="grid gap-4"
-        style={{ gridTemplateColumns: '1.6fr 1fr', minHeight: 320, maxHeight: 380 }}
+        style={{ gridTemplateColumns: '1fr 1fr', minHeight: 320, maxHeight: 380 }}
       >
         {/* Mapa (reducido) */}
         <div

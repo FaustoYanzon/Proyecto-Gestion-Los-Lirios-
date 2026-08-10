@@ -86,13 +86,23 @@ function RiegosEnCursoInicio({
 // Fuente: /clima/actual (Open-Meteo vía backend, cache de 30 min). Evaluado
 // scrapear Climagro (estación real en la finca) el 2026-08-05 y descartado
 // por ahora — sin API, requiere login+parseo de HTML, mantenimiento frágil.
+// Espejo del ClimateCard de frontend/app/dashboard/page.tsx (mismos datos,
+// mismos umbrales de UV) — mantener sincronizado a mano si cambia uno.
 interface ClimaActualMini {
   current: {
     temperature_2m: number
-    wind_speed_10m: number
+    apparent_temperature: number
     relative_humidity_2m: number
+    wind_speed_10m: number
+    wind_direction_10m: number
     weather_code: number
   }
+  daily: {
+    temperature_2m_max: number[]
+    temperature_2m_min: number[]
+    uv_index_max: number[]
+  }
+  _cached?: boolean
 }
 
 function wmoDescriptionMini(code: number): string {
@@ -117,6 +127,20 @@ function wmoIconNameMini(code: number): keyof typeof Ionicons.glyphMap {
   return 'cloud-outline'
 }
 
+// Grados → punto cardinal abreviado (N/NE/E/SE/S/SO/O/NO)
+function windDirectionLabelMini(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+  return dirs[Math.round(deg / 45) % 8]
+}
+
+function uvLevelMini(uv: number): { label: string; color: string } {
+  if (uv < 3) return { label: 'Bajo', color: colors.verdeCampo }
+  if (uv < 6) return { label: 'Moderado', color: '#b8860b' }
+  if (uv < 8) return { label: 'Alto', color: '#c96a1f' }
+  if (uv < 11) return { label: 'Muy alto', color: colors.sangre }
+  return { label: 'Extremo', color: colors.burdeos[600] }
+}
+
 function ClimateCardMini() {
   const [clima, setClima] = useState<ClimaActualMini | null>(null)
   const [loading, setLoading] = useState(true)
@@ -134,20 +158,62 @@ function ClimateCardMini() {
     })()
   }, [])
 
-  if (loading && !clima) return null
+  if (loading && !clima) {
+    return <View style={[styles.climateCard, { height: 132 }]} />
+  }
   if (!clima) return null
 
   const temp = Math.round(clima.current.temperature_2m)
+  const feels = Math.round(clima.current.apparent_temperature)
+  const max = clima.daily.temperature_2m_max[0] != null ? Math.round(clima.daily.temperature_2m_max[0]) : null
+  const min = clima.daily.temperature_2m_min[0] != null ? Math.round(clima.daily.temperature_2m_min[0]) : null
   const wind = Math.round(clima.current.wind_speed_10m)
+  const windDir = windDirectionLabelMini(clima.current.wind_direction_10m)
   const humidity = Math.round(clima.current.relative_humidity_2m)
+  const uv = clima.daily.uv_index_max[0] != null ? Math.round(clima.daily.uv_index_max[0]) : null
+  const uvInfo = uv !== null ? uvLevelMini(uv) : null
 
   return (
     <View style={styles.climateCard}>
-      <Ionicons name={wmoIconNameMini(clima.current.weather_code)} size={18} color={colors.cielo} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.climateTemp}>{temp}° · {wmoDescriptionMini(clima.current.weather_code)}</Text>
-        <Text style={styles.climateSub}>Media Agua · viento {wind} km/h · humedad {humidity}%</Text>
+      <View style={styles.climateHeader}>
+        <Ionicons name={wmoIconNameMini(clima.current.weather_code)} size={16} color={colors.cielo} />
+        <Text style={styles.climateHeaderText}>CLIMA — MEDIA AGUA</Text>
       </View>
+
+      <View style={styles.climateBigRow}>
+        <Text style={styles.climateTemp}>{temp}°</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.climateDesc}>
+            {wmoDescriptionMini(clima.current.weather_code)}
+            {feels !== temp ? ` · Sensación ${feels}°` : ''}
+          </Text>
+          {max !== null && min !== null && (
+            <Text style={styles.climateMaxMin}>Máx {max}° · Mín {min}°</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.climateStatsRow}>
+        <View style={styles.climateStatCol}>
+          <Ionicons name="speedometer-outline" size={15} color={colors.ink60} />
+          <Text style={styles.climateStatValue}>{wind} km/h</Text>
+          <Text style={styles.climateStatLabel}>{windDir}</Text>
+        </View>
+        <View style={styles.climateStatCol}>
+          <Ionicons name="water-outline" size={15} color={colors.ink60} />
+          <Text style={styles.climateStatValue}>{humidity}%</Text>
+          <Text style={styles.climateStatLabel}>Humedad</Text>
+        </View>
+        <View style={styles.climateStatCol}>
+          <Ionicons name="flash-outline" size={15} color={colors.ink60} />
+          <Text style={[styles.climateStatValue, uvInfo && { color: uvInfo.color }]}>UV {uv}</Text>
+          <Text style={styles.climateStatLabel}>{uvInfo?.label}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.climateUpdated}>
+        {clima._cached ? 'Actualizado hace menos de 30 min' : 'Actualizado ahora'}
+      </Text>
     </View>
   )
 }
@@ -358,14 +424,29 @@ const styles = StyleSheet.create({
   terminarBtnText: { color: colors.blanco, fontSize: 13, fontWeight: '700' },
 
   climateCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: colors.crema, borderRadius: 14,
     paddingHorizontal: 16, paddingVertical: 14,
     marginBottom: 24,
     borderWidth: 1, borderColor: colors.hueso,
   },
-  climateTemp: { fontSize: 15, fontWeight: '700', color: colors.ink },
-  climateSub: { fontSize: 12, color: colors.niebla, marginTop: 1 },
+  climateHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  climateHeaderText: {
+    fontSize: 11, fontWeight: '700', color: colors.ink60,
+    letterSpacing: 0.6,
+  },
+  climateBigRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  climateTemp: { fontSize: 34, fontWeight: '800', color: colors.ink, lineHeight: 36 },
+  climateDesc: { fontSize: 13, color: colors.ink60, marginBottom: 2 },
+  climateMaxMin: { fontSize: 12, color: colors.niebla },
+  climateStatsRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: 14, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: colors.hueso,
+  },
+  climateStatCol: { alignItems: 'center', gap: 3, flex: 1 },
+  climateStatValue: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  climateStatLabel: { fontSize: 10, color: colors.niebla },
+  climateUpdated: { fontSize: 11, color: colors.niebla, marginTop: 12 },
   fenologiaCard: {
     backgroundColor: colors.blanco, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
