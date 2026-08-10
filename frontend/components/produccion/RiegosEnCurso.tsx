@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Droplets, Timer } from 'lucide-react'
+import { Droplets, Timer, ArrowRight } from 'lucide-react'
 import { getRiegosEnCurso, terminarRiego, calcEnCurso } from '@/lib/api/riego'
 
 function formatTranscurrido(horas: number): string {
@@ -15,9 +16,13 @@ function formatTranscurrido(horas: number): string {
 interface Props {
   parcelaNombre: (id: string) => string
   showTerminar?: boolean
+  // Ruta a "Iniciar riego" — si se pasa, el estado vacío muestra un CTA en
+  // vez de desaparecer del todo (antes el panel era invisible si nadie
+  // había iniciado un riego nunca, y la función quedaba sin descubrir).
+  iniciarHref?: string
 }
 
-export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Props) {
+export default function RiegosEnCurso({ parcelaNombre, showTerminar = true, iniciarHref }: Props) {
   const queryClient = useQueryClient()
   const [terminandoId, setTerminandoId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +43,21 @@ export default function RiegosEnCurso({ parcelaNombre, showTerminar = true }: Pr
     return () => clearInterval(t)
   }, [enCurso.length])
 
-  if (enCurso.length === 0) return null
+  if (enCurso.length === 0) {
+    if (!iniciarHref) return null
+    return (
+      <Link
+        href={iniciarHref}
+        className="flex items-center justify-between gap-3 bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:border-[#7a1f2c] transition-colors"
+      >
+        <span className="flex items-center gap-2 text-sm text-[#5a544c]">
+          <Timer size={16} className="text-blue-600 flex-shrink-0" />
+          Sin riegos en curso — Iniciar uno
+        </span>
+        <ArrowRight size={15} className="text-[#a09584] flex-shrink-0" />
+      </Link>
+    )
+  }
 
   async function handleTerminar(id: string, horas: number, litros: number) {
     if (!window.confirm(

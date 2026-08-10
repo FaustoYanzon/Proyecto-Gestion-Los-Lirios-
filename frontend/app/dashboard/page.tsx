@@ -398,7 +398,11 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
           <ClimateCard />
           <Alertas />
-          <RiegosEnCurso parcelaNombre={parcelaNombre} showTerminar={false} />
+          <RiegosEnCurso
+            parcelaNombre={parcelaNombre}
+            showTerminar={false}
+            iniciarHref="/dashboard/produccion/riego"
+          />
         </div>
       </div>
 

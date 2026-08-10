@@ -149,35 +149,58 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
     }
     if (submittingRef.current) return
     submittingRef.current = true
-    try {
-      setSubmitError(null)
-      const inicio = `${data.fecha_inicio}T${data.hora_inicio}:00-03:00`
-      const fin = `${data.fecha_fin}T${data.hora_fin}:00-03:00`
-      const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin)?.mm
-      const valvula = Array.from(selectedValvulas).sort().join(',')
 
-      const payload = {
-        fecha: data.fecha_inicio,
-        parcela_id: data.parcela_id,
-        cabezal: data.cabezal,
-        valvula,
-        inicio,
-        fin,
-        mm_aplicados: mm,
-        responsable: data.responsable,
-        fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
-        fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
-      }
+    const inicio = `${data.fecha_inicio}T${data.hora_inicio}:00-03:00`
+    const fin = `${data.fecha_fin}T${data.hora_fin}:00-03:00`
+    const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin)?.mm
+    const valvula = Array.from(selectedValvulas).sort().join(',')
 
+    const payload = {
+      fecha: data.fecha_inicio,
+      parcela_id: data.parcela_id,
+      cabezal: data.cabezal,
+      valvula,
+      inicio,
+      fin,
+      mm_aplicados: mm,
+      responsable: data.responsable,
+      fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
+      fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
+    }
+
+    async function attempt() {
       if (isEdit) {
         await updateRiego(riego.id, payload)
       } else {
         await createRiego({ ...payload, idempotency_key: idempotencyKeyRef.current })
       }
+    }
 
+    try {
+      setSubmitError(null)
+      await attempt()
       queryClient.invalidateQueries({ queryKey: ['riegos'] })
       onSuccess()
-    } catch {
+    } catch (e: unknown) {
+      const err = e as { response?: unknown }
+      // Sin respuesta del servidor (ya después del retry automático del
+      // interceptor, ver lib/api.ts) puede significar que la escritura sí
+      // llegó y solo se perdió la respuesta en el camino — mismo patrón que
+      // el bug de "terminar riego" del 2026-07-27 (confirmado en logs: 200
+      // OK del lado del servidor, error falso del lado del cliente). Un
+      // reintento más es seguro: las creaciones llevan idempotency_key (el
+      // backend deduplica) y las ediciones son un PUT de reemplazo completo
+      // (repetirlo dos veces da el mismo resultado final).
+      if (!err.response) {
+        try {
+          await attempt()
+          queryClient.invalidateQueries({ queryKey: ['riegos'] })
+          onSuccess()
+          return
+        } catch {
+          // Sigue sin funcionar (o ahora sí es un error real) — cae al mensaje de abajo.
+        }
+      }
       setSubmitError('Error al guardar. Intente nuevamente.')
     } finally {
       submittingRef.current = false
