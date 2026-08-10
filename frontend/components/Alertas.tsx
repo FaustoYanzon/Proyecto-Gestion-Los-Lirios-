@@ -7,6 +7,7 @@ import { getRiegos, type RiegoResponse } from '@/lib/api/riego'
 import { getEstadoActual, type EstadoActualItem } from '@/lib/api/produccion'
 import { getAlertasCarencia, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { getAlertasDescartadas, descartarAlerta } from '@/lib/api/alertas'
+import BuzonModal from '@/components/BuzonModal'
 
 interface Alerta {
   id: string
@@ -100,71 +101,53 @@ function AlertasModal({
   descartandoId: string | null
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col max-h-[70vh]">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            aria-label="Cerrar"
-          >
-            <X size={18} />
-          </button>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[#5a544c]">
-            Alertas ({alertas.length})
-          </h2>
-        </div>
-
-        <div className="overflow-y-auto p-3">
-          {alertas.length === 0 ? (
-            <p className="text-sm text-[#a09584] px-2 py-4 text-center">Sin alertas activas</p>
-          ) : (
-            <div className="space-y-2">
-              {alertas.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5"
+    <BuzonModal
+      title={`Alertas (${alertas.length})`}
+      onClose={onClose}
+      footer="Al tildar o cancelar, la alerta se oculta por 48h — si el problema sigue, vuelve a aparecer sola."
+    >
+      {alertas.length === 0 ? (
+        <p className="text-sm text-[#a09584] px-2 py-4 text-center">Sin alertas activas</p>
+      ) : (
+        <div className="space-y-2">
+          {alertas.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5"
+            >
+              <span
+                className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]"
+                style={{ backgroundColor: a.nivel === 'warn' ? '#a3293a' : '#3d6b86' }}
+              />
+              <span
+                className="text-sm flex-1"
+                style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}
+              >
+                {a.mensaje}
+              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={() => onDescartar(a.id, 'completada')}
+                  disabled={descartandoId === a.id}
+                  title="Marcar como completada"
+                  className="p-1.5 rounded-md text-[#3f5c3a] hover:bg-[#eef3ec] disabled:opacity-50 transition-colors"
                 >
-                  <span
-                    className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]"
-                    style={{ backgroundColor: a.nivel === 'warn' ? '#a3293a' : '#3d6b86' }}
-                  />
-                  <span
-                    className="text-sm flex-1"
-                    style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}
-                  >
-                    {a.mensaje}
-                  </span>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => onDescartar(a.id, 'completada')}
-                      disabled={descartandoId === a.id}
-                      title="Marcar como completada"
-                      className="p-1.5 rounded-md text-[#3f5c3a] hover:bg-[#eef3ec] disabled:opacity-50 transition-colors"
-                    >
-                      <Check size={15} />
-                    </button>
-                    <button
-                      onClick={() => onDescartar(a.id, 'cancelada')}
-                      disabled={descartandoId === a.id}
-                      title="Cancelar"
-                      className="p-1.5 rounded-md text-[#a09584] hover:bg-gray-100 disabled:opacity-50 transition-colors"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  <Check size={15} />
+                </button>
+                <button
+                  onClick={() => onDescartar(a.id, 'cancelada')}
+                  disabled={descartandoId === a.id}
+                  title="Cancelar"
+                  className="p-1.5 rounded-md text-[#a09584] hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
-          )}
+          ))}
         </div>
-
-        <p className="text-[11px] text-[#a09584] px-5 py-2.5 border-t border-gray-100 flex-shrink-0">
-          Al tildar o cancelar, la alerta se oculta por 48h — si el problema sigue, vuelve a aparecer sola.
-        </p>
-      </div>
-    </div>
+      )}
+    </BuzonModal>
   )
 }
 

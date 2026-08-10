@@ -384,15 +384,23 @@ export default function DashboardPage() {
       {/* Grid mapa compacto + sidebar clima/alertas */}
       <div
         className="grid gap-4"
-        style={{ gridTemplateColumns: '1fr 1fr', minHeight: 320, maxHeight: 380 }}
+        style={{ gridTemplateColumns: '1fr 1fr', height: 460 }}
       >
-        {/* Mapa (reducido) */}
-        <div
-          className="rounded-[10px] overflow-hidden border border-[#fbfaf6]"
+        {/* Mapa (reducido) — clickeable, lleva al mapa completo */}
+        <Link
+          href="/dashboard/mapa"
+          className="group relative rounded-[10px] overflow-hidden border border-[#fbfaf6] block"
           style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
         >
           <FincaMap compact height="100%" />
-        </div>
+          <span className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
+          <span
+            className="absolute bottom-3 right-3 text-xs font-semibold text-white px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ backgroundColor: '#1f1a17cc' }}
+          >
+            Ver mapa completo →
+          </span>
+        </Link>
 
         {/* Sidebar derecho: clima + alertas + riegos en curso */}
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
@@ -402,6 +410,7 @@ export default function DashboardPage() {
             parcelaNombre={parcelaNombre}
             showTerminar={false}
             iniciarHref="/dashboard/produccion/riego"
+            collapsed
           />
         </div>
       </div>
