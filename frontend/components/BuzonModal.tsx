@@ -14,7 +14,10 @@ export default function BuzonModal({
   footer?: React.ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+    // z-[2000]: Leaflet usa z-index internos de hasta 1000 (.leaflet-top/
+    // .leaflet-bottom) para sus controles/paneles — con z-50 el mapa del
+    // Inicio lo tapaba. Bien por encima de eso para que gane siempre.
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[56rem] flex flex-col max-h-[85vh]">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
