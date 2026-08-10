@@ -1,6 +1,7 @@
 from app.models.user import User, UserRole
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.push_token import PushToken
+from app.models.clima_cache import ClimaCache
 from app.models.finanzas import (
     ClasificacionEgreso,
     DestinoIngreso,
@@ -36,6 +37,7 @@ from app.models.produccion import (
 
 __all__ = [
     "PushToken",
+    "ClimaCache",
     "User",
     "UserRole",
     "Parcela",

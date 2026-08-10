@@ -6,7 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import auth, finanzas, kpis, notificaciones, parcelas, presupuestos, produccion, trabajadores, users
+from app.api import auth, clima, finanzas, kpis, notificaciones, parcelas, presupuestos, produccion, trabajadores, users
 from app.core.config import settings
 from app.core.limiter import limiter
 
@@ -59,6 +59,7 @@ async def security_headers(
 
 
 app.include_router(auth.router)
+app.include_router(clima.router)
 app.include_router(users.router)
 app.include_router(parcelas.router)
 app.include_router(finanzas.router)
