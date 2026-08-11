@@ -4,7 +4,7 @@ tags: [sistema, spec, mobile, offline, pendiente]
 
 # Spec — Cola de envíos offline (mobile)
 
-> **Estado: spec, NO implementado.** Escrito el 2026-08-06 a pedido explícito de Fausto para que una sesión futura arranque directo a implementar en vez de re-investigar el problema desde cero. Decisión tomada esa sesión (ver [[2026-08-05-login-username-biometria-clima]]): explicar el comportamiento actual y documentar el plan, sin tocar código todavía.
+> **Estado: implementado 2026-08-10.** Escrito el 2026-08-06 a pedido explícito de Fausto para que una sesión futura arranque directo a implementar en vez de re-investigar el problema desde cero (ver [[2026-08-05-login-username-biometria-clima]]). Implementado tal cual el plan de abajo — los 3 wizards, decisión "los 3 de una vez", solo lectura, límite de 7 días. Detalle: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. **Pendiente sin confirmar:** si `@react-native-community/netinfo` necesita un `eas build` nuevo (módulo nativo) — se publicó por OTA, solo JS.
 
 ## Motivación
 

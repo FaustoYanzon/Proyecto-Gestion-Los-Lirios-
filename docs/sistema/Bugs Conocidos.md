@@ -4,15 +4,13 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-06 (login por username + huella dactilar, clima enriquecido, deploy completo — ver [[2026-08-05-login-username-biometria-clima]] y [[2026-08-05-trabajador-combobox-refresh-token-backup-check]])
+> Última revisión: 2026-08-11 (logging estructurado + Sentry, tests de idempotencia riego/fito/cosecha, test de registro de routers, build nuevo para la cola offline — ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]])
 
 ---
 
 ## 🔴 Abiertos — relevantes para el deploy de prueba
 
-### Backup automático: fallos silenciosos en las corridas de catch-up (StartWhenAvailable)
-
-**Encontrado:** 2026-08-05, al fin correr el test de restore que pedía `BACKUP.md` desde que se activó el backup (2026-07-27). **Estado:** el mecanismo de restore en sí funciona (probado con `los_lirios_prod_20260803_2100.dump`, conteos consistentes). Pero de los últimos 15 días, 7 dumps generados fuera del horario exacto de 21:00 (corridas de catch-up al prender la PC después de perderse la de las 21:00) quedaron en **0 bytes o truncados**, y **ninguno de esos 7 casos aparece en `backup.log`** — ni `OK` ni `FAIL`. La instrucción de "revisar el log semanalmente" no los detecta porque simplemente no dejan rastro. Hipótesis: algo en el arranque (red/Wi-Fi no lista, o el proceso cortado por Windows) mata `pg_dump`/PowerShell antes de que el `try/catch` del script llegue a loguear el fallo. El backup más reciente confiable verificado al momento de este hallazgo tenía 2 días de antigüedad. **Fix pendiente, evaluado con Fausto pero no ejecutado:** verificación real de integridad del dump (ej. `pg_restore --list`, no solo el chequeo de tamaño >10KB que ya existe) + revisar el trigger de arranque. Detalle: [[2026-08-05-trabajador-combobox-refresh-token-backup-check]].
+Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08-05) se resolvió esta sesión, ver Resueltos abajo.
 
 ---
 
@@ -20,7 +18,6 @@ tags: [sistema, bugs]
 
 - **Vercel NO auto-despliega en este proyecto.** Railway sí redespliega el backend solo en cada push a `main` (y corre `alembic upgrade head`), pero el frontend se quedó pegado en un deploy de 4 días hasta que se corrió `vercel --prod` a mano el 2026-07-14 — ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. **Acordarse de correr `vercel --prod` (o `npx vercel --prod --yes` desde `frontend/`) después de cualquier push que toque `frontend/`.** `vercel ls` muestra el último deploy y su antigüedad si hay dudas.
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
-- **Sin logging estructurado ni exception handler genérico** en el backend: los 500 no dejan rastro propio, solo lo que capture la plataforma de hosting. Con pocos usuarios de prueba es tolerable, pero conviene revisar logs de Railway a diario durante la semana.
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
 - ~~Backup automático de producción configurado pero sin activar~~ — **activado 2026-07-27**: `install_backup_task.ps1` corrido, tarea `LosLirios-PG-Backup` registrada (diaria 21:00), probada con `Start-ScheduledTask` (dump real creado y copiado a OneDrive). **Sigue pendiente:** el test de restore que pide `scripts/BACKUP.md` (requiere un Postgres local corriendo, no se hizo todavía) — un backup no está "verificado" hasta que se prueba restaurarlo al menos una vez. También sigue siendo un backup que depende de que la PC de Fausto esté prendida a las 21:00 — si el piloto se vuelve permanente, migrar a un cron de Railway o GitHub Actions (ya anotado en `BACKUP.md` § Known limitations).
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
@@ -32,6 +29,22 @@ tags: [sistema, bugs]
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-11** (detalle completo en [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]):
+- **Sin logging estructurado ni exception handler genérico — resuelto.** Root logger a stdout (Railway lo captura) + `@app.exception_handler(Exception)` que loguea el traceback y devuelve un 500 genérico sin filtrar detalles internos; las rutas con `HTTPException` explícito siguen intactas. Sentry instalado y verificado en vivo (evento capturado en el dashboard); activación en producción pendiente de que Fausto agregue `SENTRY_DSN` en las env vars de Railway.
+- **Tests de idempotencia faltantes en riego/fitosanitarios/cosecha — resuelto.** El backend ya soportaba idempotencia completa desde el 07-29; causa raíz del bug histórico "no such table: parcelas" identificada (fixture debía usar `TestSessionLocal`, no el engine de producción). 27/27 tests passing.
+- **Sin test que valide routers registrados en `main.py` — resuelto.** Descubrimiento estático vía `ast` (no importa `seed_cosecha.py`/`seed_parcelas.py`, que tienen efectos secundarios al importarse) + verificación contra `app.routes`.
+- **Cola offline (mobile) no estaba lista para probarse en la finca — resuelto antes de que se detectara en campo.** `@react-native-community/netinfo` (agregado el 08-10) es un módulo nativo compilado; el build publicado en Play Store (versionCode 3) es anterior a ese commit y no lo tenía enlazado. Build nuevo (versionCode 4) generado y en proceso de publicación en Prueba interna.
+
+**Sesión del 2026-08-10** (detalle completo en [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]):
+- **Widget de clima nunca funcionó — resuelto de raíz.** No era un bug de la sesión del 08-05/06 que lo "enriqueció" — nunca había funcionado desde que existe. Causa: `app.api.clima` nunca se registró en `main.py` (confirmado recorriendo todo el historial de git — ni un commit lo incluyó), `ClimaCache` no estaba en `app/models/__init__.py` (invisible para Alembic), y no existía migración para la tabla `clima_cache`. De paso encontrados y corregidos: un carácter `\r` corrupto en medio de una línea de `clima_cache.py` (rompía hasta el autogenerate) y `fetched_at` sin timezone mientras el código escribe datetimes aware (asyncpg lo rechazaba). Probado de punta a punta contra Postgres local antes de pushear.
+- **Backup: fallos silenciosos en catch-up — resuelto.** Agregado `pg_restore --list` a `backup_postgres.ps1` (integridad real, no solo tamaño). Probado con un dump truncado simulado que pasaba el chequeo viejo — ahora se detecta.
+- **Cola de envíos offline (mobile) implementada** — los 3 wizards (tareas/riego/fito) encolan en `AsyncStorage` si el POST falla sin respuesta del servidor, en vez de mostrar error y perder lo tipeado. Sincroniza sola al volver la señal. Pendiente de confirmar en dispositivo real (posible necesidad de `eas build` para el módulo nativo de `netinfo`).
+- **Error falso al confirmar riego (web) — resuelto.** Mismo patrón que el bug de "terminar riego" del 07-27: `RiegoForm.tsx` mostraba error genérico aunque la escritura hubiera llegado. Ahora reintenta una vez más (seguro por `idempotency_key`/PUT idempotente) antes de mostrar error.
+- **Camilo no estaba realmente como tester de Play Store** a pesar de creerse confirmado el 08-05 — verificado y agregado en Play Console.
+- **Nuevo: panel de Alertas tipo "buzón"** — antes solo mostraba hasta 3 alertas sin forma de interactuar. Ahora es un modal con todas las alertas, tildar (✓) o cancelar (✕) las oculta 48h (backend nuevo: tabla `alertas_descartadas`, compartida entre usuarios — las alertas se calculan en vivo, no son filas persistidas, por eso no hay forma de "resolverlas" de verdad, solo descartarlas temporalmente).
+- **"Riegos en curso" con el mismo patrón que Alertas** — con varios riegos activos a la vez, el Inicio ahora muestra el primero + "ver todos" en vez de la lista completa. Se descubrió que "iniciar riego" ya existía en web desde el 07-17 (`IniciarRiegoForm` en la página de Riego) — el problema era que el panel del Inicio desaparecía del todo sin ningún riego activo, sin pista de que la función existía; agregado un CTA de estado vacío.
+- **Layout del Inicio:** mapa más angosto, widget de clima ampliado (mobile espejando a web), dos bugs de superposición corregidos (altura fija del grid en vez de max-height con overflow visible; z-index de los modales por debajo de los paneles de Leaflet). Mapa compacto ahora es clickeable → lleva al mapa completo.
 
 **Sesión del 2026-08-05:**
 - **`TareaForm` sin selector de `Trabajador` (texto libre) — resuelto.** Combobox con sugerencias contra `GET /trabajadores/` (web y mobile); si el nombre tipeado no matchea ninguno existente, se crea el `Trabajador` nuevo automáticamente al confirmar en vez de quedar como texto libre suelto. El backend ya soportaba `trabajador_id` de punta a punta desde antes (nadie lo había conectado desde el frontend) — cero cambios de backend. El campo `finca` que faltaba en el mismo formulario se dio por resuelto por decisión de negocio: solo se trabaja con Media Agua, que ya es el default del backend.
@@ -114,6 +127,8 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
+- [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]
 - [[2026-08-05-trabajador-combobox-refresh-token-backup-check]]
 - [[2026-07-29-duplicados-cuarta-vez-idempotencia-real]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]

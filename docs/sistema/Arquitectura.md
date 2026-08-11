@@ -36,6 +36,8 @@ repo/
 | `parcelas.py` | `/parcelas` | CRUD parcelas + stats |
 | `finanzas.py` | `/finanzas` | Ingresos (libro de cobros "BD COBROS", desde 2026-07-14), egresos, cheques, flujo de caja |
 | `produccion.py` | `/produccion` | Tareas, riego (incl. "riegos en curso" desde 2026-07-17: `GET /riego/en-curso`, `POST /riego/iniciar`, `POST /riego/{id}/terminar`), fitosanitarios, campaña (viejo, por parcela), estado-campaña (nuevo desde 2026-07-22, calendario único por variedad — ver sección dedicada abajo) |
+| `clima.py` | `/clima` | Open-Meteo vía `services/clima.py`, cache 30 min en tabla `clima_cache`. **Existe desde hace meses pero nunca se registró en `main.py` hasta 2026-08-10** — el endpoint daba 404 en producción todo ese tiempo, ver [[Bugs Conocidos]]. Al registrar el router, verificar siempre que quede en `app.include_router(...)` en `main.py` y el modelo en `app/models/__init__.py` — ningún test cubre eso hoy. |
+| `alertas.py` | `/alertas` | Desde 2026-08-10. Solo `GET /descartadas` y `POST /descartar` — las alertas en sí se calculan en el frontend (`Alertas.tsx`) a partir de datos ya existentes (riego, carencia, fenología), este endpoint solo guarda qué `alerta_id` se descartó (48h, tabla `alertas_descartadas`, compartida entre usuarios). |
 
 ## Ciclo de Campaña — dos sistemas separados a propósito (desde 2026-07-22)
 

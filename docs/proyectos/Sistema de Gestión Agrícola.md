@@ -60,31 +60,35 @@ Detalle completo: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - **UX de "riegos en curso" pulida**: litros solo se muestran al terminar (no en vivo), "Terminar" solo desde la pantalla de Riego (no desde Inicio), falso error al terminar corregido con verificación contra el servidor.
 - Sesión trabajada en paralelo con otra instancia de Claude Code sobre los mismos archivos (sin coordinación previa) — convergieron al mismo resultado sin conflicto destructivo, pero es una práctica a evitar si no es intencional.
 
-## Próximos pasos (actualizado 2026-08-06 — cierre de la sesión del 05/06 de agosto)
+## Estado actual (2026-08-10 — clima realmente arreglado, cola offline, layout Inicio, riego y alertas)
 
-Sesión larga (dos días): backup, Play Store, combobox de Trabajador, refresh token, login por username + huella dactilar, clima, y deploy completo. Pilot estable, sin bloqueantes de código pendientes. Pendientes reales (no de código, salvo el punto 1):
+Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
+
+- **El widget de clima nunca había funcionado** (ni antes ni después del "enriquecimiento" del 08-05/06) — el router de la API nunca se registró en `main.py`, en ningún commit desde que existe el archivo. Encontrado, corregido (+ 2 bugs más descubiertos al probar de punta a punta: `\r` corrupto en un import, columna de fecha sin timezone) y verificado en producción.
+- **Cola de envíos offline (mobile) implementada** para tareas/riego/fito — pendiente confirmar en dispositivo real.
+- **Backup:** `pg_restore --list` agregado, cierra el blindspot de dumps truncados del 08-05.
+- **Riego (web):** error falso al confirmar corregido (mismo patrón que el bug de "terminar riego" del 07-27). Se descubrió que "iniciar riego en curso" ya existía en web desde el 07-17, solo sin descubrir — agregado un CTA de estado vacío en el Inicio.
+- **Alertas:** nuevo panel tipo "buzón" (modal con todas las alertas, tildar/cancelar las oculta 48h — persistido en backend, compartido entre usuarios).
+- **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
+- Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
+
+## Próximos pasos (actualizado 2026-08-11 — cierre de sesión)
+
+Pilot estable, sin bloqueantes de código pendientes. Pendientes reales:
 
 ### Pendiente real
 
-1. **Cola de envíos offline para mobile** — próximo cambio de código a hacer. Spec completo listo para implementar directo, sin re-investigar: [[Spec — Cola de envíos offline (mobile)]]. Hoy los selectores de parcela/trabajador funcionan sin conexión (cache), pero el `POST` final de Confirmar todavía necesita señal en el momento — si un operario pierde señal justo al confirmar, no hay cola de reintento y se pierde lo tipeado. Los 6 endpoints de creación ya soportan `idempotency_key`, así que la cola es viable sin riesgo de duplicar. Decisión tomada con Fausto el 2026-08-05 de documentarlo en vez de implementarlo de apuro.
-2. **Backup automático: fallos silenciosos en las corridas de catch-up** — encontrado el 2026-08-05 al correr el test de restore (el mecanismo en sí funciona, probado con un dump real). De los últimos 15 días, 7 dumps generados fuera del horario de 21:00 quedaron en 0 bytes/truncados sin dejar rastro en `backup.log`. **Evaluado con Fausto, no ejecutado todavía:** verificación real de integridad (`pg_restore --list`, no solo el chequeo de tamaño >10KB que ya existe) + revisar el trigger de arranque (`StartWhenAvailable`). Ver [[Bugs Conocidos]].
-3. **Revisión de contenido de Google Play todavía en curso** — ficha enviada el 2026-08-05 (hasta 7 días de plazo típico). Confirmar el resultado cuando llegue.
-4. **Confirmar que Camilo quedó agregado como tester** de Internal testing (Fausto se encargó de hacerlo él mismo el 2026-08-05, no verificado desde Claude).
-5. Logging estructurado + exception handler genérico en el backend (hoy un 500 no deja rastro propio más allá de lo que capture Railway). Evaluar Sentry (u similar) en vez de solo logs de Railway — propuesto el 2026-08-05, no decidido todavía.
-6. Extender `backend/tests/test_produccion_idempotency.py` a riego/fito/cosecha (falta resolver una fixture de `Parcela` para tests) — menor, no bloqueante.
+1. **Confirmar la app en el dispositivo real de la finca con el build versionCode 4** (incluye el módulo nativo de netinfo que le faltaba al build 3) — subida a Play Console (Prueba interna) en curso al cierre de esta sesión, ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]. Una vez publicado el rollout, probar la cola offline en la finca sin señal.
+2. **Agregar `SENTRY_DSN` como variable de entorno en Railway** (dashboard, a mano) para activar el reporte de errores en producción — el código ya está listo y es no-op sin esa variable.
+3. Considerar el 4° test opcional de idempotencia para `POST /produccion/riego/iniciar` (pre-check separado del de `POST /produccion/riego/`) — menor, no bloqueante.
 
-### Hecho en la sesión del 2026-08-05/06 (para referencia — no repetir)
+### Hecho en la sesión del 2026-08-11 (para referencia — no repetir)
 
-- Test de restore del backup corrido y verificado; hallazgo de arriba (punto 2) surgió de esto.
-- Ficha de Play Store enviada a revisión (nunca se había enviado, quedó como borrador desde el 07-29).
-- Combobox de Trabajador (web + mobile), con creación automática si el nombre no matchea ninguno existente. Detalle: [[2026-08-05-trabajador-combobox-refresh-token-backup-check]].
-- Refresh token (backend + web + mobile) — ya no desloguea abrupto al expirar el JWT.
-- `email` editable en `UserUpdate`/admin de usuarios.
-- Login por `username` en vez de email (columna nueva + migración), "Recordarme" conectado de verdad en web y mobile, huella dactilar real en mobile (antes un placeholder). Detalle: [[2026-08-05-login-username-biometria-clima]].
-- Clima enriquecido (viento, humedad, UV, sensación térmica) vía Open-Meteo — se evaluó y descartó scrapear Climagro por ahora. Bug de finca corregido (`los_mimbres`→`media_agua`), widget mobile conectado a datos reales (antes texto fijo).
-- Deploy completo: Railway (migración de `username` corrida sola), `vercel --prod`, `eas build` de producción (módulo nativo de huella) **publicado en Internal testing como versión 3 (1.0.0)** el 2026-08-06.
-- `EXPO_PUBLIC_API_URL` hosteada en EAS para `production` y fix de error falso al cancelar riego mid-submit — hechos el 2026-07-30 en una sesión que Fausto hizo solo, sin documentar en su momento (encontrada recién el 2026-08-05).
-- Confirmado resuelto por Fausto: crash de "Ciclo Campaña" en el APK standalone, y el bug de riego con 2+ válvulas.
+Ver el resumen completo en [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]. Cierra los puntos 2-4 del roadmap anterior (logging/Sentry, tests de idempotencia riego/fito/cosecha, test de registro de routers) y adelanta el punto 1 (cola offline) con un build nuevo tras detectar que el publicado no tenía el módulo nativo necesario.
+
+### Hecho en la sesión del 2026-08-10 (para referencia — no repetir)
+
+Ver el resumen completo arriba y en [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Cierra los puntos 1-4 del roadmap anterior (cola offline, backup, revisión de Play Store, Camilo como tester).
 
 ### Roadmap (features nuevas, sin fecha)
 
@@ -99,6 +103,8 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
+- [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]
 - [[Spec — Cola de envíos offline (mobile)]]
 - [[2026-08-05-login-username-biometria-clima]]
 - [[2026-08-05-trabajador-combobox-refresh-token-backup-check]]
