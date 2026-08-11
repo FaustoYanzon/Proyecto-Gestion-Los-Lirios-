@@ -1,7 +1,10 @@
+import logging
 from collections.abc import Awaitable, Callable
 
+import sentry_sdk
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -9,6 +12,13 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api import alertas, auth, clima, finanzas, kpis, notificaciones, parcelas, presupuestos, produccion, trabajadores, users
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.logging_config import configure_logging
+
+configure_logging(settings.LOG_LEVEL)
+logger = logging.getLogger("app")
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, environment=settings.ENVIRONMENT.value)
 
 app = FastAPI(
     title="Los Lirios API",
@@ -56,6 +66,16 @@ async def security_headers(
             "max-age=31536000; includeSubDomains"
         )
     return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Safety net for anything not already raised as an HTTPException in a
+    router. Starlette resolves handlers by the most specific exception class,
+    so HTTPException/RequestValidationError keep using FastAPI's own handlers
+    -- this only catches what would otherwise fail silently."""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 app.include_router(alertas.router)

@@ -90,7 +90,81 @@ async def test_trabajo_single_retried_with_same_key_does_not_duplicate(client, c
     listado = await client.get("/produccion/trabajo/", headers=headers)
     assert len(listado.json()) == 1
 
-# registros_riego/registros_fitosanitarios/registros_cosecha aren't covered
-# here (creating them needs a Parcela fixture this suite doesn't have yet),
-# but their create handlers follow the exact same pre-check-by-idempotency_key
-# pattern verified above for registros_trabajo.
+
+# --- registros_riego ---------------------------------------------------------
+
+
+async def test_riego_retried_with_same_key_does_not_duplicate(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela()
+    payload = {
+        "fecha": "2026-07-29",
+        "parcela_id": parcela.id,
+        "cabezal": "C1",
+        "valvula": "V1",
+        "inicio": "2026-07-29T08:00:00",
+        "fin": "2026-07-29T10:00:00",
+        "responsable": "Juan Perez",
+        "idempotency_key": "test-key-riego-1",
+    }
+    first = await client.post("/produccion/riego/", json=payload, headers=headers)
+    second = await client.post("/produccion/riego/", json=payload, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+    listado = await client.get("/produccion/riego/", headers=headers)
+    assert len(listado.json()) == 1
+
+
+# --- registros_fitosanitarios -------------------------------------------------
+
+
+async def test_fitosanitario_retried_with_same_key_does_not_duplicate(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela()
+    payload = {
+        "fecha": "2026-07-29",
+        "parcela_id": parcela.id,
+        "producto_nombre": "Cobre",
+        "dosis_lt_ha": 1.5,
+        "motivo": "Preventivo",
+        "dias_carencia": 7,
+        "dias_reingreso": 2,
+        "responsable": "Juan Perez",
+        "idempotency_key": "test-key-fito-1",
+    }
+    first = await client.post("/produccion/fitosanitarios/", json=payload, headers=headers)
+    second = await client.post("/produccion/fitosanitarios/", json=payload, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+    listado = await client.get("/produccion/fitosanitarios/", headers=headers)
+    assert len(listado.json()) == 1
+
+
+# --- registros_cosecha ---------------------------------------------------------
+
+
+async def test_cosecha_retried_with_same_key_does_not_duplicate(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela()
+    payload = {
+        "fecha": "2026-07-29",
+        "parcela_id": parcela.id,
+        "destino": "MI",
+        "kg_total": 500,
+        "idempotency_key": "test-key-cosecha-1",
+    }
+    first = await client.post("/produccion/cosecha/", json=payload, headers=headers)
+    second = await client.post("/produccion/cosecha/", json=payload, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+    listado = await client.get("/produccion/cosecha/", headers=headers)
+    assert len(listado.json()) == 1

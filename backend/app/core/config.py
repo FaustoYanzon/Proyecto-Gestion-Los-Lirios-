@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # outside production (see docs_enabled below).
     DOCS_ENABLED: bool | None = None
 
+    LOG_LEVEL: str = "INFO"
+
+    # None disables Sentry (default). Set to activate error reporting; get the
+    # DSN from the project's Sentry organization settings.
+    SENTRY_DSN: str | None = None
+
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -77,6 +83,15 @@ class Settings(BaseSettings):
         """
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def _validate_log_level(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.upper()
+            if value not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+                raise ValueError(f"LOG_LEVEL inválido: {value!r}")
         return value
 
     @property

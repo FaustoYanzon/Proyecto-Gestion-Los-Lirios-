@@ -38,6 +38,7 @@ import app.models  # noqa: E402,F401
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.parcela import Parcela, TipoParcela  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 
 # Single shared in-memory database for the whole session.
@@ -117,5 +118,23 @@ async def create_user():
             await session.commit()
             await session.refresh(user)
             return user
+
+    return _create
+
+
+@pytest_asyncio.fixture
+async def create_parcela():
+    """Factory to insert a Parcela directly into the test DB."""
+
+    async def _create(
+        nombre: str = "Parcela Test",
+        tipo: TipoParcela = TipoParcela.parral,
+    ) -> Parcela:
+        async with TestSessionLocal() as session:
+            parcela = Parcela(nombre=nombre, tipo=tipo)
+            session.add(parcela)
+            await session.commit()
+            await session.refresh(parcela)
+            return parcela
 
     return _create
