@@ -72,14 +72,18 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-12, cuarta tanda — cierre)
+## Próximos pasos (actualizado 2026-08-12, quinta tanda — cierre)
 
-Pilot estable.
+Pilot estable, sin pendientes bloqueantes ni no-bloqueantes abiertos al cierre de esta sesión.
 
 ### Pendiente real
 
-1. **Módulo de notificaciones push, a medio camino.** Backend (`POST /notificaciones/enviar`) y mobile (registro de token Expo al loguearse) completos, pero no existe ninguna UI en el frontend web que dispare el envío — el endpoint (gerencial+, título/cuerpo libre) no lo puede usar nadie hoy. Tampoco hay ningún trigger automático (ninguna alerta del sistema genera push sola). Falta: pantalla/formulario en el dashboard web para componer y enviar, y evaluar si alguna alerta crítica (riego atrasado, carencia) debería disparar push automático.
-2. **Responsividad mobile del frontend web, sin avance real.** 12 de 51 componentes con breakpoints (revisado 08-12, prácticamente el mismo número que en julio). Todas las páginas de `finanzas/` y `produccion/` (tablas y formularios) son desktop-first — son justo las que un encargado abriría desde el navegador del celular si no usa la app.
+Ninguno. Los dos puntos que quedaban (notificaciones push, responsividad mobile) se cerraron en la quinta tanda (ver abajo).
+
+### Hecho en la sesión del 2026-08-12, quinta tanda (para referencia — no repetir)
+
+**Pantalla de notificaciones push** (`/dashboard/admin/notificaciones`): compone título/cuerpo, elige destinatarios (todos, o usuarios puntuales para super_admin), llama al endpoint que ya existía (`POST /notificaciones/enviar`) pero no tenía UI. Sin cambios de backend. Los triggers automáticos desde Alertas quedaron fuera de alcance a propósito (decisión de diseño aparte).
+**Responsividad — las 13 páginas cerradas.** Headers que no envolvían (varios botones se superponían en pantallas angostas) corregidos en 9 páginas; las otras 4 (`flujo`, `flujo/desglose`, `presupuesto`, `campana`) ya resolvían el ancho bien con `flex-wrap` + `overflow-x-auto`, solo hacía falta confirmarlo. Hallazgo real de paso: el panel de detalle de parcela en el mapa (`FincaMapInner.tsx`) tenía un ancho fijo de 288px que tapaba casi toda la pantalla en un celular — corregido a `w-full` por debajo de `sm`. Ver [[2026-08-12-notificaciones-y-responsividad]].
 
 ### Hecho en la sesión del 2026-08-12, cuarta tanda (para referencia — no repetir)
 

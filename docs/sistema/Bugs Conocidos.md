@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-12, cuarta tanda (catálogo de Trabajador vacío en producción, diagnosticado y con backfill listo — ver [[2026-08-12-catalogo-trabajadores-vacio-y-fix]])
+> Última revisión: 2026-08-12, quinta tanda (notificaciones push + responsividad mobile cerradas — ver [[2026-08-12-notificaciones-y-responsividad]])
 
 ---
 
@@ -21,8 +21,8 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
 - ~~Backup automático de producción configurado pero sin activar~~ — **activado 2026-07-27**: `install_backup_task.ps1` corrido, tarea `LosLirios-PG-Backup` registrada (diaria 21:00), probada con `Start-ScheduledTask` (dump real creado y copiado a OneDrive). **Sigue pendiente:** el test de restore que pide `scripts/BACKUP.md` (requiere un Postgres local corriendo, no se hizo todavía) — un backup no está "verificado" hasta que se prueba restaurarlo al menos una vez. También sigue siendo un backup que depende de que la PC de Fausto esté prendida a las 21:00 — si el piloto se vuelve permanente, migrar a un cron de Railway o GitHub Actions (ya anotado en `BACKUP.md` § Known limitations).
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
-- **Responsividad mobile del frontend web limitada**: 12 de 51 componentes usan breakpoints (revisado 2026-08-12, prácticamente sin cambio desde el 07-27); el layout de dashboard es desktop-first. Todas las páginas de `finanzas/` y `produccion/` (tablas y formularios) están sin breakpoints — son las que un encargado más probablemente abriría desde el navegador del celular. Si algún encargado prueba desde ahí (no la app), la experiencia va a ser mala.
-- **Módulo de notificaciones push solo tiene la mitad del camino hecho**: el backend (`notificaciones.py`) y mobile (`lib/notifications.ts`, registra el token Expo al loguearse) están completos, pero no hay ninguna UI en el frontend web que llame a `POST /notificaciones/enviar` — el endpoint (gerencial+, título/cuerpo libre a todos o a usuarios puntuales) existe pero nadie puede dispararlo hoy. Tampoco hay ningún trigger automático: ninguna alerta del sistema (riego atrasado, carencia, etc.) llega como push, solo se ven en el panel "Alertas" si el usuario abre la app/web.
+- ~~Responsividad mobile del frontend web limitada~~ — **resuelta 2026-08-12**: headers de las 13 páginas de `finanzas/`/`producción/`/`admin` corregidos para apilar en mobile, y el panel de detalle de parcela en el mapa (ancho fijo de 288px) corregido a full-width por debajo de `sm`.
+- ~~Módulo de notificaciones push solo tenía la mitad del camino hecho~~ — **resuelto 2026-08-12**: pantalla `/dashboard/admin/notificaciones` para componer y enviar. Los triggers automáticos desde Alertas quedan fuera de alcance a propósito, ver [[2026-08-12-notificaciones-y-responsividad]].
 - **Dashboard finanzas sin costo por kg** todavía.
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
 - **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
@@ -30,6 +30,10 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-12, quinta tanda** (ver [[2026-08-12-notificaciones-y-responsividad]]):
+- **Notificaciones push sin UI de envío — resuelto.** `/dashboard/admin/notificaciones` nuevo, sin cambios de backend.
+- **Responsividad mobile del frontend web — resuelta en las 13 páginas identificadas.** Headers que no envolvían corregidos en 9; las otras 4 ya estaban bien resueltas con `flex-wrap`/`overflow-x-auto`. Hallazgo de paso: panel de detalle de parcela en el mapa con ancho fijo de 288px, corregido a full-width en mobile.
 
 **Sesión del 2026-08-12, cuarta tanda** (ver [[2026-08-12-catalogo-trabajadores-vacio-y-fix]]):
 - **Catálogo de `trabajadores` completamente vacío en producción desde el 08-05 — resuelto.** 105 de 106 registros de Tareas (y todos los de Riego/Fitosanitarios) tenían `trabajador_id`/`responsable_id` NULL. El combobox en sí funciona bien (verificado con una creación de prueba real en producción) — el gap era retroactivo: nunca se volvió a ejercitar el flujo de creación después del lanzamiento. `scripts/backfill_trabajadores.py` corrido en producción: 28 Trabajadores creados, 109 registros vinculados, 0 pendientes tras verificar.
