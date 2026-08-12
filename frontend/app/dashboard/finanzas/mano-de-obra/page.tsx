@@ -11,6 +11,7 @@ import {
   getKpiManoObraMensual, getKpiManoObraParcelas, getKpiManoObraParcelasMes,
   getKpiProduccionParcelas, getPresupuestoVsReal,
 } from '@/lib/api/kpis'
+import { getTrabajadores } from '@/lib/api/trabajadores'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -150,6 +151,12 @@ export default function ManoObraDashboardPage() {
     queryKey: ['kpi-prod-parcelas', anio],
     queryFn: () => getKpiProduccionParcelas(anio),
     staleTime: 300_000,
+  })
+
+  const { data: trabajadoresActivos = [] } = useQuery({
+    queryKey: ['trabajadores'],
+    queryFn: getTrabajadores,
+    staleTime: 60_000,
   })
 
   // ── Derived data ───────────────────────────────────────────────────────────
@@ -319,7 +326,7 @@ export default function ManoObraDashboardPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
           label={`Jornales ${MES_LABELS[now.getMonth() + 1] ?? 'mes'}`}
           value={NUM_FMT.format(kpis.jornalesMes)}
@@ -348,6 +355,11 @@ export default function ManoObraDashboardPage() {
             ? `${NUM_FMT.format(Number(empleadoDelMes.total_jornales))} jornales en ${MES_LABELS[now.getMonth() + 1]}`
             : 'sin registros este mes'}
           tone="good"
+        />
+        <KpiCard
+          label="Trabajadores activos"
+          value={NUM_FMT.format(trabajadoresActivos.length)}
+          hint="catálogo (Admin → Trabajadores)"
         />
       </div>
 

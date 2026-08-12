@@ -100,6 +100,7 @@ const SUB_NAVS: SubNav[] = [
     items: [
       { href: '/dashboard/admin/usuarios', label: 'Usuarios' },
       { href: '/dashboard/admin/parcelas', label: 'Parcelas' },
+      { href: '/dashboard/admin/trabajadores', label: 'Trabajadores' },
     ],
   },
 ]
