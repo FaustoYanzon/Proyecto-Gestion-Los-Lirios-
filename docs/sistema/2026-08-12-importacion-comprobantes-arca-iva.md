@@ -49,10 +49,18 @@ Primera subida de archivo de todo el repo (confirmado que no había ningún prec
 
 Commit `04a3eae` pusheado a `main`. Railway va a correr las 3 migraciones nuevas solas en el próximo deploy. **Pendiente que haga Fausto:** `vercel --prod` para que el frontend llegue a producción (Vercel no auto-despliega en este proyecto).
 
+## Follow-up mismo día: bugs reales encontrados por Fausto probando en producción
+
+- **Fecha en formato D/M/YYYY sin ceros** (`"1/7/2026"`) — el archivo real de ARCA en producción no usa ISO como el archivo de muestra que se había analizado. 43/43 filas del CSV de julio fallaban al importar. Parser corregido para aceptar ambos formatos (`_parse_fecha`), más filas en blanco al final del export que se saltean en silencio en vez de contar como error.
+- **No había forma de deshacer un descarte** — Fausto descartó comprobantes de prueba (julio y agosto) y no podía reimportarlos (el índice único de dedupe lo bloqueaba). Agregado: vista "Ver descartados" con botón **Restaurar** (vuelve a pendiente) y botón **Borrar** (definitivo — a diferencia de descartar, borrar libera la clave natural, así que reimportar el mismo CSV más adelante sí puede traer ese comprobante de nuevo como nuevo).
+- **`$NaN` en el total ARS de Egresos** — bug preexistente a esta sesión (la API serializa `Decimal` como string en el JSON; sumar strings con `+` concatena en vez de sumar numéricamente), recién visible ahora que había 2+ egresos ARS reales cargados a la vez. Corregido en `EgresosTable.tsx`, `IngresosTable.tsx` y `cheques/page.tsx` (mismo patrón en los tres).
+- **Datos de prueba borrados de producción a pedido de Fausto**, para arrancar de cero con "el ingeniero": 17 comprobantes descartados (14 recibidos + 3 emitidos, julio+agosto) + 6 lotes de importación. Confirmado antes de borrar que ninguno había generado un `Egreso`/`Ingreso` real (`fuente='arca_csv'` daba 0 filas en ambas tablas) — el borrado no tocó ningún dato financiero real.
+- Commits: `00da76a` (fecha), `38858e6` (restaurar + NaN), `f753702` (borrar definitivo). Todos pusheados y desplegados (Railway auto + `vercel --prod` x3 durante el follow-up).
+
 ## Pendiente para más adelante (no bloqueante)
 
-- No hay forma de "deshacer" un comprobante descartado por error — reimportar el mismo CSV lo bloquea el índice único. Se podría agregar una vista de "descartados" con opción de restaurar, si hace falta en la práctica.
 - El chatbot para gastos no oficiales ("en negro") sigue como visión a futuro, no iniciado.
+- `SENTRY_DSN` todavía no está seteado en las env vars de Railway (pendiente desde la sesión del 08-11) — el código está listo, solo falta que Fausto lo agregue a mano en el dashboard.
 
 ## Ver también
 
