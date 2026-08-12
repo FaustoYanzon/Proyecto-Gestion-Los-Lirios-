@@ -72,14 +72,19 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-12, tercera tanda — cierre)
+## Próximos pasos (actualizado 2026-08-12, cuarta tanda — cierre)
 
-Pilot estable, sin bloqueantes de código pendientes.
+Pilot estable.
 
 ### Pendiente real
 
+0. **Correr el backfill de Trabajadores en producción** — `python scripts/backfill_trabajadores.py --commit` (bloqueado por el classifier, hay que correrlo con `!` en el chat de Claude Code). Ya probado en dry-run: crea 28 Trabajadores y vincula 109 registros históricos. Ver [[2026-08-12-catalogo-trabajadores-vacio-y-fix]].
 1. **Módulo de notificaciones push, a medio camino.** Backend (`POST /notificaciones/enviar`) y mobile (registro de token Expo al loguearse) completos, pero no existe ninguna UI en el frontend web que dispare el envío — el endpoint (gerencial+, título/cuerpo libre) no lo puede usar nadie hoy. Tampoco hay ningún trigger automático (ninguna alerta del sistema genera push sola). Falta: pantalla/formulario en el dashboard web para componer y enviar, y evaluar si alguna alerta crítica (riego atrasado, carencia) debería disparar push automático.
 2. **Responsividad mobile del frontend web, sin avance real.** 12 de 51 componentes con breakpoints (revisado 08-12, prácticamente el mismo número que en julio). Todas las páginas de `finanzas/` y `produccion/` (tablas y formularios) son desktop-first — son justo las que un encargado abriría desde el navegador del celular si no usa la app.
+
+### Hecho en la sesión del 2026-08-12, cuarta tanda (para referencia — no repetir)
+
+**Diagnóstico: el catálogo de Trabajador estaba vacío en producción desde que se lanzó el 08-05** — 105 de 106 registros de Tareas (y todos los de Riego/Fitosanitarios) nunca quedaron vinculados a un `Trabajador`. Confirmado con Claude in Chrome que el combobox funciona bien hoy (creación de prueba real, luego borrada sin rastro); el problema era retroactivo, no un bug vigente. Backfill (`scripts/backfill_trabajadores.py`) probado en dry-run, pendiente de correr en producción. Nueva pantalla `/dashboard/admin/trabajadores` (maestro de trabajadores, CRUD completo, sin cambios de backend) y KPI "Trabajadores activos" en el dashboard de Mano de Obra. Auditoría del resto del esquema: es el único caso de este tipo en toda la base. Ver [[2026-08-12-catalogo-trabajadores-vacio-y-fix]].
 
 ### Hecho en la sesión del 2026-08-12, tercera tanda (para referencia — no repetir)
 
