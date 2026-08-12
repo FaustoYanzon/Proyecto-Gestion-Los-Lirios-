@@ -268,7 +268,7 @@ function ParcelPanel({ name, parcelas, estadoCampanaByVariedad, cosechaByParcela
     : 'Cabezal'
 
   return (
-    <div className="absolute right-0 top-0 bottom-0 w-72 bg-white shadow-2xl z-[1000] flex flex-col border-l border-gray-200">
+    <div className="absolute right-0 top-0 bottom-0 w-full sm:w-72 bg-white shadow-2xl z-[1000] flex flex-col border-l border-gray-200">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-gray-900 text-sm truncate">{name}</h3>

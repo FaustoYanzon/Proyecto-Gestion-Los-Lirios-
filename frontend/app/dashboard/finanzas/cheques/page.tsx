@@ -104,9 +104,9 @@ export default function ChequesPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-semibold text-gray-900">Seguimiento de Cheques</h1>
-        <div className="flex items-center gap-4 text-sm text-gray-600">
+        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
           <span className="flex items-center gap-1.5">
             <Circle size={10} className="fill-green-500 text-green-500" />
             {disponiblesCount} disponible{disponiblesCount !== 1 ? 's' : ''}

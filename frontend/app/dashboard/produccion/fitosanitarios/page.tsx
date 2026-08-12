@@ -116,7 +116,7 @@ export default function FitosanitariosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-semibold text-gray-900">Fitosanitarios</h1>
         <div className="flex items-center gap-2">
           {registros.length > 0 && (

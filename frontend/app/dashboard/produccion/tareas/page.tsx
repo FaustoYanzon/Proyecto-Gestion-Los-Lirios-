@@ -169,7 +169,7 @@ export default function TareasPage() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-semibold text-gray-900">Tarea Diaria</h1>
         <div className="flex items-center gap-2">
           {trabajos.length > 0 && (

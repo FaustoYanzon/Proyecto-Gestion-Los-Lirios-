@@ -5,7 +5,7 @@ import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Map, Sprout, Droplets, FlaskConical,
-  DollarSign, TrendingDown, TrendingUp, ClipboardList, Settings, Search, Users,
+  DollarSign, TrendingDown, TrendingUp, ClipboardList, Settings, Search, Users, BellRing,
 } from 'lucide-react'
 
 type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>
@@ -24,6 +24,7 @@ const CMD_ITEMS: CmdItem[] = [
   { label: 'Registros campaña',   href: '/dashboard/produccion/dashboard',      icon: ClipboardList,   group: 'Registros'   },
   { label: 'Usuarios',            href: '/dashboard/admin/usuarios',            icon: Settings,        group: 'Admin'       },
   { label: 'Trabajadores',        href: '/dashboard/admin/trabajadores',        icon: Users,           group: 'Admin'       },
+  { label: 'Notificaciones',      href: '/dashboard/admin/notificaciones',      icon: BellRing,        group: 'Admin'       },
 ]
 
 const GROUPS = ['Navegación', 'Producción', 'Finanzas', 'Registros', 'Admin']
