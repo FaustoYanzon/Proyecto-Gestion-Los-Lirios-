@@ -118,6 +118,27 @@ async def test_riego_retried_with_same_key_does_not_duplicate(client, create_use
     assert len(listado.json()) == 1
 
 
+async def test_riego_iniciar_retried_with_same_key_does_not_duplicate(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela()
+    payload = {
+        "parcela_id": parcela.id,
+        "cabezal": "C1",
+        "valvula": "V1",
+        "responsable": "Juan Perez",
+        "idempotency_key": "test-key-riego-iniciar-1",
+    }
+    first = await client.post("/produccion/riego/iniciar", json=payload, headers=headers)
+    second = await client.post("/produccion/riego/iniciar", json=payload, headers=headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+    listado = await client.get("/produccion/riego/en-curso", headers=headers)
+    assert len(listado.json()) == 1
+
+
 # --- registros_fitosanitarios -------------------------------------------------
 
 
