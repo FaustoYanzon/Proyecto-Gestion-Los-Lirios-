@@ -212,6 +212,9 @@ class RegistroRiego(Base):
     fertilizante_nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)
     fertilizante_dosis_lt_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
     responsable: Mapped[str] = mapped_column(String(100), nullable=False)
+    responsable_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trabajadores.id"), nullable=True
+    )
     # Ver nota en RegistroTrabajo.idempotency_key.
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
@@ -307,6 +310,9 @@ class RegistroFitosanitario(Base):
     fecha_habilitacion_cosecha: Mapped[date] = mapped_column(Date, nullable=False)
     fecha_habilitacion_reingreso: Mapped[date] = mapped_column(Date, nullable=False)
     responsable: Mapped[str] = mapped_column(String(100), nullable=False)
+    responsable_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trabajadores.id"), nullable=True
+    )
     # Ver nota en RegistroTrabajo.idempotency_key.
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(

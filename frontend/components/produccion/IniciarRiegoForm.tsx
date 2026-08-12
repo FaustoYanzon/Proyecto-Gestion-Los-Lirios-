@@ -5,16 +5,19 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getValvulas, iniciarRiego } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
+import { getTrabajadores, resolveTrabajadorId } from '@/lib/api/trabajadores'
+import ResponsableInput from './ResponsableInput'
 
 const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
   cabezal: z.string().min(1, 'Requerido'),
   responsable: z.string().min(1, 'Requerido'),
+  responsable_id: z.string().optional(),
   fertilizante_nombre: z.string().optional(),
   fertilizante_dosis_lt_ha: z.preprocess(
     (v) => (!v || v === '' ? undefined : Number(v)),
@@ -52,9 +55,16 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
-    defaultValues: { parcela_id: '', cabezal: '', responsable: '', fertilizante_nombre: '' },
+    defaultValues: { parcela_id: '', cabezal: '', responsable: '', responsable_id: undefined, fertilizante_nombre: '' },
   })
 
+  const { data: trabajadoresDb = [] } = useQuery({
+    queryKey: ['trabajadores'],
+    queryFn: getTrabajadores,
+    staleTime: 60_000,
+  })
+  const responsableW = watch('responsable')
+  const responsableIdW = watch('responsable_id')
   const parcelaIdW = watch('parcela_id')
   const parcelaSeleccionada = parcelas.find((p) => p.id === parcelaIdW)
   const valvulasDisponibles = parcelaSeleccionada ? getValvulas(parcelaSeleccionada.nombre) : [1, 2, 3, 4]
@@ -85,11 +95,13 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     submittingRef.current = true
     try {
       setSubmitError(null)
+      const responsableId = await resolveTrabajadorId(data.responsable, data.responsable_id, trabajadoresDb)
       await iniciarRiego({
         parcela_id: data.parcela_id,
         cabezal: data.cabezal,
         valvula: Array.from(selectedValvulas).sort().join(','),
         responsable: data.responsable,
+        responsable_id: responsableId,
         fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
         fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
         idempotency_key: idempotencyKeyRef.current,
@@ -165,8 +177,16 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
 
       <div>
         <label className={label}>Responsable</label>
-        <input type="text" placeholder="Nombre..." {...register('responsable')} className={field} />
-        {errors.responsable && <p className={err}>{errors.responsable.message}</p>}
+        <ResponsableInput
+          value={responsableW}
+          trabajadorId={responsableIdW}
+          onChange={(nombre, trabajadorId) => {
+            setValue('responsable', nombre)
+            setValue('responsable_id', trabajadorId)
+          }}
+          className={field}
+          error={errors.responsable?.message}
+        />
       </div>
 
       <div>

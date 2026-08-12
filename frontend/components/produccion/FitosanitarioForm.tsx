@@ -5,11 +5,13 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2, CalendarCheck } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFitosanitario, updateFitosanitario, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
+import { getTrabajadores, resolveTrabajadorId } from '@/lib/api/trabajadores'
+import ResponsableInput from './ResponsableInput'
 
 const schema = z.object({
   fecha: z.string().min(1, 'Requerido'),
@@ -20,6 +22,7 @@ const schema = z.object({
   dias_carencia: z.coerce.number().int().min(0, 'Mínimo 0'),
   dias_reingreso: z.coerce.number().int().min(0, 'Mínimo 0'),
   responsable: z.string().min(1, 'Requerido'),
+  responsable_id: z.string().optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -55,6 +58,7 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
@@ -68,13 +72,21 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
           dias_carencia: registro.dias_carencia,
           dias_reingreso: registro.dias_reingreso,
           responsable: registro.responsable,
+          responsable_id: registro.responsable_id ?? undefined,
         }
-      : { fecha: today, parcela_id: '', producto_nombre: '', motivo: '', responsable: '', dias_carencia: 0, dias_reingreso: 0 },
+      : { fecha: today, parcela_id: '', producto_nombre: '', motivo: '', responsable: '', responsable_id: undefined, dias_carencia: 0, dias_reingreso: 0 },
   })
 
+  const { data: trabajadoresDb = [] } = useQuery({
+    queryKey: ['trabajadores'],
+    queryFn: getTrabajadores,
+    staleTime: 60_000,
+  })
   const fechaW = watch('fecha')
   const diasCarenciaW = watch('dias_carencia')
   const diasReingresoW = watch('dias_reingreso')
+  const responsableW = watch('responsable')
+  const responsableIdW = watch('responsable_id')
 
   const habCosecha = addDays(fechaW, Number(diasCarenciaW))
   const habReingreso = addDays(fechaW, Number(diasReingresoW))
@@ -86,10 +98,12 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
     submittingRef.current = true
     try {
       setSubmitError(null)
+      const responsableId = await resolveTrabajadorId(data.responsable, data.responsable_id, trabajadoresDb)
+      const payload = { ...data, responsable_id: responsableId }
       if (isEdit) {
-        await updateFitosanitario(registro.id, data)
+        await updateFitosanitario(registro.id, payload)
       } else {
-        await createFitosanitario({ ...data, idempotency_key: idempotencyKeyRef.current })
+        await createFitosanitario({ ...payload, idempotency_key: idempotencyKeyRef.current })
       }
       queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
       onSuccess()
@@ -111,8 +125,16 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
         </div>
         <div>
           <label className={label}>Responsable</label>
-          <input type="text" placeholder="Nombre..." {...register('responsable')} className={field} />
-          {errors.responsable && <p className={err}>{errors.responsable.message}</p>}
+          <ResponsableInput
+            value={responsableW}
+            trabajadorId={responsableIdW}
+            onChange={(nombre, trabajadorId) => {
+              setValue('responsable', nombre)
+              setValue('responsable_id', trabajadorId)
+            }}
+            className={field}
+            error={errors.responsable?.message}
+          />
         </div>
       </div>
 

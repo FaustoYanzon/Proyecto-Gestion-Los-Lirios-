@@ -18,7 +18,7 @@ import { newIdempotencyKey } from '../lib/idempotency'
 import { enqueue } from '../lib/offlineQueue'
 import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
 import { colors } from '../lib/theme'
-import type { Parcela, RegistroFitosanitario } from '../lib/types'
+import type { Parcela, RegistroFitosanitario, Trabajador as TrabajadorDb } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
 
 const FAVORITOS = ['Mancozeb', 'Azufre', 'Karate', 'Cobre', 'Folpet']
@@ -212,16 +212,26 @@ const dp = StyleSheet.create({
 
 function StepFechaResp({
   initialResponsable,
+  trabajadoresDb,
   onNext,
   onCancelar,
 }: {
   initialResponsable: string
-  onNext: (fecha: string, responsable: string) => void
+  trabajadoresDb: TrabajadorDb[]
+  onNext: (fecha: string, responsable: string, responsableId?: string) => void
   onCancelar: () => void
 }) {
   const [fecha, setFecha] = useState(isoToday())
   const [responsable, setResponsable] = useState(initialResponsable)
+  const [responsableId, setResponsableId] = useState<string | undefined>(undefined)
+  const [focused, setFocused] = useState(false)
   const [dateVisible, setDateVisible] = useState(false)
+
+  const matches = focused && responsable.trim() && !responsableId
+    ? trabajadoresDb
+        .filter((t) => t.nombre_completo.toLowerCase().includes(responsable.trim().toLowerCase()))
+        .slice(0, 5)
+    : []
 
   return (
     <View style={styles.stepContainer}>
@@ -246,17 +256,31 @@ function StepFechaResp({
         <TextInput
           style={styles.input}
           value={responsable}
-          onChangeText={setResponsable}
+          onChangeText={(v) => { setResponsable(v); setResponsableId(undefined) }}
+          onFocus={() => setFocused(true)}
           placeholder="Nombre del responsable"
           placeholderTextColor={colors.niebla}
           autoCapitalize="words"
         />
+        {matches.length > 0 && (
+          <View style={styles.suggestBox}>
+            {matches.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={styles.suggestItem}
+                onPress={() => { setResponsable(t.nombre_completo); setResponsableId(t.id); setFocused(false) }}
+              >
+                <Text style={styles.suggestItemText}>{t.nombre_completo}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.primaryBtn, { marginTop: 24 }]}
           onPress={() => {
             if (!responsable.trim()) { Alert.alert('Error', 'Ingresá el nombre del responsable.'); return }
-            onNext(fecha, responsable.trim())
+            onNext(fecha, responsable.trim(), responsableId)
           }}
         >
           <Text style={styles.primaryBtnText}>Continuar</Text>
@@ -466,11 +490,13 @@ function StepDetalle({
 // ─── Step 3: Confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  fecha, responsable, parcela, producto, dosis, motivo, diasCarencia, diasReingreso,
+  fecha, responsable, responsableId, trabajadoresDb, parcela, producto, dosis, motivo, diasCarencia, diasReingreso,
   onSuccess, onBack, onCancelar,
 }: {
   fecha: string
   responsable: string
+  responsableId?: string
+  trabajadoresDb: TrabajadorDb[]
   parcela: Parcela | null
   producto: string
   dosis: string
@@ -491,10 +517,27 @@ function StepConfirmar({
     return d.toISOString().split('T')[0]
   }
 
+  // Si no se eligió una sugerencia, intenta matchear por nombre exacto contra
+  // el catálogo cargado; si tampoco matchea, crea un Trabajador nuevo para que
+  // quede disponible la próxima vez. Mismo patrón que tareas.tsx (2026-08-05).
+  async function resolveResponsableId(): Promise<string | undefined> {
+    if (responsableId) return responsableId
+    const trimmed = responsable.trim().toLowerCase()
+    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
+    if (exact) return exact.id
+    try {
+      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: responsable.trim() })
+      return data.id
+    } catch {
+      return undefined
+    }
+  }
+
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
     const dosisNum = parseFloat(dosis.replace(',', '.'))
+    const resolvedResponsableId = await resolveResponsableId()
     const payload = {
       fecha,
       parcela_id: parcela?.id,
@@ -504,6 +547,7 @@ function StepConfirmar({
       dias_carencia: diasCarencia,
       dias_reingreso: diasReingreso,
       responsable,
+      responsable_id: resolvedResponsableId,
       idempotency_key: idempotencyKeyRef.current,
     }
     try {
@@ -655,9 +699,21 @@ export default function FitoScreen() {
 
   const [selFecha, setSelFecha] = useState(isoToday())
   const [selResponsable, setSelResponsable] = useState('')
+  const [selResponsableId, setSelResponsableId] = useState<string | undefined>(undefined)
   const [selDetalle, setSelDetalle] = useState<DetalleData | null>(null)
+  const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
 
   const initialResponsable = user?.full_name?.split(' ')[0] ?? ''
+
+  const loadTrabajadoresDb = useCallback(async () => {
+    const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
+    if (cached) setTrabajadoresDb(cached)
+    try {
+      const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
+      setTrabajadoresDb(data)
+      await setCache('trabajadores', data)
+    } catch { /* offline */ }
+  }, [])
 
   const loadParcelas = useCallback(async () => {
     const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
@@ -679,7 +735,7 @@ export default function FitoScreen() {
     finally { setLoadingRegistros(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadParcelas(); loadRegistros() }, [loadParcelas, loadRegistros])
+  useEffect(() => { loadParcelas(); loadRegistros(); loadTrabajadoresDb() }, [loadParcelas, loadRegistros, loadTrabajadoresDb])
 
   useEffect(() => {
     if (!toast) return
@@ -692,6 +748,7 @@ export default function FitoScreen() {
   function reset() {
     setSelFecha(isoToday())
     setSelResponsable('')
+    setSelResponsableId(undefined)
     setSelDetalle(null)
     setStep('list')
   }
@@ -725,6 +782,8 @@ export default function FitoScreen() {
       <StepConfirmar
         fecha={selFecha}
         responsable={selResponsable}
+        responsableId={selResponsableId}
+        trabajadoresDb={trabajadoresDb}
         parcela={selDetalle.parcela}
         producto={selDetalle.producto}
         dosis={selDetalle.dosis}
@@ -742,7 +801,8 @@ export default function FitoScreen() {
     return (
       <StepFechaResp
         initialResponsable={initialResponsable}
-        onNext={(f, r) => { setSelFecha(f); setSelResponsable(r); setStep('detalle') }}
+        trabajadoresDb={trabajadoresDb}
+        onNext={(f, r, rid) => { setSelFecha(f); setSelResponsable(r); setSelResponsableId(rid); setStep('detalle') }}
         onCancelar={handleCancelar}
       />
     )
@@ -792,6 +852,12 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
   },
+  suggestBox: {
+    backgroundColor: colors.blanco, borderRadius: 10, borderWidth: 1, borderColor: colors.hueso,
+    marginTop: -8, marginBottom: 14, overflow: 'hidden',
+  },
+  suggestItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.hueso },
+  suggestItemText: { fontSize: 14, color: colors.ink, fontWeight: '500' },
 
   // new btn
   newBtn: {

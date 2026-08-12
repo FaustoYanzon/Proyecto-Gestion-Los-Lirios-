@@ -102,6 +102,7 @@ export interface RegistroFitosanitario {
   dias_carencia: number
   dias_reingreso: number
   responsable: string
+  responsable_id: string | null
   fecha_habilitacion_cosecha: string
   fecha_habilitacion_reingreso: string
   created_at: string
@@ -122,6 +123,7 @@ export interface RegistroRiego {
   fertilizante_nombre: string | null
   fertilizante_dosis_lt_ha: number | null
   responsable: string
+  responsable_id: string | null
   created_at: string
 }
 
@@ -136,6 +138,7 @@ export interface RiegoPayload {
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   responsable: string
+  responsable_id?: string
 }
 
 // Riego "en curso": arrancó (inicio) pero todavía no se cerró (sin fin).
@@ -144,6 +147,7 @@ export interface RiegoIniciarPayload {
   cabezal: string
   valvula: string
   responsable: string
+  responsable_id?: string
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   idempotency_key?: string
@@ -158,6 +162,7 @@ export interface RiegoEnCurso {
   inicio: string
   n_valvulas: number
   responsable: string
+  responsable_id: string | null
   fertilizante_nombre: string | null
 }
 

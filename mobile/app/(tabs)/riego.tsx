@@ -19,7 +19,7 @@ import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
-import type { Parcela, RegistroRiego, RiegoEnCurso } from '../../lib/types'
+import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb } from '../../lib/types'
 import { CABEZAL_VALVULAS, getValvulasForParcela, calcRiegoTotales } from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
@@ -631,13 +631,14 @@ function StepHorario({
 // ─── Step 3: fertirriego + responsable ────────────────────────────────────────
 
 function StepDetalle({
-  initialConFertirriego, initialProducto, initialDosis, initialResponsable, onNext, onBack, onCancelar,
+  initialConFertirriego, initialProducto, initialDosis, initialResponsable, trabajadoresDb, onNext, onBack, onCancelar,
 }: {
   initialConFertirriego: boolean
   initialProducto: string
   initialDosis: string
   initialResponsable: string
-  onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string) => void
+  trabajadoresDb: TrabajadorDb[]
+  onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string, responsableId?: string) => void
   onBack: () => void
   onCancelar: () => void
 }) {
@@ -645,6 +646,14 @@ function StepDetalle({
   const [producto, setProducto] = useState(initialProducto)
   const [dosis, setDosis] = useState(initialDosis)
   const [responsable, setResponsable] = useState(initialResponsable)
+  const [responsableId, setResponsableId] = useState<string | undefined>(undefined)
+  const [focused, setFocused] = useState(false)
+
+  const matches = focused && responsable.trim() && !responsableId
+    ? trabajadoresDb
+        .filter((t) => t.nombre_completo.toLowerCase().includes(responsable.trim().toLowerCase()))
+        .slice(0, 5)
+    : []
 
   function handleContinue() {
     if (conFertirriego && !producto.trim()) {
@@ -655,7 +664,7 @@ function StepDetalle({
       Alert.alert('Falta el responsable', 'Indicá quién realizó el riego.')
       return
     }
-    onNext(conFertirriego, producto.trim(), dosis.trim(), responsable.trim())
+    onNext(conFertirriego, producto.trim(), dosis.trim(), responsable.trim(), responsableId)
   }
 
   return (
@@ -706,10 +715,24 @@ function StepDetalle({
         <TextInput
           style={styles.input}
           value={responsable}
-          onChangeText={setResponsable}
+          onChangeText={(v) => { setResponsable(v); setResponsableId(undefined) }}
+          onFocus={() => setFocused(true)}
           placeholder="Nombre del responsable..."
           placeholderTextColor={colors.niebla}
         />
+        {matches.length > 0 && (
+          <View style={styles.suggestBox}>
+            {matches.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={styles.suggestItem}
+                onPress={() => { setResponsable(t.nombre_completo); setResponsableId(t.id); setFocused(false) }}
+              >
+                <Text style={styles.suggestItemText}>{t.nombre_completo}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <View style={[styles.actionRow, { marginTop: 24 }]}>
           <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
@@ -738,12 +761,14 @@ interface RiegoDraft {
   producto: string
   dosis: string
   responsable: string
+  responsable_id?: string
 }
 
 function StepConfirmar({
-  draft, onSuccess, onBack, onCancelar,
+  draft, trabajadoresDb, onSuccess, onBack, onCancelar,
 }: {
   draft: RiegoDraft
+  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -756,10 +781,27 @@ function StepConfirmar({
   const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
   const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length)
 
+  // Si no se eligió una sugerencia, intenta matchear por nombre exacto contra
+  // el catálogo cargado; si tampoco matchea, crea un Trabajador nuevo para que
+  // quede disponible la próxima vez. Mismo patrón que tareas.tsx (2026-08-05).
+  async function resolveResponsableId(): Promise<string | undefined> {
+    if (draft.responsable_id) return draft.responsable_id
+    const trimmed = draft.responsable.trim().toLowerCase()
+    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
+    if (exact) return exact.id
+    try {
+      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: draft.responsable.trim() })
+      return data.id
+    } catch {
+      return undefined
+    }
+  }
+
   async function handleSubmit() {
     if (submittingRef.current) return
     if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
     submittingRef.current = true
+    const responsableId = await resolveResponsableId()
     const payload = {
       fecha: draft.fechaInicio,
       parcela_id: draft.parcela.id,
@@ -768,6 +810,7 @@ function StepConfirmar({
       inicio: inicioISO,
       fin: finISO,
       responsable: draft.responsable,
+      responsable_id: responsableId,
       fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
       fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
       idempotency_key: idempotencyKeyRef.current,
@@ -871,12 +914,14 @@ interface IniciarDraft {
   producto: string
   dosis: string
   responsable: string
+  responsable_id?: string
 }
 
 function StepIniciarConfirmar({
-  draft, onSuccess, onBack, onCancelar,
+  draft, trabajadoresDb, onSuccess, onBack, onCancelar,
 }: {
   draft: IniciarDraft
+  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -885,16 +930,31 @@ function StepIniciarConfirmar({
   const submittingRef = useRef(false)
   const idempotencyKeyRef = useRef(newIdempotencyKey())
 
+  async function resolveResponsableId(): Promise<string | undefined> {
+    if (draft.responsable_id) return draft.responsable_id
+    const trimmed = draft.responsable.trim().toLowerCase()
+    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
+    if (exact) return exact.id
+    try {
+      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: draft.responsable.trim() })
+      return data.id
+    } catch {
+      return undefined
+    }
+  }
+
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
     try {
       setLoading(true)
+      const responsableId = await resolveResponsableId()
       await iniciarRiego({
         parcela_id: draft.parcela.id,
         cabezal: draft.cabezal,
         valvula: draft.valvulas.join(','),
         responsable: draft.responsable,
+        responsable_id: responsableId,
         fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
         fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
         idempotency_key: idempotencyKeyRef.current,
@@ -1103,6 +1163,17 @@ export default function RiegoScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [draft, setDraft] = useState<RiegoDraft>(emptyDraft)
   const [toast, setToast] = useState<string | null>(null)
+  const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
+
+  const loadTrabajadoresDb = useCallback(async () => {
+    const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
+    if (cached) setTrabajadoresDb(cached)
+    try {
+      const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
+      setTrabajadoresDb(data)
+      await setCache('trabajadores', data)
+    } catch { /* offline */ }
+  }, [])
 
   const loadData = useCallback(async () => {
     const [cachedParcelas, cachedRiegos] = await Promise.all([
@@ -1134,7 +1205,7 @@ export default function RiegoScreen() {
     } catch { /* offline */ }
   }, [])
 
-  useEffect(() => { loadData(); loadRiegosEnCurso() }, [loadData, loadRiegosEnCurso])
+  useEffect(() => { loadData(); loadRiegosEnCurso(); loadTrabajadoresDb() }, [loadData, loadRiegosEnCurso, loadTrabajadoresDb])
 
   // Refetch cada 30s para detectar riegos iniciados/cerrados por otros
   // usuarios/dispositivos — el cronómetro que se ve en cada card se calcula
@@ -1273,8 +1344,9 @@ export default function RiegoScreen() {
         initialProducto={draft.producto}
         initialDosis={draft.dosis}
         initialResponsable={draft.responsable}
-        onNext={(conFertirriego, producto, dosis, responsable) => {
-          setDraft((d) => ({ ...d, conFertirriego, producto, dosis, responsable }))
+        trabajadoresDb={trabajadoresDb}
+        onNext={(conFertirriego, producto, dosis, responsable, responsable_id) => {
+          setDraft((d) => ({ ...d, conFertirriego, producto, dosis, responsable, responsable_id }))
           setStep(modo === 'iniciar' ? 'iniciar_confirmar' : 'confirmar')
         }}
         onBack={() => setStep(modo === 'iniciar' ? 'modo' : 'horario')}
@@ -1287,6 +1359,7 @@ export default function RiegoScreen() {
     return (
       <StepConfirmar
         draft={draft}
+        trabajadoresDb={trabajadoresDb}
         onSuccess={() => { resetWizard(); loadData(); setToast('Riego cargado ✓') }}
         onBack={() => setStep('detalle')}
         onCancelar={handleCancelar}
@@ -1298,6 +1371,7 @@ export default function RiegoScreen() {
     return (
       <StepIniciarConfirmar
         draft={draft}
+        trabajadoresDb={trabajadoresDb}
         onSuccess={() => { resetWizard(); loadRiegosEnCurso(); setToast('Riego iniciado ✓') }}
         onBack={() => setStep('detalle')}
         onCancelar={handleCancelar}
@@ -1351,6 +1425,12 @@ const styles = StyleSheet.create({
   },
   hintText: { fontSize: 12, color: colors.ink60, marginTop: 8, fontStyle: 'italic' },
   errorText: { fontSize: 12, color: colors.sangre, marginTop: 8 },
+  suggestBox: {
+    backgroundColor: colors.blanco, borderRadius: 10, borderWidth: 1, borderColor: colors.hueso,
+    marginTop: -8, marginBottom: 14, overflow: 'hidden',
+  },
+  suggestItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.hueso },
+  suggestItemText: { fontSize: 14, color: colors.ink, fontWeight: '500' },
 
   // chip grids (cabezal / parral / valvula)
   chipGridWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

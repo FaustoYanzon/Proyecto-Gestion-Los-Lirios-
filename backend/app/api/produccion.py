@@ -81,6 +81,17 @@ def _get_clasificacion(tarea: str) -> ClasificacionTarea:
     return ClasificacionTarea(CLASIFICACION_POR_TAREA.get(tarea, "general"))
 
 
+async def _resolve_responsable_nombre(db: AsyncSession, responsable_id: str) -> str:
+    """Valida un responsable_id contra el catálogo de Trabajador y devuelve
+    su nombre completo, para que `responsable` (texto denormalizado) quede
+    siempre sincronizado con el registro vinculado. Mismo patrón que
+    `trabajador_id` en RegistroTrabajo (create_trabajo)."""
+    t = await db.get(Trabajador, responsable_id)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
+    return t.nombre_completo
+
+
 def _build_egreso_for_trabajo(
     registro: RegistroTrabajo,
     user_id: str,
@@ -613,13 +624,17 @@ async def iniciar_riego(
         if existing_row:
             return existing_row
 
+    data = riego_data.model_dump()
+    if data.get("responsable_id"):
+        data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
+
     now = datetime.now(timezone.utc)
     riego = RegistroRiego(
         fecha=now.astimezone(ZoneInfo("America/Argentina/San_Juan")).date(),
         inicio=now,
         fin=None,
         created_by=current_user.id,
-        **riego_data.model_dump(),
+        **data,
     )
     db.add(riego)
     await db.flush()
@@ -655,6 +670,8 @@ async def create_riego(
             return existing_row
 
     data = riego_data.model_dump()
+    if data.get("responsable_id"):
+        data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
     data["created_by"] = current_user.id
     # duracion_horas computed by RegistroRiego.__init__
     riego = RegistroRiego(**data)
@@ -802,6 +819,8 @@ async def create_fitosanitario(
             return existing_row
 
     data = fito_data.model_dump()
+    if data.get("responsable_id"):
+        data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
     data["created_by"] = current_user.id
     # fecha_habilitacion_* computed by RegistroFitosanitario.__init__
     fito = RegistroFitosanitario(**data)

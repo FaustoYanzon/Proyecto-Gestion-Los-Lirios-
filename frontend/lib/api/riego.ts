@@ -110,6 +110,7 @@ export interface RiegoCreate {
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   responsable: string
+  responsable_id?: string
   idempotency_key?: string
 }
 
@@ -124,6 +125,7 @@ export interface RiegoUpdate {
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   responsable?: string
+  responsable_id?: string
 }
 
 export interface RiegoResponse {
@@ -141,6 +143,7 @@ export interface RiegoResponse {
   fertilizante_nombre: string | null
   fertilizante_dosis_lt_ha: number | null
   responsable: string
+  responsable_id: string | null
   created_by: string
   created_at: string
 }
@@ -161,6 +164,7 @@ export interface RiegoIniciarInput {
   cabezal: string
   valvula: string
   responsable: string
+  responsable_id?: string
   fertilizante_nombre?: string
   fertilizante_dosis_lt_ha?: number
   idempotency_key?: string
@@ -175,6 +179,7 @@ export interface RiegoEnCurso {
   inicio: string
   n_valvulas: number
   responsable: string
+  responsable_id: string | null
   fertilizante_nombre: string | null
 }
 

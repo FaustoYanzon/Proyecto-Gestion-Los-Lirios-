@@ -117,6 +117,7 @@ class RegistroRiegoBase(BaseModel):
     fertilizante_nombre: str | None = None
     fertilizante_dosis_lt_ha: float | None = None
     responsable: str
+    responsable_id: str | None = None
 
 
 class RegistroRiegoCreate(RegistroRiegoBase):
@@ -134,6 +135,7 @@ class RegistroRiegoUpdate(BaseModel):
     fertilizante_nombre: str | None = None
     fertilizante_dosis_lt_ha: float | None = None
     responsable: str | None = None
+    responsable_id: str | None = None
 
 
 class RegistroRiegoResponse(RegistroRiegoBase):
@@ -154,6 +156,7 @@ class RegistroRiegoIniciar(BaseModel):
     cabezal: str
     valvula: str
     responsable: str
+    responsable_id: str | None = None
     fertilizante_nombre: str | None = None
     fertilizante_dosis_lt_ha: float | None = None
     idempotency_key: str | None = None
@@ -168,6 +171,7 @@ class RegistroRiegoEnCursoResponse(BaseModel):
     inicio: datetime
     n_valvulas: int
     responsable: str
+    responsable_id: str | None = None
     fertilizante_nombre: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -188,6 +192,7 @@ class RegistroFitosanitarioBase(BaseModel):
     dias_carencia: int
     dias_reingreso: int
     responsable: str
+    responsable_id: str | None = None
 
 
 class RegistroFitosanitarioCreate(RegistroFitosanitarioBase):
@@ -203,6 +208,7 @@ class RegistroFitosanitarioUpdate(BaseModel):
     dias_carencia: int | None = None
     dias_reingreso: int | None = None
     responsable: str | None = None
+    responsable_id: str | None = None
 
 
 class RegistroFitosanitarioResponse(RegistroFitosanitarioBase):

@@ -5,7 +5,7 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2, Droplets } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   calcMm,
   getValvulas,
@@ -19,6 +19,8 @@ import {
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
+import { getTrabajadores, resolveTrabajadorId } from '@/lib/api/trabajadores'
+import ResponsableInput from './ResponsableInput'
 
 const schema = z.object({
   fecha_inicio: z.string().min(1, 'Requerido'),
@@ -28,6 +30,7 @@ const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
   cabezal: z.string().min(1, 'Requerido'),
   responsable: z.string().min(1, 'Requerido'),
+  responsable_id: z.string().optional(),
   fertilizante_nombre: z.string().optional(),
   fertilizante_dosis_lt_ha: z.preprocess(
     (v) => (!v || v === '' ? undefined : Number(v)),
@@ -96,6 +99,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           parcela_id: riego.parcela_id,
           cabezal: riego.cabezal,
           responsable: riego.responsable,
+          responsable_id: riego.responsable_id ?? undefined,
           fertilizante_nombre: riego.fertilizante_nombre ?? '',
           fertilizante_dosis_lt_ha: riego.fertilizante_dosis_lt_ha ?? undefined,
         }
@@ -107,9 +111,18 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           parcela_id: '',
           cabezal: '',
           responsable: '',
+          responsable_id: undefined,
           fertilizante_nombre: '',
         },
   })
+
+  const { data: trabajadoresDb = [] } = useQuery({
+    queryKey: ['trabajadores'],
+    queryFn: getTrabajadores,
+    staleTime: 60_000,
+  })
+  const responsableW = watch('responsable')
+  const responsableIdW = watch('responsable_id')
 
   const parcelaIdW = watch('parcela_id')
   const fechaInicioW = watch('fecha_inicio')
@@ -154,6 +167,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
     const fin = `${data.fecha_fin}T${data.hora_fin}:00-03:00`
     const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin)?.mm
     const valvula = Array.from(selectedValvulas).sort().join(',')
+    const responsableId = await resolveTrabajadorId(data.responsable, data.responsable_id, trabajadoresDb)
 
     const payload = {
       fecha: data.fecha_inicio,
@@ -164,6 +178,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       fin,
       mm_aplicados: mm,
       responsable: data.responsable,
+      responsable_id: responsableId,
       fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
       fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
     }
@@ -325,8 +340,16 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       {/* Responsable */}
       <div>
         <label className={label}>Responsable</label>
-        <input type="text" placeholder="Nombre..." {...register('responsable')} className={field} />
-        {errors.responsable && <p className={err}>{errors.responsable.message}</p>}
+        <ResponsableInput
+          value={responsableW}
+          trabajadorId={responsableIdW}
+          onChange={(nombre, trabajadorId) => {
+            setValue('responsable', nombre)
+            setValue('responsable_id', trabajadorId)
+          }}
+          className={field}
+          error={errors.responsable?.message}
+        />
       </div>
 
       {/* Fertilizante toggle */}
