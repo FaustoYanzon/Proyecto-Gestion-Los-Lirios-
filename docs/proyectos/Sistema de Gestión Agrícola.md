@@ -72,15 +72,22 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-11 — cierre de sesión)
+## Próximos pasos (actualizado 2026-08-12 — cierre de sesión)
 
 Pilot estable, sin bloqueantes de código pendientes. Pendientes reales:
 
 ### Pendiente real
 
-1. **Confirmar la app en el dispositivo real de la finca con el build versionCode 4** (incluye el módulo nativo de netinfo que le faltaba al build 3) — subida a Play Console (Prueba interna) en curso al cierre de esta sesión, ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]. Una vez publicado el rollout, probar la cola offline en la finca sin señal.
-2. **Agregar `SENTRY_DSN` como variable de entorno en Railway** (dashboard, a mano) para activar el reporte de errores en producción — el código ya está listo y es no-op sin esa variable.
-3. Considerar el 4° test opcional de idempotencia para `POST /produccion/riego/iniciar` (pre-check separado del de `POST /produccion/riego/`) — menor, no bloqueante.
+1. **Correr `vercel --prod`** para que la importación de comprobantes ARCA (nueva, ver [[2026-08-12-importacion-comprobantes-arca-iva]]) llegue al frontend de producción — el backend ya se despliega solo en Railway (corre las migraciones nuevas automáticamente).
+2. **Probar el flujo real de importación ARCA con Fausto** en producción: subir un CSV real, clasificar unos comprobantes, confirmar que el IVA del dashboard y el recordatorio de Alertas se ven bien con datos reales de producción (la verificación de esta sesión fue completa pero contra Postgres local).
+3. **Confirmar la app en el dispositivo real de la finca con el build versionCode 4** (incluye el módulo nativo de netinfo que le faltaba al build 3) — ya publicado en Play Console Internal testing el 08-11, ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]].
+4. **Agregar `SENTRY_DSN` como variable de entorno en Railway** (dashboard, a mano) para activar el reporte de errores en producción — el código ya está listo y es no-op sin esa variable.
+5. Considerar el 4° test opcional de idempotencia para `POST /produccion/riego/iniciar` (pre-check separado del de `POST /produccion/riego/`) — menor, no bloqueante.
+6. Sin forma de "deshacer" un comprobante ARCA descartado por error (el índice único bloquea reimportarlo) — evaluar una vista de descartados con restore si aparece como problema real en el uso diario.
+
+### Hecho en la sesión del 2026-08-12 (para referencia — no repetir)
+
+Importación de comprobantes ARCA (CSV) → Egresos/Ingresos + IVA compra/venta/saldo, completa (modelo, backend, frontend, alertas, verificada end-to-end con datos reales). Ver [[2026-08-12-importacion-comprobantes-arca-iva]].
 
 ### Hecho en la sesión del 2026-08-11 (para referencia — no repetir)
 
@@ -103,6 +110,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-12-importacion-comprobantes-arca-iva]]
 - [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
 - [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]
 - [[Spec — Cola de envíos offline (mobile)]]
