@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-12, segunda tanda (Sentry activado en producción, deploy frontend ARCA, test de idempotencia riego/iniciar + fix tzdata, punto "deshacer descarte ARCA" confirmado ya resuelto — ver [[2026-08-12-importacion-comprobantes-arca-iva]])
+> Última revisión: 2026-08-12, tercera tanda (combobox de Trabajador extendido a Riego/Fitosanitarios — ver [[2026-08-12-combobox-responsable-riego-fito]])
 
 ---
 
@@ -30,6 +30,9 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-12, tercera tanda** (ver [[2026-08-12-combobox-responsable-riego-fito]]):
+- **El campo "responsable" de Riego y Fitosanitarios era texto libre, sin dedupe ni link a Trabajador — resuelto.** El combobox de Tareas (2026-08-05) nunca se había extendido a estos dos módulos, en ninguna de las dos plataformas. Agregado `responsable_id` (backend, migración `32b5a004492a`) + combobox de sugerencias (web: `ResponsableInput.tsx` nuevo, mobile: mismo patrón que `tareas.tsx`) en los 4 formularios (`RiegoForm`, `IniciarRiegoForm`, `FitosanitarioForm` web; `riego.tsx`, `fito.tsx` mobile). 47/47 tests backend, `tsc --noEmit` limpio en frontend y mobile.
 
 **Sesión del 2026-08-12, segunda tanda** (cierre de los pendientes del roadmap del 08-12 — ver [[2026-08-12-importacion-comprobantes-arca-iva]]):
 - **`SENTRY_DSN` seteado en Railway — Sentry activo en producción.** DSN obtenido de sentry.io (proyecto `python-fastapi`, no `python-fastapi-1` como se había anotado) vía Claude in Chrome, seteado con `railway variables --set` contra el servicio ya linkeado. El set de la variable disparó el redeploy solo.

@@ -72,13 +72,18 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-12, segunda sesión — cierre)
+## Próximos pasos (actualizado 2026-08-12, tercera tanda — cierre)
 
-Pilot estable, sin bloqueantes de código pendientes. Puntos 2 y 3 del roadmap anterior confirmados por Fausto (probados en producción y en el dispositivo real de la finca, van bien). Puntos 1, 4 y 5 cerrados en esta sesión. Pendientes reales:
+Pilot estable, sin bloqueantes de código pendientes.
 
 ### Pendiente real
 
-Ninguno bloqueante. Los puntos que quedaban del roadmap anterior ya están resueltos (ver abajo).
+1. **Módulo de notificaciones push, a medio camino.** Backend (`POST /notificaciones/enviar`) y mobile (registro de token Expo al loguearse) completos, pero no existe ninguna UI en el frontend web que dispare el envío — el endpoint (gerencial+, título/cuerpo libre) no lo puede usar nadie hoy. Tampoco hay ningún trigger automático (ninguna alerta del sistema genera push sola). Falta: pantalla/formulario en el dashboard web para componer y enviar, y evaluar si alguna alerta crítica (riego atrasado, carencia) debería disparar push automático.
+2. **Responsividad mobile del frontend web, sin avance real.** 12 de 51 componentes con breakpoints (revisado 08-12, prácticamente el mismo número que en julio). Todas las páginas de `finanzas/` y `produccion/` (tablas y formularios) son desktop-first — son justo las que un encargado abriría desde el navegador del celular si no usa la app.
+
+### Hecho en la sesión del 2026-08-12, tercera tanda (para referencia — no repetir)
+
+**Combobox de Trabajador extendido a Riego y Fitosanitarios** (`responsable_id`, mismo patrón que Tareas desde el 08-05) — mobile y web por igual, en los dos módulos. Ver [[2026-08-12-combobox-responsable-riego-fito]].
 
 ### Hecho en esta sesión (2026-08-12, segunda tanda — para referencia, no repetir)
 
@@ -102,8 +107,6 @@ Ver el resumen completo arriba y en [[2026-08-10-clima-fix-inicio-layout-riego-a
 ### Roadmap (features nuevas, sin fecha)
 
 - Costo por kg en dashboard de finanzas.
-- Módulo de notificaciones (base ya existe en `notificaciones.py`).
-- Responsividad mobile del frontend **web** (solo 11/43 componentes con breakpoints) — si algún encargado va a usar el navegador desde el celular en vez de la app.
 - Integraciones Fase 5: Climagro real (solo si el dato de Open-Meteo se demuestra insuficiente), bot de WhatsApp (carga de egresos), agente ARCA (boletas), termógrafo IoT.
 
 ### Google Play Store (track Internal testing)
