@@ -341,6 +341,9 @@ export const MM_POR_HORA = 1.6
 export const LITROS_POR_HORA_VALVULA = 16_000
 // Referencia agronómica para el suelo de Media Agua: 6.000.000 L/ha/año.
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
+// 1mm sobre 1ha = 10.000 L — el objetivo en mm no depende de la superficie
+// de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
+export const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
 export function calcMmRiego(inicioISO: string, finISO: string): number | null {
   const start = new Date(inicioISO)

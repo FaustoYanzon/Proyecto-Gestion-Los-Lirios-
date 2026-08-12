@@ -8,16 +8,20 @@ import 'leaflet/dist/leaflet.css'
 import { loadFincaKML, type KMLFeature } from '@/lib/kml'
 import {
   VARIEDAD_LABELS,
+  ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES,
   type ParcelaItem, getParcelasMapa,
 } from '@/lib/api/produccion'
 import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 import LayerControl, { type LayerVisibility } from './LayerControl'
 
-type ColorMode = 'type' | 'variedad' | 'cosecha' | 'riego' | 'cumplimiento' | 'fenologia'
+type ColorMode = 'type' | 'variedad' | 'cosecha' | 'cumplimiento' | 'fenologia'
 
 // Objetivo agronómico: 6.000.000 L/ha/año (suelo de Media Agua)
 const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
+// 1mm sobre 1ha = 10.000 L — el objetivo en mm no depende de la superficie
+// de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
+const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
 const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
   parral:   { color: '#5a1320', fillColor: '#7a1f2c' },
@@ -34,17 +38,6 @@ const VAR_COLORS: Record<string, string> = {
   aspirant: '#06b6d4', alfalfa: '#84cc16', otro: '#94a3b8',
 }
 
-const ESTADO_LABELS: Record<string, string> = {
-  brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje',
-  envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
-}
-
-// Colores por estado fenológico — mismos que mobile/lib/types.ts (ESTADO_COLORS).
-const ESTADO_COLORS: Record<string, string> = {
-  brotacion: '#eab308', floracion: '#ec4899', cuaje: '#f97316',
-  envero: '#a855f7', madurez: '#22c55e', cosecha: '#ef4444', latencia: '#6b7280',
-}
-
 function formatARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 }
@@ -58,13 +51,8 @@ function cosechaColor(kg: number, maxKg: number): string {
   return `rgb(${r},${g},${b})`
 }
 
-export interface RiegoMapaInfo {
-  litros_totales: number
-  porcentaje_cumplimiento: number | null
-}
-
-// Semáforo de riego vs objetivo anual (6M L/ha): déficit severo, déficit,
-// en objetivo, o posible exceso.
+// Semáforo de cumplimiento de riego (vs. los riegos esperados del estado de
+// campaña actual): déficit severo, déficit, en objetivo, o posible exceso.
 function riegoColor(pct: number | null): string {
   if (pct == null) return '#f3f4f6'
   if (pct < 50) return '#dc2626'
@@ -99,9 +87,9 @@ function getPolyStyle(
   mode: ColorMode,
   cosechaByParcelaId?: Record<string, number>,
   maxKg?: number,
-  riegoByParcelaId?: Record<string, RiegoMapaInfo>,
   fenologiaByVariedad?: Record<string, FenologiaMapaInfo>,
   cumplimientoByParcelaId?: Record<string, number | null>,
+  estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>,
 ): L.PathOptions {
   if (mode === 'cosecha') {
     const kg = (p?.id != null && cosechaByParcelaId?.[p.id]) ? cosechaByParcelaId[p.id] : 0
@@ -113,20 +101,8 @@ function getPolyStyle(
       fillOpacity: selected ? 0.75 : 0.6,
     }
   }
-  if (mode === 'riego') {
-    const info = p?.id != null ? riegoByParcelaId?.[p.id] : undefined
-    const fill = riegoColor(info?.porcentaje_cumplimiento ?? null)
-    return {
-      color: '#2d5468',
-      weight: selected ? 3 : 1.5,
-      fillColor: fill,
-      fillOpacity: selected ? 0.75 : 0.6,
-    }
-  }
   if (mode === 'cumplimiento') {
-    // Cumplimiento contra los riegos esperados del estado fenológico actual
-    // (Ciclo de Campaña) — no contra el objetivo anual, que es lo que mide
-    // el modo "riego" de arriba.
+    // Cumplimiento contra los riegos esperados del estado de campaña actual.
     const pct = p?.id != null ? cumplimientoByParcelaId?.[p.id] : undefined
     const fill = riegoColor(pct ?? null)
     return {
@@ -137,9 +113,14 @@ function getPolyStyle(
     }
   }
   if (mode === 'fenologia') {
-    // La fenología se calcula por variedad, no por parcela puntual.
-    const info = p?.variedad != null ? fenologiaByVariedad?.[p.variedad] : undefined
-    const fill = info ? (ESTADO_COLORS[info.estado_fenologico] ?? '#94a3b8') : '#f3f4f6'
+    // El estado se calcula por variedad, no por parcela puntual. Usa el
+    // Ciclo de Campaña nuevo (EstadoCampana, incluye Post-Cosecha) — no el
+    // motor viejo de fenologia.py (FenologiaMapaInfo), que se quedó con
+    // estados como "Latencia"/"Madurez" que ya no reflejan el calendario
+    // actual. fenologiaByVariedad sigue vivo solo para "tareas recomendadas"
+    // en el panel de detalle, más abajo.
+    const info = p?.variedad != null ? estadoCampanaByVariedad?.[p.variedad] : undefined
+    const fill = info ? (ESTADO_CAMPANA_COLORES[info.estado_campana as keyof typeof ESTADO_CAMPANA_COLORES] ?? '#94a3b8') : '#f3f4f6'
     return {
       color: '#3f5c3a',
       weight: selected ? 3 : 1.5,
@@ -437,7 +418,7 @@ function ParcelPanel({ name, parcelas, estadoCampanaByVariedad, cosechaByParcela
                         />
                       </div>
                       <p className="text-xs text-gray-400 mt-1">
-                        {porcentajeCumplimiento.toFixed(0)}% de {(objetivoAnual / 1_000_000).toFixed(1)}M L/año objetivo
+                        {porcentajeCumplimiento.toFixed(0)}% de {MM_OBJETIVO_ANUAL_POR_HA.toFixed(0)} mm/año objetivo
                       </p>
                     </div>
                   )}
@@ -534,10 +515,10 @@ interface Props {
   compact?: boolean
   height?: string
   cosechaByParcelaId?: Record<string, number>
-  riegoByParcelaId?: Record<string, RiegoMapaInfo>
   fenologiaByVariedad?: Record<string, FenologiaMapaInfo>
   cumplimientoByParcelaId?: Record<string, number | null>
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>
+  parcelasEnRiego?: Set<string>
 }
 
 // ── GeoJSON coordinate helpers ───────────────────────────────────────────────
@@ -595,8 +576,8 @@ const INFRA_LEGEND = [
 ]
 
 export default function FincaMapInner({
-  compact = false, height = '100%', cosechaByParcelaId, riegoByParcelaId, fenologiaByVariedad,
-  cumplimientoByParcelaId, estadoCampanaByVariedad,
+  compact = false, height = '100%', cosechaByParcelaId, fenologiaByVariedad,
+  cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -696,9 +677,15 @@ export default function FincaMapInner({
     polyRef.current.forEach((poly, name) => {
       const f = features.find(feat => feat.name === name)
       const p = parcelas.find(parc => parc.nombre === name)
-      if (f) poly.setStyle(getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, riegoByParcelaId, fenologiaByVariedad, cumplimientoByParcelaId))
+      if (!f) return
+      const style = getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad)
+      // Riego en curso: se compone encima del modo de color elegido (no lo
+      // reemplaza) — borde celeste punteado, mismo criterio en las dos
+      // plataformas. Ver docs/sistema, sesión de mejoras al mapa.
+      const enRiego = p?.id != null && parcelasEnRiego?.has(p.id)
+      poly.setStyle(enRiego ? { ...style, color: '#0ea5e9', weight: 3, dashArray: '6,4' } : style)
     })
-  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, riegoByParcelaId, fenologiaByVariedad, cumplimientoByParcelaId])
+  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego])
 
   // ── Load GeoJSON layer data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -774,7 +761,7 @@ export default function FincaMapInner({
         key: 'cuadrantesRiego',
         build: d => L.geoJSON(normalizeGeoJSON(d) as never, {
           style: () => ({ color: '#d1d5db', fillColor: '#d1d5db', fillOpacity: 0.15, weight: 1.5 }),
-          interactive: false,
+          onEachFeature: makeInfraPopup('Cuadrante'),
         }),
       },
     ]
@@ -816,7 +803,6 @@ export default function FincaMapInner({
             { mode: 'type',    label: 'Tipo'     },
             { mode: 'variedad', label: 'Variedad' },
             { mode: 'cosecha',  label: 'Cosecha'  },
-            { mode: 'riego',    label: 'Riego'    },
             { mode: 'cumplimiento', label: 'Cumpl. riego' },
             { mode: 'fenologia', label: 'Fenología' },
           ] as { mode: ColorMode; label: string }[]).map(({ mode, label }) => (
@@ -848,9 +834,8 @@ export default function FincaMapInner({
             {colorMode === 'type' ? 'Tipo'
               : colorMode === 'variedad' ? 'Variedad'
               : colorMode === 'cosecha' ? 'Cosecha'
-              : colorMode === 'fenologia' ? 'Estado fenológico (automático)'
-              : colorMode === 'cumplimiento' ? 'Cumpl. riego (estado actual)'
-              : 'Riego (% objetivo anual)'}
+              : colorMode === 'fenologia' ? 'Ciclo de Campaña (estado actual)'
+              : 'Cumpl. riego (estado actual)'}
           </p>
           {colorMode === 'cosecha' ? (
             <div>
@@ -862,9 +847,9 @@ export default function FincaMapInner({
             </div>
           ) : colorMode === 'fenologia' ? (
             <div className="space-y-1.5">
-              {Object.entries(ESTADO_LABELS).map(([k, label]) => (
+              {Object.entries(ESTADO_CAMPANA_LABELS).map(([k, label]) => (
                 <div key={k} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10" style={{ background: ESTADO_COLORS[k] }} />
+                  <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10" style={{ background: ESTADO_CAMPANA_COLORES[k as keyof typeof ESTADO_CAMPANA_COLORES] }} />
                   <span className="text-xs text-gray-700">{label}</span>
                 </div>
               ))}
@@ -873,7 +858,7 @@ export default function FincaMapInner({
                 <span className="text-xs text-gray-700">Sin variedad / dato</span>
               </div>
             </div>
-          ) : colorMode === 'riego' || colorMode === 'cumplimiento' ? (
+          ) : colorMode === 'cumplimiento' ? (
             <div className="space-y-1.5">
               {[
                 { color: '#dc2626', label: '< 50% (déficit severo)' },

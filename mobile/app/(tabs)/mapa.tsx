@@ -10,9 +10,9 @@ import {
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import api, { getCumplimientoRiego, getEstadoCampanaActual } from '../../lib/api'
-import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad } from '../../lib/types'
-import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES } from '../../lib/types'
+import api, { getCumplimientoRiego, getEstadoCampanaActual, getRiegosEnCurso } from '../../lib/api'
+import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad, RiegoEnCurso } from '../../lib/types'
+import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
@@ -40,26 +40,11 @@ const VAR_COLORS: Record<string, string> = {
   aspirant: '#06b6d4', alfalfa: '#84cc16', otro: '#94a3b8',
 }
 
-const ESTADO_LABELS: Record<string, string> = {
-  brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje',
-  envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
-}
-// Unificado con FincaMapInner.tsx ESTADO_COLORS — antes estaban invertidos.
-const ESTADO_COLORS: Record<string, string> = {
-  brotacion: '#eab308', floracion: '#ec4899', cuaje: '#f97316',
-  envero: '#a855f7', madurez: '#22c55e', cosecha: '#ef4444', latencia: '#6b7280',
-}
-
 // ── Cosecha / Riego (modos de color nuevos, mismos endpoints que el mapa web) ──
 
 interface CosechaResumenPorParcela {
   parcela_id: string | null
   kg_total: number
-}
-
-interface EficienciaHidricaParcela {
-  parcela_id: string
-  porcentaje_cumplimiento: number | null
 }
 
 // Mismo gradiente que cosechaColor() en FincaMapInner.tsx.
@@ -95,8 +80,8 @@ interface ParcelPanel {
 
 function buildMapHTML(
   parcelas: Parcela[], layers: GeoLayerData, fenologia: FaseVariedad[],
-  cosecha: CosechaResumenPorParcela[], riego: EficienciaHidricaParcela[],
-  cumplimiento: CumplimientoRiegoParcela[],
+  cosecha: CosechaResumenPorParcela[],
+  cumplimiento: CumplimientoRiegoParcela[], estadoCampana: EstadoActualVariedad[],
 ): string {
   // Los polígonos de cada parcela vienen de la API (parcelas.coordenadas, ya
   // poblada desde el KML real) — ya no de un snapshot hardcodeado. El único
@@ -116,11 +101,17 @@ function buildMapHTML(
   )
   const typeColorsJSON = JSON.stringify(TYPE_COLORS)
   const varColorsJSON = JSON.stringify(VAR_COLORS)
-  const estadoColorsJSON = JSON.stringify(ESTADO_COLORS)
-  const estadoLabelsJSON = JSON.stringify(ESTADO_LABELS)
+  const estadoCampanaColorsJSON = JSON.stringify(ESTADO_CAMPANA_COLORES)
+  const estadoCampanaLabelsJSON = JSON.stringify(ESTADO_CAMPANA_LABELS)
   // Keyed by variedad for O(1) lookup inside the WebView JS.
   const fenologiaJSON = JSON.stringify(
     Object.fromEntries(fenologia.map((f) => [f.variedad, f]))
+  )
+  // Ciclo de Campaña nuevo (incluye Post-Cosecha) — separado a propósito de
+  // fenologiaJSON de arriba (motor viejo, sigue vivo solo para el panel de
+  // "tareas recomendadas"). El modo de color "Fenología" del mapa usa este.
+  const estadoCampanaJSON = JSON.stringify(
+    Object.fromEntries(estadoCampana.map((e) => [e.variedad, e]))
   )
   // Keyed by parcela_id, mismo criterio que el mapa web.
   const cosechaByParcelaId = Object.fromEntries(
@@ -128,10 +119,6 @@ function buildMapHTML(
   )
   const maxKg = Math.max(0, ...Object.values(cosechaByParcelaId))
   const cosechaJSON = JSON.stringify(cosechaByParcelaId)
-  const riegoByParcelaId = Object.fromEntries(
-    riego.map((r) => [r.parcela_id, r.porcentaje_cumplimiento])
-  )
-  const riegoJSON = JSON.stringify(riegoByParcelaId)
   const cumplimientoByParcelaId = Object.fromEntries(
     cumplimiento.map((c) => [c.parcela_id, c.cumplimiento_pct])
   )
@@ -256,13 +243,18 @@ const FINCA_OUTLINE = ${fincaOutlineJSON};
 const PARCELAS = ${parcelasJSON};
 const TYPE_COLORS = ${typeColorsJSON};
 const VAR_COLORS = ${varColorsJSON};
-const ESTADO_COLORS = ${estadoColorsJSON};
-const ESTADO_LABELS = ${estadoLabelsJSON};
-const FENOLOGIA = ${fenologiaJSON}; // keyed by variedad
+const ESTADO_CAMPANA_COLORS = ${estadoCampanaColorsJSON};
+const ESTADO_CAMPANA_LABELS = ${estadoCampanaLabelsJSON};
+const FENOLOGIA = ${fenologiaJSON}; // keyed by variedad -- solo alimenta el panel de tareas recomendadas
+const ESTADO_CAMPANA = ${estadoCampanaJSON}; // keyed by variedad -- alimenta el modo de color "Fenología"
 const COSECHA_BY_PARCELA = ${cosechaJSON}; // keyed by parcela_id -> kg_total
 const MAX_KG = ${maxKg};
-const RIEGO_BY_PARCELA = ${riegoJSON}; // keyed by parcela_id -> porcentaje_cumplimiento
 const CUMPLIMIENTO_BY_PARCELA = ${cumplimientoJSON}; // keyed by parcela_id -> cumplimiento_pct del estado de campaña actual
+// Riego en curso: arranca vacío -- el HTML se construye una sola vez al
+// cargar la pantalla y no se reconstruye en cada poll (eso recargaría el
+// WebView entero, perdiendo zoom/modo de color/capas activas). El valor
+// real llega después vía injectJavaScript (ver window.setParcelasEnRiego).
+let PARCELAS_EN_RIEGO = new Set();
 
 // Infrastructure GeoJSON data
 const GEO_DATA = {
@@ -288,20 +280,27 @@ function getStyle(f, selected) {
   if (colorMode === 'cosecha') {
     const kg = (p && COSECHA_BY_PARCELA[p.id]) || 0;
     stroke = '#166534'; fill = cosechaColor(kg, MAX_KG);
-  } else if (colorMode === 'riego') {
-    const pct = p ? RIEGO_BY_PARCELA[p.id] : null;
-    stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
   } else if (colorMode === 'cumplimiento') {
     const pct = p ? CUMPLIMIENTO_BY_PARCELA[p.id] : null;
     stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
-  } else if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && FENOLOGIA[p.variedad]) {
-    const estado = FENOLOGIA[p.variedad].estado_fenologico;
-    stroke = fill = ESTADO_COLORS[estado] || '#94a3b8';
+  } else if (colorMode === 'fenologia' && f.type === 'parral' && p && p.variedad && ESTADO_CAMPANA[p.variedad]) {
+    const estado = ESTADO_CAMPANA[p.variedad].estado_campana;
+    stroke = fill = ESTADO_CAMPANA_COLORS[estado] || '#94a3b8';
   } else if (colorMode === 'variedad' && f.type === 'parral' && p && p.variedad) {
     stroke = fill = VAR_COLORS[p.variedad] || '#94a3b8';
   } else {
     const c = TYPE_COLORS[f.type] || TYPE_COLORS.parral;
     stroke = c.stroke; fill = c.fill;
+  }
+  // Riego en curso: se compone encima del modo de color elegido (no lo
+  // reemplaza) — mismo criterio que FincaMapInner.tsx web.
+  if (p && PARCELAS_EN_RIEGO.has(p.id)) {
+    stroke = '#0ea5e9';
+    return {
+      color: stroke, weight: 3, dashArray: '6,4',
+      fillColor: fill,
+      fillOpacity: selected ? 0.65 : 0.3,
+    };
   }
   return {
     color: stroke, weight: selected ? 3 : 1.5,
@@ -345,18 +344,14 @@ function updateLegend() {
       '<div class="legend-item"><div class="legend-dot" style="background:#f3f4f6;border:1px solid #e5e7eb"></div><span class="legend-label">Sin datos</span></div>' +
       '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG*0.3, MAX_KG)+'"></div><span class="legend-label">Bajo</span></div>' +
       '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG, MAX_KG)+'"></div><span class="legend-label">Alto</span></div>';
-  } else if (colorMode === 'riego') {
-    title.textContent = 'Riego';
-    const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
-    items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
   } else if (colorMode === 'cumplimiento') {
     title.textContent = 'Cumpl. riego (estado)';
     const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
     items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
   } else {
-    title.textContent = 'Fenología';
-    const estados = ['brotacion','floracion','cuaje','envero','madurez','cosecha','latencia'];
-    items.innerHTML = estados.map(e => '<div class="legend-item"><div class="legend-dot" style="background:'+(ESTADO_COLORS[e]||'#94a3b8')+'"></div><span class="legend-label">'+(ESTADO_LABELS[e]||e)+'</span></div>').join('');
+    title.textContent = 'Ciclo de Campaña';
+    const estados = ['brotacion','floracion','cuaje','cierre_racimo','envero','cosecha','post_cosecha'];
+    items.innerHTML = estados.map(e => '<div class="legend-item"><div class="legend-dot" style="background:'+(ESTADO_CAMPANA_COLORS[e]||'#94a3b8')+'"></div><span class="legend-label">'+(ESTADO_CAMPANA_LABELS[e]||e)+'</span></div>').join('');
   }
 }
 
@@ -369,16 +364,23 @@ function updateStyles() {
 
 const MODE_LABELS = {
   type: '&#9632; Por tipo', variedad: '&#9632; Por variedad',
-  cosecha: '&#9632; Cosecha', riego: '&#9632; Riego', cumplimiento: '&#9632; Cumpl. riego',
+  cosecha: '&#9632; Cosecha', cumplimiento: '&#9632; Cumpl. riego',
   fenologia: '&#9632; Fenología',
 };
-const MODE_ORDER = ['type', 'variedad', 'cosecha', 'riego', 'cumplimiento', 'fenologia'];
+const MODE_ORDER = ['type', 'variedad', 'cosecha', 'cumplimiento', 'fenologia'];
 
 function toggleMode() {
   colorMode = MODE_ORDER[(MODE_ORDER.indexOf(colorMode) + 1) % MODE_ORDER.length];
   document.getElementById('mode-btn').innerHTML = MODE_LABELS[colorMode];
   updateStyles(); updateLegend();
 }
+
+// Llamado desde React Native vía injectJavaScript cada vez que cambia el
+// poll de riegos en curso (30s) -- no reconstruye el HTML, solo repinta.
+window.setParcelasEnRiego = function(parcelaIds) {
+  PARCELAS_EN_RIEGO = new Set(parcelaIds);
+  updateStyles();
+};
 
 L.polygon(FINCA_OUTLINE, { color: '#2d4a28', weight: 2.5, fill: false, dashArray: '6,4', interactive: false }).addTo(map);
 
@@ -460,7 +462,7 @@ function initExtraLayers() {
     { key: 'lineaElectrica',  type: 'line',  color: '#facc15', label: 'Línea eléctrica' },
     { key: 'canerias',        type: 'line',  color: '#1e3a8a', label: 'Cañería'         },
     { key: 'valvulas',        type: 'point', color: '#1e3a8a', label: 'Válvula'         },
-    { key: 'cuadrantesRiego', type: 'poly',  color: '#d1d5db', label: null              },
+    { key: 'cuadrantesRiego', type: 'poly',  color: '#d1d5db', label: 'Cuadrante'       },
   ];
 
   cfgs.forEach(function(cfg) {
@@ -484,7 +486,7 @@ function initExtraLayers() {
         style: function() {
           return { color: cfg.color, fillColor: cfg.color, fillOpacity: 0.15, weight: 1.5 };
         },
-        interactive: false,
+        onEachFeature: cfg.label ? makePopupHandler(cfg.label) : null,
       });
     } else {
       geoLayer = L.geoJSON(data, {
@@ -631,6 +633,19 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
                 )}
               </View>
             )}
+            {panel.mmTotal !== null && (() => {
+              const pct = (panel.mmTotal / MM_OBJETIVO_ANUAL_POR_HA) * 100
+              return (
+                <View style={panelStyles.objetivoWrap}>
+                  <View style={panelStyles.progressBarBg}>
+                    <View style={[panelStyles.progressBarFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: riegoColor(pct) }]} />
+                  </View>
+                  <Text style={panelStyles.riegoSub}>
+                    {pct.toFixed(0)}% de {MM_OBJETIVO_ANUAL_POR_HA.toFixed(0)} mm/año objetivo
+                  </Text>
+                </View>
+              )
+            })()}
           </View>
         )}
 
@@ -741,6 +756,9 @@ const panelStyles = StyleSheet.create({
   riegoRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   mmValue: { fontSize: 18, fontWeight: '800', color: '#1d4ed8' },
   riegoSub: { fontSize: 12, color: '#9ca3af' },
+  objetivoWrap: { marginTop: 6 },
+  progressBarBg: { width: '100%', height: 6, borderRadius: 3, backgroundColor: '#f3f4f6', overflow: 'hidden', marginBottom: 4 },
+  progressBarFill: { height: '100%', borderRadius: 3 },
   actionsBar: {
     flexDirection: 'row', gap: 8, padding: 12,
     borderTopWidth: 1, borderTopColor: '#f0f2f5',
@@ -760,8 +778,8 @@ export default function MapaScreen() {
   const [estadoCampana, setEstadoCampana] = useState<EstadoActualVariedad[]>([])
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
   const [cosecha, setCosecha] = useState<CosechaResumenPorParcela[]>([])
-  const [riego, setRiego] = useState<EficienciaHidricaParcela[]>([])
   const [cumplimiento, setCumplimiento] = useState<CumplimientoRiegoParcela[]>([])
+  const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [panel, setPanel] = useState<ParcelPanel | null>(null)
@@ -775,12 +793,11 @@ export default function MapaScreen() {
     // encargado+, y regador/obrero no lo tienen). Si Promise.all fallara por
     // un solo 403/500 de esas, el mapa entero quedaba en blanco (sin
     // parcelas ni polígonos) para esos roles o ante cualquier error puntual.
-    const [parcelasRes, estadoCampanaRes, fenologiaRes, cosechaRes, riegoRes, cumplimientoRes] = await Promise.allSettled([
+    const [parcelasRes, estadoCampanaRes, fenologiaRes, cosechaRes, cumplimientoRes] = await Promise.allSettled([
       api.get<Parcela[]>('/parcelas/mapa'),
       getEstadoCampanaActual(),
       api.get<FaseVariedad[]>('/produccion/fenologia/estado-actual'),
       api.get<CosechaResumenPorParcela[]>('/produccion/cosecha/resumen/por-parcela', { params: { temporada: anio } }),
-      api.get<EficienciaHidricaParcela[]>('/produccion/dashboard/eficiencia-hidrica', { params: { anio } }),
       getCumplimientoRiego(),
     ])
     if (parcelasRes.status === 'fulfilled') {
@@ -789,12 +806,36 @@ export default function MapaScreen() {
     if (estadoCampanaRes.status === 'fulfilled') setEstadoCampana(estadoCampanaRes.value)
     if (fenologiaRes.status === 'fulfilled') setFenologia(fenologiaRes.value.data)
     if (cosechaRes.status === 'fulfilled') setCosecha(cosechaRes.value.data)
-    if (riegoRes.status === 'fulfilled') setRiego(riegoRes.value.data)
     if (cumplimientoRes.status === 'fulfilled') setCumplimiento(cumplimientoRes.value)
     setLoading(false)
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Riegos en curso — para resaltar en el mapa el parral que se está regando
+  // ahora mismo. Poll cada 30s, mismo intervalo que riego.tsx. Falla en
+  // silencio si no hay conexión o el rol no tiene permiso (regador/obrero,
+  // require_encargado_up en el backend) — no bloquea el resto del mapa.
+  const loadRiegosEnCurso = useCallback(async () => {
+    try {
+      setRiegosEnCurso(await getRiegosEnCurso())
+    } catch { /* offline o sin permiso */ }
+  }, [])
+
+  useEffect(() => {
+    loadRiegosEnCurso()
+    const t = setInterval(loadRiegosEnCurso, 30_000)
+    return () => clearInterval(t)
+  }, [loadRiegosEnCurso])
+
+  // Empuja el resultado del poll al WebView ya cargado, sin reconstruir el
+  // HTML (eso recargaría el mapa entero cada 30s).
+  useEffect(() => {
+    const ids = riegosEnCurso.map((r) => r.parcela_id)
+    webviewRef.current?.injectJavaScript(
+      `window.setParcelasEnRiego && window.setParcelasEnRiego(${JSON.stringify(ids)}); true;`
+    )
+  }, [riegosEnCurso])
 
   async function fetchPanelExtras(parcelaId: string): Promise<{
     mmTotal: number; m3Total: number; riegoCount: number;
@@ -876,7 +917,7 @@ export default function MapaScreen() {
     )
   }
 
-  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia, cosecha, riego, cumplimiento)
+  const html = buildMapHTML(parcelas, GEO_LAYERS, fenologia, cosecha, cumplimiento, estadoCampana)
 
   return (
     <View style={styles.container}>

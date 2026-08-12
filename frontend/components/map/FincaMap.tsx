@@ -5,10 +5,11 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getCosechaResumenPorParcela } from '@/lib/api/cosecha'
 import {
-  getEficienciaHidrica, getFenologiaEstadoActual,
+  getFenologiaEstadoActual,
   getCumplimientoRiego, getEstadoCampanaActual,
 } from '@/lib/api/produccion'
-import type { RiegoMapaInfo, FenologiaMapaInfo, EstadoCampanaMapaInfo } from './FincaMapInner'
+import { getRiegosEnCurso } from '@/lib/api/riego'
+import type { FenologiaMapaInfo, EstadoCampanaMapaInfo } from './FincaMapInner'
 
 const Inner = dynamic(() => import('./FincaMapInner'), {
   ssr: false,
@@ -36,23 +37,6 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     }
     return map
   }, [cosechaData])
-
-  const { data: eficienciaData = [] } = useQuery({
-    queryKey: ['eficiencia-hidrica-mapa', CURRENT_TEMPORADA],
-    queryFn: () => getEficienciaHidrica(CURRENT_TEMPORADA),
-    staleTime: 300_000,
-  })
-
-  const riegoByParcelaId = useMemo((): Record<string, RiegoMapaInfo> => {
-    const map: Record<string, RiegoMapaInfo> = {}
-    for (const item of eficienciaData) {
-      map[item.parcela_id] = {
-        litros_totales: item.litros_totales,
-        porcentaje_cumplimiento: item.porcentaje_cumplimiento,
-      }
-    }
-    return map
-  }, [eficienciaData])
 
   const { data: fenologiaData = [] } = useQuery({
     queryKey: ['fenologia-mapa'],
@@ -109,15 +93,31 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     return map
   }, [estadoCampanaData])
 
+  // Riegos en curso — para resaltar en el mapa el parral que se está regando
+  // ahora mismo. 30s, mismo intervalo que RiegosEnCurso.tsx en otras
+  // pantallas. require_encargado_up en el backend: regador/obrero no ven
+  // esto (403), pero eso no rompe el mapa — solo no les aparece el resaltado.
+  const { data: riegosEnCurso = [] } = useQuery({
+    queryKey: ['riegos-en-curso-mapa'],
+    queryFn: getRiegosEnCurso,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const parcelasEnRiego = useMemo(
+    () => new Set(riegosEnCurso.map((r) => r.parcela_id)),
+    [riegosEnCurso],
+  )
+
   return (
     <Inner
       compact={compact}
       height={height}
       cosechaByParcelaId={cosechaByParcelaId}
-      riegoByParcelaId={riegoByParcelaId}
       fenologiaByVariedad={fenologiaByVariedad}
       cumplimientoByParcelaId={cumplimientoByParcelaId}
       estadoCampanaByVariedad={estadoCampanaByVariedad}
+      parcelasEnRiego={parcelasEnRiego}
     />
   )
 }
