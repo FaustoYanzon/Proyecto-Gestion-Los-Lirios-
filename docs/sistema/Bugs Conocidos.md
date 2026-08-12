@@ -32,7 +32,7 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ## ✅ Resueltos
 
 **Sesión del 2026-08-12, cuarta tanda** (ver [[2026-08-12-catalogo-trabajadores-vacio-y-fix]]):
-- **Catálogo de `trabajadores` completamente vacío en producción desde el 08-05 — diagnosticado, backfill listo (falta correr `--commit`).** 105 de 106 registros de Tareas (y todos los de Riego/Fitosanitarios) tenían `trabajador_id`/`responsable_id` NULL. El combobox en sí funciona bien (verificado con una creación de prueba real en producción) — el gap es retroactivo: nunca se volvió a ejercitar el flujo de creación después del lanzamiento. `scripts/backfill_trabajadores.py` (dry-run probado: 28 Trabajadores nuevos, 109 registros a vincular).
+- **Catálogo de `trabajadores` completamente vacío en producción desde el 08-05 — resuelto.** 105 de 106 registros de Tareas (y todos los de Riego/Fitosanitarios) tenían `trabajador_id`/`responsable_id` NULL. El combobox en sí funciona bien (verificado con una creación de prueba real en producción) — el gap era retroactivo: nunca se volvió a ejercitar el flujo de creación después del lanzamiento. `scripts/backfill_trabajadores.py` corrido en producción: 28 Trabajadores creados, 109 registros vinculados, 0 pendientes tras verificar.
 - **Sin pantalla de administración para el catálogo de Trabajador — resuelto.** Nueva `/dashboard/admin/trabajadores` (CRUD completo, sin cambios de backend — los endpoints ya existían desde el 08-05).
 - **Auditoría de integridad de datos** (pedida por Fausto tras encontrar el gap de arriba): revisado todo `app/models/*.py` buscando el mismo patrón (texto denormalizado + FK opcional sin vincular) en otro lado. No se encontró ningún otro caso — es aislado a `trabajador_id`/`responsable_id`.
 

@@ -21,7 +21,7 @@ Los datos de prueba (Trabajador + Tarea + Egreso vinculado) se borraron sin deja
 - Crea un `Trabajador` por cada nombre nuevo (rol `obrero` por defecto, mismo default que el endpoint).
 - Vincula (UPDATE) todos los registros existentes que matcheen.
 - Dry-run: 28 nombres únicos → 28 Trabajador nuevos, 109 registros a vincular (105 tareas + 3 riegos + 1 fitosanitario). Casos ambiguos como "Oscar" vs "Oscar Carrizo" o "Lucas" vs "Lucas Mercado" se dejaron **sin fusionar** a propósito (no hay forma de saber con certeza si son la misma persona) — quedan como dos entradas del catálogo, fusionables a mano después desde el maestro si corresponde.
-- Bloqueado por el classifier al intentar `--commit` (mismo patrón de siempre con escrituras a producción) — pendiente que Fausto lo corra con `!` en el chat.
+- Bloqueado por el classifier al intentar `--commit` (mismo patrón de siempre con escrituras a producción) — corrido por Fausto con `!` en el chat. **Resultado real:** 28 Trabajadores creados, 109 registros vinculados, backup `los_lirios_prod_20260812_175642_pre_backfill_trabajadores.dump` (94,785 bytes). Verificado con un dry-run posterior: 0 registros sin vincular en los 3 módulos.
 
 ## Maestro de Trabajadores (nuevo, Admin)
 
