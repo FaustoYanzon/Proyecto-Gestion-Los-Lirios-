@@ -195,6 +195,7 @@ async def list_ingresos(
     origen: OrigenPago | None = Query(None),
     finca: Finca | None = Query(None),
     moneda: MonedaTipo | None = Query(None),
+    fuente: str | None = Query(None),
     solo_cheques_disponibles: bool = Query(
         False, description="Cheques cobrados (forma_pago cheque/echeque) sin uso_cheque asignado."
     ),
@@ -220,6 +221,8 @@ async def list_ingresos(
         stmt = stmt.where(Ingreso.finca == finca)
     if moneda is not None:
         stmt = stmt.where(Ingreso.moneda == moneda)
+    if fuente is not None:
+        stmt = stmt.where(Ingreso.fuente == fuente)
     if solo_cheques_disponibles:
         stmt = stmt.where(
             Ingreso.forma_pago.in_([FormaPago.cheque, FormaPago.echeque]),

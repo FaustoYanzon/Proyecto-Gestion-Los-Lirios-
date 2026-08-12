@@ -9,7 +9,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import alertas, auth, clima, finanzas, kpis, notificaciones, parcelas, presupuestos, produccion, trabajadores, users
+from app.api import alertas, arca, auth, clima, finanzas, kpis, notificaciones, parcelas, presupuestos, produccion, trabajadores, users
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import configure_logging
@@ -79,6 +79,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 app.include_router(alertas.router)
+app.include_router(arca.router)
 app.include_router(auth.router)
 app.include_router(clima.router)
 app.include_router(users.router)

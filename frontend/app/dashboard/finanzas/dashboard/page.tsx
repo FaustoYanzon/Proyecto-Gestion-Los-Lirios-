@@ -10,6 +10,7 @@ import {
 import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
+import { getResumenIva } from '@/lib/api/arca'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,12 @@ export default function FinanceDashboardPage() {
     queryKey: ['kpi-compradores', anio, 'media_agua'],
     queryFn: () => getKpiCompradores(anio, 'media_agua'),
     staleTime: 300_000,
+  })
+
+  const { data: resumenIva } = useQuery({
+    queryKey: ['arca-resumen-iva'],
+    queryFn: () => getResumenIva({}),
+    staleTime: 60_000,
   })
 
   // ── Derived data ───────────────────────────────────────────────────────────
@@ -286,6 +293,26 @@ export default function FinanceDashboardPage() {
           value={fmtMoney(porMes.at(-1)?.saldoAcum ?? 0, moneda)}
           hint={kpiMes ? `mes: ${fmtMoney(kpiMes.saldo, moneda)}` : undefined}
           tone={(porMes.at(-1)?.saldoAcum ?? 0) >= 0 ? 'good' : 'bad'}
+        />
+      </div>
+
+      {/* IVA cards — from comprobantes ARCA importados, mes calendario en curso */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <KpiCard
+          label={`IVA compra ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_compra)}` : '—'}
+          hint="sobre comprobantes recibidos importados"
+        />
+        <KpiCard
+          label={`IVA venta ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_venta)}` : '—'}
+          hint="sobre comprobantes emitidos importados"
+        />
+        <KpiCard
+          label={`IVA saldo ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_saldo)}` : '—'}
+          hint={resumenIva ? (resumenIva.iva_saldo >= 0 ? 'a pagar (venta > compra)' : 'a favor (compra > venta)') : undefined}
+          tone={!resumenIva ? 'neutral' : resumenIva.iva_saldo >= 0 ? 'bad' : 'good'}
         />
       </div>
 

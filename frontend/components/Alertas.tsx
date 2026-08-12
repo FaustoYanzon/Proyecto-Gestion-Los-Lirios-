@@ -7,7 +7,29 @@ import { getRiegos, type RiegoResponse } from '@/lib/api/riego'
 import { getEstadoActual, type EstadoActualItem } from '@/lib/api/produccion'
 import { getAlertasCarencia, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { getAlertasDescartadas, descartarAlerta } from '@/lib/api/alertas'
+import { getLotesArca, type LoteImportacionArcaResponse } from '@/lib/api/arca'
 import BuzonModal from '@/components/BuzonModal'
+
+const MES_NOMBRE = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
+// Quincena vencida hace >=3 días sin un lote importado que la cubra, o null
+// si estamos en medio de una quincena (sin apuro todavía).
+function quincenaVencidaSinImportar(now: Date): { desde: Date; etiqueta: string } | null {
+  const day = now.getDate()
+  if (day >= 18) {
+    const desde = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { desde, etiqueta: `primera quincena de ${MES_NOMBRE[now.getMonth()]}` }
+  }
+  if (day <= 3) {
+    const finMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0)
+    const desde = new Date(finMesAnterior.getFullYear(), finMesAnterior.getMonth(), 16)
+    return { desde, etiqueta: `segunda quincena de ${MES_NOMBRE[desde.getMonth()]}` }
+  }
+  return null
+}
 
 interface Alerta {
   id: string
@@ -19,9 +41,29 @@ function derivarAlertas(
   riegos: RiegoResponse[],
   estadoActual: EstadoActualItem[],
   carencias: FitosanitarioResponse[],
+  lotesArca: LoteImportacionArcaResponse[],
 ): Alerta[] {
   const alertas: Alerta[] = []
   const now = new Date()
+
+  // Recordatorio de subir los CSV de ARCA (recibidos/emitidos) — quincena
+  // vencida hace >=3 días sin un lote de ese tipo que la cubra. Puro cálculo
+  // de fecha + los últimos lotes ya cargados, sin scheduler ni backend nuevo.
+  const vencida = quincenaVencidaSinImportar(now)
+  if (vencida) {
+    for (const tipo of ['recibido', 'emitido'] as const) {
+      const yaImportado = lotesArca.some(
+        (l) => l.tipo_archivo === tipo && new Date(l.importado_at) >= vencida.desde,
+      )
+      if (!yaImportado) {
+        alertas.push({
+          id: `arca-${tipo}-${vencida.desde.toISOString().split('T')[0]}`,
+          nivel: 'info',
+          mensaje: `Falta importar los comprobantes ${tipo === 'recibido' ? 'recibidos (compras)' : 'emitidos (ventas)'} de ARCA de la ${vencida.etiqueta}`,
+        })
+      }
+    }
+  }
 
   // Carencia fitosanitaria: parcelas que aún no pueden cosecharse.
   // Food-safety rule — always listed first, before any other alert.
@@ -186,8 +228,14 @@ export default function Alertas() {
     staleTime: 60_000,
   })
 
+  const { data: lotesArca = [] } = useQuery({
+    queryKey: ['arca-lotes'],
+    queryFn: () => getLotesArca({ limit: 10 }),
+    staleTime: 300_000,
+  })
+
   const descartadasIds = new Set(descartadas.map((d) => d.alerta_id))
-  const todasLasAlertas = derivarAlertas(riegos, estadoActual, carencias)
+  const todasLasAlertas = derivarAlertas(riegos, estadoActual, carencias, lotesArca)
   const alertasVisibles = todasLasAlertas.filter((a) => !descartadasIds.has(a.id))
   const resumen = alertasVisibles.slice(0, 3)
 

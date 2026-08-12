@@ -85,6 +85,7 @@ class IngresoBase(BaseModel):
     origen: OrigenPago
     finca: Finca
     descripcion: str | None = None
+    fuente: str = "manual"
 
 
 class IngresoCreate(IngresoBase):
@@ -108,6 +109,7 @@ class IngresoUpdate(BaseModel):
     origen: OrigenPago | None = None
     finca: Finca | None = None
     descripcion: str | None = None
+    fuente: str | None = None
 
 
 class IngresoResponse(IngresoBase):

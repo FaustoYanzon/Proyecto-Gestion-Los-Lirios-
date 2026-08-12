@@ -14,6 +14,7 @@ import {
 } from '@/lib/api/egresos'
 import EgresosTable from '@/components/finanzas/EgresosTable'
 import EgresoForm from '@/components/finanzas/EgresoForm'
+import ComprobantesArcaPanel from '@/components/finanzas/ComprobantesArcaPanel'
 
 // ─── Sheet (right-side drawer, no external deps) ─────────────────────────────
 
@@ -173,6 +174,8 @@ export default function EgresosPage() {
           </button>
         </div>
       </div>
+
+      <ComprobantesArcaPanel tipoArchivo="recibido" titulo="Comprobantes de compra (ARCA)" />
 
       {/* Filter bar */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">

@@ -188,6 +188,7 @@ class Ingreso(Base):
     origen: Mapped[OrigenPago] = mapped_column(SAEnum(OrigenPago), nullable=False)
     finca: Mapped[Finca] = mapped_column(SAEnum(Finca), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    fuente: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )
