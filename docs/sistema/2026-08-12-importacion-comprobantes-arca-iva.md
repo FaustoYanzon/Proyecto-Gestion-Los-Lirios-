@@ -60,7 +60,14 @@ Commit `04a3eae` pusheado a `main`. Railway va a correr las 3 migraciones nuevas
 ## Pendiente para más adelante (no bloqueante)
 
 - El chatbot para gastos no oficiales ("en negro") sigue como visión a futuro, no iniciado.
-- `SENTRY_DSN` todavía no está seteado en las env vars de Railway (pendiente desde la sesión del 08-11) — el código está listo, solo falta que Fausto lo agregue a mano en el dashboard.
+
+## Segunda tanda, mismo día — cierre del roadmap (2026-08-12)
+
+Fausto confirmó que probar el flujo ARCA en producción y el build mobile v4 en el dispositivo real (puntos 2 y 3 del roadmap) salieron bien. Se cerraron los 3 puntos restantes:
+- `vercel --prod` corrido — frontend con la importación ARCA en producción.
+- `SENTRY_DSN` seteado en Railway (obtenido de sentry.io vía Claude in Chrome, seteado con `railway variables --set`) — Sentry activo.
+- 4° test de idempotencia (`POST /produccion/riego/iniciar`) agregado — expuso que `ZoneInfo("America/Argentina/San_Juan")` necesita el paquete `tzdata` explícito (ausente en Windows, y no garantizado en toda imagen Linux). Agregado a `requirements.txt`. 44/44 tests. Commit `7c4fde1`.
+- El punto "deshacer descarte ARCA" resultó ya resuelto desde el follow-up de arriba (`38858e6`/`f753702`) — el roadmap de `Sistema de Gestión Agrícola.md` había quedado desactualizado y lo marcaba como pendiente por error; corregido.
 
 ## Ver también
 

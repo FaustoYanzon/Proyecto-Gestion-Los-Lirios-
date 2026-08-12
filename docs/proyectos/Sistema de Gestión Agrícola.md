@@ -72,20 +72,22 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-12 — cierre de sesión)
+## Próximos pasos (actualizado 2026-08-12, segunda sesión — cierre)
 
-Pilot estable, sin bloqueantes de código pendientes. Pendientes reales:
+Pilot estable, sin bloqueantes de código pendientes. Puntos 2 y 3 del roadmap anterior confirmados por Fausto (probados en producción y en el dispositivo real de la finca, van bien). Puntos 1, 4 y 5 cerrados en esta sesión. Pendientes reales:
 
 ### Pendiente real
 
-1. **Correr `vercel --prod`** para que la importación de comprobantes ARCA (nueva, ver [[2026-08-12-importacion-comprobantes-arca-iva]]) llegue al frontend de producción — el backend ya se despliega solo en Railway (corre las migraciones nuevas automáticamente).
-2. **Probar el flujo real de importación ARCA con Fausto** en producción: subir un CSV real, clasificar unos comprobantes, confirmar que el IVA del dashboard y el recordatorio de Alertas se ven bien con datos reales de producción (la verificación de esta sesión fue completa pero contra Postgres local).
-3. **Confirmar la app en el dispositivo real de la finca con el build versionCode 4** (incluye el módulo nativo de netinfo que le faltaba al build 3) — ya publicado en Play Console Internal testing el 08-11, ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]].
-4. **Agregar `SENTRY_DSN` como variable de entorno en Railway** (dashboard, a mano) para activar el reporte de errores en producción — el código ya está listo y es no-op sin esa variable.
-5. Considerar el 4° test opcional de idempotencia para `POST /produccion/riego/iniciar` (pre-check separado del de `POST /produccion/riego/`) — menor, no bloqueante.
-6. Sin forma de "deshacer" un comprobante ARCA descartado por error (el índice único bloquea reimportarlo) — evaluar una vista de descartados con restore si aparece como problema real en el uso diario.
+Ninguno bloqueante. Los puntos que quedaban del roadmap anterior ya están resueltos (ver abajo).
 
-### Hecho en la sesión del 2026-08-12 (para referencia — no repetir)
+### Hecho en esta sesión (2026-08-12, segunda tanda — para referencia, no repetir)
+
+1. **`vercel --prod` corrido** — la importación ARCA (CSV → Egresos/Ingresos + IVA) ya está en el frontend de producción.
+4. **`SENTRY_DSN` seteado en Railway** (vía `railway variables --set`, DSN obtenido del proyecto `python-fastapi` en sentry.io) — Sentry queda activo en producción a partir del próximo redeploy del servicio (el set de la variable ya dispara uno).
+5. **4° test de idempotencia agregado** para `POST /produccion/riego/iniciar` (`backend/tests/test_produccion_idempotency.py`) — expuso un bug real de paso: `ZoneInfo("America/Argentina/San_Juan")` depende de la base IANA del sistema operativo, ausente en Windows sin el paquete `tzdata` explícito (nunca se había ejercitado ese endpoint en un test). Agregado `tzdata` a `requirements.txt`. 44/44 tests backend pasando. Commit `7c4fde1`, pusheado — Railway redespliega solo (sin migraciones nuevas).
+6. **Punto "deshacer descarte ARCA" — ya estaba resuelto, el roadmap había quedado desactualizado.** El follow-up de la sesión del 08-12 (misma tarde, commits `38858e6`/`f753702`) ya había agregado `POST /finanzas/arca/{id}/restaurar`, `DELETE /finanzas/arca/{id}` y la vista "Ver descartados" en `ComprobantesArcaPanel.tsx` — confirmado presente en el código actual. No había nada que construir, solo corregir este documento.
+
+### Hecho en la sesión del 2026-08-12, primera tanda (para referencia — no repetir)
 
 Importación de comprobantes ARCA (CSV) → Egresos/Ingresos + IVA compra/venta/saldo, completa (modelo, backend, frontend, alertas, verificada end-to-end con datos reales). Ver [[2026-08-12-importacion-comprobantes-arca-iva]].
 

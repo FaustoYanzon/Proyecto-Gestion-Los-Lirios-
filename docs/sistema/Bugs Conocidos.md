@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-11 (logging estructurado + Sentry, tests de idempotencia riego/fito/cosecha, test de registro de routers, build nuevo para la cola offline — ver [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]])
+> Última revisión: 2026-08-12, segunda tanda (Sentry activado en producción, deploy frontend ARCA, test de idempotencia riego/iniciar + fix tzdata, punto "deshacer descarte ARCA" confirmado ya resuelto — ver [[2026-08-12-importacion-comprobantes-arca-iva]])
 
 ---
 
@@ -21,7 +21,8 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
 - ~~Backup automático de producción configurado pero sin activar~~ — **activado 2026-07-27**: `install_backup_task.ps1` corrido, tarea `LosLirios-PG-Backup` registrada (diaria 21:00), probada con `Start-ScheduledTask` (dump real creado y copiado a OneDrive). **Sigue pendiente:** el test de restore que pide `scripts/BACKUP.md` (requiere un Postgres local corriendo, no se hizo todavía) — un backup no está "verificado" hasta que se prueba restaurarlo al menos una vez. También sigue siendo un backup que depende de que la PC de Fausto esté prendida a las 21:00 — si el piloto se vuelve permanente, migrar a un cron de Railway o GitHub Actions (ya anotado en `BACKUP.md` § Known limitations).
 - **Lint del frontend no pasa**: 14 errores, todos el mismo patrón (`setState` síncrono dentro de `useEffect` al resetear paginación en `TareasTable.tsx`, `RiegoTable.tsx`, `FitosanitariosTable.tsx`). No rompe runtime.
-- **Responsividad mobile del frontend web limitada**: solo 11 de 43 componentes usan breakpoints; el layout de dashboard es desktop-first. Si algún encargado prueba desde el celular en el navegador (no la app), la experiencia va a ser mala.
+- **Responsividad mobile del frontend web limitada**: 12 de 51 componentes usan breakpoints (revisado 2026-08-12, prácticamente sin cambio desde el 07-27); el layout de dashboard es desktop-first. Todas las páginas de `finanzas/` y `produccion/` (tablas y formularios) están sin breakpoints — son las que un encargado más probablemente abriría desde el navegador del celular. Si algún encargado prueba desde ahí (no la app), la experiencia va a ser mala.
+- **Módulo de notificaciones push solo tiene la mitad del camino hecho**: el backend (`notificaciones.py`) y mobile (`lib/notifications.ts`, registra el token Expo al loguearse) están completos, pero no hay ninguna UI en el frontend web que llame a `POST /notificaciones/enviar` — el endpoint (gerencial+, título/cuerpo libre a todos o a usuarios puntuales) existe pero nadie puede dispararlo hoy. Tampoco hay ningún trigger automático: ninguna alerta del sistema (riego atrasado, carencia, etc.) llega como push, solo se ven en el panel "Alertas" si el usuario abre la app/web.
 - **Dashboard finanzas sin costo por kg** todavía.
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
 - **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
@@ -29,6 +30,12 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-12, segunda tanda** (cierre de los pendientes del roadmap del 08-12 — ver [[2026-08-12-importacion-comprobantes-arca-iva]]):
+- **`SENTRY_DSN` seteado en Railway — Sentry activo en producción.** DSN obtenido de sentry.io (proyecto `python-fastapi`, no `python-fastapi-1` como se había anotado) vía Claude in Chrome, seteado con `railway variables --set` contra el servicio ya linkeado. El set de la variable disparó el redeploy solo.
+- **Frontend con la importación ARCA desplegado a producción** (`vercel --prod`).
+- **Bug real encontrado al agregar el 4° test de idempotencia (`POST /produccion/riego/iniciar`): `ZoneInfo("America/Argentina/San_Juan")` sin `tzdata` instalado explota con `ModuleNotFoundError`.** Windows no trae la base IANA de zonas horarias como sí la traen la mayoría de las imágenes Linux (por eso nunca se vio en Railway) — pero tampoco estaba declarado como dependencia explícita, así que cualquier imagen Linux minimalista sin tzdata del SO tendría el mismo problema en producción. Nunca se había detectado porque ningún test anterior ejercitaba ese endpoint. `tzdata==2026.3` agregado a `requirements.txt`. 44/44 tests backend pasando.
+- **"Deshacer un descarte de comprobante ARCA" — confirmado que ya estaba resuelto, el roadmap había quedado desactualizado.** El follow-up de la sesión del 08-12 (misma tarde, commits `38858e6`/`f753702`) ya había agregado `POST /finanzas/arca/{id}/restaurar`, `DELETE /finanzas/arca/{id}` y la vista "Ver descartados" — confirmado en el código actual, no hizo falta construir nada.
 
 **Sesión del 2026-08-11** (detalle completo en [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]):
 - **Sin logging estructurado ni exception handler genérico — resuelto.** Root logger a stdout (Railway lo captura) + `@app.exception_handler(Exception)` que loguea el traceback y devuelve un 500 genérico sin filtrar detalles internos; las rutas con `HTTPException` explícito siguen intactas. Sentry instalado y verificado en vivo (evento capturado en el dashboard); activación en producción pendiente de que Fausto agregue `SENTRY_DSN` en las env vars de Railway.
