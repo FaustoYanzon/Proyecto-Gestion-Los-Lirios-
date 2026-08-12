@@ -307,3 +307,48 @@ async def test_restaurar_comprobante_no_descartado_es_rechazado(client, create_u
 
     resp = await client.post(f"/finanzas/arca/{pendientes[0]['id']}/restaurar", headers=headers)
     assert resp.status_code == 400
+
+
+async def test_eliminar_comprobante_descartado_es_definitivo(client, create_user):
+    headers = await _auth(client, create_user)
+    files = {"file": ("recibidos.csv", RECIBIDOS_CSV.encode("utf-8"), "text/csv")}
+    await client.post("/finanzas/arca/importar", data={"tipo_archivo": "recibido"}, files=files, headers=headers)
+    pendientes = (
+        await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
+    ).json()
+    comprobante_id = pendientes[0]["id"]
+
+    await client.post(f"/finanzas/arca/{comprobante_id}/descartar", headers=headers)
+
+    resp = await client.delete(f"/finanzas/arca/{comprobante_id}", headers=headers)
+    assert resp.status_code == 204
+
+    descartados = (
+        await client.get(
+            "/finanzas/arca/pendientes",
+            params={"tipo_archivo": "recibido", "estado": "descartado"},
+            headers=headers,
+        )
+    ).json()
+    assert not any(c["id"] == comprobante_id for c in descartados)
+
+    # A diferencia de descartar, borrar libera la clave natural -- reimportar
+    # el mismo CSV trae de nuevo ese comprobante como pendiente (no bloqueado).
+    reimport = await client.post(
+        "/finanzas/arca/importar", data={"tipo_archivo": "recibido"}, files=files, headers=headers
+    )
+    body = reimport.json()
+    assert body["nuevos"] == 1
+    assert body["duplicados"] == len(pendientes) - 1
+
+
+async def test_eliminar_comprobante_pendiente_es_rechazado(client, create_user):
+    headers = await _auth(client, create_user)
+    files = {"file": ("recibidos.csv", RECIBIDOS_CSV.encode("utf-8"), "text/csv")}
+    await client.post("/finanzas/arca/importar", data={"tipo_archivo": "recibido"}, files=files, headers=headers)
+    pendientes = (
+        await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
+    ).json()
+
+    resp = await client.delete(f"/finanzas/arca/{pendientes[0]['id']}", headers=headers)
+    assert resp.status_code == 400

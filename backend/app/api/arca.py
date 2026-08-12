@@ -319,3 +319,31 @@ async def restaurar_comprobante_arca(
     await db.flush()
     await db.refresh(comprobante)
     return comprobante
+
+
+@router.delete("/{comprobante_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_comprobante_arca(
+    comprobante_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> None:
+    """Borrado definitivo -- solo para comprobantes ya descartados (no para
+    pendientes ni clasificados: esos primero se descartan o, si ya generaron
+    un Egreso/Ingreso, se borran desde ahí). A diferencia de descartar (que
+    bloquea reimportar el mismo comprobante vía el índice único), borrar
+    libera esa clave -- si el mismo CSV se reimporta más adelante, ese
+    comprobante vuelve a aparecer como pendiente nuevo. Es la diferencia real
+    entre "descartar" (decisión registrada, reversible) y "eliminar" (como si
+    nunca se hubiera importado)."""
+    result = await db.execute(
+        select(ComprobanteArcaImportado).where(ComprobanteArcaImportado.id == comprobante_id)
+    )
+    comprobante = result.scalar_one_or_none()
+    if comprobante is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprobante not found")
+    if comprobante.estado != EstadoComprobanteArca.descartado:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Solo se pueden borrar comprobantes descartados"
+        )
+    await db.delete(comprobante)
+    await db.flush()

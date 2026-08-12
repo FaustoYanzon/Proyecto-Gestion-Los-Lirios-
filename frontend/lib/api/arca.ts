@@ -101,6 +101,10 @@ export async function restaurarComprobanteArca(comprobanteId: string): Promise<C
   return data
 }
 
+export async function eliminarComprobanteArca(comprobanteId: string): Promise<void> {
+  await api.delete(`/finanzas/arca/${comprobanteId}`)
+}
+
 export async function getLotesArca(params: {
   tipo_archivo?: TipoArchivoArca
   limit?: number

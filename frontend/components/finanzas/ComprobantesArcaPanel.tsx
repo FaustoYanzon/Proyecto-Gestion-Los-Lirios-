@@ -10,6 +10,7 @@ import {
   clasificarComoIngreso,
   descartarComprobanteArca,
   restaurarComprobanteArca,
+  eliminarComprobanteArca,
   type TipoArchivoArca,
   type ComprobanteArcaResponse,
 } from '@/lib/api/arca'
@@ -308,6 +309,7 @@ function PendientesModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoArc
 function DescartadosModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoArca; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null)
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null)
 
   const { data: descartados = [], isLoading } = useQuery({
     queryKey: ['arca-descartados', tipoArchivo],
@@ -325,11 +327,22 @@ function DescartadosModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoAr
     }
   }
 
+  async function handleEliminar(id: string) {
+    if (!window.confirm('¿Borrar definitivamente este comprobante? No se puede deshacer ni reimportar desde el mismo CSV.')) return
+    setEliminandoId(id)
+    try {
+      await eliminarComprobanteArca(id)
+      queryClient.invalidateQueries({ queryKey: ['arca-descartados', tipoArchivo] })
+    } finally {
+      setEliminandoId(null)
+    }
+  }
+
   return (
     <BuzonModal
       title={`Comprobantes ARCA descartados (${descartados.length})`}
       onClose={onClose}
-      footer="Reimportar el mismo CSV no trae de vuelta un comprobante descartado (el índice de duplicados lo bloquea) — restauralo desde acá."
+      footer="Restaurar lo vuelve a pendiente. Borrar lo elimina del todo -- si reimportás el mismo CSV más adelante, ese comprobante puede volver a aparecer como nuevo."
     >
       {isLoading ? (
         <p className="text-sm text-gray-400 px-2 py-4">Cargando...</p>
@@ -352,6 +365,14 @@ function DescartadosModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoAr
                     {c.moneda.toUpperCase()} {formatMonto(c.imp_total)}
                   </div>
                 </div>
+                <button
+                  onClick={() => handleEliminar(c.id)}
+                  disabled={eliminandoId === c.id}
+                  title="Borrar definitivamente"
+                  className="px-3 py-1 text-xs font-medium text-gray-500 hover:text-red-600 transition-colors disabled:opacity-60"
+                >
+                  Borrar
+                </button>
                 <button
                   onClick={() => handleRestaurar(c.id)}
                   disabled={restaurandoId === c.id}
