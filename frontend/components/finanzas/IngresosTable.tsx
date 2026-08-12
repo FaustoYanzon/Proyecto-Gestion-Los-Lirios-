@@ -56,8 +56,11 @@ const PAGE_SIZE = 10
 
 export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }: Props) {
   const [page, setPage] = useState(1)
-  const totalARS = ingresos.filter((i) => i.moneda === 'ars').reduce((s, i) => s + i.monto, 0)
-  const totalUSD = ingresos.filter((i) => i.moneda === 'usd').reduce((s, i) => s + i.monto, 0)
+  // Number(i.monto): la API serializa Decimal como string en el JSON -- sumar
+  // strings con + concatena en vez de sumar, lo que rompe Intl.NumberFormat
+  // con 2+ filas y muestra $NaN (mismo bug que EgresosTable.tsx).
+  const totalARS = ingresos.filter((i) => i.moneda === 'ars').reduce((s, i) => s + Number(i.monto), 0)
+  const totalUSD = ingresos.filter((i) => i.moneda === 'usd').reduce((s, i) => s + Number(i.monto), 0)
 
   useEffect(() => { setPage(1) }, [ingresos])
 

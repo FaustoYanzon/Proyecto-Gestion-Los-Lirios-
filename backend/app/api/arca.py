@@ -113,6 +113,7 @@ async def importar_arca(
 @router.get("/pendientes", response_model=list[ComprobanteArcaResponse])
 async def list_pendientes_arca(
     tipo_archivo: TipoArchivoArca = Query(...),
+    estado: EstadoComprobanteArca = Query(EstadoComprobanteArca.pendiente),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[ComprobanteArcaImportado]:
@@ -120,7 +121,7 @@ async def list_pendientes_arca(
         select(ComprobanteArcaImportado)
         .where(
             ComprobanteArcaImportado.tipo_archivo == tipo_archivo,
-            ComprobanteArcaImportado.estado == EstadoComprobanteArca.pendiente,
+            ComprobanteArcaImportado.estado == estado,
         )
         .order_by(ComprobanteArcaImportado.fecha_emision)
     )
@@ -293,3 +294,28 @@ async def descartar_comprobante_arca(
     comprobante.clasificado_por = current_user.id
     comprobante.clasificado_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+@router.post("/{comprobante_id}/restaurar", response_model=ComprobanteArcaResponse)
+async def restaurar_comprobante_arca(
+    comprobante_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> ComprobanteArcaImportado:
+    """Un comprobante descartado por error vuelve a pendiente -- el único
+    camino de vuelta, ya que el índice único de dedupe impide reimportarlo
+    desde el mismo CSV."""
+    result = await db.execute(
+        select(ComprobanteArcaImportado).where(ComprobanteArcaImportado.id == comprobante_id)
+    )
+    comprobante = result.scalar_one_or_none()
+    if comprobante is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprobante not found")
+    if comprobante.estado != EstadoComprobanteArca.descartado:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Comprobante no está descartado")
+    comprobante.estado = EstadoComprobanteArca.pendiente
+    comprobante.clasificado_por = None
+    comprobante.clasificado_at = None
+    await db.flush()
+    await db.refresh(comprobante)
+    return comprobante

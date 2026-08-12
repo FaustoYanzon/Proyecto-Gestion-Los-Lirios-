@@ -265,3 +265,45 @@ async def test_descartar_comprobante(client, create_user):
         await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
     ).json()
     assert len(pendientes_after) == len(pendientes) - 1
+
+
+async def test_restaurar_comprobante_descartado_vuelve_a_pendiente(client, create_user):
+    headers = await _auth(client, create_user)
+    files = {"file": ("recibidos.csv", RECIBIDOS_CSV.encode("utf-8"), "text/csv")}
+    await client.post("/finanzas/arca/importar", data={"tipo_archivo": "recibido"}, files=files, headers=headers)
+    pendientes = (
+        await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
+    ).json()
+    comprobante_id = pendientes[0]["id"]
+
+    await client.post(f"/finanzas/arca/{comprobante_id}/descartar", headers=headers)
+
+    descartados = (
+        await client.get(
+            "/finanzas/arca/pendientes",
+            params={"tipo_archivo": "recibido", "estado": "descartado"},
+            headers=headers,
+        )
+    ).json()
+    assert any(c["id"] == comprobante_id for c in descartados)
+
+    resp = await client.post(f"/finanzas/arca/{comprobante_id}/restaurar", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["estado"] == "pendiente"
+
+    pendientes_after = (
+        await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
+    ).json()
+    assert any(c["id"] == comprobante_id for c in pendientes_after)
+
+
+async def test_restaurar_comprobante_no_descartado_es_rechazado(client, create_user):
+    headers = await _auth(client, create_user)
+    files = {"file": ("recibidos.csv", RECIBIDOS_CSV.encode("utf-8"), "text/csv")}
+    await client.post("/finanzas/arca/importar", data={"tipo_archivo": "recibido"}, files=files, headers=headers)
+    pendientes = (
+        await client.get("/finanzas/arca/pendientes", params={"tipo_archivo": "recibido"}, headers=headers)
+    ).json()
+
+    resp = await client.post(f"/finanzas/arca/{pendientes[0]['id']}/restaurar", headers=headers)
+    assert resp.status_code == 400

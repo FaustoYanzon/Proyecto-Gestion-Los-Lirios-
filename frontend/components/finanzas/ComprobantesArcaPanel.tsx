@@ -9,6 +9,7 @@ import {
   clasificarComoEgreso,
   clasificarComoIngreso,
   descartarComprobanteArca,
+  restaurarComprobanteArca,
   type TipoArchivoArca,
   type ComprobanteArcaResponse,
 } from '@/lib/api/arca'
@@ -304,6 +305,69 @@ function PendientesModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoArc
   )
 }
 
+function DescartadosModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoArca; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [restaurandoId, setRestaurandoId] = useState<string | null>(null)
+
+  const { data: descartados = [], isLoading } = useQuery({
+    queryKey: ['arca-descartados', tipoArchivo],
+    queryFn: () => getPendientesArca(tipoArchivo, 'descartado'),
+  })
+
+  async function handleRestaurar(id: string) {
+    setRestaurandoId(id)
+    try {
+      await restaurarComprobanteArca(id)
+      queryClient.invalidateQueries({ queryKey: ['arca-descartados', tipoArchivo] })
+      queryClient.invalidateQueries({ queryKey: ['arca-pendientes', tipoArchivo] })
+    } finally {
+      setRestaurandoId(null)
+    }
+  }
+
+  return (
+    <BuzonModal
+      title={`Comprobantes ARCA descartados (${descartados.length})`}
+      onClose={onClose}
+      footer="Reimportar el mismo CSV no trae de vuelta un comprobante descartado (el índice de duplicados lo bloquea) — restauralo desde acá."
+    >
+      {isLoading ? (
+        <p className="text-sm text-gray-400 px-2 py-4">Cargando...</p>
+      ) : descartados.length === 0 ? (
+        <p className="text-sm text-gray-400 px-2 py-4">No hay comprobantes descartados.</p>
+      ) : (
+        <ul className="space-y-2">
+          {descartados.map((c) => (
+            <li key={c.id} className="border border-gray-100 rounded-md p-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-gray-800">{formatFecha(c.fecha_emision)}</span>
+                  <span className="text-xs text-gray-500">{c.tipo_comprobante_desc}</span>
+                </div>
+                <p className="text-sm text-gray-600 truncate">{c.denominacion_contraparte}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="text-right">
+                  <div className="text-sm font-mono text-gray-800">
+                    {c.moneda.toUpperCase()} {formatMonto(c.imp_total)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRestaurar(c.id)}
+                  disabled={restaurandoId === c.id}
+                  className="px-3 py-1 text-xs font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60"
+                >
+                  Restaurar
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </BuzonModal>
+  )
+}
+
 // ─── Banner (entry point) ─────────────────────────────────────────────────────
 
 export default function ComprobantesArcaPanel({
@@ -315,6 +379,7 @@ export default function ComprobantesArcaPanel({
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [descartadosOpen, setDescartadosOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [resultado, setResultado] = useState<string | null>(null)
 
@@ -365,6 +430,12 @@ export default function ComprobantesArcaPanel({
             Ver pendientes
           </button>
         )}
+        <button
+          onClick={() => setDescartadosOpen(true)}
+          className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          Ver descartados
+        </button>
         <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelected} className="hidden" />
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -377,6 +448,7 @@ export default function ComprobantesArcaPanel({
       </div>
 
       {modalOpen && <PendientesModal tipoArchivo={tipoArchivo} onClose={() => setModalOpen(false)} />}
+      {descartadosOpen && <DescartadosModal tipoArchivo={tipoArchivo} onClose={() => setDescartadosOpen(false)} />}
     </div>
   )
 }

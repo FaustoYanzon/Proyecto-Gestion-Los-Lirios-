@@ -86,8 +86,18 @@ export async function importarArcaCsv(
   return data
 }
 
-export async function getPendientesArca(tipoArchivo: TipoArchivoArca): Promise<ComprobanteArcaResponse[]> {
-  const { data } = await api.get('/finanzas/arca/pendientes', { params: { tipo_archivo: tipoArchivo } })
+export async function getPendientesArca(
+  tipoArchivo: TipoArchivoArca,
+  estado: EstadoComprobanteArca = 'pendiente'
+): Promise<ComprobanteArcaResponse[]> {
+  const { data } = await api.get('/finanzas/arca/pendientes', {
+    params: { tipo_archivo: tipoArchivo, estado },
+  })
+  return data
+}
+
+export async function restaurarComprobanteArca(comprobanteId: string): Promise<ComprobanteArcaResponse> {
+  const { data } = await api.post(`/finanzas/arca/${comprobanteId}/restaurar`)
   return data
 }
 

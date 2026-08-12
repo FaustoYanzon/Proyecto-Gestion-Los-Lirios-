@@ -95,7 +95,7 @@ export default function ChequesPage() {
   const disponiblesCount = cheques.filter((c) => !c.uso_cheque || c.uso_cheque.trim() === '').length
   const montoDisponibleArs = cheques
     .filter((c) => (!c.uso_cheque || c.uso_cheque.trim() === '') && c.moneda === 'ars')
-    .reduce((s, c) => s + c.monto, 0)
+    .reduce((s, c) => s + Number(c.monto), 0)
 
   const selectCls =
     'rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]'

@@ -62,8 +62,11 @@ const PAGE_SIZE = 10
 
 export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: Props) {
   const [page, setPage] = useState(1)
-  const totalARS = egresos.filter((e) => e.moneda === 'ars').reduce((s, e) => s + e.monto, 0)
-  const totalUSD = egresos.filter((e) => e.moneda === 'usd').reduce((s, e) => s + e.monto, 0)
+  // Number(e.monto): la API serializa Decimal como string en el JSON -- sumar
+  // strings con + concatena en vez de sumar (ej. "10" + "5" = "105"), lo que
+  // termina rompiendo Intl.NumberFormat con 2+ filas y mostrando $NaN.
+  const totalARS = egresos.filter((e) => e.moneda === 'ars').reduce((s, e) => s + Number(e.monto), 0)
+  const totalUSD = egresos.filter((e) => e.moneda === 'usd').reduce((s, e) => s + Number(e.monto), 0)
 
   useEffect(() => { setPage(1) }, [egresos])
 
