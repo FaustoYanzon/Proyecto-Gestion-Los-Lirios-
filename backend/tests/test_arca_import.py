@@ -91,6 +91,26 @@ def test_parser_emitidos_uses_receptor_as_contraparte():
     assert result.filas[0].denominacion_contraparte == "OVAR S. A."
 
 
+def test_parser_accepts_non_zero_padded_arca_date_format():
+    """Real ARCA exports use D/M/YYYY (e.g. "1/7/2026"), not ISO -- the
+    original sample files this suite is based on had already-normalized
+    ISO dates, which masked this in production."""
+    fila_fecha_arg = _FACTURA_A.replace("2026-07-02;", "1/7/2026;", 1)
+    csv_content = "\n".join([_RECIBIDOS_HEADER, fila_fecha_arg])
+    result = parse_arca_csv(csv_content, TipoArchivoArca.recibido)
+    assert result.errores == []
+    assert len(result.filas) == 1
+    assert result.filas[0].fecha_emision.isoformat() == "2026-07-01"
+
+
+def test_parser_skips_blank_trailing_rows_without_reporting_error():
+    fila_vacia = ";" * (_RECIBIDOS_HEADER.count(";"))
+    csv_content = "\n".join([_RECIBIDOS_HEADER, _FACTURA_A, fila_vacia, fila_vacia])
+    result = parse_arca_csv(csv_content, TipoArchivoArca.recibido)
+    assert len(result.filas) == 1
+    assert result.errores == []
+
+
 # --- endpoints -----------------------------------------------------------------
 
 

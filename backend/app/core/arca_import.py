@@ -105,6 +105,16 @@ def _parse_decimal(raw: str) -> Decimal:
     return Decimal(raw.replace(".", "").replace(",", "."))
 
 
+def _parse_fecha(raw: str) -> date:
+    raw = raw.strip()
+    if "-" in raw:
+        return date.fromisoformat(raw)
+    # ARCA's "Mis Comprobantes" export uses D/M/YYYY, not necessarily
+    # zero-padded (e.g. "1/7/2026").
+    day, month, year = raw.split("/")
+    return date(int(year), int(month), int(day))
+
+
 def _parse_moneda(raw: str) -> str:
     key = raw.strip()
     if key not in _MONEDA_MAP:
@@ -121,6 +131,11 @@ def parse_arca_csv(content: str, tipo_archivo: TipoArchivoArca) -> ParseResult:
     errores: list[str] = []
 
     for i, row in enumerate(reader, start=2):  # start=2: header is line 1
+        # Trailing/blank lines in the export (no comprobante data at all) --
+        # skip silently rather than reporting a confusing error for a row
+        # that was never a real comprobante to begin with.
+        if not row.get("Tipo de Comprobante", "").strip():
+            continue
         try:
             tipo_comprobante = int(row["Tipo de Comprobante"])
             catalogo = TIPOS_COMPROBANTE.get(tipo_comprobante)
@@ -133,7 +148,7 @@ def parse_arca_csv(content: str, tipo_archivo: TipoArchivoArca) -> ParseResult:
 
             filas.append(
                 ParsedComprobante(
-                    fecha_emision=date.fromisoformat(row["Fecha de Emisión"].strip()),
+                    fecha_emision=_parse_fecha(row["Fecha de Emisión"]),
                     tipo_comprobante=tipo_comprobante,
                     tipo_comprobante_desc=tipo_comprobante_desc,
                     es_nota_credito=es_nota_credito,
