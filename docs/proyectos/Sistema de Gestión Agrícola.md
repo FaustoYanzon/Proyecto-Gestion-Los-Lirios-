@@ -72,13 +72,18 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-12, quinta tanda — cierre)
+## Próximos pasos (actualizado 2026-08-13 — cierre)
 
-Pilot estable, sin pendientes bloqueantes ni no-bloqueantes abiertos al cierre de esta sesión.
+Pilot estable.
 
 ### Pendiente real
 
-Ninguno. Los dos puntos que quedaban (notificaciones push, responsividad mobile) se cerraron en la quinta tanda (ver abajo).
+1. **Confirmar en el dispositivo real que el mapa mobile funciona bien tras el `eas update` de hoy** — no se pudo probar en vivo en esta sesión (sin acceso a dispositivo/emulador). El riesgo principal ya se identificó y corrigió en el código (ver abajo, el poll de riegos en curso usa `injectJavaScript` para no recargar el WebView), pero falta la confirmación real de Fausto.
+2. **Evaluar si vale la pena resaltar a nivel cuadrante/válvula** el riego en curso (hoy es a nivel parral, a propósito — ver sesión del 08-13). Necesita antes una tabla de equivalencia entre el índice posicional de válvula (`RegistroRiego.valvula`, ej. "1,2") y el nombre real de la válvula física en el GeoJSON (ej. "SU1") — trabajo de reconciliación manual, o cambiar el flujo de "iniciar riego" para elegir la válvula real por nombre. No arrancar sin decisión explícita de Fausto.
+
+### Hecho en la sesión del 2026-08-13 (para referencia — no repetir)
+
+**5 mejoras al mapa (web + mobile), con plan formal aprobado antes de ejecutar:** (1) modo "Fenología" corregido para leer del Ciclo de Campaña nuevo (antes mostraba estados viejos tipo "Latencia"/"Madurez" en vez de "Post-Cosecha"); (2) modo "Riego" anual eliminado, queda solo "Cumpl. riego" (los dos mostraban la misma info con etiquetas distintas); (3) objetivo de agua en el panel de parcela ahora en mm/año (600mm/año) en vez de litros, agregado también a mobile que no lo tenía; (4) capa "Cuadrantes de Riego" ahora clickeable (tenía `interactive:false`, el click caía siempre sobre el parral de abajo); (5) riegos en curso se resaltan en tiempo real sobre el parral exacto (poll 30s, borde celeste punteado) — deliberadamente a nivel parral y no cuadrante/válvula, ver el análisis de viabilidad en la nota de sesión. Verificado en vivo en producción (web) con una prueba real de principio a fin. Ver [[2026-08-13-mejoras-mapa]].
 
 ### Hecho en la sesión del 2026-08-12, quinta tanda (para referencia — no repetir)
 

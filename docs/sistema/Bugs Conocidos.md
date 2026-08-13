@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-12, quinta tanda (notificaciones push + responsividad mobile cerradas — ver [[2026-08-12-notificaciones-y-responsividad]])
+> Última revisión: 2026-08-13 (5 mejoras al mapa — fenología, cuadrantes clickeables, mm/año, riego en curso en tiempo real — ver [[2026-08-13-mejoras-mapa]])
 
 ---
 
@@ -30,6 +30,14 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-13** (ver [[2026-08-13-mejoras-mapa]]):
+- **Modo "Fenología" del mapa mostraba estados viejos (Latencia/Madurez, sin Post-Cosecha) — resuelto.** Leía del motor viejo (`fenologia.py`/`EstadoFenologico`) en vez del Ciclo de Campaña nuevo (`EstadoCampana`, ya se pedía pero no se usaba para pintar). El endpoint viejo queda intacto — sigue alimentando "tareas recomendadas".
+- **Modos "Riego" y "Cumpl. riego" mostraban la misma info con etiquetas distintas — resuelto.** Se sacó "Riego" (objetivo anual), queda solo "Cumpl. riego" (contra el estado de campaña actual).
+- **Objetivo de agua en el panel de parcela en litros, pedido en mm/año — resuelto.** 600 mm/año, derivado de la constante existente. Mobile no tenía esta barra en absoluto — agregada para paridad con web.
+- **Capa "Cuadrantes de Riego" no se podía clickear — resuelto.** Tenía `interactive:false` explícito en ambas plataformas (cañerías/válvulas sí eran interactivas). Mismo popup genérico que ya usan esas dos.
+- **Riegos en curso sin ninguna conexión visual al mapa — resuelto, a nivel parral.** Poll 30s, borde celeste punteado sobre el parral exacto. Deliberadamente NO a nivel cuadrante/cañería/válvula — `RegistroRiego.valvula` es un índice posicional por parcela, no el mismo espacio de nombres que las válvulas físicas del GeoJSON (sin tabla de equivalencia hoy, pintar a nivel cabezal sería impreciso y riesgoso en una herramienta de campo).
+- **Hallazgo de proceso en mobile:** el primer intento de implementación del punto de riego en curso conectaba el dato directo al armado del HTML del WebView — se detectó a tiempo que eso recargaría el mapa completo cada 30s (perdiendo zoom/modo/capas). Corregido con `injectJavaScript` antes de deployar, no llegó a producción.
 
 **Sesión del 2026-08-12, quinta tanda** (ver [[2026-08-12-notificaciones-y-responsividad]]):
 - **Notificaciones push sin UI de envío — resuelto.** `/dashboard/admin/notificaciones` nuevo, sin cambios de backend.
