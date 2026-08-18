@@ -37,6 +37,8 @@ from app.models.produccion import (
 )
 from app.models.trabajador import Trabajador
 from app.models.user import User
+from app.models.valvula import Valvula
+from app.schemas.valvula import ValvulaResponse
 from app.schemas.produccion import (
     CicloCampanaCreate,
     CicloCampanaResponse,
@@ -597,6 +599,23 @@ async def list_riego(
     if responsable is not None:
         stmt = stmt.where(RegistroRiego.responsable.ilike(f"%{responsable}%"))
     stmt = stmt.offset(skip).limit(limit)
+    return list((await db.execute(stmt)).scalars().all())
+
+
+@router.get("/valvulas", response_model=list[ValvulaResponse])
+async def list_valvulas(
+    parcela_id: str | None = Query(None),
+    cabezal: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[Valvula]:
+    stmt = select(Valvula).where(Valvula.is_active.is_(True)).order_by(
+        Valvula.parcela_id, Valvula.orden.asc().nulls_last(), Valvula.nombre
+    )
+    if parcela_id is not None:
+        stmt = stmt.where(Valvula.parcela_id == parcela_id)
+    if cabezal is not None:
+        stmt = stmt.where(Valvula.cabezal == cabezal)
     return list((await db.execute(stmt)).scalars().all())
 
 

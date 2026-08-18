@@ -40,6 +40,7 @@ from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.parcela import Parcela, TipoParcela  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
+from app.models.valvula import Valvula  # noqa: E402
 
 # Single shared in-memory database for the whole session.
 test_engine = create_async_engine(
@@ -136,5 +137,30 @@ async def create_parcela():
             await session.commit()
             await session.refresh(parcela)
             return parcela
+
+    return _create
+
+
+@pytest_asyncio.fixture
+async def create_valvula():
+    """Factory to insert a Valvula directly into the test DB."""
+
+    async def _create(
+        parcela_id: str,
+        nombre: str = "21",
+        cabezal: int = 1,
+        orden: int | None = 1,
+        lat: float = -32.02,
+        lon: float = -68.40,
+    ) -> Valvula:
+        async with TestSessionLocal() as session:
+            valvula = Valvula(
+                nombre=nombre, parcela_id=parcela_id, cabezal=cabezal,
+                orden=orden, lat=lat, lon=lon,
+            )
+            session.add(valvula)
+            await session.commit()
+            await session.refresh(valvula)
+            return valvula
 
     return _create

@@ -519,6 +519,7 @@ interface Props {
   cumplimientoByParcelaId?: Record<string, number | null>
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>
   parcelasEnRiego?: Set<string>
+  valvulasEnRiego?: Set<string>
 }
 
 // ── GeoJSON coordinate helpers ───────────────────────────────────────────────
@@ -577,12 +578,13 @@ const INFRA_LEGEND = [
 
 export default function FincaMapInner({
   compact = false, height = '100%', cosechaByParcelaId, fenologiaByVariedad,
-  cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego,
+  cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego, valvulasEnRiego,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerGroupRef = useRef<L.LayerGroup | null>(null)
   const polyRef = useRef(new Map<string, L.Polygon>())
+  const cuadrantesRiegoLayerRef = useRef<L.GeoJSON | null>(null)
 
   // Extra infrastructure layers
   const extraGroupsRef = useRef<Partial<Record<keyof LayerVisibility, L.LayerGroup>>>({})
@@ -769,12 +771,34 @@ export default function FincaMapInner({
     configs.forEach(({ key, build }) => {
       const data = layerData[key]
       if (!data) return
-      const group = L.layerGroup([build(data)])
+      const built = build(data)
+      if (key === 'cuadrantesRiego') cuadrantesRiegoLayerRef.current = built as L.GeoJSON
+      const group = L.layerGroup([built])
       extraGroupsRef.current[key] = group
       // Respect current visibility state (use ref to avoid stale closure)
       if (visibleLayersRef.current[key]) group.addTo(map)
     })
   }, [mapReady, layerData])
+
+  // ── Cuadrante en riego: mismo criterio que el resaltado por parral (borde
+  // celeste punteado compuesto encima del estilo base), pero a nivel de
+  // cuadrante individual — matchea "Valvula Correspondiente" del cuadrante
+  // contra los nombres reales de válvula abiertos ahora mismo. Reconstruir
+  // el layer group entero perdería el estado de visibilidad, así que se
+  // restylean los sublayers existentes en vez de reconstruir.
+  useEffect(() => {
+    cuadrantesRiegoLayerRef.current?.eachLayer((layer) => {
+      const props = (layer as unknown as { feature?: { properties?: Record<string, unknown> } })
+        .feature?.properties
+      const nombreValvula = props?.['Valvula Correspondiente']
+      const enRiego = typeof nombreValvula === 'string' && valvulasEnRiego?.has(nombreValvula)
+      ;(layer as L.Path).setStyle(
+        enRiego
+          ? { color: '#0ea5e9', weight: 3, dashArray: '4,3', fillColor: '#0ea5e9', fillOpacity: 0.35 }
+          : { color: '#d1d5db', fillColor: '#d1d5db', fillOpacity: 0.15, weight: 1.5 }
+      )
+    })
+  }, [layerData.cuadrantesRiego, valvulasEnRiego])
 
   // ── Toggle layer visibility ──────────────────────────────────────────────────
   useEffect(() => {

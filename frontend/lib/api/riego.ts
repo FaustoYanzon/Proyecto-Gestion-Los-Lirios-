@@ -33,33 +33,24 @@ export const LITROS_POR_HORA_VALVULA = 16_000
 // Referencia agronómica para el suelo de Media Agua: 6.000.000 L/ha/año.
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
-// Válvulas disponibles por parcela (según planilla de cabezales)
-export const VALVULAS_POR_PARCELA: Record<string, number> = {
-  'Parral Sult.':       4,
-  'Parral 9':           2,
-  'Parral 4':           2,
-  'Parral 5':           2,
-  'Parral 2':           2,
-  'Parral 10':          3,
-  'Parral 6':           4,
-  'Parral 11':          4,
-  'Parral 7':           4,
-  'Parral 16':          2,
-  'Parral 13':          3,
-  'Parral 15':          2,
-  'Parral 14':          3,
-  'Parral 21':          4,
-  'Parral 12':          3,
-  'Parral 8':           3,
-  'Parral SYR-RG':      3,
-  'Parral Bond. Viejo': 2,
-  'Parral Bond. Nuevo': 2,
+// Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1"),
+// poblado en el backend desde Valvulas.geojson vía scripts/seed_valvulas.py.
+// El cabezal es un atributo de la válvula, no de la parcela — una misma
+// parcela puede tener válvulas alimentadas por cabezales distintos (caso
+// real: Parral 2, válvula "21" en cabezal 2 vs. "22"/"23" en cabezal 1).
+export interface ValvulaReal {
+  id: string
+  nombre: string
+  parcela_id: string
+  cabezal: number
+  orden: number | null
+  lat: number
+  lon: number
 }
 
-export function getValvulas(parcelaNombre: string): number[] {
-  const max = VALVULAS_POR_PARCELA[parcelaNombre]
-  if (!max) return [1, 2, 3, 4]
-  return Array.from({ length: max }, (_, i) => i + 1)
+export async function getValvulasReales(params?: { parcela_id?: string; cabezal?: number }): Promise<ValvulaReal[]> {
+  const { data } = await api.get('/produccion/valvulas', { params })
+  return data
 }
 
 export function calcMm(

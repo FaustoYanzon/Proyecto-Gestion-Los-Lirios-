@@ -109,6 +109,16 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     [riegosEnCurso],
   )
 
+  // Nombres reales de válvula abiertas ahora mismo (ej. "21", "SU1") — solo
+  // los riegos cargados después de la migración a válvulas reales tienen
+  // este formato; los registros viejos (índice posicional "1","2") no van a
+  // matchear ningún cuadrante, así que simplemente no se resaltan a ese
+  // nivel (el resaltado por parral de arriba sigue cubriéndolos igual).
+  const valvulasEnRiego = useMemo(
+    () => new Set(riegosEnCurso.flatMap((r) => r.valvula.split(',').map((v) => v.trim()))),
+    [riegosEnCurso],
+  )
+
   return (
     <Inner
       compact={compact}
@@ -118,6 +128,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
       cumplimientoByParcelaId={cumplimientoByParcelaId}
       estadoCampanaByVariedad={estadoCampanaByVariedad}
       parcelasEnRiego={parcelasEnRiego}
+      valvulasEnRiego={valvulasEnRiego}
     />
   )
 }

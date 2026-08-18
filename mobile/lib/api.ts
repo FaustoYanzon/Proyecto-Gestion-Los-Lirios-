@@ -115,10 +115,19 @@ export async function deleteCosecha(id: string): Promise<void> {
 
 // ─── Riego en curso ───────────────────────────────────────────────────────────
 
-import type { RiegoEnCurso, RiegoIniciarPayload } from './types'
+import type { RiegoEnCurso, RiegoIniciarPayload, ValvulaReal } from './types'
 
 export async function getRiegosEnCurso(): Promise<RiegoEnCurso[]> {
   const { data } = await api.get<RiegoEnCurso[]>('/produccion/riego/en-curso')
+  return data
+}
+
+// Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1") —
+// reemplaza VALVULAS_POR_PARCELA/CABEZAL_VALVULAS hardcodeados. El cabezal es
+// un atributo de la válvula, no de la parcela (caso real: Parral 2 reparte
+// sus válvulas entre 2 cabezales distintos).
+export async function getValvulasReales(): Promise<ValvulaReal[]> {
+  const { data } = await api.get<ValvulaReal[]>('/produccion/valvulas')
   return data
 }
 

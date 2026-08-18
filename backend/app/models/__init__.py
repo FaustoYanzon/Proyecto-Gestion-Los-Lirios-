@@ -20,6 +20,7 @@ from app.models.presupuesto import (
     Presupuesto,
 )
 from app.models.trabajador import RolTrabajador, Trabajador
+from app.models.valvula import Valvula
 from app.models.arca import (
     ComprobanteArcaImportado,
     EstadoComprobanteArca,
@@ -78,6 +79,7 @@ __all__ = [
     "MetaProduccion",
     "Trabajador",
     "RolTrabajador",
+    "Valvula",
     "TipoArchivoArca",
     "EstadoComprobanteArca",
     "LoteImportacionArca",

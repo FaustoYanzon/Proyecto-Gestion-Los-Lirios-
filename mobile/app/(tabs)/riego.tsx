@@ -12,15 +12,15 @@ import {
   Modal,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import api, { getRiegosEnCurso, iniciarRiego, terminarRiego } from '../../lib/api'
+import api, { getRiegosEnCurso, getValvulasReales, iniciarRiego, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
-import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb } from '../../lib/types'
-import { CABEZAL_VALVULAS, getValvulasForParcela, calcRiegoTotales } from '../../lib/types'
+import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb, ValvulaReal } from '../../lib/types'
+import { calcRiegoTotales } from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
 // al usuario se ancla explícitamente a America/Argentina/San_Juan: no hay que
@@ -353,12 +353,11 @@ const tp = StyleSheet.create({
 
 // ─── Step 1: cabezal + parral + válvulas ──────────────────────────────────────
 
-const CABEZALES = Object.keys(CABEZAL_VALVULAS).sort()
-
 function StepUbicacion({
-  parcelas, initialCabezal, initialParcelaId, initialValvulas, onNext, onCancelar,
+  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, onNext, onCancelar,
 }: {
   parcelas: Parcela[]
+  valvulasReales: ValvulaReal[]
   initialCabezal: string | null
   initialParcelaId: string | null
   initialValvulas: string[]
@@ -369,12 +368,24 @@ function StepUbicacion({
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
   const [valvulas, setValvulas] = useState<Set<string>>(new Set(initialValvulas))
 
+  // Cabezales reales derivados del catálogo — no hardcodeados (hoy son 4,
+  // pero se ajusta solo si cambia la infraestructura de riego).
+  const cabezales = [...new Set(valvulasReales.map((v) => String(v.cabezal)))].sort()
+
+  // Una parcela puede tener válvulas en más de 1 cabezal (caso real: Parral
+  // 2) — elegir el cabezal filtra tanto los parrales como, dentro de un
+  // parral, cuáles de sus válvulas corresponden a ESE cabezal.
+  const parcelaIdsDelCabezal = cabezal
+    ? new Set(valvulasReales.filter((v) => String(v.cabezal) === cabezal).map((v) => v.parcela_id))
+    : new Set<string>()
   const parralesDelCabezal = cabezal
-    ? parcelas.filter((p) => p.tipo === 'parral' && p.is_active && p.cabezal_riego === cabezal)
+    ? parcelas.filter((p) => p.is_active && parcelaIdsDelCabezal.has(p.id))
     : []
 
   const parcelaSel = parcelas.find((p) => p.id === parcelaId) ?? null
-  const valvulasDisponibles = parcelaSel ? getValvulasForParcela(parcelaSel.nombre) : []
+  const valvulasDisponibles = (parcelaSel && cabezal)
+    ? valvulasReales.filter((v) => v.parcela_id === parcelaSel.id && String(v.cabezal) === cabezal)
+    : []
 
   function selectCabezal(cab: string) {
     setCabezal(cab)
@@ -399,7 +410,12 @@ function StepUbicacion({
     if (!cabezal) { Alert.alert('Falta el cabezal', 'Seleccioná un cabezal de riego.'); return }
     if (!parcelaSel) { Alert.alert('Falta el parral', 'Seleccioná el parral a regar.'); return }
     if (valvulas.size === 0) { Alert.alert('Faltan válvulas', 'Seleccioná al menos una válvula.'); return }
-    onNext(cabezal, parcelaSel, Array.from(valvulas).sort((a, b) => Number(a) - Number(b)))
+    // Orden oeste->este real (mismo orden que valvulasDisponibles), no alfabético/numérico.
+    const ordenPorNombre = new Map(valvulasDisponibles.map((v) => [v.nombre, v.orden ?? 0]))
+    const valvulasOrdenadas = Array.from(valvulas).sort(
+      (a, b) => (ordenPorNombre.get(a) ?? 0) - (ordenPorNombre.get(b) ?? 0)
+    )
+    onNext(cabezal, parcelaSel, valvulasOrdenadas)
   }
 
   return (
@@ -409,7 +425,7 @@ function StepUbicacion({
 
         <Text style={styles.fieldLabel}>1. CABEZAL</Text>
         <View style={styles.chipGridWrap}>
-          {CABEZALES.map((cab) => (
+          {cabezales.map((cab) => (
             <TouchableOpacity
               key={cab}
               style={[styles.cabezalChip, cabezal === cab && styles.cabezalChipActive]}
@@ -427,7 +443,7 @@ function StepUbicacion({
           <>
             <Text style={[styles.fieldLabel, { marginTop: 22 }]}>2. PARRAL</Text>
             {parralesDelCabezal.length === 0 ? (
-              <Text style={styles.emptyText}>Sin parrales activos para este cabezal</Text>
+              <Text style={styles.emptyText}>Sin parcelas con riego para este cabezal</Text>
             ) : (
               <View style={styles.chipGridWrap}>
                 {parralesDelCabezal.map((p) => (
@@ -453,18 +469,18 @@ function StepUbicacion({
             <View style={styles.chipGridWrap}>
               {valvulasDisponibles.map((v) => (
                 <TouchableOpacity
-                  key={v}
-                  style={[styles.valvulaChip, valvulas.has(v) && styles.valvulaChipActive]}
-                  onPress={() => toggleValvula(v)}
+                  key={v.nombre}
+                  style={[styles.valvulaChip, valvulas.has(v.nombre) && styles.valvulaChipActive]}
+                  onPress={() => toggleValvula(v.nombre)}
                   activeOpacity={0.75}
                 >
                   <Ionicons
                     name="water"
                     size={14}
-                    color={valvulas.has(v) ? colors.blanco : colors.cielo}
+                    color={valvulas.has(v.nombre) ? colors.blanco : colors.cielo}
                   />
-                  <Text style={[styles.valvulaChipText, valvulas.has(v) && styles.valvulaChipTextActive]}>
-                    Válvula {v}
+                  <Text style={[styles.valvulaChipText, valvulas.has(v.nombre) && styles.valvulaChipTextActive]}>
+                    Válvula {v.nombre}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1157,6 +1173,7 @@ export default function RiegoScreen() {
   const [step, setStep] = useState<Step>('list')
   const [modo, setModo] = useState<Modo>('retroactivo')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [valvulasReales, setValvulasReales] = useState<ValvulaReal[]>([])
   const [riegos, setRiegos] = useState<RegistroRiego[]>([])
   const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
   const [terminandoId, setTerminandoId] = useState<string | null>(null)
@@ -1172,6 +1189,16 @@ export default function RiegoScreen() {
       const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
       setTrabajadoresDb(data)
       await setCache('trabajadores', data)
+    } catch { /* offline */ }
+  }, [])
+
+  const loadValvulasReales = useCallback(async () => {
+    const cached = await getCache<ValvulaReal[]>('valvulas', CACHE_TTL.valvulas)
+    if (cached) setValvulasReales(cached)
+    try {
+      const data = await getValvulasReales()
+      setValvulasReales(data)
+      await setCache('valvulas', data)
     } catch { /* offline */ }
   }, [])
 
@@ -1205,7 +1232,9 @@ export default function RiegoScreen() {
     } catch { /* offline */ }
   }, [])
 
-  useEffect(() => { loadData(); loadRiegosEnCurso(); loadTrabajadoresDb() }, [loadData, loadRiegosEnCurso, loadTrabajadoresDb])
+  useEffect(() => {
+    loadData(); loadRiegosEnCurso(); loadTrabajadoresDb(); loadValvulasReales()
+  }, [loadData, loadRiegosEnCurso, loadTrabajadoresDb, loadValvulasReales])
 
   // Refetch cada 30s para detectar riegos iniciados/cerrados por otros
   // usuarios/dispositivos — el cronómetro que se ve en cada card se calcula
@@ -1298,6 +1327,7 @@ export default function RiegoScreen() {
     return (
       <StepUbicacion
         parcelas={parcelas}
+        valvulasReales={valvulasReales}
         initialCabezal={draft.cabezal || null}
         initialParcelaId={draft.parcela?.id ?? null}
         initialValvulas={draft.valvulas}

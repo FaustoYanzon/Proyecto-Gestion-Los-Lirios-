@@ -6,7 +6,7 @@
 { "type": "Feature", "properties": { "fid": 1, "Nombre de Valvula": "SU1", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.40039155931575, -32.02255760828703 ] } },
 { "type": "Feature", "properties": { "fid": 2, "Nombre de Valvula": "SU2", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.399943448218934, -32.022551413194449 ] } },
 { "type": "Feature", "properties": { "fid": 3, "Nombre de Valvula": "SU3", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.399171127711213, -32.022534892955029 ] } },
-{ "type": "Feature", "properties": { "fid": 4, "Nombre de Valvula": "SU3", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.398433912681028, -32.022522502772688 ] } },
+{ "type": "Feature", "properties": { "fid": 4, "Nombre de Valvula": "SU4", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.398433912681028, -32.022522502772688 ] } },
 { "type": "Feature", "properties": { "fid": 5, "Nombre de Valvula": "91", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.397459907762425, -32.022508735900693 ] } },
 { "type": "Feature", "properties": { "fid": 6, "Nombre de Valvula": "92", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.396718562676256, -32.022488085605374 ] } },
 { "type": "Feature", "properties": { "fid": 7, "Nombre de Valvula": "41", "Cabezal": 1 }, "geometry": { "type": "Point", "coordinates": [ -68.395864329387379, -32.022470877021775 ] } },

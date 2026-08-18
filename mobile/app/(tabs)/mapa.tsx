@@ -255,6 +255,12 @@ const CUMPLIMIENTO_BY_PARCELA = ${cumplimientoJSON}; // keyed by parcela_id -> c
 // WebView entero, perdiendo zoom/modo de color/capas activas). El valor
 // real llega después vía injectJavaScript (ver window.setParcelasEnRiego).
 let PARCELAS_EN_RIEGO = new Set();
+// Nombres reales de válvula abiertas ahora mismo (ej. "21", "SU1") -- mismo
+// mecanismo que PARCELAS_EN_RIEGO, matchea contra "Valvula Correspondiente"
+// del cuadrante. Los riegos viejos (índice posicional) no matchean nada acá,
+// se siguen viendo igual por el resaltado a nivel parral de arriba.
+let VALVULAS_EN_RIEGO = new Set();
+let cuadrantesRiegoLayer = null;
 
 // Infrastructure GeoJSON data
 const GEO_DATA = {
@@ -382,6 +388,19 @@ window.setParcelasEnRiego = function(parcelaIds) {
   updateStyles();
 };
 
+window.setValvulasEnRiego = function(nombres) {
+  VALVULAS_EN_RIEGO = new Set(nombres);
+  if (cuadrantesRiegoLayer) cuadrantesRiegoLayer.setStyle(cuadranteStyle);
+};
+
+function cuadranteStyle(feature) {
+  var nombreValvula = feature && feature.properties && feature.properties['Valvula Correspondiente'];
+  if (nombreValvula && VALVULAS_EN_RIEGO.has(nombreValvula)) {
+    return { color: '#0ea5e9', weight: 3, dashArray: '4,3', fillColor: '#0ea5e9', fillOpacity: 0.35 };
+  }
+  return { color: '#d1d5db', fillColor: '#d1d5db', fillOpacity: 0.15, weight: 1.5 };
+}
+
 L.polygon(FINCA_OUTLINE, { color: '#2d4a28', weight: 2.5, fill: false, dashArray: '6,4', interactive: false }).addTo(map);
 
 FEATURES.forEach(f => {
@@ -483,11 +502,12 @@ function initExtraLayers() {
       });
     } else if (cfg.type === 'poly') {
       geoLayer = L.geoJSON(data, {
-        style: function() {
-          return { color: cfg.color, fillColor: cfg.color, fillOpacity: 0.15, weight: 1.5 };
-        },
+        style: cfg.key === 'cuadrantesRiego'
+          ? cuadranteStyle
+          : function() { return { color: cfg.color, fillColor: cfg.color, fillOpacity: 0.15, weight: 1.5 }; },
         onEachFeature: cfg.label ? makePopupHandler(cfg.label) : null,
       });
+      if (cfg.key === 'cuadrantesRiego') cuadrantesRiegoLayer = geoLayer;
     } else {
       geoLayer = L.geoJSON(data, {
         style: function() { return { color: cfg.color, weight: 2, opacity: 0.85 }; },
@@ -832,8 +852,12 @@ export default function MapaScreen() {
   // HTML (eso recargaría el mapa entero cada 30s).
   useEffect(() => {
     const ids = riegosEnCurso.map((r) => r.parcela_id)
+    // Nombres reales de válvula (riegos viejos con índice posicional no
+    // matchean ningún cuadrante — sin efecto, no rompen nada).
+    const nombresValvula = riegosEnCurso.flatMap((r) => r.valvula.split(',').map((v) => v.trim()))
     webviewRef.current?.injectJavaScript(
-      `window.setParcelasEnRiego && window.setParcelasEnRiego(${JSON.stringify(ids)}); true;`
+      `window.setParcelasEnRiego && window.setParcelasEnRiego(${JSON.stringify(ids)}); ` +
+      `window.setValvulasEnRiego && window.setValvulasEnRiego(${JSON.stringify(nombresValvula)}); true;`
     )
   }, [riegosEnCurso])
 

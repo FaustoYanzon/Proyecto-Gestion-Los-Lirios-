@@ -10,6 +10,7 @@ interface CacheEntry<T> {
 export const CACHE_TTL = {
   parcelas: 60 * 60 * 1000,  // 1 hora
   trabajadores: 60 * 60 * 1000,  // 1 hora, igual que parcelas
+  valvulas: 60 * 60 * 1000,  // 1 hora, cambia solo si se re-siembra el catalogo
   estados: 15 * 60 * 1000,   // 15 min
   tareas: 15 * 60 * 1000,
   riegos: 15 * 60 * 1000,

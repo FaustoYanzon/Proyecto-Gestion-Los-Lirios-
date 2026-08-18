@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         RegistroRiego,
         RegistroTrabajo,
     )
+    from app.models.valvula import Valvula
 
 
 class TipoParcela(str, enum.Enum):
@@ -82,4 +83,7 @@ class Parcela(Base):
     )
     registros_cosecha: Mapped[list[RegistroCosecha]] = relationship(
         "RegistroCosecha", back_populates="parcela"
+    )
+    valvulas: Mapped[list[Valvula]] = relationship(
+        "Valvula", back_populates="parcela"
     )
