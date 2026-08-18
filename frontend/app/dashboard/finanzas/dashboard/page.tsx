@@ -11,6 +11,7 @@ import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
 import { getResumenIva } from '@/lib/api/arca'
+import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,16 @@ export default function FinanceDashboardPage() {
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
   const [tipoFilter, setTipoFilter] = useState<string>('todos')
 
+  // Meses reales (calendario) de los extremos del rango elegido -- mayo-dic
+  // pertenecen al año de campaña `anio`, enero-abril al año siguiente.
+  const mesDesdeReal = MESES_ORDER[mesDesdeIdx]
+  const mesHastaReal = MESES_ORDER[mesHastaIdx]
+  const anioDesdeReal = mesDesdeReal >= 5 ? anio : anio + 1
+  const anioHastaReal = mesHastaReal >= 5 ? anio : anio + 1
+  const rangoLabel = mesDesdeIdx === mesHastaIdx
+    ? (MES_LABELS[mesDesdeReal] ?? '')
+    : `${MES_LABELS[mesDesdeReal] ?? ''}–${MES_LABELS[mesHastaReal] ?? ''}`
+
   const { data: pvr = [] } = useQuery({
     queryKey: ['kpi-presup-real', anio, moneda, 'media_agua'],
     queryFn: () => getPresupuestoVsReal({ temporada: anio, moneda, finca: 'media_agua' }),
@@ -91,8 +102,11 @@ export default function FinanceDashboardPage() {
   })
 
   const { data: resumenIva } = useQuery({
-    queryKey: ['arca-resumen-iva'],
-    queryFn: () => getResumenIva({}),
+    queryKey: ['arca-resumen-iva', anioDesdeReal, mesDesdeReal, anioHastaReal, mesHastaReal],
+    queryFn: () => getResumenIva({
+      anio_desde: anioDesdeReal, mes_desde: mesDesdeReal,
+      anio_hasta: anioHastaReal, mes_hasta: mesHastaReal,
+    }),
     staleTime: 60_000,
   })
 
@@ -149,9 +163,14 @@ export default function FinanceDashboardPage() {
   const hayPresupuesto = useMemo(() => pvr.some((r) => Number(r.monto_presupuesto) > 0), [pvr])
   const hayReal = useMemo(() => pvr.some((r) => Number(r.monto_real) > 0), [pvr])
 
-  // Current campaign month (calendar month of "today")
-  const mesActual = now.getMonth() + 1
-  const kpiMes = porMes.find((r) => r.mes === mesActual)
+  // Agregado del rango de meses elegido (no solo "el mes actual" — las
+  // tarjetas de arriba deben reflejar el filtro activo, mismo criterio para
+  // Cumplimiento/Egresos/Ingresos/IVA).
+  const rangoAgg = useMemo(() => ({
+    egresoPresup: porMes.reduce((s, r) => s + r.egresoPresup, 0),
+    egresoReal: porMes.reduce((s, r) => s + r.egresoReal, 0),
+    ingresoReal: porMes.reduce((s, r) => s + r.ingresoReal, 0),
+  }), [porMes])
 
   // Accumulated deviation per expense tipo across the selected range
   const desvioPorTipo = useMemo(() => {
@@ -231,6 +250,9 @@ export default function FinanceDashboardPage() {
               {MESES_ORDER.map((m, i) => <option key={m} value={i}>{MES_LABELS[m]}</option>)}
             </select>
           </div>
+          <MesRangeQuickButtons
+            onApply={(a, desde, hasta) => { setAnio(a); setMesDesdeIdx(desde); setMesHastaIdx(hasta) }}
+          />
           <div className="flex rounded-md border border-gray-300 overflow-hidden text-sm">
             {(['ars', 'usd'] as const).map((m) => (
               <button key={m} onClick={() => setMoneda(m)}
@@ -264,52 +286,51 @@ export default function FinanceDashboardPage() {
         </div>
       )}
 
-      {/* KPI cards (current month) */}
+      {/* KPI cards — reflejan el rango de meses elegido arriba, no un mes fijo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
-          label={`Cumplimiento ${MES_LABELS[mesActual] ?? ''}`}
+          label={`Cumplimiento ${rangoLabel}`}
           value={
-            kpiMes && kpiMes.egresoPresup > 0
-              ? `${((kpiMes.egresoReal / kpiMes.egresoPresup) * 100).toFixed(0)}%`
+            rangoAgg.egresoPresup > 0
+              ? `${((rangoAgg.egresoReal / rangoAgg.egresoPresup) * 100).toFixed(0)}%`
               : '—'
           }
           hint="egresos reales / presupuesto"
           tone={
-            !kpiMes || kpiMes.egresoPresup === 0 ? 'neutral'
-              : kpiMes.egresoReal <= kpiMes.egresoPresup * 1.1 ? 'good' : 'bad'
+            rangoAgg.egresoPresup === 0 ? 'neutral'
+              : rangoAgg.egresoReal <= rangoAgg.egresoPresup * 1.1 ? 'good' : 'bad'
           }
         />
         <KpiCard
-          label={`Egresos ${MES_LABELS[mesActual] ?? ''}`}
-          value={kpiMes ? fmtMoney(kpiMes.egresoReal, moneda) : '—'}
+          label={`Egresos ${rangoLabel}`}
+          value={fmtMoney(rangoAgg.egresoReal, moneda)}
           hint={moneda === 'ars' ? 'USD aparte — usá el selector' : undefined}
         />
         <KpiCard
-          label={`Ingresos ${MES_LABELS[mesActual] ?? ''}`}
-          value={kpiMes ? fmtMoney(kpiMes.ingresoReal, moneda) : '—'}
+          label={`Ingresos ${rangoLabel}`}
+          value={fmtMoney(rangoAgg.ingresoReal, moneda)}
         />
         <KpiCard
           label={mesDesdeIdx === 0 && mesHastaIdx === 11 ? 'Saldo acumulado campaña' : 'Saldo acumulado (rango)'}
           value={fmtMoney(porMes.at(-1)?.saldoAcum ?? 0, moneda)}
-          hint={kpiMes ? `mes: ${fmtMoney(kpiMes.saldo, moneda)}` : undefined}
           tone={(porMes.at(-1)?.saldoAcum ?? 0) >= 0 ? 'good' : 'bad'}
         />
       </div>
 
-      {/* IVA cards — from comprobantes ARCA importados, mes calendario en curso */}
+      {/* IVA cards — de comprobantes ARCA importados, mismo rango de meses elegido arriba */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <KpiCard
-          label={`IVA compra ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          label={`IVA compra ${rangoLabel}`}
           value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_compra)}` : '—'}
           hint="sobre comprobantes recibidos importados"
         />
         <KpiCard
-          label={`IVA venta ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          label={`IVA venta ${rangoLabel}`}
           value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_venta)}` : '—'}
           hint="sobre comprobantes emitidos importados"
         />
         <KpiCard
-          label={`IVA saldo ${resumenIva ? MES_LABELS[resumenIva.mes] ?? '' : ''}`}
+          label={`IVA saldo ${rangoLabel}`}
           value={resumenIva ? `$${NUM_FMT.format(resumenIva.iva_saldo)}` : '—'}
           hint={resumenIva ? (resumenIva.iva_saldo >= 0 ? 'a pagar (venta > compra)' : 'a favor (compra > venta)') : undefined}
           tone={!resumenIva ? 'neutral' : resumenIva.iva_saldo >= 0 ? 'bad' : 'good'}

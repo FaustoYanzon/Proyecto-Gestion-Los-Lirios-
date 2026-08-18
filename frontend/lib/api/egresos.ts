@@ -59,9 +59,9 @@ export interface EgresosFilter {
 
 export interface ResumenTipo {
   tipo: TipoEgreso
-  total_ars: number
-  total_usd: number
-  count: number
+  clasificacion: string
+  moneda: string
+  total: number
 }
 
 export const TIPO_EGRESO_LABELS: Record<TipoEgreso, string> = {

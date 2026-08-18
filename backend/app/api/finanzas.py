@@ -91,6 +91,9 @@ async def list_egresos(
 async def egresos_resumen_por_tipo(
     fecha_desde: date | None = Query(None),
     fecha_hasta: date | None = Query(None),
+    tipo: TipoEgreso | None = Query(None),
+    clasificacion: ClasificacionEgreso | None = Query(None),
+    origen: OrigenPago | None = Query(None),
     finca: Finca | None = Query(None),
     moneda: MonedaTipo | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -107,6 +110,12 @@ async def egresos_resumen_por_tipo(
         stmt = stmt.where(Egreso.fecha >= fecha_desde)
     if fecha_hasta is not None:
         stmt = stmt.where(Egreso.fecha <= fecha_hasta)
+    if tipo is not None:
+        stmt = stmt.where(Egreso.tipo == tipo)
+    if clasificacion is not None:
+        stmt = stmt.where(Egreso.clasificacion == clasificacion)
+    if origen is not None:
+        stmt = stmt.where(Egreso.origen == origen)
     if finca is not None:
         stmt = stmt.where(Egreso.finca == finca)
     if moneda is not None:

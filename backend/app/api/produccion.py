@@ -74,6 +74,7 @@ from app.schemas.produccion import (
     RendimientoHistoricoParcela,
     ResumenTarea,
     ResumenTrabajador,
+    ResumenTrabajoTotal,
 )
 
 router = APIRouter(prefix="/produccion", tags=["Produccion"])
@@ -452,6 +453,41 @@ async def resumen_por_tarea(
         for tarea, data in agg.items()
     ]
     return sorted(result, key=lambda x: x.monto_total, reverse=True)
+
+
+@router.get("/trabajo/resumen/total", response_model=ResumenTrabajoTotal)
+async def resumen_trabajo_total(
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
+    parcela_id: str | None = Query(None),
+    trabajador_nombre: str | None = Query(None),
+    tarea: str | None = Query(None),
+    clasificacion: ClasificacionTarea | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> ResumenTrabajoTotal:
+    """Total real (SUM en SQL, sin el límite de paginación de 100 filas de
+    GET /trabajo/), con los mismos filtros que esa lista -- evita que el
+    total mostrado en TareasTable termine sumando solo la página visible.
+    """
+    stmt = select(
+        func.count(RegistroTrabajo.id),
+        func.coalesce(func.sum(RegistroTrabajo.monto_total), 0),
+    )
+    if fecha_desde is not None:
+        stmt = stmt.where(RegistroTrabajo.fecha >= fecha_desde)
+    if fecha_hasta is not None:
+        stmt = stmt.where(RegistroTrabajo.fecha <= fecha_hasta)
+    if parcela_id is not None:
+        stmt = stmt.where(RegistroTrabajo.parcela_id == parcela_id)
+    if trabajador_nombre is not None:
+        stmt = stmt.where(RegistroTrabajo.trabajador_nombre.ilike(f"%{trabajador_nombre}%"))
+    if tarea is not None:
+        stmt = stmt.where(RegistroTrabajo.tarea == tarea)
+    if clasificacion is not None:
+        stmt = stmt.where(RegistroTrabajo.clasificacion == clasificacion)
+    total_registros, monto_total = (await db.execute(stmt)).one()
+    return ResumenTrabajoTotal(total_registros=total_registros, monto_total=monto_total)
 
 
 @router.get("/trabajo/{registro_id}", response_model=RegistroTrabajoResponse)

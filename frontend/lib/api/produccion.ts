@@ -257,6 +257,18 @@ export async function getResumenPorTarea(params?: { fecha_desde?: string; fecha_
   return data
 }
 
+export interface ResumenTrabajoTotal {
+  total_registros: number
+  monto_total: number
+}
+
+// Total real (SUM en SQL, sin el tope de 100 filas de getTrabajos) para los
+// mismos filtros de la pantalla de Tareas -- ver TareasTable.tsx.
+export async function getResumenTrabajoTotal(params: TrabajoFilter): Promise<ResumenTrabajoTotal> {
+  const { data } = await api.get('/produccion/trabajo/resumen/total', { params })
+  return data
+}
+
 export async function getParcelas(): Promise<ParcelaItem[]> {
   const { data } = await api.get('/parcelas/')
   return data

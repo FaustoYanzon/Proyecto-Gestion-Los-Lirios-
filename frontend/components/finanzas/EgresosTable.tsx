@@ -40,6 +40,10 @@ const FORMA_PAGO_LABELS: Record<string, string> = {
 
 interface Props {
   egresos: EgresoResponse[]
+  // Totales reales (SUM en SQL, sin el tope de 100 filas de `egresos`) para
+  // el filtro activo. `null` mientras se están cargando.
+  totalARS: number | null
+  totalUSD: number | null
   isLoading: boolean
   onEdit: (egreso: EgresoResponse) => void
   onDelete: (id: string) => void
@@ -60,13 +64,8 @@ function SkeletonRow() {
 
 const PAGE_SIZE = 10
 
-export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: Props) {
+export default function EgresosTable({ egresos, totalARS, totalUSD, isLoading, onEdit, onDelete }: Props) {
   const [page, setPage] = useState(1)
-  // Number(e.monto): la API serializa Decimal como string en el JSON -- sumar
-  // strings con + concatena en vez de sumar (ej. "10" + "5" = "105"), lo que
-  // termina rompiendo Intl.NumberFormat con 2+ filas y mostrando $NaN.
-  const totalARS = egresos.filter((e) => e.moneda === 'ars').reduce((s, e) => s + Number(e.monto), 0)
-  const totalUSD = egresos.filter((e) => e.moneda === 'usd').reduce((s, e) => s + Number(e.monto), 0)
 
   useEffect(() => { setPage(1) }, [egresos])
 
@@ -195,9 +194,11 @@ export default function EgresosTable({ egresos, isLoading, onEdit, onDelete }: P
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center gap-6 text-sm">
           <span className="font-medium text-gray-700">
             Total ARS:{' '}
-            <span className="font-mono text-green-700">${formatMonto(totalARS)}</span>
+            <span className="font-mono text-green-700">
+              {totalARS != null ? `$${formatMonto(totalARS)}` : '…'}
+            </span>
           </span>
-          {totalUSD > 0 && (
+          {totalUSD != null && totalUSD > 0 && (
             <span className="font-medium text-gray-700">
               Total USD:{' '}
               <span className="font-mono text-blue-700">${formatMonto(totalUSD)}</span>

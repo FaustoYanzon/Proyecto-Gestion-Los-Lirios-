@@ -104,6 +104,11 @@ class ResumenTarea(BaseModel):
     monto_total: Decimal
 
 
+class ResumenTrabajoTotal(BaseModel):
+    total_registros: int
+    monto_total: Decimal
+
+
 # ── Registro Riego ────────────────────────────────────────────────────────────
 
 class RegistroRiegoBase(BaseModel):

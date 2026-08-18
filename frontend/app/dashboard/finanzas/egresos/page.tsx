@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download } from 'lucide-react'
 import {
   getEgresos,
+  getResumenPorTipo,
   deleteEgreso,
   TIPO_EGRESO_VALUES,
   TIPO_EGRESO_LABELS,
@@ -114,6 +115,20 @@ export default function EgresosPage() {
     queryFn: () => getEgresos(filtros),
     staleTime: 30_000,
   })
+
+  // Totales reales (SUM en SQL) para el filtro activo -- getEgresos trae
+  // como mucho 100 filas (paginación del backend), no alcanza para el total.
+  const { data: resumen } = useQuery({
+    queryKey: ['egresos-resumen', filtros],
+    queryFn: () => getResumenPorTipo(filtros),
+    staleTime: 30_000,
+  })
+  const totalARS = resumen
+    ? resumen.filter((r) => r.moneda === 'ars').reduce((s, r) => s + Number(r.total), 0)
+    : null
+  const totalUSD = resumen
+    ? resumen.filter((r) => r.moneda === 'usd').reduce((s, r) => s + Number(r.total), 0)
+    : null
 
   function openCreate() {
     setEgresoEditar(null)
@@ -253,6 +268,8 @@ export default function EgresosPage() {
       {/* Table */}
       <EgresosTable
         egresos={egresos}
+        totalARS={totalARS}
+        totalUSD={totalUSD}
         isLoading={isLoading}
         onEdit={openEdit}
         onDelete={handleDelete}

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download } from 'lucide-react'
 import {
   getTrabajos,
+  getResumenTrabajoTotal,
   deleteTrabajo,
   getParcelas,
   formatParcelaLabel,
@@ -116,6 +117,14 @@ export default function TareasPage() {
   const { data: trabajos = [], isLoading } = useQuery({
     queryKey: ['trabajos', filtros],
     queryFn: () => getTrabajos(filtros),
+    staleTime: 30_000,
+  })
+
+  // Total real (SUM en SQL) para el filtro activo -- getTrabajos trae como
+  // mucho 100 filas (paginación del backend), no alcanza para el total.
+  const { data: resumenTotal } = useQuery({
+    queryKey: ['trabajos-resumen-total', filtros],
+    queryFn: () => getResumenTrabajoTotal(filtros),
     staleTime: 30_000,
   })
 
@@ -268,6 +277,8 @@ export default function TareasPage() {
       {/* Table */}
       <TareasTable
         registros={trabajos}
+        total={resumenTotal?.monto_total ?? null}
+        totalRegistros={resumenTotal?.total_registros ?? null}
         isLoading={isLoading}
         parcelaNombre={parcelaNombre}
         onEdit={openEdit}

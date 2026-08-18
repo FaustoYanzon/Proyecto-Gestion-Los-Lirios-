@@ -12,6 +12,7 @@ import {
   getKpiProduccionParcelas, getPresupuestoVsReal,
 } from '@/lib/api/kpis'
 import { getTrabajadores } from '@/lib/api/trabajadores'
+import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -161,24 +162,31 @@ export default function ManoObraDashboardPage() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
+  // Label del rango elegido arriba (mes único si desde===hasta, si no "Mayo–Agosto").
+  const rangoLabel = mesDesdeIdx === mesHastaIdx
+    ? (MES_LABELS[MESES_ORDER[mesDesdeIdx]] ?? '')
+    : `${MES_LABELS[MESES_ORDER[mesDesdeIdx]] ?? ''}–${MES_LABELS[MESES_ORDER[mesHastaIdx]] ?? ''}`
+
   const kpis = useMemo(() => {
-    const mesActual = now.getMonth() + 1
-    const delMes = moMensual.filter((r) => r.mes === mesActual)
-    const jornalesMes = delMes.reduce((s, r) => s + Number(r.jornales ?? 0), 0)
-    const costoMes = delMes.reduce((s, r) => s + Number(r.monto), 0)
+    const delRango = moMensual.filter((r) => {
+      const idx = MESES_ORDER.indexOf(r.mes)
+      return idx >= mesDesdeIdx && idx <= mesHastaIdx
+    })
+    const jornalesRango = delRango.reduce((s, r) => s + Number(r.jornales ?? 0), 0)
+    const costoRango = delRango.reduce((s, r) => s + Number(r.monto), 0)
     const moTotal = moMensual.reduce((s, r) => s + Number(r.monto), 0)
     const egresosTotal = pvr
       .filter((r) => r.concepto === 'egreso')
       .reduce((s, r) => s + Number(r.monto_real), 0)
     const kgTotal = parcelasKpi.reduce((s, p) => s + p.kg_total, 0)
     return {
-      jornalesMes,
-      costoMes,
+      jornalesRango,
+      costoRango,
       moTotal,
       pctSobreEgresos: egresosTotal > 0 ? (moTotal / egresosTotal) * 100 : null,
       costoPorKg: kgTotal > 0 ? moTotal / kgTotal : null,
     }
-  }, [moMensual, pvr, parcelasKpi])
+  }, [moMensual, pvr, parcelasKpi, mesDesdeIdx, mesHastaIdx])
 
   const clasifsVisibles = clasifFilter === 'todas' ? CLASIFS : [clasifFilter]
 
@@ -315,6 +323,9 @@ export default function ManoObraDashboardPage() {
               {MESES_ORDER.map((m, i) => <option key={m} value={i}>{MES_LABELS[m]}</option>)}
             </select>
           </div>
+          <MesRangeQuickButtons
+            onApply={(a, desde, hasta) => { setAnio(a); setMesDesdeIdx(desde); setMesHastaIdx(hasta) }}
+          />
           <select
             value={anio}
             onChange={(e) => setAnio(Number(e.target.value))}
@@ -328,13 +339,13 @@ export default function ManoObraDashboardPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
-          label={`Jornales ${MES_LABELS[now.getMonth() + 1] ?? 'mes'}`}
-          value={NUM_FMT.format(kpis.jornalesMes)}
+          label={`Jornales ${rangoLabel}`}
+          value={NUM_FMT.format(kpis.jornalesRango)}
           hint="solo registros por día"
         />
         <KpiCard
-          label={`Costo MO ${MES_LABELS[now.getMonth() + 1] ?? 'mes'}`}
-          value={fmtM(kpis.costoMes)}
+          label={`Costo MO ${rangoLabel}`}
+          value={fmtM(kpis.costoRango)}
           hint="incluye tanto (plantas, metros...)"
         />
         <KpiCard

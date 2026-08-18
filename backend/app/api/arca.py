@@ -148,24 +148,37 @@ async def list_lotes_arca(
 # there isn't one here, but kept as a flat list of static routes regardless.
 @router.get("/resumen-iva", response_model=ResumenIvaResponse)
 async def resumen_iva(
-    anio: int | None = Query(None),
-    mes: int | None = Query(None, ge=1, le=12),
+    anio_desde: int | None = Query(None),
+    mes_desde: int | None = Query(None, ge=1, le=12),
+    anio_hasta: int | None = Query(None),
+    mes_hasta: int | None = Query(None, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> ResumenIvaResponse:
+    """Suma IVA compra/venta sobre un rango de meses calendario (inclusive en
+    ambos extremos) -- por defecto, si no se pasa nada, el mes actual solo
+    (mismo comportamiento que antes de soportar rango).
+    """
     now = datetime.now(timezone.utc)
-    anio = anio or now.year
-    mes = mes or now.month
+    anio_desde = anio_desde or now.year
+    mes_desde = mes_desde or now.month
+    anio_hasta = anio_hasta or anio_desde
+    mes_hasta = mes_hasta or mes_desde
 
     result = await db.execute(
-        text("SELECT tipo_archivo, iva FROM vw_kpi_iva WHERE anio = :anio AND mes = :mes"),
-        {"anio": anio, "mes": mes},
+        text(
+            "SELECT tipo_archivo, SUM(iva) AS iva FROM vw_kpi_iva "
+            "WHERE (anio, mes) >= (:anio_desde, :mes_desde) AND (anio, mes) <= (:anio_hasta, :mes_hasta) "
+            "GROUP BY tipo_archivo"
+        ),
+        {"anio_desde": anio_desde, "mes_desde": mes_desde, "anio_hasta": anio_hasta, "mes_hasta": mes_hasta},
     )
     por_tipo = {row.tipo_archivo: Decimal(row.iva) for row in result.all()}
     iva_compra = por_tipo.get("recibido", Decimal("0"))
     iva_venta = por_tipo.get("emitido", Decimal("0"))
     return ResumenIvaResponse(
-        anio=anio, mes=mes, iva_compra=iva_compra, iva_venta=iva_venta, iva_saldo=iva_venta - iva_compra
+        anio_desde=anio_desde, mes_desde=mes_desde, anio_hasta=anio_hasta, mes_hasta=mes_hasta,
+        iva_compra=iva_compra, iva_venta=iva_venta, iva_saldo=iva_venta - iva_compra,
     )
 
 

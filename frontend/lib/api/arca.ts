@@ -66,8 +66,10 @@ export interface ClasificarIngresoRequest {
 }
 
 export interface ResumenIvaResponse {
-  anio: number
-  mes: number
+  anio_desde: number
+  mes_desde: number
+  anio_hasta: number
+  mes_hasta: number
   iva_compra: number
   iva_venta: number
   iva_saldo: number
@@ -133,7 +135,9 @@ export async function descartarComprobanteArca(comprobanteId: string): Promise<v
   await api.post(`/finanzas/arca/${comprobanteId}/descartar`)
 }
 
-export async function getResumenIva(params: { anio?: number; mes?: number }): Promise<ResumenIvaResponse> {
+export async function getResumenIva(params: {
+  anio_desde?: number; mes_desde?: number; anio_hasta?: number; mes_hasta?: number
+}): Promise<ResumenIvaResponse> {
   const { data } = await api.get('/finanzas/arca/resumen-iva', { params })
   return data
 }

@@ -72,8 +72,10 @@ class ClasificarIngresoRequest(BaseModel):
 
 
 class ResumenIvaResponse(BaseModel):
-    anio: int
-    mes: int
+    anio_desde: int
+    mes_desde: int
+    anio_hasta: int
+    mes_hasta: int
     iva_compra: Decimal
     iva_venta: Decimal
     iva_saldo: Decimal

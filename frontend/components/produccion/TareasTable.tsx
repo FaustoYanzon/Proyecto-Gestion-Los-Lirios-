@@ -28,6 +28,11 @@ const CLASIFICACION_BADGE: Record<string, string> = {
 
 interface Props {
   registros: RegistroTrabajoResponse[]
+  // Total real (SUM en SQL, sin el tope de 100 filas de `registros`) y
+  // cantidad real de registros que matchean el filtro activo. `null`
+  // mientras se está cargando.
+  total: number | null
+  totalRegistros: number | null
   isLoading: boolean
   parcelaNombre: (id: string | null) => string
   onEdit: (r: RegistroTrabajoResponse) => void
@@ -48,9 +53,12 @@ function SkeletonRow() {
 
 const PAGE_SIZE = 10
 
-export default function TareasTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
+export default function TareasTable({ registros, total, totalRegistros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
   const [page, setPage] = useState(1)
-  const total = registros.reduce((s, r) => s + Number(r.monto_total), 0)
+  // `registros` viene paginado por el backend (tope 100) -- si hay más
+  // registros reales que los cargados, el total real (SQL) puede no
+  // coincidir con la suma de lo que se ve en pantalla.
+  const hayMasRegistros = totalRegistros != null && totalRegistros > registros.length
 
   useEffect(() => { setPage(1) }, [registros])
 
@@ -168,10 +176,14 @@ export default function TareasTable({ registros, isLoading, parcelaNombre, onEdi
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center gap-6 text-sm">
           <span className="font-medium text-gray-700">
             Total ARS:{' '}
-            <span className="font-mono text-green-700">$ {formatMonto(total)}</span>
+            <span className="font-mono text-green-700">
+              {total != null ? `$ ${formatMonto(total)}` : '…'}
+            </span>
           </span>
           <span className="ml-auto text-gray-400">
-            {registros.length} registro{registros.length !== 1 ? 's' : ''}
+            {hayMasRegistros
+              ? `mostrando ${registros.length} de ${totalRegistros} registros — el total ya incluye todos`
+              : `${registros.length} registro${registros.length !== 1 ? 's' : ''}`}
           </span>
         </div>
       )}
