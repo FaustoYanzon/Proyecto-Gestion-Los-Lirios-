@@ -47,9 +47,9 @@ async def clima_pronostico_extendido(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Pronóstico extendido (16 días): temperaturas, precipitación + probabilidad,
+    """Pronóstico extendido (7 días): temperaturas, precipitación + probabilidad,
     humedad, viento, ET0 -- para el panel de Clima en Producción, no el widget
-    compacto de Inicio (ese sigue usando /pronostico, 7 días)."""
+    compacto de Inicio (ese sigue usando /pronostico, con menos variables)."""
     if finca not in FINCA_COORDS:
         raise HTTPException(404, f"Finca desconocida: {finca}")
     try:

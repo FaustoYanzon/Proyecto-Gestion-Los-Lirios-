@@ -2,7 +2,10 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, Loader2, Snowflake, Flame, Thermometer, Sprout, Droplet, ShieldAlert, History } from 'lucide-react'
+import {
+  Upload, Loader2, Snowflake, Flame, Thermometer, Sprout, Droplet, ShieldAlert, History,
+  ChevronLeft, ChevronRight,
+} from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
@@ -49,6 +52,8 @@ function todayISO(offsetDays = 0): string {
   return d.toISOString().slice(0, 10)
 }
 
+const HELADA_PAGE_SIZE = 10
+
 export default function TermografoPanel() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -57,6 +62,16 @@ export default function TermografoPanel() {
   const [historialOpen, setHistorialOpen] = useState(false)
   const [desde, setDesde] = useState(todayISO(-30))
   const [hasta, setHasta] = useState(todayISO())
+  const [heladaPage, setHeladaPage] = useState(0)
+
+  // Reset de página al cambiar el filtro de fecha -- ajuste de estado durante
+  // el render (patrón documentado de React), no en un efecto, para evitar
+  // el render en cascada de un setState dentro de useEffect.
+  const [heladaPageFiltro, setHeladaPageFiltro] = useState(`${desde}|${hasta}`)
+  if (heladaPageFiltro !== `${desde}|${hasta}`) {
+    setHeladaPageFiltro(`${desde}|${hasta}`)
+    setHeladaPage(0)
+  }
 
   const { data: lotes = [] } = useQuery({
     queryKey: ['termografo-lotes'],
@@ -95,6 +110,13 @@ export default function TermografoPanel() {
       humedad: p.humedad_avg,
     }))
   }, [lecturas])
+
+  const eventosHelada = metricas?.eventos_helada ?? []
+  const heladaTotalPages = Math.max(1, Math.ceil(eventosHelada.length / HELADA_PAGE_SIZE))
+  const heladaPageActual = Math.min(heladaPage, heladaTotalPages - 1)
+  const eventosHeladaPagina = eventosHelada.slice(
+    heladaPageActual * HELADA_PAGE_SIZE, (heladaPageActual + 1) * HELADA_PAGE_SIZE
+  )
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -235,10 +257,10 @@ export default function TermografoPanel() {
       )}
 
       {/* Eventos de helada */}
-      {metricas && metricas.eventos_helada.length > 0 && (
+      {eventosHelada.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <p className="text-sm font-medium text-gray-800 mb-3">
-            Eventos de helada ({metricas.eventos_helada.length})
+            Eventos de helada ({eventosHelada.length})
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -251,7 +273,7 @@ export default function TermografoPanel() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {metricas.eventos_helada.map((ev, i) => (
+                {eventosHeladaPagina.map((ev, i) => (
                   <tr key={i}>
                     <td className="py-1.5 pr-4 text-gray-700">{fmtFechaHora(ev.inicio)}</td>
                     <td className="py-1.5 pr-4 text-gray-700">{fmtFechaHora(ev.fin)}</td>
@@ -262,6 +284,29 @@ export default function TermografoPanel() {
               </tbody>
             </table>
           </div>
+          {heladaTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+              <button
+                onClick={() => setHeladaPage((p) => Math.max(0, p - 1))}
+                disabled={heladaPageActual === 0}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={14} />
+                Anterior
+              </button>
+              <span className="text-xs text-gray-500">
+                Página {heladaPageActual + 1} de {heladaTotalPages}
+              </span>
+              <button
+                onClick={() => setHeladaPage((p) => Math.min(heladaTotalPages - 1, p + 1))}
+                disabled={heladaPageActual >= heladaTotalPages - 1}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -88,7 +88,7 @@ async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
                 "et0_fao_evapotranspiration",
                 "uv_index_max",
             ]),
-            "forecast_days": 16,
+            "forecast_days": 7,
         }
 
     url = "https://api.open-meteo.com/v1/forecast"

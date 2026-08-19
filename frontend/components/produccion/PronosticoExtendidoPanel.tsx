@@ -28,7 +28,7 @@ export default function PronosticoExtendidoPanel() {
       {isError && <div className="h-32 flex items-center justify-center text-sm text-gray-400">Sin datos de pronóstico</div>}
 
       {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
           {data.daily.time.map((dia, i) => {
             const Icon = wmoIcon(data.daily.weather_code[i])
             const precip = data.daily.precipitation_sum[i]
