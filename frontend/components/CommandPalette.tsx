@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import {
-  LayoutDashboard, Map, Sprout, Droplets, FlaskConical,
+  LayoutDashboard, Map, Sprout, Droplets, FlaskConical, Cloud,
   DollarSign, TrendingDown, TrendingUp, ClipboardList, Settings, Search, Users, BellRing,
 } from 'lucide-react'
 
@@ -18,6 +18,7 @@ const CMD_ITEMS: CmdItem[] = [
   { label: 'Tareas del día',      href: '/dashboard/produccion/tareas',         icon: Sprout,          group: 'Producción'  },
   { label: 'Riego',               href: '/dashboard/produccion/riego',          icon: Droplets,        group: 'Producción'  },
   { label: 'Fitosanitarios',      href: '/dashboard/produccion/fitosanitarios', icon: FlaskConical,    group: 'Producción'  },
+  { label: 'Clima',                href: '/dashboard/produccion/clima',         icon: Cloud,           group: 'Producción'  },
   { label: 'Dashboard financiero',href: '/dashboard/finanzas/dashboard',        icon: DollarSign,      group: 'Finanzas'    },
   { label: 'Egresos',             href: '/dashboard/finanzas/egresos',          icon: TrendingDown,    group: 'Finanzas'    },
   { label: 'Ingresos',            href: '/dashboard/finanzas/ingresos',         icon: TrendingUp,      group: 'Finanzas'    },

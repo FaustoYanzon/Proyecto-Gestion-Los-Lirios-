@@ -80,6 +80,7 @@ const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/produccion/campana',        label: 'Campaña'        },
       { href: '/dashboard/produccion/cosecha',        label: 'Cosecha'        },
       { href: '/dashboard/produccion/metas',          label: 'Metas'          },
+      { href: '/dashboard/produccion/clima',          label: 'Clima'          },
       { href: '/dashboard/produccion/dashboard',      label: 'Dashboard Producción' },
     ],
   },

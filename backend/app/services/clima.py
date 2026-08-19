@@ -20,7 +20,7 @@ FINCA_COORDS: dict[str, tuple[float, float]] = {
 }
 
 CACHE_TTL_MIN = 30
-ClimaKind = Literal["actual", "pronostico"]
+ClimaKind = Literal["actual", "pronostico", "pronostico_extendido"]
 
 
 def _is_fresh(fetched_at: datetime) -> bool:
@@ -59,7 +59,7 @@ async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
             ]),
             "forecast_days": 1,
         }
-    else:  # pronostico
+    elif kind == "pronostico":
         params = {
             **common,
             "daily": ",".join([
@@ -72,6 +72,23 @@ async def _fetch_open_meteo(lat: float, lng: float, kind: ClimaKind) -> dict:
                 "uv_index_max",
             ]),
             "forecast_days": 7,
+        }
+    else:  # pronostico_extendido -- panel de Clima en Producción, no el widget compacto de Inicio
+        params = {
+            **common,
+            "daily": ",".join([
+                "temperature_2m_max",
+                "temperature_2m_min",
+                "precipitation_sum",
+                "precipitation_probability_max",
+                "relative_humidity_2m_mean",
+                "wind_speed_10m_max",
+                "wind_direction_10m_dominant",
+                "weather_code",
+                "et0_fao_evapotranspiration",
+                "uv_index_max",
+            ]),
+            "forecast_days": 16,
         }
 
     url = "https://api.open-meteo.com/v1/forecast"

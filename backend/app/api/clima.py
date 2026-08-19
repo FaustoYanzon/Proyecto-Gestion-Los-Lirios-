@@ -41,6 +41,23 @@ async def clima_pronostico(
         raise HTTPException(502, f"No se pudo obtener pronóstico: {e}")
 
 
+@router.get("/pronostico-extendido")
+async def clima_pronostico_extendido(
+    finca: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Pronóstico extendido (16 días): temperaturas, precipitación + probabilidad,
+    humedad, viento, ET0 -- para el panel de Clima en Producción, no el widget
+    compacto de Inicio (ese sigue usando /pronostico, 7 días)."""
+    if finca not in FINCA_COORDS:
+        raise HTTPException(404, f"Finca desconocida: {finca}")
+    try:
+        return await get_clima(db, finca, "pronostico_extendido")
+    except Exception as e:
+        raise HTTPException(502, f"No se pudo obtener pronóstico extendido: {e}")
+
+
 @router.get("/fincas")
 async def listar_fincas_con_coords(
     _: User = Depends(get_current_user),

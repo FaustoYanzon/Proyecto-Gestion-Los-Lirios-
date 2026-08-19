@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Cloud, CloudRain, CloudFog, CloudLightning, Sun, CloudSun, Wind, Droplets, Sunrise, ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
+import { Cloud, Wind, Droplets, Sunrise, ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ReferenceLine,
@@ -16,6 +16,7 @@ import FenologiaNotificaciones from '@/components/FenologiaNotificaciones'
 import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
 import { getPresupuestoVsReal, getKpiProduccionParcelas } from '@/lib/api/kpis'
 import { getParcelasMapa } from '@/lib/api/produccion'
+import { wmoDescription, wmoIcon, windDirectionLabel, uvLevel } from '@/lib/weather'
 
 const now = new Date()
 const TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
@@ -28,45 +29,6 @@ const fmtM = (n: number) =>
   Math.abs(n) >= 1_000_000
     ? `$${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`
     : `$${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(n)}`
-
-// WMO weather code → short Spanish description
-// Ref: https://open-meteo.com/en/docs#weathervariables
-function wmoDescription(code: number): string {
-  if (code === 0) return 'Despejado'
-  if (code <= 2) return 'Parcialmente nublado'
-  if (code === 3) return 'Nublado'
-  if (code <= 49) return 'Niebla'
-  if (code <= 59) return 'Llovizna'
-  if (code <= 69) return 'Lluvia'
-  if (code <= 79) return 'Nieve'
-  if (code <= 84) return 'Chaparrón'
-  if (code <= 99) return 'Tormenta'
-  return 'Variable'
-}
-
-function wmoIcon(code: number) {
-  if (code === 0) return Sun
-  if (code <= 2) return CloudSun
-  if (code === 3) return Cloud
-  if (code <= 49) return CloudFog
-  if (code <= 69 || code === 80 || code === 81 || code === 82) return CloudRain
-  if (code <= 99) return CloudLightning
-  return Cloud
-}
-
-// Grados → punto cardinal abreviado (N/NE/E/SE/S/SO/O/NO)
-function windDirectionLabel(deg: number): string {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
-  return dirs[Math.round(deg / 45) % 8]
-}
-
-function uvLevel(uv: number): { label: string; color: string } {
-  if (uv < 3) return { label: 'Bajo', color: '#3f5c3a' }
-  if (uv < 6) return { label: 'Moderado', color: '#b8860b' }
-  if (uv < 8) return { label: 'Alto', color: '#c96a1f' }
-  if (uv < 11) return { label: 'Muy alto', color: '#a3293a' }
-  return { label: 'Extremo', color: '#7a1f2c' }
-}
 
 interface ClimaActualResponse {
   current: {

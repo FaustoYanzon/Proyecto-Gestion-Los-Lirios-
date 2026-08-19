@@ -27,6 +27,7 @@ from app.models.arca import (
     LoteImportacionArca,
     TipoArchivoArca,
 )
+from app.models.termografo import LecturaTermografo, LoteImportacionTermografo
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     TAREAS_POR_CLASIFICACION,
@@ -84,4 +85,6 @@ __all__ = [
     "EstadoComprobanteArca",
     "LoteImportacionArca",
     "ComprobanteArcaImportado",
+    "LoteImportacionTermografo",
+    "LecturaTermografo",
 ]
