@@ -72,16 +72,19 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-18 — cierre)
+## Próximos pasos (actualizado 2026-08-18, segunda tanda)
 
 Pilot estable.
 
 ### Pendiente real
 
-1. **Investigar diferencia de totales: Inicio (tarjeta de Dirección) muestra ~18M en egresos, pero Egresos y Tareas diarias muestran ~14M para el mismo período** — reportado por Fausto el 18/08, no investigado todavía. Hay algo (filtro de fecha, fuente de datos, o cálculo) que difiere entre el KPI de Inicio y las pantallas de detalle.
-2. **Dashboard de Mano de Obra — las tarjetas (costo MO, cumplimiento, egresos, ingresos, IVA) no respetan el filtro de fecha del dashboard, quedan fijas al mes actual.** Pedido de Fausto: que se recalculen según el rango de fecha elegido, más botones de filtro predefinidos "Mes actual"/"Mes anterior" que actualicen todo automáticamente. No iniciado.
+1. **Confirmar que el deploy del backend a Railway quedó activo** — bloqueado al cierre de esta sesión por un incidente de plataforma de Railway ("Deployments are slow to progress", [status.railway.com/incident/YYU63JUO](https://status.railway.com/incident/YYU63JUO)), no por nada del código ni del repo. El commit `382901f` (fix de totales + dashboards por rango) está pusheado y el frontend ya está en producción — falta que el backend termine de desplegar solo una vez Railway resuelva el incidente. Verificar `railway deployment list` al retomar.
 
-### Hecho en la sesión del 2026-08-18 (para referencia — no repetir)
+### Hecho en la sesión del 2026-08-18, segunda tanda (para referencia — no repetir)
+
+**Fix de totales (Egresos/Tareas) + tarjetas de dashboard por rango de fecha.** Ver [[2026-08-18-fix-totales-egresos-tareas-dashboards-por-rango]]. La diferencia de totales entre Inicio (~18M) y Egresos/Tareas (~14M) resultó ser que esas dos tablas sumaban solo los últimos 100 registros (tope de paginación del backend), no el total real — corregido con endpoints dedicados que suman en SQL sin límite. Las tarjetas de Cumplimiento/Egresos/Ingresos/IVA (dashboard Finanzas) y Jornales/Costo MO (Mano de Obra) dejaron de estar fijas al mes actual y ahora respetan el rango de fecha ya seleccionado en cada dashboard, con botones rápidos nuevos "Mes actual"/"Mes anterior".
+
+### Hecho en la sesión del 2026-08-18, primera tanda (para referencia — no repetir)
 
 **Tabla de equivalencia de válvulas reales (GeoJSON) + resaltado de riego en curso a nivel de cuadrante** — cierra el punto 2 pendiente desde el 08-13. Ver [[2026-08-18-tabla-equivalencia-valvulas-cuadrante]]. Encontró y corrigió, con confirmación de Fausto: el Parral 2 reparte sus 3 válvulas reales entre 2 cabezales distintos (antes invisible, `Parcela.cabezal_riego` solo guardaba uno); las válvulas "41"/"42" son del Parral 4 y "43"/"44" del Parral 5 (estaban digitalizadas del lado equivocado del límite compartido en QGIS); "31"/"32" riegan el Potrero 3, no un parral; una válvula mal nombrada "SU3" duplicada corregida a "SU4". Tabla nueva `valvulas` en el backend (cabezal por válvula, no por parcela) reemplaza las 3 listas hardcodeadas que antes vivían duplicadas en frontend y mobile. Válido en producción, confirmado por Fausto en el celular.
 
@@ -132,6 +135,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-18-fix-totales-egresos-tareas-dashboards-por-rango]]
 - [[2026-08-18-tabla-equivalencia-valvulas-cuadrante]]
 - [[2026-08-12-importacion-comprobantes-arca-iva]]
 - [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
