@@ -72,13 +72,19 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-18, segunda tanda)
+## Próximos pasos (actualizado 2026-08-19)
 
 Pilot estable.
 
 ### Pendiente real
 
-1. **Confirmar que el deploy del backend a Railway quedó activo** — bloqueado al cierre de esta sesión por un incidente de plataforma de Railway ("Deployments are slow to progress", [status.railway.com/incident/YYU63JUO](https://status.railway.com/incident/YYU63JUO)), no por nada del código ni del repo. El commit `382901f` (fix de totales + dashboards por rango) está pusheado y el frontend ya está en producción — falta que el backend termine de desplegar solo una vez Railway resuelva el incidente. Verificar `railway deployment list` al retomar.
+1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — un `cd` que no persistió entre comandos de una sesión de Claude Code hizo que un listado corriera contra `backend/.env` en vez de `frontend/.env`, mostrando en el chat `SECRET_KEY`, `SUPER_ADMIN_PASSWORD` (la contraseña real de `administracion@losliriossa.com`) y `DATABASE_PUBLIC_URL`. Fausto decidió posponerlo, no es urgente por infraestructura pero sí por higiene de seguridad. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
+
+**Resuelto desde la última actualización (no repetir):** el deploy de Railway del 08-18 (bloqueado por el incidente de plataforma) terminó activándose solo una vez Railway resolvió el incidente — confirmado en la sesión del 08-19 (`railway status`, deployment `Online`, endpoints nuevos del commit `382901f` respondiendo). No quedó nada pendiente de esa sesión.
+
+### Hecho en la sesión del 2026-08-19 (pestaña Clima: termógrafo de campo + pronóstico extendido)
+
+Ver [[2026-08-19-clima-termografo-pronostico-extendido]] para el detalle completo. Resumen: pestaña nueva `/dashboard/produccion/clima` — importación del CSV del termógrafo BLE de campo (mismo patrón de dedupe que ARCA), 6 métricas agroclimáticas (horas bajo 0°C/sobre 30°C/de frío, GDD acumulado cruzado contra el calendario de Ciclo de Campaña, amplitud térmica diaria, eventos de helada, riesgo fúngico), tabla de eventos de helada paginada (10 por página), y pronóstico extendido de 7 días (Open-Meteo, humedad/viento/precipitación) sin tocar el widget compacto de Inicio. Verificado end-to-end contra Postgres real y el CSV real de Fausto antes de deployar. Bug real encontrado y corregido en producción: los campos `Decimal` de la API (GDD, amplitud térmica, mínimas de helada) llegan al frontend como *string*, no `number` — mismo patrón que el bug de "$NaN" del 08-18, ahora anotado como gotcha recurrente. **Metodología nueva a partir de esta sesión:** probar en local con Claude in Chrome antes de pushear/deployar — ver [[feedback_local_testing_before_deploy]] en la memoria de Claude Code (no vive en esta bóveda).
 
 ### Hecho en la sesión del 2026-08-18, segunda tanda (para referencia — no repetir)
 
@@ -135,6 +141,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-19-clima-termografo-pronostico-extendido]]
 - [[2026-08-18-fix-totales-egresos-tareas-dashboards-por-rango]]
 - [[2026-08-18-tabla-equivalencia-valvulas-cuadrante]]
 - [[2026-08-12-importacion-comprobantes-arca-iva]]
