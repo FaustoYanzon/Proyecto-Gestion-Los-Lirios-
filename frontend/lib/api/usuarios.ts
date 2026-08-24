@@ -11,12 +11,22 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   obrero: 'Obrero',
 }
 
+// Sin Caucete — misma finca vieja/de prueba que se sacó de los demás selectores.
+export const USER_FINCA_VALUES = ['los_mimbres', 'media_agua'] as const
+export type UserFinca = (typeof USER_FINCA_VALUES)[number]
+
+export const USER_FINCA_LABELS: Record<UserFinca, string> = {
+  los_mimbres: 'Los Mimbres',
+  media_agua: 'Media Agua',
+}
+
 export interface UserResponse {
   id: string
   email: string
   username: string
   full_name: string
   role: UserRole
+  finca: UserFinca
   is_active: boolean
   created_at: string
 }
@@ -26,6 +36,7 @@ export interface UserCreate {
   username: string
   full_name: string
   role: UserRole
+  finca: UserFinca
   password: string
 }
 
@@ -34,6 +45,7 @@ export interface UserUpdate {
   username?: string
   full_name?: string
   role?: UserRole
+  finca?: UserFinca
   is_active?: boolean
   password?: string
 }

@@ -17,6 +17,7 @@ import {
 import IngresosTable from '@/components/finanzas/IngresosTable'
 import IngresoForm from '@/components/finanzas/IngresoForm'
 import ComprobantesArcaPanel from '@/components/finanzas/ComprobantesArcaPanel'
+import { useContextStore } from '@/store/contextStore'
 
 // ─── Sheet ────────────────────────────────────────────────────────────────────
 
@@ -105,9 +106,20 @@ const EMPTY_FILTERS: IngresosFilter = {}
 
 export default function IngresosPage() {
   const queryClient = useQueryClient()
-  const [filtros, setFiltros] = useState<IngresosFilter>(EMPTY_FILTERS)
+  const fincaGlobal = useContextStore((s) => s.finca)
+  const [filtros, setFiltros] = useState<IngresosFilter>(() => ({ ...EMPTY_FILTERS, finca: fincaGlobal }))
   const [modalOpen, setModalOpen] = useState(false)
   const [ingresoEditar, setIngresoEditar] = useState<IngresoResponse | null>(null)
+
+  // Se re-sincroniza con el selector global de Finca del header. El usuario
+  // sigue pudiendo cambiarlo o limpiarlo acá abajo para ver otra finca puntual
+  // sin tener que tocar el selector de arriba. Ajustado durante el render (no
+  // en un useEffect) para no disparar cascading renders.
+  const [prevFincaGlobal, setPrevFincaGlobal] = useState(fincaGlobal)
+  if (prevFincaGlobal !== fincaGlobal) {
+    setPrevFincaGlobal(fincaGlobal)
+    setFiltros((f) => ({ ...f, finca: fincaGlobal }))
+  }
 
   const { data: ingresos = [], isLoading } = useQuery({
     queryKey: ['ingresos', filtros],

@@ -84,12 +84,11 @@ export function canSeeAdmin(role: Role): boolean {
   return role === 'super_admin' || role === 'gerencial';
 }
 
-// Coordenadas de las 3 fincas — usadas por el widget de clima.
+// Coordenadas de las fincas operativas — usadas por el widget de clima.
 // Reemplazar con las coordenadas reales (Fausto).
 export const FINCA_COORDS: Record<string, { lat: number; lng: number; label: string }> = {
   los_mimbres: { lat: -31.45, lng: -68.55, label: 'Los Mimbres' },
   media_agua:  { lat: -31.97, lng: -68.42, label: 'Media Agua' },
-  caucete:     { lat: -31.65, lng: -68.28, label: 'Caucete' },
 };
 
 // Helper de formato de monto en ARS.

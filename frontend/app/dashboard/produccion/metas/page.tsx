@@ -8,16 +8,26 @@ import {
   getMetas, createMeta, updateMeta, deleteMeta,
 } from '@/lib/api/metas'
 import type { MetaProduccion } from '@/lib/api/metas'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 
 const now = new Date()
 const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
 const AVAILABLE_YEARS = [DEFAULT_YEAR - 1, DEFAULT_YEAR, DEFAULT_YEAR + 1]
 
 export default function MetasProduccionPage() {
-  const [anio, setAnio] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
   // Local draft of kg_plan inputs, keyed by parcela_id
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const qc = useQueryClient()
+
+  // Ajustado durante el render (no en un useEffect) para no disparar
+  // cascading renders — ver react-hooks/set-state-in-effect.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setAnio(campanaToAnio(campanaGlobal))
+  }
 
   const { data: parcelas = [] } = useQuery({
     queryKey: ['parcelas'],

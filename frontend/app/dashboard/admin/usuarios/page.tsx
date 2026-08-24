@@ -12,6 +12,8 @@ import {
   updateUser,
   ROLE_VALUES,
   ROLE_LABELS,
+  USER_FINCA_VALUES,
+  USER_FINCA_LABELS,
   type UserResponse,
   type UserRole,
 } from '@/lib/api/usuarios'
@@ -37,6 +39,7 @@ const createSchema = z.object({
   username:  usernameField,
   full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   role:      z.enum(ROLE_VALUES),
+  finca:     z.enum(USER_FINCA_VALUES),
   password:  z.string().min(8, 'Mínimo 8 caracteres'),
 })
 
@@ -45,6 +48,7 @@ const editSchema = z.object({
   username:  usernameField,
   full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   role:      z.enum(ROLE_VALUES),
+  finca:     z.enum(USER_FINCA_VALUES),
   is_active: z.boolean(),
   password:  z.union([z.string().min(8, 'Mínimo 8 caracteres'), z.literal('')]),
 })
@@ -92,7 +96,7 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<CreateData>({
     resolver: zodResolver(createSchema) as Resolver<CreateData>,
-    defaultValues: { email: '', username: '', full_name: '', role: 'obrero', password: '' },
+    defaultValues: { email: '', username: '', full_name: '', role: 'obrero', finca: 'media_agua', password: '' },
   })
 
   async function onSubmit(data: CreateData) {
@@ -135,6 +139,12 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
         </select>
       </div>
       <div>
+        <label className={label}>Finca</label>
+        <select {...register('finca')} className={field}>
+          {USER_FINCA_VALUES.map((f) => <option key={f} value={f}>{USER_FINCA_LABELS[f]}</option>)}
+        </select>
+      </div>
+      <div>
         <label className={label}>Contraseña</label>
         <input type="password" {...register('password')} className={field} placeholder="Mínimo 8 caracteres" />
         {errors.password && <p className={err}>{errors.password.message}</p>}
@@ -166,6 +176,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
       username:  user.username,
       full_name: user.full_name,
       role:      user.role,
+      finca:     user.finca,
       is_active: user.is_active,
       password:  '',
     },
@@ -179,6 +190,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
         username:  data.username,
         full_name: data.full_name,
         role:      data.role,
+        finca:     data.finca,
         is_active: data.is_active,
       }
       if (data.password) payload.password = data.password
@@ -216,6 +228,12 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserResponse; onSuc
         <label className={label}>Rol</label>
         <select {...register('role')} className={field}>
           {ROLE_VALUES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className={label}>Finca</label>
+        <select {...register('finca')} className={field}>
+          {USER_FINCA_VALUES.map((f) => <option key={f} value={f}>{USER_FINCA_LABELS[f]}</option>)}
         </select>
       </div>
       <div>
@@ -292,6 +310,7 @@ export default function UsuariosPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Usuario</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Rol</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Finca</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Alta</th>
                 {isSuperAdmin && (
@@ -303,7 +322,7 @@ export default function UsuariosPage() {
               {isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: isSuperAdmin ? 7 : 6 }).map((_, j) => (
+                    {Array.from({ length: isSuperAdmin ? 8 : 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-gray-200 rounded animate-pulse" />
                       </td>
@@ -312,7 +331,7 @@ export default function UsuariosPage() {
                 ))
               ) : usuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 7 : 6} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={isSuperAdmin ? 8 : 7} className="px-4 py-10 text-center text-gray-400">
                     No hay usuarios registrados
                   </td>
                 </tr>
@@ -327,6 +346,7 @@ export default function UsuariosPage() {
                         {ROLE_LABELS[u.role] ?? u.role}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{USER_FINCA_LABELS[u.finca] ?? u.finca}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
                         {u.is_active ? 'Activo' : 'Inactivo'}

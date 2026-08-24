@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.finanzas import Finca
 
 if TYPE_CHECKING:
     from app.models.finanzas import Egreso, Ingreso
@@ -44,6 +45,16 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         SAEnum(UserRole), default=UserRole.obrero, nullable=False
+    )
+    # Finca asignada al usuario. Para encargado/regador/obrero determina la
+    # finca fija que ven en mobile (sin selector propio); gerencial/super_admin
+    # mantienen el selector manual de finca en la app, este campo es solo su
+    # punto de partida. Reusa el mismo enum de Postgres que Egreso/Ingreso.
+    finca: Mapped[Finca] = mapped_column(
+        SAEnum(Finca, name="finca", create_type=False),
+        default=Finca.media_agua,
+        server_default="media_agua",
+        nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Incremented to invalidate all previously issued JWTs for this user

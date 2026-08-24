@@ -11,6 +11,7 @@ import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
 import { getResumenIva } from '@/lib/api/arca'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -18,6 +19,8 @@ import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 const now = new Date()
 const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
 const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+
+const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua' }
 
 const MESES_ORDER = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4]
 const MES_LABELS: Record<number, string> = {
@@ -72,12 +75,26 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FinanceDashboardPage() {
-  const [anio, setAnio] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const finca = useContextStore((s) => s.finca)
+  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
   const [moneda, setMoneda] = useState<'ars' | 'usd'>('ars')
   // Month-range filter expressed as positions in the campaign order (0 = May, 11 = Apr)
   const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
   const [tipoFilter, setTipoFilter] = useState<string>('todos')
+
+  // Re-sincroniza con la campaña elegida en el selector global del header —
+  // reinicia al rango completo de esa campaña, el usuario puede volver a
+  // acotarlo localmente después con los controles de abajo. Ajustado durante
+  // el render (no en un useEffect) para no disparar cascading renders.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setAnio(campanaToAnio(campanaGlobal))
+    setMesDesdeIdx(0)
+    setMesHastaIdx(11)
+  }
 
   // Meses reales (calendario) de los extremos del rango elegido -- mayo-dic
   // pertenecen al año de campaña `anio`, enero-abril al año siguiente.
@@ -90,14 +107,14 @@ export default function FinanceDashboardPage() {
     : `${MES_LABELS[mesDesdeReal] ?? ''}–${MES_LABELS[mesHastaReal] ?? ''}`
 
   const { data: pvr = [] } = useQuery({
-    queryKey: ['kpi-presup-real', anio, moneda, 'media_agua'],
-    queryFn: () => getPresupuestoVsReal({ temporada: anio, moneda, finca: 'media_agua' }),
+    queryKey: ['kpi-presup-real', anio, moneda, finca],
+    queryFn: () => getPresupuestoVsReal({ temporada: anio, moneda, finca }),
     staleTime: 60_000,
   })
 
   const { data: compradores = [] } = useQuery({
-    queryKey: ['kpi-compradores', anio, 'media_agua'],
-    queryFn: () => getKpiCompradores(anio, 'media_agua'),
+    queryKey: ['kpi-compradores', anio, finca],
+    queryFn: () => getKpiCompradores(anio, finca),
     staleTime: 300_000,
   })
 
@@ -270,11 +287,12 @@ export default function FinanceDashboardPage() {
             {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>{y}/{y + 1}</option>)}
           </select>
           <select
-            value="media_agua"
+            value={finca}
             disabled
+            title="Se cambia con el selector de Finca del encabezado"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-gray-50 text-gray-600 focus:outline-none"
           >
-            <option value="media_agua">Media Agua</option>
+            <option value={finca}>{FINCA_LABELS[finca] ?? finca}</option>
           </select>
         </div>
       </div>

@@ -17,9 +17,11 @@ import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
 import { getPresupuestoVsReal, getKpiProduccionParcelas } from '@/lib/api/kpis'
 import { getParcelasMapa } from '@/lib/api/produccion'
 import { wmoDescription, wmoIcon, windDirectionLabel, uvLevel } from '@/lib/weather'
+import { useContextStore } from '@/store/contextStore'
 
 const now = new Date()
 const TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
+const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua' }
 const MESES_ORDER = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4]
 const MES_LABELS: Record<number, string> = {
   5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Oct',
@@ -69,11 +71,12 @@ function DireccionKpi({ label, value, hint, tone = 'neutral' }: {
 // Revisar de nuevo solo si el dato de Open-Meteo se demuestra insuficiente
 // para decisiones de riego.
 function ClimateCard() {
+  const finca = useContextStore((s) => s.finca)
   const { data, isLoading, isError } = useQuery<ClimaActualResponse>({
-    queryKey: ['clima-actual', 'media_agua'],
+    queryKey: ['clima-actual', finca],
     queryFn: async () => {
       const { data } = await api.get<ClimaActualResponse>('/clima/actual', {
-        params: { finca: 'media_agua' },
+        params: { finca },
       })
       return data
     },
@@ -102,7 +105,7 @@ function ClimateCard() {
       <div className="flex items-center gap-2 mb-3">
         <Icon size={16} strokeWidth={1.75} color="#3d6b86" />
         <span className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">
-          Clima — Media Agua
+          Clima — {FINCA_LABELS[finca] ?? finca}
         </span>
       </div>
 

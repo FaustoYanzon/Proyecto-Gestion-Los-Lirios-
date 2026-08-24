@@ -11,6 +11,14 @@ function getDefaultCampana(): string {
   return `${startYear}/${startYear + 1}`
 }
 
+// "2026/2027" -> 2026. Usado por las pantallas con filtro de año de campaña
+// (mayo→abril) para sincronizarse con el selector global en vez de calcular
+// su propio año de forma aislada.
+export function campanaToAnio(campana: string): number {
+  const [startYear] = campana.split('/')
+  return Number(startYear)
+}
+
 interface ContextState {
   finca: FincaKey
   setFinca: (finca: FincaKey) => void

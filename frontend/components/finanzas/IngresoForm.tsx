@@ -318,7 +318,12 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
             <option value="">Seleccionar...</option>
             <option value="los_mimbres">Los Mimbres</option>
             <option value="media_agua">Media Agua</option>
-            <option value="caucete">Caucete</option>
+            {/* Caucete ya no se ofrece para carga nueva — se deja visible solo
+                si el registro que se está editando ya la tiene, para no dejar
+                el select en un valor inválido/vacío. */}
+            {isEdit && ingreso?.finca === 'caucete' && (
+              <option value="caucete">Caucete</option>
+            )}
           </select>
           {errors.finca && <p className={err}>{errors.finca.message}</p>}
         </div>

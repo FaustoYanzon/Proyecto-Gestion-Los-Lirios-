@@ -8,6 +8,7 @@ import {
   limpiarOverridesFenologia,
   type FaseVariedadItem,
 } from '@/lib/api/produccion'
+import { useContextStore } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -35,9 +36,6 @@ const TIMELINE_DOTS: Record<EstadoKey, string> = {
   brotacion: 'bg-lime-500', floracion: 'bg-pink-500', cuaje: 'bg-orange-500',
   envero: 'bg-purple-500', madurez: 'bg-green-500', cosecha: 'bg-red-500', latencia: 'bg-gray-400',
 }
-
-const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -231,6 +229,7 @@ function UpdateModal({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CampanaPage() {
+  const campanaGlobal = useContextStore((s) => s.campana)
   const [editing, setEditing] = useState<FaseVariedadItem | null>(null)
   const [resetting, setResetting] = useState(false)
   const qc = useQueryClient()
@@ -307,7 +306,7 @@ export default function CampanaPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Ciclo de Campaña</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Estado fenológico por variedad · Campaña {DEFAULT_YEAR}/{DEFAULT_YEAR + 1}
+            Estado fenológico por variedad · Campaña {campanaGlobal}
           </p>
         </div>
         {hasManual && (

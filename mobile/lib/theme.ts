@@ -94,7 +94,6 @@ export const text = {
 export const FINCA_COORDS = {
   los_mimbres: { lat: -31.45, lng: -68.55, label: 'Los Mimbres' },
   media_agua:  { lat: -31.97, lng: -68.42, label: 'Media Agua' },
-  caucete:     { lat: -31.65, lng: -68.28, label: 'Caucete' },
 } as const;
 
 // ============================================================

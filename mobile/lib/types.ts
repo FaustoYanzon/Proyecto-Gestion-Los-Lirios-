@@ -1,3 +1,5 @@
+import type { FincaKey } from '../store/fincaStore'
+
 export type UserRole = 'super_admin' | 'gerencial' | 'encargado' | 'regador' | 'obrero'
 
 export interface User {
@@ -6,6 +8,7 @@ export interface User {
   username: string
   full_name: string
   role: UserRole
+  finca: FincaKey
   is_active: boolean
 }
 

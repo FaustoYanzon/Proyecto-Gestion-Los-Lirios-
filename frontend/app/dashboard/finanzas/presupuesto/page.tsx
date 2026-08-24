@@ -9,6 +9,7 @@ import {
   getPresupuestos, createPresupuestosBulk, updatePresupuesto, deletePresupuesto,
 } from '@/lib/api/presupuestos'
 import type { Presupuesto, PresupuestoCreate } from '@/lib/api/presupuestos'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,12 +40,21 @@ const fmtM = (n: number) =>
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PresupuestoPage() {
-  const [anio, setAnio] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
   const [drafts, setDrafts] = useState<Drafts>({})
   const [clientes, setClientes] = useState<string[]>([])
   const [nuevoCliente, setNuevoCliente] = useState('')
   const [saving, setSaving] = useState(false)
   const qc = useQueryClient()
+
+  // Ajustado durante el render (no en un useEffect) para no disparar
+  // cascading renders — ver react-hooks/set-state-in-effect.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setAnio(campanaToAnio(campanaGlobal))
+  }
 
   const { data: presupuestos = [], isLoading } = useQuery({
     queryKey: ['presupuestos', anio],

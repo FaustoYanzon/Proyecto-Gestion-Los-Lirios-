@@ -8,7 +8,6 @@ import type { FincaKey } from '@/store/contextStore'
 const FINCAS: { key: FincaKey; label: string }[] = [
   { key: 'los_mimbres', label: 'Los Mimbres' },
   { key: 'media_agua',  label: 'Media Agua'  },
-  { key: 'caucete',     label: 'Caucete'      },
 ]
 
 export default function FincaSwitcher() {
@@ -63,12 +62,6 @@ export default function FincaSwitcher() {
               )}
             </button>
           ))}
-          <div className="border-t border-[#fbfaf6]">
-            <button className="w-full px-4 py-2.5 text-[11px] font-bold uppercase
-                               tracking-wider text-[#5a544c] hover:bg-[#fbfaf6] transition-colors">
-              Comparar las 3
-            </button>
-          </div>
         </div>
       )}
     </div>

@@ -10,10 +10,11 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/authStore'
+import { useFincaStore } from '../../store/fincaStore'
 import api, { getRiegosEnCurso } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
-import { colors, fonts } from '../../lib/theme'
+import { colors, fonts, FINCA_COORDS } from '../../lib/theme'
 import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
 import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
 
@@ -142,6 +143,7 @@ function uvLevelMini(uv: number): { label: string; color: string } {
 }
 
 function ClimateCardMini() {
+  const finca = useFincaStore((s) => s.active.key)
   const [clima, setClima] = useState<ClimaActualMini | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -150,13 +152,13 @@ function ClimateCardMini() {
       const cached = await getCache<ClimaActualMini>('clima', CACHE_TTL.clima)
       if (cached) { setClima(cached); setLoading(false) }
       try {
-        const { data } = await api.get<ClimaActualMini>('/clima/actual', { params: { finca: 'media_agua' } })
+        const { data } = await api.get<ClimaActualMini>('/clima/actual', { params: { finca } })
         setClima(data)
         await setCache('clima', data)
       } catch { /* usa lo cacheado si existe, si no queda oculto */ }
       finally { setLoading(false) }
     })()
-  }, [])
+  }, [finca])
 
   if (loading && !clima) {
     return <View style={[styles.climateCard, { height: 132 }]} />
@@ -177,7 +179,9 @@ function ClimateCardMini() {
     <View style={styles.climateCard}>
       <View style={styles.climateHeader}>
         <Ionicons name={wmoIconNameMini(clima.current.weather_code)} size={16} color={colors.cielo} />
-        <Text style={styles.climateHeaderText}>CLIMA — MEDIA AGUA</Text>
+        <Text style={styles.climateHeaderText}>
+          CLIMA — {(FINCA_COORDS[finca as keyof typeof FINCA_COORDS]?.label ?? finca).toUpperCase()}
+        </Text>
       </View>
 
       <View style={styles.climateBigRow}>

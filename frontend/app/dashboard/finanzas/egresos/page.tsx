@@ -16,6 +16,7 @@ import {
 import EgresosTable from '@/components/finanzas/EgresosTable'
 import EgresoForm from '@/components/finanzas/EgresoForm'
 import ComprobantesArcaPanel from '@/components/finanzas/ComprobantesArcaPanel'
+import { useContextStore } from '@/store/contextStore'
 
 // ─── Sheet (right-side drawer, no external deps) ─────────────────────────────
 
@@ -106,9 +107,20 @@ const EMPTY_FILTERS: EgresosFilter = {}
 
 export default function EgresosPage() {
   const queryClient = useQueryClient()
-  const [filtros, setFiltros] = useState<EgresosFilter>(EMPTY_FILTERS)
+  const fincaGlobal = useContextStore((s) => s.finca)
+  const [filtros, setFiltros] = useState<EgresosFilter>(() => ({ ...EMPTY_FILTERS, finca: fincaGlobal }))
   const [modalOpen, setModalOpen] = useState(false)
   const [egresoEditar, setEgresoEditar] = useState<EgresoResponse | null>(null)
+
+  // Se re-sincroniza con el selector global de Finca del header. El usuario
+  // sigue pudiendo cambiarlo o limpiarlo acá abajo para ver otra finca puntual
+  // sin tener que tocar el selector de arriba. Ajustado durante el render (no
+  // en un useEffect) para no disparar cascading renders.
+  const [prevFincaGlobal, setPrevFincaGlobal] = useState(fincaGlobal)
+  if (prevFincaGlobal !== fincaGlobal) {
+    setPrevFincaGlobal(fincaGlobal)
+    setFiltros((f) => ({ ...f, finca: fincaGlobal }))
+  }
 
   const { data: egresos = [], isLoading } = useQuery({
     queryKey: ['egresos', filtros],

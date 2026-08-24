@@ -139,6 +139,7 @@ async def register(
         hashed_password=get_password_hash(user_data.password),
         full_name=user_data.full_name,
         role=user_data.role,
+        finca=user_data.finca,
     )
     db.add(user)
     await db.flush()

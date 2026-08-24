@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 export const FINCAS = [
   { key: 'los_mimbres', label: 'Los Mimbres' },
   { key: 'media_agua',  label: 'Media Agua'  },
-  { key: 'caucete',     label: 'Caucete'     },
 ] as const
 
 export type FincaKey = (typeof FINCAS)[number]['key']

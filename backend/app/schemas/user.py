@@ -4,6 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.models.finanzas import Finca
 from app.models.user import UserRole
 
 # Letters, digits, dot, underscore, hyphen. Stored/compared lowercase so
@@ -28,6 +29,7 @@ class UserBase(BaseModel):
     username: str
     full_name: str
     role: UserRole
+    finca: Finca = Finca.media_agua
 
 
 class UserCreate(UserBase):
@@ -44,6 +46,7 @@ class UserUpdate(BaseModel):
     username: str | None = None
     full_name: str | None = None
     role: UserRole | None = None
+    finca: Finca | None = None
     is_active: bool | None = None
     password: Annotated[str, Field(min_length=8)] | None = None
 

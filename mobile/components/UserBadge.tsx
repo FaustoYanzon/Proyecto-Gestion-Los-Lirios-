@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Alert,
+  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -82,6 +82,10 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
   router: ReturnType<typeof useRouter>
 }) {
   const { active } = useFincaStore();
+  // encargado/regador/obrero ven la finca fija asignada por el gerencial al
+  // crearlos — sin picker propio. Gerencial/super_admin siguen pudiendo
+  // cambiarla libremente.
+  const puedeCambiarFinca = user?.role === 'gerencial' || user?.role === 'super_admin';
 
   return (
     <>
@@ -99,22 +103,14 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
       </View>
 
       <SectionHeader>FINCA ACTIVA</SectionHeader>
-      <TouchableOpacity style={styles.fincaCard} onPress={() => onNav('finca')}>
+      <TouchableOpacity
+        style={styles.fincaCard}
+        onPress={puedeCambiarFinca ? () => onNav('finca') : undefined}
+        disabled={!puedeCambiarFinca}
+      >
         <Ionicons name="location" size={18} color={colors.burdeos[600]} />
         <Text style={styles.fincaName}>{active.label}</Text>
-        <Text style={styles.fincaChevron}>cambiar ▾</Text>
-      </TouchableOpacity>
-
-      <SectionHeader>CAMPAÑA</SectionHeader>
-      <TouchableOpacity
-        style={styles.campRow}
-        onPress={() =>
-          Alert.alert('Campaña', 'La gestión de campaña se realiza desde el sistema web.')
-        }
-      >
-        <Ionicons name="calendar" size={18} color={colors.ink60} />
-        <Text style={styles.campText}>Campaña 25/26 · día 27</Text>
-        <Text style={styles.fincaChevron}>▾</Text>
+        {puedeCambiarFinca && <Text style={styles.fincaChevron}>cambiar ▾</Text>}
       </TouchableOpacity>
 
       <View style={styles.divider} />
@@ -344,13 +340,6 @@ const styles = StyleSheet.create({
   },
   fincaName: { flex: 1, ...text.body, fontWeight: '700', color: colors.ink },
   fincaChevron: { ...text.small, color: colors.ink60 },
-  campRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space.s2,
-    paddingHorizontal: space.s3, paddingVertical: space.s3,
-    borderWidth: 1, borderColor: colors.hueso, borderRadius: radius.md,
-    backgroundColor: colors.blanco,
-  },
-  campText: { flex: 1, ...text.body, color: colors.ink, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: colors.hueso, marginVertical: space.s4 },
   drawerItem: {

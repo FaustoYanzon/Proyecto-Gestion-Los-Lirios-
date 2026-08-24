@@ -22,7 +22,7 @@ const FORMA_PAGO_VALUES = ['efectivo', 'transferencia', 'cheque', 'echeque', 'cr
 const FORMA_PAGO_LABELS: Record<string, string> = {
   efectivo: 'Efectivo', transferencia: 'Transferencia', cheque: 'Cheque', echeque: 'E-Cheque', credito: 'Crédito',
 }
-const FINCA_VALUES = ['los_mimbres', 'media_agua', 'caucete'] as const
+const FINCA_VALUES = ['los_mimbres', 'media_agua'] as const
 const FINCA_LABELS: Record<string, string> = {
   los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete',
 }

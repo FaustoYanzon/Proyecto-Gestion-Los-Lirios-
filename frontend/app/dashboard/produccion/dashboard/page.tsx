@@ -21,12 +21,15 @@ import {
   getKpiProduccionVariedades,
 } from '@/lib/api/kpis'
 import type { ProduccionParcelaKpi } from '@/lib/api/kpis'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const now = new Date()
 const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
 const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+
+const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua' }
 
 // Design-system colors per variedad (see docs/DESIGN_SYSTEM.md)
 const VARIEDAD_COLORS: Record<string, string> = {
@@ -98,20 +101,30 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProduccionDashboardPage() {
-  const [anio, setAnio] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const finca = useContextStore((s) => s.finca)
+  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
   const [variedadFilter, setVariedadFilter] = useState<string>('todas')
+
+  // Ajustado durante el render (no en un useEffect) para no disparar
+  // cascading renders — ver react-hooks/set-state-in-effect.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setAnio(campanaToAnio(campanaGlobal))
+  }
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: parcelasKpi = [] } = useQuery({
-    queryKey: ['kpi-prod-parcelas', anio, 'media_agua'],
-    queryFn: () => getKpiProduccionParcelas(anio, 'media_agua'),
+    queryKey: ['kpi-prod-parcelas', anio, finca],
+    queryFn: () => getKpiProduccionParcelas(anio, finca),
     staleTime: 300_000,
   })
 
   const { data: variedadesKpi = [] } = useQuery({
-    queryKey: ['kpi-prod-variedades', anio, 'media_agua'],
-    queryFn: () => getKpiProduccionVariedades(anio, 'media_agua'),
+    queryKey: ['kpi-prod-variedades', anio, finca],
+    queryFn: () => getKpiProduccionVariedades(anio, finca),
     staleTime: 300_000,
   })
 
@@ -284,11 +297,12 @@ export default function ProduccionDashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <select
-            value="media_agua"
+            value={finca}
             disabled
+            title="Se cambia con el selector de Finca del encabezado"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-gray-50 text-gray-600 focus:outline-none"
           >
-            <option value="media_agua">Media Agua</option>
+            <option value={finca}>{FINCA_LABELS[finca] ?? finca}</option>
           </select>
           <select
             value={variedadFilter}

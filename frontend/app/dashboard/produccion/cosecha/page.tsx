@@ -15,6 +15,7 @@ import {
   type CultivoCosecha, type DestinoCosecha, type TipoEnvase,
 } from '@/lib/api/cosecha'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -133,13 +134,22 @@ const COSECHA_PAGE_SIZE = 10
 
 export default function CosechaPage() {
   const qc = useQueryClient()
-  const [temporada, setTemporada] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [cosechaPage, setCosechaPage] = useState(1)
+
+  // Ajustado durante el render (no en un useEffect) para no disparar
+  // cascading renders — ver react-hooks/set-state-in-effect.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setTemporada(campanaToAnio(campanaGlobal))
+  }
 
   // ── Queries ───────────────────────────────────────────────────────────────
 

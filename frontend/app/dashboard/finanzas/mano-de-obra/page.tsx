@@ -12,6 +12,7 @@ import {
   getKpiProduccionParcelas, getPresupuestoVsReal,
 } from '@/lib/api/kpis'
 import { getTrabajadores } from '@/lib/api/trabajadores'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
 import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -88,11 +89,22 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ManoObraDashboardPage() {
-  const [anio, setAnio] = useState(DEFAULT_YEAR)
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
   const [clasifFilter, setClasifFilter] = useState<string>('todas')
   // Month-range filter as positions in the campaign order (0 = May, 11 = Apr)
   const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
+
+  // Ajustado durante el render (no en un useEffect) para no disparar
+  // cascading renders — ver react-hooks/set-state-in-effect.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setAnio(campanaToAnio(campanaGlobal))
+    setMesDesdeIdx(0)
+    setMesHastaIdx(11)
+  }
 
   // Convert campaign positions to real dates (months >= May belong to `anio`)
   const mesDesde = MESES_ORDER[mesDesdeIdx]
