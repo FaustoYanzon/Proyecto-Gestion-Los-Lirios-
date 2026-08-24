@@ -4,31 +4,34 @@ import { useEffect } from 'react'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import {
-  LayoutDashboard, Map, Sprout, Droplets, FlaskConical, Cloud,
-  DollarSign, TrendingDown, TrendingUp, ClipboardList, Settings, Search, Users, BellRing,
+  LayoutDashboard, Sprout, DollarSign, Settings, BookOpen, Search,
 } from 'lucide-react'
-
-type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>
+import { ALL_NAV, SUB_NAVS, type LucideIcon } from '@/lib/navigation'
 
 type CmdItem = { label: string; href: string; icon: LucideIcon; group: string }
 
-const CMD_ITEMS: CmdItem[] = [
-  { label: 'Inicio',              href: '/dashboard',                          icon: LayoutDashboard, group: 'Navegación'  },
-  { label: 'Mapa de Finca',       href: '/dashboard/mapa',                     icon: Map,             group: 'Navegación'  },
-  { label: 'Tareas del día',      href: '/dashboard/produccion/tareas',         icon: Sprout,          group: 'Producción'  },
-  { label: 'Riego',               href: '/dashboard/produccion/riego',          icon: Droplets,        group: 'Producción'  },
-  { label: 'Fitosanitarios',      href: '/dashboard/produccion/fitosanitarios', icon: FlaskConical,    group: 'Producción'  },
-  { label: 'Clima',                href: '/dashboard/produccion/clima',         icon: Cloud,           group: 'Producción'  },
-  { label: 'Dashboard financiero',href: '/dashboard/finanzas/dashboard',        icon: DollarSign,      group: 'Finanzas'    },
-  { label: 'Egresos',             href: '/dashboard/finanzas/egresos',          icon: TrendingDown,    group: 'Finanzas'    },
-  { label: 'Ingresos',            href: '/dashboard/finanzas/ingresos',         icon: TrendingUp,      group: 'Finanzas'    },
-  { label: 'Registros campaña',   href: '/dashboard/produccion/dashboard',      icon: ClipboardList,   group: 'Registros'   },
-  { label: 'Usuarios',            href: '/dashboard/admin/usuarios',            icon: Settings,        group: 'Admin'       },
-  { label: 'Trabajadores',        href: '/dashboard/admin/trabajadores',        icon: Users,           group: 'Admin'       },
-  { label: 'Notificaciones',      href: '/dashboard/admin/notificaciones',      icon: BellRing,        group: 'Admin'       },
-]
+// Ícono + etiqueta de grupo por prefijo de ruta — un ítem nuevo agregado a
+// SUB_NAVS/ALL_NAV (frontend/lib/navigation.ts) aparece acá solo, sin tocar
+// este archivo, así este buscador no se vuelve a desincronizar de la nav real.
+const GROUP_META: Record<string, { label: string; icon: LucideIcon }> = {
+  '/dashboard/produccion':    { label: 'Producción',    icon: Sprout },
+  '/dashboard/finanzas':      { label: 'Finanzas',      icon: DollarSign },
+  '/dashboard/admin':         { label: 'Admin',         icon: Settings },
+  '/dashboard/documentacion': { label: 'Documentación', icon: BookOpen },
+}
 
-const GROUPS = ['Navegación', 'Producción', 'Finanzas', 'Registros', 'Admin']
+const TOP_LEVEL_ITEMS: CmdItem[] = ALL_NAV
+  .filter((item) => !SUB_NAVS.some((sn) => item.href.startsWith(sn.prefix)))
+  .map((item) => ({ label: item.label, href: item.href, icon: item.icon, group: 'Navegación' }))
+
+const SUB_NAV_ITEMS: CmdItem[] = SUB_NAVS.flatMap((sn) => {
+  const meta = GROUP_META[sn.prefix] ?? { label: sn.prefix, icon: LayoutDashboard }
+  return sn.items.map((item) => ({ label: item.label, href: item.href, icon: meta.icon, group: meta.label }))
+})
+
+const CMD_ITEMS: CmdItem[] = [...TOP_LEVEL_ITEMS, ...SUB_NAV_ITEMS]
+
+const GROUPS = ['Navegación', 'Producción', 'Finanzas', 'Admin', 'Documentación']
 
 interface Props {
   open: boolean
@@ -108,7 +111,7 @@ export default function CommandPalette({ open, onClose }: Props) {
               <Search size={16} strokeWidth={1.75} style={{ color: '#a09584', flexShrink: 0 }} />
               <Command.Input
                 autoFocus
-                placeholder="Buscar sección, tarea, parcela…"
+                placeholder="Buscar sección…"
                 className="flex-1 h-12 text-sm bg-transparent outline-none"
                 style={{ color: '#1f1a17' }}
               />
@@ -130,7 +133,7 @@ export default function CommandPalette({ open, onClose }: Props) {
                     {items.map((item) => (
                       <Command.Item
                         key={item.href}
-                        value={item.label}
+                        value={`${item.group} ${item.label}`}
                         onSelect={() => navigate(item.href)}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
