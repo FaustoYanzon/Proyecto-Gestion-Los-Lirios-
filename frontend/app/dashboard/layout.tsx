@@ -2,110 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import {
-  LayoutDashboard, Map, Sprout, DollarSign,
-  Settings, Bell, LogOut,
-} from 'lucide-react'
+import { Bell, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { logout } from '@/lib/auth'
 import type { Role } from '@/lib/theme'
+import { ALL_NAV, SUB_NAVS, type NavItem } from '@/lib/navigation'
 import FincaSwitcher from '@/components/FincaSwitcher'
 import CampanaSwitcher from '@/components/CampanaSwitcher'
 import UserBadge from '@/components/UserBadge'
 import CommandPalette from '@/components/CommandPalette'
-
-type LucideIcon = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string; color?: string }>
-
-type NavItem = {
-  href: string
-  label: string
-  short: string
-  icon: LucideIcon
-  matchFn: (path: string) => boolean
-  allowedRoles?: Role[]
-}
-
-const ALL_NAV: NavItem[] = [
-  {
-    href: '/dashboard',
-    label: 'Inicio',
-    short: 'Inicio',
-    icon: LayoutDashboard,
-    matchFn: (p) => p === '/dashboard',
-  },
-  {
-    href: '/dashboard/mapa',
-    label: 'Mapa',
-    short: 'Mapa',
-    icon: Map,
-    matchFn: (p) => p.startsWith('/dashboard/mapa'),
-  },
-  {
-    href: '/dashboard/produccion/tareas',
-    label: 'Producción',
-    short: 'Prod.',
-    icon: Sprout,
-    matchFn: (p) =>
-      p.startsWith('/dashboard/produccion') &&
-      !p.startsWith('/dashboard/produccion/dashboard'),
-  },
-  {
-    href: '/dashboard/finanzas/egresos',
-    label: 'Finanzas',
-    short: 'Finanzas',
-    icon: DollarSign,
-    matchFn: (p) => p.startsWith('/dashboard/finanzas'),
-    allowedRoles: ['super_admin', 'gerencial'],
-  },
-  {
-    href: '/dashboard/admin/usuarios',
-    label: 'Admin',
-    short: 'Admin',
-    icon: Settings,
-    matchFn: (p) => p.startsWith('/dashboard/admin'),
-    allowedRoles: ['super_admin', 'gerencial'],
-  },
-]
-
-type SubNav = { prefix: string; items: { href: string; label: string }[] }
-
-const SUB_NAVS: SubNav[] = [
-  {
-    prefix: '/dashboard/produccion',
-    items: [
-      { href: '/dashboard/produccion/tareas',         label: 'Tareas'         },
-      { href: '/dashboard/produccion/riego',          label: 'Riego'          },
-      { href: '/dashboard/produccion/fitosanitarios', label: 'Fitosanitarios' },
-      { href: '/dashboard/produccion/campana',        label: 'Campaña'        },
-      { href: '/dashboard/produccion/cosecha',        label: 'Cosecha'        },
-      { href: '/dashboard/produccion/metas',          label: 'Metas'          },
-      { href: '/dashboard/produccion/clima',          label: 'Clima'          },
-      { href: '/dashboard/produccion/dashboard',      label: 'Dashboard Producción' },
-    ],
-  },
-  {
-    prefix: '/dashboard/finanzas',
-    items: [
-      { href: '/dashboard/finanzas/egresos',     label: 'Egresos'     },
-      { href: '/dashboard/finanzas/ingresos',    label: 'Ingresos'    },
-      { href: '/dashboard/finanzas/cheques',      label: 'Cheques'      },
-      { href: '/dashboard/finanzas/presupuesto',  label: 'Presupuesto'  },
-      { href: '/dashboard/finanzas/dashboard',    label: 'Dashboard'    },
-      { href: '/dashboard/finanzas/mano-de-obra', label: 'Mano de Obra' },
-      { href: '/dashboard/finanzas/flujo',        label: 'Flujo Anual'  },
-    ],
-  },
-  {
-    prefix: '/dashboard/admin',
-    items: [
-      { href: '/dashboard/admin/usuarios', label: 'Usuarios' },
-      { href: '/dashboard/admin/parcelas', label: 'Parcelas' },
-      { href: '/dashboard/admin/trabajadores', label: 'Trabajadores' },
-      { href: '/dashboard/admin/notificaciones', label: 'Notificaciones' },
-    ],
-  },
-]
 
 function SidebarItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
   const iconColor  = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)'
