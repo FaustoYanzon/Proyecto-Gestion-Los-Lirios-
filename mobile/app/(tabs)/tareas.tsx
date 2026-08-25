@@ -19,8 +19,8 @@ import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
-import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb } from '../../lib/types'
-import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS } from '../../lib/types'
+import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb, PrecioTarea } from '../../lib/types'
+import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS, temporadaDeFecha, buscarPrecio } from '../../lib/types'
 
 const TOP_5_TAREAS = ['Poda', 'Verde', 'Jornal Comun', 'Cosecha', 'Raleo']
 const TEMPORADAS: { value: string; label: string }[] = [
@@ -415,9 +415,10 @@ function StepTareaFecha({
 // ─── Step 2: Detalle (ubicación + unidad + precio) ────────────────────────────
 
 function StepDetalle({
-  tarea, parcelas, onNext, onBack, onCancelar,
+  tarea, fecha, parcelas, onNext, onBack, onCancelar,
 }: {
   tarea: string
+  fecha: string
   parcelas: Parcela[]
   onNext: (parcela: Parcela | null, unidad: UnidadMedida, precio: number, detalle: string) => void
   onBack: () => void
@@ -430,6 +431,26 @@ function StepDetalle({
   const [detalle, setDetalle] = useState('')
   const [ubicacionModalVisible, setUbicacionModalVisible] = useState(false)
   const [unidadModalVisible, setUnidadModalVisible] = useState(false)
+
+  // Autocompletado de precio desde el maestro (Documentación > Precios en la
+  // web) -- se trae una sola vez para la temporada de la fecha elegida, y
+  // deja de proponer valores apenas el usuario toca el campo a mano.
+  const [preciosDb, setPreciosDb] = useState<PrecioTarea[]>([])
+  const precioTouchedRef = useRef(false)
+  useEffect(() => {
+    const temporada = temporadaDeFecha(fecha)
+    api.get<PrecioTarea[]>('/precios-tarea/', { params: { temporada } })
+      .then((res) => setPreciosDb(res.data))
+      .catch(() => { /* sin conexión o error -- se carga el precio a mano, como siempre */ })
+  }, [fecha])
+
+  useEffect(() => {
+    if (precioTouchedRef.current) return
+    const encontrado = buscarPrecio(preciosDb, {
+      tarea, parcelaId: parcela?.id ?? null, unidadMedida: unidad,
+    })
+    if (encontrado) setPrecio(String(encontrado.precio_unitario))
+  }, [preciosDb, tarea, parcela, unidad])
 
   const filtered = parcelas.filter((p) =>
     p.nombre.toLowerCase().includes(search.toLowerCase())
@@ -500,7 +521,7 @@ function StepDetalle({
         <TextInput
           style={styles.input}
           value={precio}
-          onChangeText={setPrecio}
+          onChangeText={(v) => { precioTouchedRef.current = true; setPrecio(v) }}
           placeholder="0"
           placeholderTextColor={colors.niebla}
           keyboardType="numeric"
@@ -1076,6 +1097,7 @@ export default function TareasScreen() {
     return (
       <StepDetalle
         tarea={selTarea}
+        fecha={selFecha}
         parcelas={parcelas}
         onNext={(p, u, pr, d) => { setSelParcela(p); setSelUnidad(u); setSelPrecio(pr); setSelDetalle(d); setStep('trabajadores') }}
         onBack={() => setStep('tarea_fecha')}

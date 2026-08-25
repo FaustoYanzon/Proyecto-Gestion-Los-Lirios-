@@ -111,6 +111,7 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/documentacion/parcelas',     label: 'Parcelas'     },
       { href: '/dashboard/documentacion/trabajadores', label: 'Trabajadores' },
       { href: '/dashboard/documentacion/riego',        label: 'Riego'        },
+      { href: '/dashboard/documentacion/precios',      label: 'Precios'      },
       { href: '/dashboard/documentacion/melgas',       label: 'Melgas'       },
       { href: '/dashboard/documentacion/empresa',      label: 'Empresa'      },
     ],

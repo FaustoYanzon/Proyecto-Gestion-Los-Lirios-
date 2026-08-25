@@ -20,6 +20,7 @@ import {
   type ParcelaItem,
 } from '@/lib/api/produccion'
 import { getTrabajadores, createTrabajador, type TrabajadorResponse } from '@/lib/api/trabajadores'
+import { getPreciosTarea, buscarPrecio, temporadaDeFecha } from '@/lib/api/preciosTarea'
 import { newIdempotencyKey } from '@/lib/idempotency'
 
 const CLASIFICACION_BADGE: Record<string, string> = {
@@ -155,6 +156,31 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
       firstRender.current = false
     }
   }, [])
+
+  // Autocompletado de precio desde el maestro (Documentación > Precios) --
+  // solo para tareas nuevas, nunca pisa un precio ya cargado al editar, y
+  // deja de proponer valores apenas el usuario toca el campo a mano.
+  const precioTouchedRef = useRef(false)
+  const fechaWatched = watch('fecha')
+  const parcelaIdWatched = watch('parcela_id')
+  const unidadWatched = watch('unidad_medida')
+  const temporadaActual = temporadaDeFecha(fechaWatched || today)
+  const { data: preciosDb = [] } = useQuery({
+    queryKey: ['precios-tarea', temporadaActual],
+    queryFn: () => getPreciosTarea({ temporada: temporadaActual }),
+    enabled: !isEdit,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (isEdit || isCustomTask || !tareaWatched || precioTouchedRef.current) return
+    const precio = buscarPrecio(preciosDb, {
+      tarea: tareaWatched,
+      parcelaId: parcelaIdWatched || null,
+      unidadMedida: unidadWatched,
+    })
+    if (precio) setValue('precio_unitario', precio.precio_unitario)
+  }, [isEdit, isCustomTask, tareaWatched, parcelaIdWatched, unidadWatched, preciosDb, setValue])
 
   const precioWatched = watch('precio_unitario')
   const trabajadoresWatched = watch('trabajadores')
@@ -319,7 +345,9 @@ export default function TareaForm({ registro, parcelas, onSuccess, onCancel }: P
             step="0.01"
             min="0"
             placeholder="0.00"
-            {...register('precio_unitario')}
+            {...register('precio_unitario', {
+              onChange: () => { precioTouchedRef.current = true },
+            })}
             className={field}
           />
           {errors.precio_unitario && <p className={err}>{errors.precio_unitario.message}</p>}

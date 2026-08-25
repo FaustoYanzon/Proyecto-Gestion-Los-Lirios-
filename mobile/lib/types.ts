@@ -222,6 +222,44 @@ export const UNIDAD_LABELS: Record<UnidadMedida, string> = {
   otros: 'Otros',
 }
 
+// Maestro de precios por tarea (Documentación > Precios en la web) -- ver
+// backend/app/models/precio_tarea.py. parcela_id null = precio general,
+// fallback cuando no hay una regla específica para el parral elegido.
+export interface PrecioTarea {
+  id: string
+  temporada: number
+  tarea: string
+  parcela_id: string | null
+  parcela_nombre: string | null
+  unidad_medida: UnidadMedida
+  precio_unitario: number
+}
+
+// "2026-08-25" -> 2026 (año de inicio de campaña, mayo->abril -- mismo
+// criterio que ya usa RegistroCosecha en el backend).
+export function temporadaDeFecha(fechaISO: string): number {
+  const [anioStr, mesStr] = fechaISO.split('-')
+  const anio = Number(anioStr)
+  const mes = Number(mesStr)
+  return mes >= 5 ? anio : anio - 1
+}
+
+export function buscarPrecio(
+  precios: PrecioTarea[],
+  { tarea, parcelaId, unidadMedida }: { tarea: string; parcelaId: string | null; unidadMedida: UnidadMedida }
+): PrecioTarea | null {
+  if (parcelaId) {
+    const especifico = precios.find(
+      (p) => p.tarea === tarea && p.parcela_id === parcelaId && p.unidad_medida === unidadMedida
+    )
+    if (especifico) return especifico
+  }
+  const general = precios.find(
+    (p) => p.tarea === tarea && p.parcela_id == null && p.unidad_medida === unidadMedida
+  )
+  return general ?? null
+}
+
 export const ESTADO_LABELS: Record<EstadoFenologico, string> = {
   brotacion: 'Brotación',
   floracion: 'Floración',
