@@ -72,15 +72,30 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-19)
+## Próximos pasos (actualizado 2026-08-25)
 
 Pilot estable.
 
 ### Pendiente real
 
-1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — un `cd` que no persistió entre comandos de una sesión de Claude Code hizo que un listado corriera contra `backend/.env` en vez de `frontend/.env`, mostrando en el chat `SECRET_KEY`, `SUPER_ADMIN_PASSWORD` (la contraseña real de `administracion@losliriossa.com`) y `DATABASE_PUBLIC_URL`. Fausto decidió posponerlo, no es urgente por infraestructura pero sí por higiene de seguridad. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
+1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — sigue sin hacerse, Fausto ya lo pospuso dos veces (08-19, 08-21). No urgente por infraestructura, sí por higiene de seguridad. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
+2. **Confirmar que los 2 usuarios `regador` nuevos (Lucas y Heber Mercado, Media Agua) ven la finca fija en mobile sin poder cambiarla**, y que encargado/regador/obrero en general ven bien la finca asignada tras el OTA del 2026-08-24 (requiere cerrar la app del todo y reabrirla — mismo patrón de siempre).
+3. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
+4. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó esta sesión, puede que ya se haya resuelto solo con algún reinicio de la app; revisar si Fausto no lo vuelve a mencionar.
 
-**Resuelto desde la última actualización (no repetir):** el deploy de Railway del 08-18 (bloqueado por el incidente de plataforma) terminó activándose solo una vez Railway resolvió el incidente — confirmado en la sesión del 08-19 (`railway status`, deployment `Online`, endpoints nuevos del commit `382901f` respondiendo). No quedó nada pendiente de esa sesión.
+**Resuelto desde la última actualización (no repetir):** el deploy de Railway del 08-18 (bloqueado por el incidente de plataforma) terminó activándose solo. Sin pendientes de esa sesión.
+
+### Hecho en la sesión del 2026-08-25 (nuevo tipo de egreso "Repuestos y Reparación")
+
+Ver [[2026-08-25-tipo-egreso-repuestos-reparacion]] para el detalle completo. Resumen: Repuestos/Reparaciones vivía mezclado dentro de Insumos Varios — conceptualmente incorrecto desde lo financiero. Tipo nuevo `repuestos_reparacion` (Infraestructura/Vehículos/Maquinaria/Riego/Parral/Otros); Insumos Varios gana Herramientas/Indumentaria. Cambio acotado a un solo archivo por capa (confirmado explorando los ~15 lugares que referencian estos enums, todos derivan dinámicamente). Los egresos históricos con Repuestos Vehículos/Infraestructura se reclasifican solos vía migración (0 filas afectadas en producción — todavía no había ninguno cargado). **Hallazgo técnico real, ya corregido:** agregar un valor a un enum nativo de Postgres y usarlo en la misma corrida de `alembic upgrade head` rompe si las migraciones no commitean por separado — faltaba `transaction_per_migration=True` en `env.py`, mejora general para cualquier migración futura de este tipo.
+
+### Hecho en la sesión del 2026-08-24 (pestaña Documentación, selectores Finca/Campaña conectados, fix Ctrl+K)
+
+Ver [[2026-08-24-documentacion-selectores-finca-campana-ctrlk]] para el detalle completo. Resumen: pestaña nueva "Documentación" (Parcelas/Trabajadores movidos desde Admin + Riego/Melgas/Empresa nuevas). El selector global de Finca/Campaña del header **no filtraba nada** (hallazgo real, no solo "sacar Caucete" como pedía Fausto originalmente) — ahora los ~9 dashboards se sincronizan de verdad con él. Campo `finca` nuevo en `User`: encargado/regador/obrero ven fija la finca asignada en mobile (sin picker), gerencial/super_admin mantienen el picker manual; el selector de Campaña se sacó de mobile (no filtraba nada real ahí). Ctrl+K reparado — derivaba de una lista hardcodeada desincronizada, ahora deriva de la nav real.
+
+### Hecho en la sesión del 2026-08-21 (diagnóstico: válvulas/cuadrantes "faltantes" en mobile)
+
+Fausto pidió aplicar a mobile el trabajo de válvulas/cuadrantes que creía hecho solo para web, tras probar en su celular y no verlo. Antes de escribir código se investigó si realmente faltaba: `git show --stat 93c4fcb` confirmó que `mobile/app/(tabs)/riego.tsx` y `mobile/app/(tabs)/mapa.tsx` ya tienen el catálogo real de válvulas (`getValvulasReales`, chips "Válvula {nombre}", filtrado por cabezal) y `window.setValvulasEnRiego` para el resaltado de cuadrante — ambos del 18/08. `npx eas update:list --branch production` confirmó que el OTA con ese cambio se publicó a producción hace 2 días. El endpoint `/produccion/valvulas` responde en producción (401 sin token, ruta viva). No se encontró ningún commit posterior que lo haya roto o revertido. Conclusión: no se tocó código esta sesión — se le pidió a Fausto que cierre/reabra la app dos veces (patrón OTA ya conocido) y confirme de nuevo antes de asumir que hay un bug real. Ver también la memoria de Claude Code (`project_loslirios.md`) para el detalle completo de la investigación.
 
 ### Hecho en la sesión del 2026-08-19 (pestaña Clima: termógrafo de campo + pronóstico extendido)
 
@@ -141,6 +156,8 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-25-tipo-egreso-repuestos-reparacion]]
+- [[2026-08-24-documentacion-selectores-finca-campana-ctrlk]]
 - [[2026-08-19-clima-termografo-pronostico-extendido]]
 - [[2026-08-18-fix-totales-egresos-tareas-dashboards-por-rango]]
 - [[2026-08-18-tabla-equivalencia-valvulas-cuadrante]]
