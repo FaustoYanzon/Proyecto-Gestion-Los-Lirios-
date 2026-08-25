@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
-from app.models.produccion import RegistroTrabajo
+from app.models.produccion import RegistroFitosanitario, RegistroRiego, RegistroTrabajo
 from app.models.trabajador import RolTrabajador, Trabajador
 from app.models.user import User
 from app.schemas.produccion import RegistroTrabajoResponse
@@ -62,8 +62,32 @@ async def update_trabajador(
     trabajador = await db.get(Trabajador, trabajador_id)
     if trabajador is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
         setattr(trabajador, field, value)
+
+    # El nombre queda congelado como texto en cada registro de tarea/riego/fito
+    # al momento de cargarlo (trabajador_nombre/responsable) -- si se corrige acá,
+    # se propaga a todo lo ya cargado que esté vinculado por trabajador_id/responsable_id,
+    # para que no queden nombres viejos huerfanos en los historicos.
+    if "nombre_completo" in update_data:
+        nombre_nuevo = update_data["nombre_completo"]
+        await db.execute(
+            update(RegistroTrabajo)
+            .where(RegistroTrabajo.trabajador_id == trabajador_id)
+            .values(trabajador_nombre=nombre_nuevo)
+        )
+        await db.execute(
+            update(RegistroRiego)
+            .where(RegistroRiego.responsable_id == trabajador_id)
+            .values(responsable=nombre_nuevo)
+        )
+        await db.execute(
+            update(RegistroFitosanitario)
+            .where(RegistroFitosanitario.responsable_id == trabajador_id)
+            .values(responsable=nombre_nuevo)
+        )
+
     await db.flush()
     await db.refresh(trabajador)
     return trabajador
