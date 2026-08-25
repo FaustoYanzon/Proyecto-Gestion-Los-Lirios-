@@ -64,6 +64,7 @@ class TipoEgreso(str, enum.Enum):
     impuestos_servicios = "impuestos_servicios"
     financiero = "financiero"
     materia_prima = "materia_prima"
+    repuestos_reparacion = "repuestos_reparacion"
 
 
 class ClasificacionEgreso(str, enum.Enum):
@@ -85,10 +86,19 @@ class ClasificacionEgreso(str, enum.Enum):
     inversion_riego = "inversion_riego"
     inversion_otros = "inversion_otros"
     # Insumos varios
+    combustibles = "combustibles"
+    herramientas = "herramientas"
+    indumentaria = "indumentaria"
+    insumos_otros = "insumos_otros"
+    # Repuestos y reparación (rep_repuestos_vehiculos/infraestructura ya
+    # existían bajo insumos_varios -- mismo nombre de clasificacion, solo
+    # cambian de tipo, ver migracion de reclasificacion de datos)
     rep_repuestos_vehiculos = "rep_repuestos_vehiculos"
     rep_repuestos_infraestructura = "rep_repuestos_infraestructura"
-    combustibles = "combustibles"
-    insumos_otros = "insumos_otros"
+    rep_repuestos_maquinaria = "rep_repuestos_maquinaria"
+    rep_repuestos_riego = "rep_repuestos_riego"
+    rep_repuestos_parral = "rep_repuestos_parral"
+    rep_repuestos_otros = "rep_repuestos_otros"
     # Impuestos / servicios
     vep = "vep"
     energia_electrica = "energia_electrica"

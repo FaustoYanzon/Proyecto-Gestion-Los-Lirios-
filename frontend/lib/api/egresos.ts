@@ -8,6 +8,7 @@ export const TIPO_EGRESO_VALUES = [
   'impuestos_servicios',
   'financiero',
   'materia_prima',
+  'repuestos_reparacion',
 ] as const
 
 export type TipoEgreso = (typeof TIPO_EGRESO_VALUES)[number]
@@ -16,7 +17,9 @@ export const CLASIFICACION_VALUES = [
   'gerenciales', 'encargados', 'obreros', 'contador', 'abogado', 'administrador', 'sueldos_otros',
   'fertilizantes', 'agroquimicos', 'produccion_otros',
   'inversion_movilidad', 'inversion_infraestructura', 'inversion_riego', 'inversion_otros',
-  'rep_repuestos_vehiculos', 'rep_repuestos_infraestructura', 'combustibles', 'insumos_otros',
+  'combustibles', 'herramientas', 'indumentaria', 'insumos_otros',
+  'rep_repuestos_vehiculos', 'rep_repuestos_infraestructura', 'rep_repuestos_maquinaria',
+  'rep_repuestos_riego', 'rep_repuestos_parral', 'rep_repuestos_otros',
   'vep', 'energia_electrica', 'hidraulica', 'rentas', 'gas', 'internet', 'servicios_otros',
   'creditos_bancarios', 'seguros', 'intereses', 'financiero_otros',
   'compra_uva_fresca', 'compra_pasa', 'materia_prima_otros',
@@ -72,6 +75,7 @@ export const TIPO_EGRESO_LABELS: Record<TipoEgreso, string> = {
   impuestos_servicios: 'Impuestos y Servicios',
   financiero: 'Financiero',
   materia_prima: 'Materia Prima',
+  repuestos_reparacion: 'Repuestos y Reparación',
 }
 
 export const CLASIFICACIONES_POR_TIPO: Record<TipoEgreso, { value: ClasificacionEgreso; label: string }[]> = {
@@ -96,10 +100,18 @@ export const CLASIFICACIONES_POR_TIPO: Record<TipoEgreso, { value: Clasificacion
     { value: 'inversion_otros', label: 'Otros' },
   ],
   insumos_varios: [
-    { value: 'rep_repuestos_vehiculos', label: 'Repuestos Vehículos' },
-    { value: 'rep_repuestos_infraestructura', label: 'Repuestos Infraestructura' },
     { value: 'combustibles', label: 'Combustibles' },
+    { value: 'herramientas', label: 'Herramientas' },
+    { value: 'indumentaria', label: 'Indumentaria' },
     { value: 'insumos_otros', label: 'Otros' },
+  ],
+  repuestos_reparacion: [
+    { value: 'rep_repuestos_infraestructura', label: 'Infraestructura' },
+    { value: 'rep_repuestos_vehiculos', label: 'Vehículos' },
+    { value: 'rep_repuestos_maquinaria', label: 'Maquinaria' },
+    { value: 'rep_repuestos_riego', label: 'Riego' },
+    { value: 'rep_repuestos_parral', label: 'Parral' },
+    { value: 'rep_repuestos_otros', label: 'Otros' },
   ],
   impuestos_servicios: [
     { value: 'vep', label: 'VEP' },

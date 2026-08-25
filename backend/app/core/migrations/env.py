@@ -44,16 +44,23 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_object=include_object,
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection) -> None:
+    # transaction_per_migration=True: cada revision se commitea por separado
+    # en vez de todas juntas al final -- necesario para poder agregar un
+    # valor a un enum nativo de Postgres y usarlo en una migracion posterior
+    # dentro del mismo `alembic upgrade head` (Postgres exige que el ALTER
+    # TYPE ... ADD VALUE este comprometido antes de poder usarse).
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         include_object=include_object,
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
