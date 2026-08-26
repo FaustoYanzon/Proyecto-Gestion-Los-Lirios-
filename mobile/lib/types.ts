@@ -201,6 +201,8 @@ export const CLASIFICACION_POR_TAREA: Record<string, string> = {
   'Rastrillar Pasto': 'general',
   'Anchada': 'general',
   'Zanjeo': 'general',
+  'Arreglo Parral': 'general',
+  'Arreglo Riego': 'general',
 }
 
 export const TAREAS_POR_TEMPORADA = [
@@ -208,7 +210,7 @@ export const TAREAS_POR_TEMPORADA = [
   { temporada: 'Invierno', tareas: ['Poda', 'Atada', 'Tejido'] },
   { temporada: 'Primavera', tareas: ['Verde', 'Brote', 'Raleo', 'Polainas', 'Descole'] },
   { temporada: 'Otoño', tareas: ['Murones'] },
-  { temporada: 'General', tareas: ['Jornal Comun', 'Tractor Comun', 'Riego', 'Mochila', 'Limpieza Acequia', 'Rastrillar Pasto', 'Anchada', 'Zanjeo'] },
+  { temporada: 'General', tareas: ['Jornal Comun', 'Tractor Comun', 'Riego', 'Mochila', 'Limpieza Acequia', 'Rastrillar Pasto', 'Anchada', 'Zanjeo', 'Arreglo Parral', 'Arreglo Riego'] },
 ] as const
 
 export const UNIDAD_LABELS: Record<UnidadMedida, string> = {

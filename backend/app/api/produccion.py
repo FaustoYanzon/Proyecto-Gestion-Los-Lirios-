@@ -84,6 +84,17 @@ def _get_clasificacion(tarea: str) -> ClasificacionTarea:
     return ClasificacionTarea(CLASIFICACION_POR_TAREA.get(tarea, "general"))
 
 
+# Tareas que no son mano de obra sino un gasto de inversión/reparación
+# cargado a través del mecanismo de Tarea (p.ej. "Tejido" usado alguna vez
+# para un arreglo mayor de parral en vez de mantenimiento rutinario). El
+# Egreso generado para estas tareas usa esta clasificación en vez del
+# default de Sueldos Personal/Obreros.
+EGRESO_OVERRIDE_POR_TAREA: dict[str, tuple[TipoEgreso, ClasificacionEgreso]] = {
+    "Arreglo Parral": (TipoEgreso.repuestos_reparacion, ClasificacionEgreso.rep_repuestos_parral),
+    "Arreglo Riego": (TipoEgreso.repuestos_reparacion, ClasificacionEgreso.rep_repuestos_riego),
+}
+
+
 async def _resolve_responsable_nombre(db: AsyncSession, responsable_id: str) -> str:
     """Valida un responsable_id contra el catálogo de Trabajador y devuelve
     su nombre completo, para que `responsable` (texto denormalizado) quede
@@ -104,10 +115,13 @@ def _build_egreso_for_trabajo(
     parts = [registro.tarea, registro.trabajador_nombre]
     if parcela_nombre:
         parts.append(parcela_nombre)
+    tipo, clasificacion = EGRESO_OVERRIDE_POR_TAREA.get(
+        registro.tarea, (TipoEgreso.sueldos_personal, ClasificacionEgreso.obreros)
+    )
     return Egreso(
         fecha=registro.fecha,
-        tipo=TipoEgreso.sueldos_personal,
-        clasificacion=ClasificacionEgreso.obreros,
+        tipo=tipo,
+        clasificacion=clasificacion,
         descripcion=" | ".join(parts)[:500],
         monto=registro.monto_total,
         moneda=MonedaTipo.ars,
@@ -583,6 +597,10 @@ async def update_trabajo(
         linked.monto = registro.monto_total
         linked.parcela_id = registro.parcela_id
         linked.descripcion = " | ".join(parts)[:500]
+        if "tarea" in update_data:
+            linked.tipo, linked.clasificacion = EGRESO_OVERRIDE_POR_TAREA.get(
+                registro.tarea, (TipoEgreso.sueldos_personal, ClasificacionEgreso.obreros)
+            )
 
     return registro
 

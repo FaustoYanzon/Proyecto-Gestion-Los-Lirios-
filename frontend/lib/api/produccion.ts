@@ -7,7 +7,7 @@ export const TAREAS_POR_TEMPORADA: Record<string, string[]> = {
   invierno:  ['Poda', 'Atada', 'Tejido', 'Otros'],
   primavera: ['Verde', 'Brote', 'Raleo', 'Polainas', 'Descole', 'Otros'],
   otono:     ['Murones', 'Otros'],
-  general:   ['Jornal Comun', 'Tractor Comun', 'Riego', 'Mochila', 'Limpieza Acequia', 'Rastrillar Pasto', 'Anchada', 'Zanjeo', 'Otros'],
+  general:   ['Jornal Comun', 'Tractor Comun', 'Riego', 'Mochila', 'Limpieza Acequia', 'Rastrillar Pasto', 'Anchada', 'Zanjeo', 'Arreglo Parral', 'Arreglo Riego', 'Otros'],
 }
 
 export const CLASIFICACION_POR_TAREA: Record<string, string> = {
@@ -20,6 +20,7 @@ export const CLASIFICACION_POR_TAREA: Record<string, string> = {
   'Jornal Comun': 'general', 'Tractor Comun': 'general', Riego: 'general',
   Mochila: 'general', 'Limpieza Acequia': 'general', 'Rastrillar Pasto': 'general',
   Anchada: 'general', Zanjeo: 'general',
+  'Arreglo Parral': 'general', 'Arreglo Riego': 'general',
 }
 
 export const TEMPORADA_LABELS: Record<string, string> = {

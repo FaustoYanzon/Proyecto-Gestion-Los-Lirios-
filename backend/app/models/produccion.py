@@ -40,6 +40,8 @@ TAREAS_POR_CLASIFICACION: dict[str, list[str]] = {
         "Rastrillar Pasto",
         "Anchada",
         "Zanjeo",
+        "Arreglo Parral",
+        "Arreglo Riego",
         "Otros",
     ],
 }
@@ -68,6 +70,8 @@ CLASIFICACION_POR_TAREA: dict[str, str] = {
     "Rastrillar Pasto": "general",
     "Anchada": "general",
     "Zanjeo": "general",
+    "Arreglo Parral": "general",
+    "Arreglo Riego": "general",
 }
 
 
