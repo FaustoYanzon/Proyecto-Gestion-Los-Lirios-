@@ -53,19 +53,19 @@ export const ALL_NAV: NavItem[] = [
     allowedRoles: ['super_admin', 'gerencial'],
   },
   {
-    href: '/dashboard/admin/usuarios',
-    label: 'Admin',
-    short: 'Admin',
-    icon: Settings,
-    matchFn: (p) => p.startsWith('/dashboard/admin'),
-    allowedRoles: ['super_admin', 'gerencial'],
-  },
-  {
     href: '/dashboard/documentacion/parcelas',
     label: 'Documentación',
     short: 'Docs',
     icon: BookOpen,
     matchFn: (p) => p.startsWith('/dashboard/documentacion'),
+    allowedRoles: ['super_admin', 'gerencial'],
+  },
+  {
+    href: '/dashboard/admin/usuarios',
+    label: 'Admin',
+    short: 'Admin',
+    icon: Settings,
+    matchFn: (p) => p.startsWith('/dashboard/admin'),
     allowedRoles: ['super_admin', 'gerencial'],
   },
 ]
