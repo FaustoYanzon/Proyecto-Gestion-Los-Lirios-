@@ -1,13 +1,31 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_super_admin
+from app.api.deps import get_current_user, get_db, require_super_admin
+from app.core.cloudinary_client import upload_avatar
 from app.core.security import get_password_hash
 from app.models.user import User
 from app.schemas.user import UserResponse, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+# Self-service, sin rol mínimo (mismo espíritu que /auth/change-password) --
+# declarada antes de las rutas parametrizadas /{user_id} de abajo, mismo
+# criterio que el resto del proyecto (ver CLAUDE.md).
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    raw = await file.read()
+    secure_url = await upload_avatar(raw, file.content_type or "", current_user.id)
+    current_user.avatar_url = secure_url
+    await db.flush()
+    await db.refresh(current_user)
+    return current_user
 
 
 @router.get("/", response_model=list[UserResponse])

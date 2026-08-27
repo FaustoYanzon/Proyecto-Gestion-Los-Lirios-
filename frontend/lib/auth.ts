@@ -10,6 +10,10 @@ export interface User {
   role: UserRole
   is_active: boolean
   created_at: string
+  avatar_url: string | null
+  birth_day: number | null
+  birth_month: number | null
+  birth_year: number | null
 }
 
 export interface AuthResponse {

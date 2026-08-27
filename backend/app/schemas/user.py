@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationInfo, field_validator
 
 from app.models.finanzas import Finca
 from app.models.user import UserRole
@@ -60,6 +60,10 @@ class UserResponse(UserBase):
     id: str
     is_active: bool
     created_at: datetime
+    avatar_url: str | None = None
+    birth_day: int | None = None
+    birth_month: int | None = None
+    birth_year: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -67,6 +71,24 @@ class UserResponse(UserBase):
 class ChangePasswordRequest(BaseModel):
     current_password: Annotated[str, Field(min_length=1)]
     new_password: Annotated[str, Field(min_length=8)]
+
+
+class UpdateBirthdayRequest(BaseModel):
+    """Self-service (PATCH /auth/me/cumpleanos). Día/mes obligatorios juntos,
+    año opcional -- muchos empleados de campo no lo saben con certeza y nunca
+    se usa para decidir si hoy es su cumpleaños."""
+
+    birth_day: Annotated[int, Field(ge=1, le=31)] | None = None
+    birth_month: Annotated[int, Field(ge=1, le=12)] | None = None
+    birth_year: Annotated[int, Field(ge=1900, le=2026)] | None = None
+
+    @field_validator("birth_month")
+    @classmethod
+    def _day_and_month_together(cls, v: int | None, info: ValidationInfo) -> int | None:
+        day = info.data.get("birth_day")
+        if (v is None) != (day is None):
+            raise ValueError("Día y mes de cumpleaños deben cargarse juntos")
+        return v
 
 
 class Token(BaseModel):

@@ -17,7 +17,14 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.user import ChangePasswordRequest, RefreshRequest, Token, UserCreate, UserResponse
+from app.schemas.user import (
+    ChangePasswordRequest,
+    RefreshRequest,
+    Token,
+    UpdateBirthdayRequest,
+    UserCreate,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -149,6 +156,20 @@ async def register(
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
+
+
+@router.patch("/me/cumpleanos", response_model=UserResponse)
+async def update_my_birthday(
+    body: UpdateBirthdayRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    current_user.birth_day = body.birth_day
+    current_user.birth_month = body.birth_month
+    current_user.birth_year = body.birth_year
+    await db.flush()
+    await db.refresh(current_user)
     return current_user
 
 

@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     # DSN from the project's Sentry organization settings.
     SENTRY_DSN: str | None = None
 
+    # Avatares de usuario (backend/app/core/cloudinary_client.py). None
+    # deshabilita la subida (el endpoint devuelve 503) sin romper el arranque
+    # local sin credenciales -- mismo criterio que SENTRY_DSN.
+    CLOUDINARY_CLOUD_NAME: str | None = None
+    CLOUDINARY_API_KEY: str | None = None
+    CLOUDINARY_API_SECRET: str | None = None
+
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

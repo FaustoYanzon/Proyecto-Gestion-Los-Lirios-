@@ -1,5 +1,6 @@
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI, Request, Response
@@ -13,12 +14,24 @@ from app.api import alertas, arca, auth, clima, finanzas, kpis, notificaciones, 
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import configure_logging
+from app.core.scheduler import build_scheduler
 
 configure_logging(settings.LOG_LEVEL)
 logger = logging.getLogger("app")
 
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, environment=settings.ENVIRONMENT.value)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    scheduler = build_scheduler()
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
 
 app = FastAPI(
     title="Los Lirios API",
@@ -29,6 +42,7 @@ app = FastAPI(
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
+    lifespan=lifespan,
 )
 
 # Wire slowapi. The middleware enforces the per-route decorators and the

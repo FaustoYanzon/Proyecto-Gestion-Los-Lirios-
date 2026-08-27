@@ -29,6 +29,10 @@ export interface UserResponse {
   finca: UserFinca
   is_active: boolean
   created_at: string
+  avatar_url: string | null
+  birth_day: number | null
+  birth_month: number | null
+  birth_year: number | null
 }
 
 export interface UserCreate {
@@ -68,4 +72,22 @@ export async function updateUser(id: string, data: UserUpdate): Promise<UserResp
 export async function deactivateUser(id: string): Promise<UserResponse> {
   const { data: res } = await api.delete(`/users/${id}`)
   return res
+}
+
+export async function uploadMyAvatar(file: File): Promise<UserResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/users/me/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+export async function updateMyBirthday(payload: {
+  birth_day: number | null
+  birth_month: number | null
+  birth_year: number | null
+}): Promise<UserResponse> {
+  const { data } = await api.patch('/auth/me/cumpleanos', payload)
+  return data
 }

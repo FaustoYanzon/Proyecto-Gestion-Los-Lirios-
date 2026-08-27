@@ -10,6 +10,10 @@ export interface User {
   role: UserRole
   finca: FincaKey
   is_active: boolean
+  avatar_url: string | null
+  birth_day: number | null
+  birth_month: number | null
+  birth_year: number | null
 }
 
 export type TipoParcela = 'parral' | 'potrero' | 'pasero' | 'cabezal'

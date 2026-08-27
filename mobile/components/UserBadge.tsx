@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch,
+  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -27,7 +27,11 @@ export function UserBadge() {
         style={styles.badge}
         hitSlop={10}
       >
-        <Text style={styles.badgeText}>{getInitials(user?.full_name)}</Text>
+        {user?.avatar_url ? (
+          <Image source={{ uri: user.avatar_url }} style={styles.badgeImg} />
+        ) : (
+          <Text style={styles.badgeText}>{getInitials(user?.full_name)}</Text>
+        )}
       </TouchableOpacity>
 
       <UserDrawer open={open} onClose={() => setOpen(false)} />
@@ -92,7 +96,11 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
       {/* User card */}
       <View style={styles.userCard}>
         <View style={styles.bigBadge}>
-          <Text style={styles.bigBadgeText}>{getInitials(user?.full_name)}</Text>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={styles.bigBadgeImg} />
+          ) : (
+            <Text style={styles.bigBadgeText}>{getInitials(user?.full_name)}</Text>
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.userName}>{user?.full_name ?? '—'}</Text>
@@ -308,8 +316,10 @@ const styles = StyleSheet.create({
   badge: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: colors.oro, justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
   badgeText: { color: colors.burdeos[600], fontWeight: '800', fontSize: 11 },
+  badgeImg: { width: 28, height: 28 },
 
   overlay: { flex: 1, backgroundColor: 'rgba(31,26,23,0.4)' },
   drawer: {
@@ -326,8 +336,10 @@ const styles = StyleSheet.create({
   bigBadge: {
     width: 48, height: 48, borderRadius: 24,
     backgroundColor: colors.burdeos[600], justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
   bigBadgeText: { color: colors.oro, fontSize: 17, fontWeight: '800' },
+  bigBadgeImg: { width: 48, height: 48 },
   userName: { ...text.h3, color: colors.ink },
   userRole: { ...text.small, color: colors.ink60 },
 

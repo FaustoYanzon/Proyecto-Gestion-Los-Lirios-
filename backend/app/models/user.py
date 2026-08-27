@@ -57,6 +57,16 @@ class User(Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Cumpleaños en 3 columnas separadas, no un date único -- muchos
+    # empleados de campo no saben el año con certeza, y la lógica de
+    # notificación nunca necesita el año para decidir "hoy es su cumpleaños".
+    birth_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Evita re-notificar el mismo cumpleaños dos veces si el proceso
+    # reinicia entre el chequeo y el próximo día. Ver app/core/birthdays.py.
+    last_birthday_notified_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Incremented to invalidate all previously issued JWTs for this user
     # (password change, forced logout, deactivation). The access token carries
     # this value as the "tv" claim; a mismatch is rejected in get_current_user.

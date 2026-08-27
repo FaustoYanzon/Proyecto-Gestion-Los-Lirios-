@@ -13,7 +13,6 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import * as SecureStore from 'expo-secure-store'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
@@ -21,7 +20,10 @@ import {
   isBiometricAvailable, isBiometricEnabled, setBiometricEnabled, authenticateWithBiometrics,
 } from '../../lib/biometric'
 
-const AVATAR_KEY = 'loslirios_avatar'
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -49,10 +51,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 
 export default function PerfilScreen() {
   const user = useAuthStore((s) => s.user)
+  const setUser = useAuthStore((s) => s.setUser)
   const logout = useAuthStore((s) => s.logout)
   const router = useRouter()
 
-  const [avatarUri, setAvatarUri] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
+  const [birthDay, setBirthDay] = useState<number | null>(user?.birth_day ?? null)
+  const [birthMonth, setBirthMonth] = useState<number | null>(user?.birth_month ?? null)
+  const [birthYear, setBirthYear] = useState(user?.birth_year ? String(user.birth_year) : '')
+  const [savingBirthday, setSavingBirthday] = useState(false)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -64,9 +72,6 @@ export default function PerfilScreen() {
   const [bioEnabled, setBioEnabled] = useState(false)
 
   useEffect(() => {
-    SecureStore.getItemAsync(AVATAR_KEY).then((uri) => {
-      if (uri) setAvatarUri(uri)
-    })
     isBiometricAvailable().then(setBioAvailable)
     isBiometricEnabled().then(setBioEnabled)
   }, [])
@@ -92,10 +97,50 @@ export default function PerfilScreen() {
       aspect: [1, 1],
       quality: 0.7,
     })
-    if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri
-      setAvatarUri(uri)
-      await SecureStore.setItemAsync(AVATAR_KEY, uri)
+    if (result.canceled || !result.assets[0]) return
+
+    setAvatarError(null)
+    setUploadingAvatar(true)
+    try {
+      const asset = result.assets[0]
+      const formData = new FormData()
+      // React Native's FormData acepta este shape con uri/name/type -- no es
+      // un File real del DOM, por eso el `as any`.
+      formData.append('file', {
+        uri: asset.uri,
+        name: 'avatar.jpg',
+        type: 'image/jpeg',
+      } as any)
+      const { data } = await api.post('/users/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setUser(data)
+    } catch {
+      setAvatarError('No se pudo subir la foto. Probá de nuevo.')
+      Alert.alert('Error', 'No se pudo subir la foto. Probá de nuevo.')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
+  async function handleSaveBirthday() {
+    if ((birthDay === null) !== (birthMonth === null)) {
+      Alert.alert('Error', 'Elegí día y mes juntos (o dejá los dos vacíos).')
+      return
+    }
+    setSavingBirthday(true)
+    try {
+      const { data } = await api.patch('/auth/me/cumpleanos', {
+        birth_day: birthDay,
+        birth_month: birthMonth,
+        birth_year: birthYear ? Number(birthYear) : null,
+      })
+      setUser(data)
+      Alert.alert('Listo', 'Cumpleaños actualizado.')
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar el cumpleaños.')
+    } finally {
+      setSavingBirthday(false)
     }
   }
 
@@ -157,18 +202,23 @@ export default function PerfilScreen() {
     >
       {/* Avatar + name */}
       <View style={styles.profileHeader}>
-        <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} disabled={uploadingAvatar}>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitials}>{initials}</Text>
             </View>
           )}
           <View style={styles.cameraBtn}>
-            <Ionicons name="camera" size={13} color="#fff" />
+            {uploadingAvatar ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="camera" size={13} color="#fff" />
+            )}
           </View>
         </TouchableOpacity>
+        {avatarError && <Text style={styles.avatarErrorText}>{avatarError}</Text>}
 
         <Text style={styles.userName}>{user?.full_name ?? '—'}</Text>
         <Text style={styles.userEmail}>{user?.email ?? '—'}</Text>
@@ -317,6 +367,66 @@ export default function PerfilScreen() {
         )}
       </View>
 
+      {/* Cumpleaños */}
+      <View style={styles.card}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={styles.infoIcon}>
+            <Ionicons name="gift-outline" size={16} color="#6b7280" />
+          </View>
+          <Text style={styles.cardTitle}>FECHA DE CUMPLEAÑOS</Text>
+        </View>
+        <Text style={styles.fieldLabel}>Día</Text>
+        <TextInput
+          style={styles.input}
+          value={birthDay !== null ? String(birthDay) : ''}
+          onChangeText={(v) => {
+            const n = v.replace(/[^0-9]/g, '')
+            setBirthDay(n === '' ? null : Math.min(31, Number(n)))
+          }}
+          placeholder="1-31"
+          placeholderTextColor="#9ca3af"
+          keyboardType="number-pad"
+          maxLength={2}
+        />
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Mes</Text>
+        <View style={styles.chipRow}>
+          {MESES.map((m, i) => {
+            const value = i + 1
+            const active = birthMonth === value
+            return (
+              <TouchableOpacity
+                key={m}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setBirthMonth(active ? null : value)}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.slice(0, 3)}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Año (opcional)</Text>
+        <TextInput
+          style={styles.input}
+          value={birthYear}
+          onChangeText={setBirthYear}
+          placeholder="AAAA"
+          placeholderTextColor="#9ca3af"
+          keyboardType="number-pad"
+          maxLength={4}
+        />
+        <TouchableOpacity
+          style={[styles.saveBtn, savingBirthday && { opacity: 0.6 }]}
+          onPress={handleSaveBirthday}
+          disabled={savingBirthday}
+        >
+          {savingBirthday ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.saveBtnText}>Guardar cumpleaños</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Huella dactilar */}
       {bioAvailable && (
         <View style={styles.card}>
@@ -353,6 +463,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
   },
   avatarInitials: { fontSize: 32, fontWeight: '800', color: '#fff' },
+  avatarErrorText: { fontSize: 12, color: '#ef4444', marginTop: 8, textAlign: 'center' },
   cameraBtn: {
     position: 'absolute', bottom: 0, right: 0,
     width: 28, height: 28, borderRadius: 14,
@@ -398,6 +509,14 @@ const styles = StyleSheet.create({
     fontSize: 15, color: '#111827', marginBottom: 0,
   },
   pwdInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e8eaed',
+  },
+  chipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  chipTextActive: { color: '#fff' },
   eyeBtn: { width: 44, height: 48, justifyContent: 'center', alignItems: 'center' },
   saveBtn: {
     height: 48, backgroundColor: '#16a34a', borderRadius: 10,
