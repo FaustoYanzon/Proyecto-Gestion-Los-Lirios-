@@ -182,3 +182,28 @@ export async function getEgresosPorMes(anioInicio: number): Promise<EgresosPorMe
   })
   return data
 }
+
+export interface CostoPorKg {
+  fecha_desde: string
+  fecha_hasta: string
+  moneda: 'ars' | 'usd'
+  costo_total: number
+  kg_total: number
+  costo_por_kg: number | null
+}
+
+export async function getCostoPorKg(params: {
+  fecha_desde: string
+  fecha_hasta: string
+  moneda: 'ars' | 'usd'
+  finca?: string
+}): Promise<CostoPorKg> {
+  // costo_total/costo_por_kg llegan como string (Decimal de FastAPI) -- convertir acá,
+  // no en el punto de uso (mismo gotcha ya documentado en Bugs Conocidos).
+  const { data } = await api.get('/finanzas/dashboard/costo-por-kg', { params })
+  return {
+    ...data,
+    costo_total: Number(data.costo_total),
+    costo_por_kg: data.costo_por_kg != null ? Number(data.costo_por_kg) : null,
+  }
+}

@@ -7,7 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, Legend,
 } from 'recharts'
-import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
+import { TIPO_EGRESO_LABELS, getCostoPorKg } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
 import { getResumenIva } from '@/lib/api/arca'
@@ -123,6 +123,17 @@ export default function FinanceDashboardPage() {
     queryFn: () => getResumenIva({
       anio_desde: anioDesdeReal, mes_desde: mesDesdeReal,
       anio_hasta: anioHastaReal, mes_hasta: mesHastaReal,
+    }),
+    staleTime: 60_000,
+  })
+
+  const { data: costoPorKg } = useQuery({
+    queryKey: ['costo-por-kg', anioDesdeReal, mesDesdeReal, anioHastaReal, mesHastaReal, moneda, finca],
+    queryFn: () => getCostoPorKg({
+      fecha_desde: `${anioDesdeReal}-${String(mesDesdeReal).padStart(2, '0')}-01`,
+      fecha_hasta: `${anioHastaReal}-${String(mesHastaReal).padStart(2, '0')}-${new Date(anioHastaReal, mesHastaReal, 0).getDate()}`,
+      moneda,
+      finca,
     }),
     staleTime: 60_000,
   })
@@ -305,7 +316,7 @@ export default function FinanceDashboardPage() {
       )}
 
       {/* KPI cards — reflejan el rango de meses elegido arriba, no un mes fijo */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard
           label={`Cumplimiento ${rangoLabel}`}
           value={
@@ -332,6 +343,11 @@ export default function FinanceDashboardPage() {
           label={mesDesdeIdx === 0 && mesHastaIdx === 11 ? 'Saldo acumulado campaña' : 'Saldo acumulado (rango)'}
           value={fmtMoney(porMes.at(-1)?.saldoAcum ?? 0, moneda)}
           tone={(porMes.at(-1)?.saldoAcum ?? 0) >= 0 ? 'good' : 'bad'}
+        />
+        <KpiCard
+          label={`Costo/kg uva ${rangoLabel}`}
+          value={costoPorKg?.costo_por_kg != null ? `${fmtMoney(costoPorKg.costo_por_kg, moneda)}/kg` : '—'}
+          hint="materia prima + producción + insumos + repuestos, sobre kg de uva cosechados"
         />
       </div>
 

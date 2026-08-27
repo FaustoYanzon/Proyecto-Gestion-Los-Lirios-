@@ -176,7 +176,9 @@ class EgresosPorMesResponse(BaseModel):
 
 
 class CostoPorKgResponse(BaseModel):
-    campana: str
-    total_egresos_ars: Decimal
-    kg_cosechados_total: Decimal | None
-    costo_por_kg_ars: Decimal | None
+    fecha_desde: date
+    fecha_hasta: date
+    moneda: MonedaTipo
+    costo_total: Decimal
+    kg_total: float
+    costo_por_kg: Decimal | None

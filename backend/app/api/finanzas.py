@@ -18,8 +18,7 @@ from app.models.finanzas import (
     OrigenPago,
     TipoEgreso,
 )
-from app.models.parcela import Parcela
-from app.models.produccion import CicloCampana
+from app.models.produccion import CultivoCosecha, RegistroCosecha
 from app.models.user import User
 from app.schemas.finanzas import (
     CostoPorKgResponse,
@@ -442,65 +441,58 @@ async def dashboard_egresos_por_mes(
     )
 
 
+# Tipos de egreso que representan costo directo de producción -- excluye
+# Sueldos (tiene su propio KPI "Costo MO" en Mano de Obra), Impuestos/
+# Servicios y Financiero (administrativos, no ligados a los kg producidos).
+# Decisión tomada con Fausto, no inferida.
+_TIPOS_COSTO_PRODUCCION = (
+    TipoEgreso.materia_prima,
+    TipoEgreso.produccion,
+    TipoEgreso.insumos_varios,
+    TipoEgreso.repuestos_reparacion,
+)
+
+
 @router.get("/dashboard/costo-por-kg", response_model=CostoPorKgResponse)
 async def dashboard_costo_por_kg(
-    anio: int = Query(..., ge=2000, le=2100),
+    fecha_desde: date = Query(...),
+    fecha_hasta: date = Query(...),
+    moneda: MonedaTipo = Query(MonedaTipo.ars),
+    finca: Finca | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> CostoPorKgResponse:
-    start = date(anio, 5, 1)
-    end = date(anio + 1, 4, 30)
-
-    egresos_ars = list(
-        (await db.execute(
-            select(Egreso).where(
-                Egreso.fecha >= start, Egreso.fecha <= end, Egreso.moneda == MonedaTipo.ars
-            )
-        )).scalars().all()
+    egresos_stmt = select(func.coalesce(func.sum(Egreso.monto), 0)).where(
+        Egreso.tipo.in_(_TIPOS_COSTO_PRODUCCION),
+        Egreso.fecha >= fecha_desde,
+        Egreso.fecha <= fecha_hasta,
+        Egreso.moneda == moneda,
     )
-    total_egresos_ars = sum((e.monto for e in egresos_ars), Decimal("0"))
+    if finca is not None:
+        egresos_stmt = egresos_stmt.where(Egreso.finca == finca)
+    costo_total: Decimal = (await db.execute(egresos_stmt)).scalar_one()
 
-    ciclos = list(
-        (await db.execute(
-            select(CicloCampana).where(
-                CicloCampana.anio == anio,
-                CicloCampana.rendimiento_kg_ha.is_not(None),
-            )
-        )).scalars().all()
+    # Solo uva (vid) -- excluye chacra/alfalfa/otros cultivos secundarios que
+    # comparten la misma tabla. RegistroCosecha no tiene columna de finca
+    # propia (ni Parcela), así que este total no se puede acotar por finca.
+    kg_stmt = select(func.coalesce(func.sum(RegistroCosecha.kg_total), 0)).where(
+        RegistroCosecha.cultivo == CultivoCosecha.vid,
+        RegistroCosecha.fecha >= fecha_desde,
+        RegistroCosecha.fecha <= fecha_hasta,
     )
+    kg_total: float = (await db.execute(kg_stmt)).scalar_one()
 
-    best: dict[str, Decimal] = {}
-    for c in ciclos:
-        if c.parcela_id not in best or c.rendimiento_kg_ha > best[c.parcela_id]:
-            best[c.parcela_id] = c.rendimiento_kg_ha
-
-    kg_cosechados_total: Decimal | None = None
-    if best:
-        parcelas = list(
-            (await db.execute(select(Parcela).where(Parcela.id.in_(list(best.keys()))))).scalars().all()
-        )
-        sup_map = {p.id: p.superficie_ha for p in parcelas}
-        kg_total = Decimal("0")
-        has_data = False
-        for pid, rend in best.items():
-            sup = sup_map.get(pid)
-            if sup is not None:
-                kg_total += rend * Decimal(str(sup))
-                has_data = True
-        if has_data:
-            kg_cosechados_total = kg_total
-
-    costo_por_kg_ars = (
-        total_egresos_ars / kg_cosechados_total
-        if kg_cosechados_total is not None and kg_cosechados_total > 0
-        else None
+    costo_por_kg = (
+        costo_total / Decimal(str(kg_total)) if kg_total and kg_total > 0 else None
     )
 
     return CostoPorKgResponse(
-        campana=f"{anio}-{anio + 1}",
-        total_egresos_ars=total_egresos_ars,
-        kg_cosechados_total=kg_cosechados_total,
-        costo_por_kg_ars=costo_por_kg_ars,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        moneda=moneda,
+        costo_total=costo_total,
+        kg_total=kg_total,
+        costo_por_kg=costo_por_kg,
     )
 
 
