@@ -1,0 +1,35 @@
+<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Los Lirios SA">
+  <defs>
+    <linearGradient id="bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#872634"></stop><stop offset="100%" stop-color="#4e1119"></stop>
+    </linearGradient>
+    <clipPath id="c"><rect width="200" height="200" rx="44"></rect></clipPath>
+  </defs>
+  <rect width="200" height="200" rx="44" fill="url(#bg)"></rect>
+  <g clip-path="url(#c)">
+  <g fill="#c89a3a" opacity="0.28">
+    <circle cx="34.48" cy="36.96" r="18"></circle>
+    <circle cx="67.24" cy="36.96" r="18"></circle>
+    <circle cx="100" cy="36.96" r="18"></circle>
+    <circle cx="132.76" cy="36.96" r="18"></circle>
+    <circle cx="165.52" cy="36.96" r="18"></circle>
+    <circle cx="50.86" cy="66.48" r="18"></circle>
+    <circle cx="83.62" cy="66.48" r="18"></circle>
+    <circle cx="116.38" cy="66.48" r="18"></circle>
+    <circle cx="149.14" cy="66.48" r="18"></circle>
+    <circle cx="67.24" cy="96" r="18"></circle>
+    <circle cx="100" cy="96" r="18"></circle>
+    <circle cx="132.76" cy="96" r="18"></circle>
+    <circle cx="83.62" cy="125.52" r="18"></circle>
+    <circle cx="116.38" cy="125.52" r="18"></circle>
+    <circle cx="100" cy="155.04" r="18"></circle>
+  </g>
+  <g fill="none" stroke="#c89a3a" stroke-width="5.4" stroke-linecap="round" opacity="0.28">
+    <path d="M100 24.36 L100 8.16"></path>
+    <path d="M100 8.16 Q83.8 0.9 73 4.6"></path>
+  </g>
+  </g>
+  <text x="100" y="116" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="92" font-weight="600" fill="#faf6ec" letter-spacing="-2">LL</text>
+  <line x1="52" y1="140" x2="148" y2="140" stroke="#c89a3a" stroke-width="1.6"></line>
+  <text x="100" y="162" text-anchor="middle" font-family="'Public Sans', sans-serif" font-size="12" font-weight="800" fill="#c89a3a" letter-spacing="2.6">LOS LIRIOS</text>
+</svg>

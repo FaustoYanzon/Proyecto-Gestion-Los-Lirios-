@@ -60,10 +60,9 @@ export default function LoginPage() {
       >
         <div className="flex items-center gap-3">
           <img
-            src="/logo-mark.svg"
+            src="/logo-reducido.svg"
             alt=""
             className="h-10 w-auto"
-            style={{ filter: 'none' }}
           />
           <span
             className="text-xl font-bold text-[#1f1a17]"
@@ -95,7 +94,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* logo mobile */}
           <div className="md:hidden mb-8 flex items-center gap-3">
-            <img src="/logo-mark.svg" alt="" className="h-10 w-auto" />
+            <img src="/logo-reducido.svg" alt="" className="h-10 w-auto" />
             <span className="text-xl font-bold text-[#1f1a17]" style={{ fontFamily: 'var(--font-display)' }}>
               Los Lirios SA
             </span>

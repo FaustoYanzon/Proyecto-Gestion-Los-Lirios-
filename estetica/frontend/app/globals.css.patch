@@ -1,0 +1,71 @@
+# Parche para frontend/app/globals.css
+# Tres bloques. No reemplaza el archivo: se agregan y se corrigen estas líneas.
+
+## 1 · Token que falta
+
+En :root, junto a los demás colores:
+
+    --color-borde: #e2dbcc;
+
+Y en @theme inline:
+
+    --color-border: var(--color-borde);
+
+Por qué: hoy los bordes usan --color-hueso (#fbfaf6) sobre fondo blanco.
+La diferencia de luminancia es de ~1.5%: en la práctica el campo no tiene borde.
+Se ve en la captura del login, donde el campo Usuario parece un hueco flotando.
+
+## 2 · Corregir .input y .btn--secondary
+
+.input {
+  border-color: var(--color-borde);      /* antes: var(--color-hueso) */
+}
+.input:hover  { border-color: var(--color-niebla); }
+.input:focus  {
+  outline: none;
+  border-color: var(--color-burdeos-600);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-burdeos-600) 12%, transparent);
+}
+
+.btn--secondary {
+  border-color: var(--color-borde);      /* antes: var(--color-ink) — demasiado duro */
+}
+.btn--secondary:hover { border-color: var(--color-niebla); }
+
+## 3 · Neutralizar el autofill de Chrome
+
+Agregar al final del bloque de formularios:
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px var(--color-blanco) inset !important;
+      -webkit-text-fill-color: var(--color-ink) !important;
+      caret-color: var(--color-ink);
+      transition: background-color 9999s ease-out 0s;
+    }
+
+Por qué: en la captura del login el campo Contraseña aparece con fondo celeste.
+Es el autofill de Chrome pisando el background con su color del sistema, y rompe
+la paleta en la primera pantalla que ve el usuario.
+
+## 4 · Reemplazo global
+
+Buscar en todo frontend/ y reemplazar:
+
+    border-[#fbfaf6]   →   border-[#e2dbcc]
+
+Confirmado presente en: app/dashboard/layout.tsx (header del topbar, botón ⌘K,
+barra de sub-nav, spinner), components/Alertas.tsx, components/FincaSwitcher.tsx,
+components/CampanaSwitcher.tsx (dropdowns).
+
+## 5 · Grises de Tailwind fuera de la paleta
+
+En components/Alertas.tsx hay cuatro apariciones:
+
+    border-gray-100     →   border-[#e2dbcc]
+    hover:bg-gray-100   →   hover:bg-[#fbfaf6]
+
+Los grises de Tailwind son neutros fríos; la paleta de Los Lirios es cálida.
+Puestos uno al lado del otro, el gris se ve azulado.

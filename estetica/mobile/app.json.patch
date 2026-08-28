@@ -1,0 +1,54 @@
+# Parche para mobile/app.json
+# Tres cambios. Los dos primeros son la causa de que el ícono se vea blanco.
+
+## 1 · Fondo del adaptive icon
+
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7a1f2c"        // antes: "#faf8f5"
+      }
+    }
+
+Por qué: #faf8f5 es prácticamente blanco, y encima iba una marca en dorado claro.
+Android recorta el ícono en círculo, reserva un 33% de margen de seguridad y lo
+muestra a 48px. Dorado claro sobre blanco, reducido y recortado, deja de existir.
+Además #faf8f5 no es un color de la paleta (el crema es #faf6ec).
+
+## 2 · Ícono de notificación
+
+    ["expo-notifications", {
+      "icon": "./assets/notification-icon.png",     // FALTABA
+      "color": "#7a1f2c"
+    }]
+
+Por qué: sin "icon", Android toma el ícono de la app, descarta todos los canales
+de color y usa sólo el alfa. El resultado es un cuadrado blanco sin forma en la
+barra de estado. El PNG tiene que ser una silueta blanca pura sobre transparente.
+
+## 3 · Fondo del splash
+
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#faf6ec"        // el crema de la paleta
+    }
+
+## Assets a generar (ver scripts/gen_assets.py)
+
+| Archivo                              | Tamaño    | Fuente                        | Fondo        |
+|--------------------------------------|-----------|-------------------------------|--------------|
+| mobile/assets/icon.png               | 1024×1024 | app-icon.svg                  | burdeos      |
+| mobile/assets/adaptive-icon.png      | 1024×1024 | app-icon-sin-wordmark.svg     | TRANSPARENTE |
+| mobile/assets/notification-icon.png  | 96×96     | notification.svg              | TRANSPARENTE |
+| mobile/assets/splash-icon.png        | 1024×1024 | logo.svg                      | TRANSPARENTE |
+| mobile/assets/favicon.png            | 48×48     | logo-glifo.svg                | TRANSPARENTE |
+| frontend/public/favicon.ico          | 16/32/48  | logo-glifo.svg                | TRANSPARENTE |
+
+Dos reglas que no se pueden saltear:
+
+1. adaptive-icon.png va con fondo transparente y la marca ocupando como máximo
+   el 60% del lienzo, centrada. Android le aplica el recorte circular; todo lo
+   que quede fuera del 66% central se pierde.
+2. icon.png lleva el wordmark "LOS LIRIOS"; adaptive-icon.png NO. A 48px el
+   wordmark es una mancha. Son dos dibujos distintos, no un PNG escalado.
