@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6, marginBottom: 8,
   },
   input: {
-    height: 50, borderWidth: 1.5, borderColor: colors.hueso,
+    height: 50, borderWidth: 1.5, borderColor: colors.borde,
     borderRadius: 12, paddingHorizontal: 14, fontSize: 15,
     color: colors.ink, backgroundColor: colors.hueso, marginBottom: 0,
   },

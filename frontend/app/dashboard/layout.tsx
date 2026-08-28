@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="flex h-screen items-center justify-center bg-white">
         <div
-          className="h-8 w-8 rounded-full border-2 border-[#fbfaf6] animate-spin"
+          className="h-8 w-8 rounded-full border-2 border-[#e2dbcc] animate-spin"
           style={{ borderTopColor: '#7a1f2c' }}
           role="status"
           aria-label="Cargando"

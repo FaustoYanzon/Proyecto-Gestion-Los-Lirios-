@@ -256,7 +256,7 @@ export default function Alertas() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="bg-white rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full text-left hover:border-[#e6c8cd] transition-colors"
+        className="bg-white rounded-[10px] border border-[#e2dbcc] p-4 flex-shrink-0 w-full text-left hover:border-[#e6c8cd] transition-colors"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
       >
         <div className="flex items-center gap-2 mb-3">

@@ -121,7 +121,7 @@ export default function LoginPage() {
                 autoComplete="username"
                 autoCapitalize="none"
                 placeholder="nombre.apellido"
-                className="w-full rounded-[10px] border border-[#fbfaf6] px-3.5 py-2.5 text-sm
+                className="w-full rounded-[10px] border border-[#e2dbcc] px-3.5 py-2.5 text-sm
                            text-[#1f1a17] placeholder:text-[#a09584] hover:border-[#a09584]
                            focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-[#7a1f2c]
                            transition-colors bg-white"
@@ -140,7 +140,7 @@ export default function LoginPage() {
                   type={showPwd ? 'text' : 'password'}
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  className="w-full rounded-[10px] border border-[#fbfaf6] px-3.5 py-2.5 pr-10 text-sm
+                  className="w-full rounded-[10px] border border-[#e2dbcc] px-3.5 py-2.5 pr-10 text-sm
                              text-[#1f1a17] placeholder:text-[#a09584] hover:border-[#a09584]
                              focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-[#7a1f2c]
                              transition-colors bg-white"
@@ -162,7 +162,7 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-[#fbfaf6] accent-[#7a1f2c] cursor-pointer"
+                  className="w-4 h-4 rounded border-[#e2dbcc] accent-[#7a1f2c] cursor-pointer"
                   {...register('recordarme')}
                 />
                 <span className="text-sm text-[#5a544c]">Recordarme</span>

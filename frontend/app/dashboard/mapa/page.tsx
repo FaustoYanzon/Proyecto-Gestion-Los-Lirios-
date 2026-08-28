@@ -12,7 +12,7 @@ export default function MapaPage() {
         </p>
       </div>
       <div
-        className="flex-1 min-h-0 rounded-[10px] overflow-hidden border border-[#fbfaf6]"
+        className="flex-1 min-h-0 rounded-[10px] overflow-hidden border border-[#e2dbcc]"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
       >
         <FincaMap height="100%" />

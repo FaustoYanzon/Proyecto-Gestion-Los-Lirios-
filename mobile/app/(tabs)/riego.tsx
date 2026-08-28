@@ -1516,7 +1516,7 @@ const styles = StyleSheet.create({
 
   input: {
     backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14, height: 48,
   },
 

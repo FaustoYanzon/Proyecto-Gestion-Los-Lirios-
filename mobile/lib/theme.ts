@@ -15,6 +15,7 @@ export const colors = {
   blanco:   '#ffffff',
   hueso:    '#fbfaf6',
   crema:    '#faf6ec',
+  borde:    '#e2dbcc',
   oro:      '#c89a3a',
   verdeCampo: '#3f5c3a',
   tierra:   '#8a5a2b',

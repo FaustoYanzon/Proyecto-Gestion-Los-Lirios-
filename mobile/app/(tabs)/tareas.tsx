@@ -1220,7 +1220,7 @@ const styles = StyleSheet.create({
   // parcela list (modal de ubicación)
   searchInput: {
     height: 46, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 8,
   },
   parcelaItemSub: { fontSize: 12, color: colors.ink60, marginTop: 1, textTransform: 'capitalize' },
@@ -1236,7 +1236,7 @@ const styles = StyleSheet.create({
   workerBottomRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   cantidadInput: {
     height: 44, minWidth: 72, backgroundColor: colors.hueso, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.hueso, textAlign: 'center',
+    borderWidth: 1.5, borderColor: colors.borde, textAlign: 'center',
     fontSize: 20, fontWeight: '800', color: colors.ink, paddingHorizontal: 8,
   },
   workerAmountBox: { flex: 1, alignItems: 'flex-end' },
@@ -1287,7 +1287,7 @@ const styles = StyleSheet.create({
   dateBtnText: { flex: 1, fontSize: 15, color: colors.ink, fontWeight: '500' },
   input: {
     height: 48, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14,
   },
 

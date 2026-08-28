@@ -289,7 +289,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
 
       {/* Preview duración + mm + litros totales */}
       {preview ? (
-        <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#fbfaf6] rounded-md px-4 py-3">
+        <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
           <Droplets size={18} className="text-blue-500 flex-shrink-0" />
           <div className="text-sm">
             <span className="text-blue-700 font-medium">{preview.horas}h</span>

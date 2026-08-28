@@ -35,7 +35,7 @@ function KpiCard({ icon: Icon, label, value, hint, color = '#1f1a17' }: {
   color?: string
 }) {
   return (
-    <div className="bg-white rounded-[10px] border border-[#fbfaf6] p-4" style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}>
+    <div className="bg-white rounded-[10px] border border-[#e2dbcc] p-4" style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}>
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={14} strokeWidth={1.75} color={color} />
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">{label}</p>

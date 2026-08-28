@@ -54,7 +54,7 @@ function DireccionKpi({ label, value, hint, tone = 'neutral' }: {
 }) {
   const hintColor = tone === 'good' ? '#3f5c3a' : tone === 'bad' ? '#a3293a' : '#a09584'
   return (
-    <div className="bg-white rounded-[10px] border border-[#fbfaf6] p-4"
+    <div className="bg-white rounded-[10px] border border-[#e2dbcc] p-4"
       style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}>
       <p className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">{label}</p>
       <p className="text-xl font-bold text-[#1f1a17] mt-1">{value}</p>
@@ -99,7 +99,7 @@ function ClimateCard() {
 
   return (
     <div
-      className="rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full"
+      className="rounded-[10px] border border-[#e2dbcc] p-4 flex-shrink-0 w-full"
       style={{ backgroundColor: '#faf6ec', boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
     >
       <div className="flex items-center gap-2 mb-3">
@@ -285,7 +285,7 @@ function DireccionSection() {
         />
       </div>
 
-      <div className="bg-white rounded-[10px] border border-[#fbfaf6] p-4"
+      <div className="bg-white rounded-[10px] border border-[#e2dbcc] p-4"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}>
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c] mb-2">
           Flujo acumulado: real vs presupuesto (ARS)
@@ -354,7 +354,7 @@ export default function DashboardPage() {
         {/* Mapa (reducido) — clickeable, lleva al mapa completo */}
         <Link
           href="/dashboard/mapa"
-          className="group relative rounded-[10px] overflow-hidden border border-[#fbfaf6] block"
+          className="group relative rounded-[10px] overflow-hidden border border-[#e2dbcc] block"
           style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
         >
           <FincaMap compact height="100%" />
