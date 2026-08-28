@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -11,6 +12,8 @@ import {
   ScrollView,
   Alert,
 } from 'react-native'
+import { StatusBar } from 'expo-status-bar'
+import Constants from 'expo-constants'
 import { useRouter } from 'expo-router'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import {
@@ -117,11 +120,14 @@ export default function LoginScreen() {
     }
   }
 
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0'
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.crema }}
+      style={{ flex: 1, backgroundColor: colors.blanco }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <StatusBar style="dark" />
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -129,9 +135,11 @@ export default function LoginScreen() {
       >
         {/* ── Hero ── */}
         <View style={styles.hero}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoInitials}>LL</Text>
-          </View>
+          <Image
+            source={require('../../assets/logo-mark.png')}
+            style={styles.heroLogo}
+            resizeMode="contain"
+          />
           <Text style={[styles.brand, { fontFamily: fonts.display }]}>
             Los Lirios SA
           </Text>
@@ -219,13 +227,13 @@ export default function LoginScreen() {
               activeOpacity={0.8}
             >
               <ICONS.huella size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
-              <Text style={styles.faceIdText}>Ingresar con huella dactilar</Text>
+              <Text style={styles.faceIdText}>Ingresar con huella</Text>
             </TouchableOpacity>
           </>
         )}
 
         {/* ── Footer ── */}
-        <Text style={styles.footer}>Los Lirios SA · Desde 1991</Text>
+        <Text style={styles.footer}>Los Lirios SA · v{appVersion}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -237,16 +245,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   hero: { alignItems: 'center', marginBottom: 36 },
-  logoCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: colors.burdeos[600],
-    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
-    shadowColor: colors.burdeos[700],
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
-  },
-  logoInitials: { color: colors.blanco, fontSize: 28, fontWeight: '800', letterSpacing: 1 },
-  brand: { fontSize: 26, color: colors.ink, marginBottom: 6 },
-  heroSub: { fontSize: 14, color: colors.ink60, fontWeight: '500' },
+  heroLogo: { width: 62, height: 78, marginBottom: 16 },
+  brand: { fontSize: 17, color: colors.ink, marginBottom: 6 },
+  heroSub: { fontSize: 11.5, color: colors.ink60, fontWeight: '500' },
   card: {
     width: '100%', backgroundColor: colors.blanco, borderRadius: 20, padding: 24,
     marginBottom: 20,
@@ -259,12 +260,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6, marginBottom: 8,
   },
   input: {
-    height: 50, borderWidth: 1.5, borderColor: colors.borde,
-    borderRadius: 12, paddingHorizontal: 14, fontSize: 15,
+    height: 46, borderWidth: 1.5, borderColor: colors.borde,
+    borderRadius: 11, paddingHorizontal: 14, fontSize: 15,
     color: colors.ink, backgroundColor: colors.hueso, marginBottom: 0,
   },
   pwdRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
-  eyeBtn: { width: 48, height: 50, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
+  eyeBtn: { width: 48, height: 46, justifyContent: 'center', alignItems: 'center', marginLeft: 4 },
   recordarmeRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, alignSelf: 'flex-start',
   },
