@@ -6,6 +6,7 @@ from app.api.deps import (
     get_current_user,
     get_db,
     require_any_role,
+    require_encargado_up,
     require_gerencial_up,
 )
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
@@ -26,7 +27,7 @@ async def list_parcelas(
     variedad: VariedadUva | None = Query(None),
     cabezal_riego: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_gerencial_up),
+    _: User = Depends(require_encargado_up),
 ) -> list[Parcela]:
     stmt = select(Parcela).where(Parcela.is_active == True)  # noqa: E712
     if tipo is not None:
