@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ICONS, ICON_STROKE, type IconKey } from '../lib/icons';
+import Badge from './ui/Badge';
 import { colors, space, radius, text, getInitials, ROLE_LABELS } from '../lib/theme';
 import { useAuthStore } from '../store/authStore';
 import { useFincaStore, FINCAS, loadFinca } from '../store/fincaStore';
@@ -124,7 +125,7 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
       <View style={styles.divider} />
 
       <DrawerItem icon="usuario" label="Mi perfil" onPress={() => { onClose(); router.push('/(tabs)/perfil') }} />
-      <DrawerItem icon="notificacion" label="Notificaciones" badge="3" onPress={() => onNav('notif')} />
+      <DrawerItem icon="notificacion" label="Notificaciones" badge={3} badgeVariant="count" onPress={() => onNav('notif')} />
       <DrawerItem icon="admin" label="Preferencias" onPress={() => onNav('pref')} />
       <DrawerItem
         icon="desconectado"
@@ -295,10 +296,11 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   return <Text style={styles.sectionHeader}>{children}</Text>;
 }
 
-function DrawerItem({ icon, label, badge, danger, onPress }: {
+function DrawerItem({ icon, label, badge, badgeVariant = 'label', danger, onPress }: {
   icon: IconKey
   label: string
-  badge?: string
+  badge?: string | number
+  badgeVariant?: 'count' | 'label'
   danger?: boolean
   onPress: () => void
 }) {
@@ -309,7 +311,7 @@ function DrawerItem({ icon, label, badge, danger, onPress }: {
       <Text style={[styles.drawerItemLabel, danger && { color: colors.sangre, fontWeight: '700' }]}>
         {label}
       </Text>
-      {badge && <Text style={styles.badgeSmall}>{badge}</Text>}
+      {badge !== undefined && <Badge variant={badgeVariant} value={badge} />}
     </TouchableOpacity>
   );
 }
@@ -362,11 +364,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   drawerItemLabel: { flex: 1, ...text.body, color: colors.ink, fontWeight: '500' },
-  badgeSmall: {
-    ...text.micro,
-    backgroundColor: colors.burdeos[200], color: colors.burdeos[700],
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill,
-  },
 
   footer: { marginTop: 'auto', paddingTop: space.s3, borderTopWidth: 1, borderTopColor: colors.hueso },
   footerText: { ...text.small, color: colors.ink60, fontSize: 11 },

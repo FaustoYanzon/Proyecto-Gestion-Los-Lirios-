@@ -20,10 +20,10 @@ export default function BuzonModal({
     <div className="fixed inset-0 z-[2000] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[56rem] flex flex-col max-h-[85vh]">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[#e2dbcc] flex-shrink-0">
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="p-1 rounded-md text-[#a09584] hover:text-[#5a544c] hover:bg-[#fbfaf6] transition-colors"
             aria-label="Cerrar"
           >
             <X size={18} />
@@ -34,7 +34,7 @@ export default function BuzonModal({
         <div className="overflow-y-auto p-3 flex-1">{children}</div>
 
         {footer && (
-          <div className="text-[11px] text-[#a09584] px-5 py-2.5 border-t border-gray-100 flex-shrink-0">
+          <div className="text-[11px] text-[#a09584] px-5 py-2.5 border-t border-[#e2dbcc] flex-shrink-0">
             {footer}
           </div>
         )}

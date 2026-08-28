@@ -1,10 +1,18 @@
+import { View } from 'react-native'
 import { Tabs } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { ICONS, ICON_SIZE, ICON_STROKE } from '../../lib/icons'
 import { UserBadge } from '../../components/UserBadge'
+import { SyncBar } from '../../components/SyncBar'
+
+// Altura del header nativo actual (headerStyle.height más abajo) — la
+// barra se ancla justo debajo. Si el header cambia de alto (Fase 7:
+// header blanco propio, ~41px) hay que actualizar este número.
+const HEADER_HEIGHT = 64
 
 export default function TabsLayout() {
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.burdeos[600],
@@ -84,5 +92,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="campana" options={{ href: null }} />
       <Tabs.Screen name="perfil"  options={{ href: null }} />
     </Tabs>
+    <SyncBar style={{ position: 'absolute', top: HEADER_HEIGHT, left: 0, right: 0, zIndex: 10 }} />
+    </View>
   )
 }
