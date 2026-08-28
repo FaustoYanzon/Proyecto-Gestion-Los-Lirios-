@@ -279,7 +279,7 @@ function ParcelPanel({ name, parcelas, estadoCampanaByVariedad, cosechaByParcela
         {parcela ? (
           <>
             {editing ? (
-              <div className="space-y-3 bg-[#faf6ec] border border-[#fbfaf6] rounded-lg p-3">
+              <div className="space-y-3 bg-[#faf6ec] border border-[#e2dbcc] rounded-lg p-3">
                 <p className="text-xs font-medium text-[#7a1f2c]">Editar parcela</p>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Variedad</label>
@@ -488,7 +488,7 @@ function ParcelPanel({ name, parcelas, estadoCampanaByVariedad, cosechaByParcela
 
       {/* Acciones rápidas */}
       {parcela && (
-        <div className="flex-shrink-0 border-t border-[#fbfaf6] px-4 py-3 flex gap-2">
+        <div className="flex-shrink-0 border-t border-[#e2dbcc] px-4 py-3 flex gap-2">
           {([
             { key: 'riego', label: '+ Riego' },
             { key: 'tarea', label: '+ Tarea' },
@@ -498,7 +498,7 @@ function ParcelPanel({ name, parcelas, estadoCampanaByVariedad, cosechaByParcela
               key={key}
               onClick={() => onQuickAction(key)}
               className="flex-1 py-1.5 text-xs font-medium rounded-md border transition-colors
-                         border-[#fbfaf6] text-[#5a544c] hover:bg-[#7a1f2c] hover:text-white hover:border-[#7a1f2c]"
+                         border-[#e2dbcc] text-[#5a544c] hover:bg-[#7a1f2c] hover:text-white hover:border-[#7a1f2c]"
             >
               {label}
             </button>

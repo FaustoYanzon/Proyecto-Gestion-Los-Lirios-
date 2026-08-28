@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { login, getRememberedUsername, setRememberedUsername } from '@/lib/auth'
 import { useAuthStore } from '@/store/authStore'
+import FormError from '@/components/ui/FormError'
 
 const schema = z.object({
   username:   z.string().min(1, { message: 'Ingrese su usuario' }),
@@ -55,27 +56,21 @@ export default function LoginPage() {
     <div className="min-h-screen flex">
       {/* ── Panel izquierdo — crema, marca ── */}
       <div
-        className="hidden md:flex flex-col justify-between w-[800px] flex-shrink-0 px-14 py-10"
-        style={{ backgroundColor: '#faf6ec' }}
+        className="hidden md:flex flex-col justify-center w-[46%] max-w-[620px] flex-shrink-0 px-14"
+        style={{ backgroundColor: '#faf6ec', borderTop: '3px solid #7a1f2c' }}
       >
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo-mark.svg"
-            alt=""
-            className="h-10 w-auto"
-            style={{ filter: 'none' }}
-          />
-          <span
+        <div>
+          <img src="/logo.svg" alt="" style={{ height: 72 }} className="w-auto mb-6" />
+
+          <p
             className="text-xl font-bold text-[#1f1a17]"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             Los Lirios SA
-          </span>
-        </div>
+          </p>
 
-        <div>
           <p
-            className="text-[22px] leading-[30px] font-semibold text-[#1f1a17]"
+            className="text-[22px] leading-[30px] font-semibold text-[#1f1a17] mt-4"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             Gestión integral de la finca
@@ -83,11 +78,13 @@ export default function LoginPage() {
           <p className="text-sm text-[#5a544c] mt-2">
             Producción, riego, finanzas y campaña en un solo lugar.
           </p>
-        </div>
 
-        <p className="text-[11px] font-bold uppercase tracking-widest text-[#a09584]">
-          Los Lirios SA · Desde 1991
-        </p>
+          <div className="w-7 h-0.5 mt-6" style={{ backgroundColor: '#c89a3a' }} />
+
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[#a09584] mt-6">
+            Los Lirios SA · Desde 1991
+          </p>
+        </div>
       </div>
 
       {/* ── Panel derecho — blanco, formulario ── */}
@@ -95,7 +92,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* logo mobile */}
           <div className="md:hidden mb-8 flex items-center gap-3">
-            <img src="/logo-mark.svg" alt="" className="h-10 w-auto" />
+            <img src="/logo-reducido.svg" alt="" className="h-10 w-auto" />
             <span className="text-xl font-bold text-[#1f1a17]" style={{ fontFamily: 'var(--font-display)' }}>
               Los Lirios SA
             </span>
@@ -122,7 +119,7 @@ export default function LoginPage() {
                 autoComplete="username"
                 autoCapitalize="none"
                 placeholder="nombre.apellido"
-                className="w-full rounded-[10px] border border-[#fbfaf6] px-3.5 py-2.5 text-sm
+                className="w-full rounded-[10px] border border-[#e2dbcc] px-3.5 py-2.5 text-sm
                            text-[#1f1a17] placeholder:text-[#a09584] hover:border-[#a09584]
                            focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-[#7a1f2c]
                            transition-colors bg-white"
@@ -141,7 +138,7 @@ export default function LoginPage() {
                   type={showPwd ? 'text' : 'password'}
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  className="w-full rounded-[10px] border border-[#fbfaf6] px-3.5 py-2.5 pr-10 text-sm
+                  className="w-full rounded-[10px] border border-[#e2dbcc] px-3.5 py-2.5 pr-10 text-sm
                              text-[#1f1a17] placeholder:text-[#a09584] hover:border-[#a09584]
                              focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-[#7a1f2c]
                              transition-colors bg-white"
@@ -152,7 +149,7 @@ export default function LoginPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a09584] hover:text-[#5a544c] transition-colors"
                   onClick={() => setShowPwd((v) => !v)}
                 >
-                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {errors.password && <p className="mt-1.5 text-xs text-[#a3293a]">{errors.password.message}</p>}
@@ -163,7 +160,7 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-[#fbfaf6] accent-[#7a1f2c] cursor-pointer"
+                  className="w-4 h-4 rounded border-[#e2dbcc] accent-[#7a1f2c] cursor-pointer"
                   {...register('recordarme')}
                 />
                 <span className="text-sm text-[#5a544c]">Recordarme</span>
@@ -173,11 +170,7 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {error && (
-              <div className="rounded-[10px] bg-red-50 border border-red-200 px-4 py-3 text-sm text-[#a3293a]">
-                {error}
-              </div>
-            )}
+            {error && <FormError description={error} />}
 
             <button
               type="submit"

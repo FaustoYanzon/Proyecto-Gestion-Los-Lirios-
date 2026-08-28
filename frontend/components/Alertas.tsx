@@ -155,17 +155,22 @@ function AlertasModal({
           {alertas.map((a) => (
             <div
               key={a.id}
-              className="flex items-start gap-2 rounded-lg border border-gray-100 px-3 py-2.5"
+              className="flex items-start gap-2 rounded-lg border border-[#e2dbcc] px-3 py-2.5"
             >
               <span
                 className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]"
                 style={{ backgroundColor: a.nivel === 'warn' ? '#a3293a' : '#3d6b86' }}
               />
-              <span
-                className="text-sm flex-1"
-                style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}
-              >
-                {a.mensaje}
+              <span className="text-sm flex-1">
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wide mr-1.5"
+                  style={{ color: a.nivel === 'warn' ? '#a3293a' : '#8a6a1f' }}
+                >
+                  {a.nivel === 'warn' ? 'URGENTE' : 'PENDIENTE'}
+                </span>
+                <span style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}>
+                  {a.mensaje}
+                </span>
               </span>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
@@ -180,7 +185,7 @@ function AlertasModal({
                   onClick={() => onDescartar(a.id, 'cancelada')}
                   disabled={descartandoId === a.id}
                   title="Cancelar"
-                  className="p-1.5 rounded-md text-[#a09584] hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                  className="p-1.5 rounded-md text-[#a09584] hover:bg-[#fbfaf6] disabled:opacity-50 transition-colors"
                 >
                   <X size={15} />
                 </button>
@@ -256,7 +261,7 @@ export default function Alertas() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="bg-white rounded-[10px] border border-[#fbfaf6] p-4 flex-shrink-0 w-full text-left hover:border-[#e6c8cd] transition-colors"
+        className="bg-white rounded-[10px] border border-[#e2dbcc] p-4 flex-shrink-0 w-full text-left hover:border-[#e6c8cd] transition-colors"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
       >
         <div className="flex items-center gap-2 mb-3">
@@ -275,13 +280,21 @@ export default function Alertas() {
                   className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-[5px]"
                   style={{ backgroundColor: a.nivel === 'warn' ? '#a3293a' : '#3d6b86' }}
                 />
-                <span style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}>
-                  {a.mensaje}
+                <span>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wide mr-1.5"
+                    style={{ color: a.nivel === 'warn' ? '#a3293a' : '#8a6a1f' }}
+                  >
+                    {a.nivel === 'warn' ? 'URGENTE' : 'PENDIENTE'}
+                  </span>
+                  <span style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}>
+                    {a.mensaje}
+                  </span>
                 </span>
               </div>
             ))}
             {alertasVisibles.length > resumen.length && (
-              <p className="text-xs text-[#a09584] pt-1">
+              <p className="text-[11px] font-semibold text-[#7a1f2c] pt-1">
                 +{alertasVisibles.length - resumen.length} más — ver todas
               </p>
             )}

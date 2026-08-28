@@ -15,6 +15,7 @@ export const colors = {
   blanco:   '#ffffff',
   hueso:    '#fbfaf6',
   crema:    '#faf6ec',
+  borde:    '#e2dbcc',
   oro:      '#c89a3a',
   verdeCampo: '#3f5c3a',
   tierra:   '#8a5a2b',
@@ -30,6 +31,21 @@ export const parcelaColors = {
 } as const;
 
 export type TipoParcela = keyof typeof parcelaColors;
+
+// Espejo de frontend/lib/theme.ts — estados de campaña/fenología, colores
+// aproximados (refinar con el agrónomo).
+export const fenologiaColors: Record<string, string> = {
+  reposo:           colors.ink60,
+  lloro:            colors.cielo,
+  brotacion:        colors.verdeCampo,
+  hojas_extendidas: '#5a8755',
+  floracion:        '#a6c97b',
+  cuaje:            colors.oro,
+  envero:           '#b9663f',
+  maduracion:       colors.burdeos[500],
+  cosecha:          colors.burdeos[700],
+  post_cosecha:     colors.tierra,
+};
 
 export const parcelaLabels: Record<TipoParcela, string> = {
   parral:  'Parrales',
@@ -99,6 +115,14 @@ export const FINCA_COORDS = {
 // ============================================================
 // Helpers
 // ============================================================
+// #rrggbb + alpha (0-1) -> rgba(...) — RN no tiene color-mix() de CSS.
+export function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function getInitials(fullName?: string | null): string {
   if (!fullName) return '?';
   const parts = fullName.trim().split(/\s+/).filter(Boolean);

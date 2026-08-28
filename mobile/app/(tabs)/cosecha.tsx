@@ -12,7 +12,7 @@ import {
   FlatList,
   TextInput,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { getCosechas, createCosecha, deleteCosecha } from '../../lib/api'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import type { RegistroCosecha, RegistroCosechaCreate, DestinoCosecha, CultivoCosecha, TipoEnvase } from '../../lib/types'
@@ -215,7 +215,7 @@ export default function CosechaScreen() {
         <ActivityIndicator size="large" color="#16a34a" />
       ) : (
         <>
-          <Ionicons name="basket-outline" size={48} color="#d1d5db" />
+          <ICONS.cosecha size={48} color="#d1d5db" strokeWidth={ICON_STROKE} />
           <Text style={styles.emptyTitle}>Sin registros</Text>
           <Text style={styles.emptySubtitle}>Campaña {TEMPORADA}/{TEMPORADA + 1}</Text>
         </>
@@ -242,7 +242,7 @@ export default function CosechaScreen() {
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={openModal}>
-        <Ionicons name="add" size={28} color="#fff" />
+        <ICONS.agregar size={28} color="#fff" strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
 
       {/* Create modal */}
@@ -252,7 +252,7 @@ export default function CosechaScreen() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Nuevo Remito</Text>
             <TouchableOpacity onPress={closeModal} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#374151" />
+              <ICONS.cerrar size={20} color="#374151" strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
 

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { useFocusEffect } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../lib/icons'
 import { getPendingCount, getFailedCount } from '../lib/offlineQueue'
 import { colors } from '../lib/theme'
 
@@ -31,7 +31,7 @@ export function OfflineQueueBanner() {
     <View style={styles.container}>
       {pending > 0 && (
         <View style={styles.row}>
-          <Ionicons name="cloud-upload-outline" size={16} color={colors.burdeos[600]} />
+          <ICONS.subir size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
           <Text style={styles.text}>
             {pending} {pending === 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar
           </Text>
@@ -39,7 +39,7 @@ export function OfflineQueueBanner() {
       )}
       {failed > 0 && (
         <View style={styles.row}>
-          <Ionicons name="alert-circle-outline" size={16} color={colors.burdeos[600]} />
+          <ICONS.aviso size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
           <Text style={styles.text}>
             {failed} {failed === 1 ? 'registro necesita' : 'registros necesitan'} atención
           </Text>

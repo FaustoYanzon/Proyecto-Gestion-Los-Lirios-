@@ -8,13 +8,13 @@ import {
   RefreshControl,
 } from 'react-native'
 import { useRouter, useFocusEffect } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE, type IconKey } from '../../lib/icons'
 import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
 import api, { getRiegosEnCurso } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
-import { colors, fonts, FINCA_COORDS } from '../../lib/theme'
+import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
 import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
 import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
 
@@ -31,17 +31,18 @@ function ActionButton({
   label, icon, bg, onPress,
 }: {
   label: string
-  icon: React.ComponentProps<typeof Ionicons>['name']
+  icon: IconKey
   bg: string
   onPress: () => void
 }) {
+  const Icon = ICONS[icon]
   return (
     <TouchableOpacity
       style={[styles.actionBtn, { backgroundColor: bg }]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <Ionicons name={icon} size={22} color={colors.blanco} />
+      <Icon size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
       <Text style={styles.actionBtnText}>{label}</Text>
     </TouchableOpacity>
   )
@@ -117,15 +118,15 @@ function wmoDescriptionMini(code: number): string {
   return 'Variable'
 }
 
-function wmoIconNameMini(code: number): keyof typeof Ionicons.glyphMap {
-  if (code === 0) return 'sunny-outline'
-  if (code <= 2) return 'partly-sunny-outline'
-  if (code === 3) return 'cloudy-outline'
-  if (code <= 49) return 'cloud-outline'
-  if (code <= 69 || code === 80 || code === 81 || code === 82) return 'rainy-outline'
-  if (code <= 79) return 'snow-outline'
-  if (code <= 99) return 'thunderstorm-outline'
-  return 'cloud-outline'
+function wmoIconNameMini(code: number): IconKey {
+  if (code === 0) return 'clima'
+  if (code <= 2) return 'nubesol'
+  if (code === 3) return 'nublado'
+  if (code <= 49) return 'nublado'
+  if (code <= 69 || code === 80 || code === 81 || code === 82) return 'lluvia'
+  if (code <= 79) return 'nieve'
+  if (code <= 99) return 'tormenta'
+  return 'nublado'
 }
 
 // Grados → punto cardinal abreviado (N/NE/E/SE/S/SO/O/NO)
@@ -174,11 +175,12 @@ function ClimateCardMini() {
   const humidity = Math.round(clima.current.relative_humidity_2m)
   const uv = clima.daily.uv_index_max[0] != null ? Math.round(clima.daily.uv_index_max[0]) : null
   const uvInfo = uv !== null ? uvLevelMini(uv) : null
+  const WeatherIcon = ICONS[wmoIconNameMini(clima.current.weather_code)]
 
   return (
     <View style={styles.climateCard}>
       <View style={styles.climateHeader}>
-        <Ionicons name={wmoIconNameMini(clima.current.weather_code)} size={16} color={colors.cielo} />
+        <WeatherIcon size={16} color={colors.cielo} strokeWidth={ICON_STROKE} />
         <Text style={styles.climateHeaderText}>
           CLIMA — {(FINCA_COORDS[finca as keyof typeof FINCA_COORDS]?.label ?? finca).toUpperCase()}
         </Text>
@@ -199,17 +201,17 @@ function ClimateCardMini() {
 
       <View style={styles.climateStatsRow}>
         <View style={styles.climateStatCol}>
-          <Ionicons name="speedometer-outline" size={15} color={colors.ink60} />
+          <ICONS.viento size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.climateStatValue}>{wind} km/h</Text>
           <Text style={styles.climateStatLabel}>{windDir}</Text>
         </View>
         <View style={styles.climateStatCol}>
-          <Ionicons name="water-outline" size={15} color={colors.ink60} />
+          <ICONS.humedad size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.climateStatValue}>{humidity}%</Text>
           <Text style={styles.climateStatLabel}>Humedad</Text>
         </View>
         <View style={styles.climateStatCol}>
-          <Ionicons name="flash-outline" size={15} color={colors.ink60} />
+          <ICONS.uv size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={[styles.climateStatValue, uvInfo && { color: uvInfo.color }]}>UV {uv}</Text>
           <Text style={styles.climateStatLabel}>{uvInfo?.label}</Text>
         </View>
@@ -237,6 +239,7 @@ function FenologiaNotificaciones({
   if (fases.length === 0) return null
 
   const f = fases[idx % fases.length]
+  const faseColor = fenologiaColors[f.fase] ?? colors.ink60
 
   return (
     <View style={{ marginBottom: 24 }}>
@@ -244,14 +247,14 @@ function FenologiaNotificaciones({
       <View style={styles.fenologiaCard}>
         <View style={styles.fenologiaHeader}>
           <Text style={styles.fenologiaVariedad}>{VARIEDAD_LABELS[f.variedad] ?? f.variedad}</Text>
-          <View style={styles.fenologiaBadge}>
-            <Text style={styles.fenologiaBadgeText}>{f.fase_label}</Text>
+          <View style={[styles.fenologiaBadge, { backgroundColor: withAlpha(faseColor, 0.12) }]}>
+            <Text style={[styles.fenologiaBadgeText, { color: faseColor }]}>{f.fase_label}</Text>
           </View>
         </View>
         <Text style={styles.fenologiaFuente}>
           {f.fuente === 'manual'
-            ? `✎ Confirmado a mano${f.fecha_confirmacion ? ` · ${f.fecha_confirmacion.split('-').reverse().join('/')}` : ''}`
-            : '✦ Estimado automático'}
+            ? `Confirmado a mano${f.fecha_confirmacion ? ` · ${f.fecha_confirmacion.split('-').reverse().join('/')}` : ''}`
+            : 'Estimado según fecha de campaña'}
         </Text>
         {f.tareas_recomendadas.slice(0, 2).map((t, i) => (
           <Text key={i} style={styles.fenologiaTarea}>• {t}</Text>
@@ -375,7 +378,7 @@ export default function InicioScreen() {
       <View style={styles.actionsGrid}>
         <ActionButton
           label="Ciclo Campaña"
-          icon="leaf-outline"
+          icon="campana"
           bg={colors.burdeos[600]}
           onPress={() => router.push('/(tabs)/campana')}
         />
@@ -461,10 +464,10 @@ const styles = StyleSheet.create({
   },
   fenologiaVariedad: { fontSize: 14, fontWeight: '700', color: colors.ink },
   fenologiaBadge: {
-    backgroundColor: '#f3e8ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
   },
-  fenologiaBadgeText: { fontSize: 10, fontWeight: '700', color: '#7c3aed', textTransform: 'uppercase' },
-  fenologiaFuente: { fontSize: 10, color: colors.niebla, marginBottom: 6 },
+  fenologiaBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  fenologiaFuente: { fontSize: 13, color: colors.ink60, marginBottom: 6 },
   fenologiaTarea: { fontSize: 12, color: colors.ink60, lineHeight: 17 },
   fenologiaContador: { fontSize: 10, color: colors.niebla, marginTop: 6, textAlign: 'right' },
   sectionLabel: {

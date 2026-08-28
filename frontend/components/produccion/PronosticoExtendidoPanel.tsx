@@ -34,7 +34,7 @@ export default function PronosticoExtendidoPanel() {
             const precip = data.daily.precipitation_sum[i]
             const precipProb = data.daily.precipitation_probability_max[i]
             return (
-              <div key={dia} className="rounded-[10px] border border-[#fbfaf6] p-3 text-center" style={{ backgroundColor: '#faf6ec' }}>
+              <div key={dia} className="rounded-[10px] border border-[#e2dbcc] p-3 text-center" style={{ backgroundColor: '#faf6ec' }}>
                 <p className="text-xs font-medium text-[#5a544c]">{fmtDia(dia, i)}</p>
                 <Icon size={20} strokeWidth={1.75} color="#3d6b86" className="mx-auto my-1.5" />
                 <p className="text-[11px] text-[#a09584] mb-1">{wmoDescription(data.daily.weather_code[i])}</p>

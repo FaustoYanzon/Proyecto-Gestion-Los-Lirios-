@@ -23,6 +23,7 @@
   --color-blanco:      #ffffff;
   --color-hueso:       #fbfaf6;
   --color-crema:       #faf6ec;
+  --color-borde:       #e2dbcc;
 
   /* Domain */
   --color-oro:         #c89a3a;
@@ -75,6 +76,7 @@
   --color-muted:         var(--color-ink-60);
   --color-subtle:        var(--color-hueso);
   --color-cream:         var(--color-crema);
+  --color-border:        var(--color-borde);
 
   --color-primary:       var(--color-burdeos-600);
   --color-primary-hover: var(--color-burdeos-700);
@@ -186,9 +188,9 @@ a:hover { text-decoration: underline; }
 .btn--secondary {
   background-color: var(--color-blanco);
   color: var(--color-ink);
-  border-color: var(--color-ink);
+  border-color: var(--color-borde);
 }
-.btn--secondary:hover { background-color: var(--color-hueso); }
+.btn--secondary:hover { background-color: var(--color-hueso); border-color: var(--color-niebla); }
 
 .btn--ghost {
   background-color: transparent;
@@ -246,7 +248,7 @@ a:hover { text-decoration: underline; }
   width: 100%;
   height: 40px;
   padding: 0 14px;
-  border: 1.2px solid var(--color-hueso);
+  border: 1.2px solid var(--color-borde);
   border-radius: var(--radius-md);
   background-color: var(--color-blanco);
   font-family: var(--font-sans);
@@ -254,8 +256,20 @@ a:hover { text-decoration: underline; }
   color: var(--color-ink);
 }
 .input:hover { border-color: var(--color-niebla); }
-.input:focus { outline: none; border-color: var(--color-burdeos-600); box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-burdeos-600) 18%, transparent); }
+.input:focus { outline: none; border-color: var(--color-burdeos-600); box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-burdeos-600) 12%, transparent); }
 .input[data-invalid="true"] { border-color: var(--color-sangre); }
+
+/* Neutraliza el autofill de Chrome (fondo celeste del sistema pisando la
+   paleta) — se ve en el primer campo que el usuario completa, login incluido. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-blanco) inset !important;
+  -webkit-text-fill-color: var(--color-ink) !important;
+  caret-color: var(--color-ink);
+  transition: background-color 9999s ease-out 0s;
+}
 
 .label {
   display: block;

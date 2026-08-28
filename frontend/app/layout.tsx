@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.ico' },
-      { url: '/logo-mark.svg', type: 'image/svg+xml' },
+      { url: '/logo-glifo.svg', type: 'image/svg+xml' },
     ],
   },
 };

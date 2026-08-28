@@ -11,7 +11,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import api, { getRiegosEnCurso, getValvulasReales, iniciarRiego, terminarRiego } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
@@ -71,7 +71,7 @@ function StepIndicator({
           <View key={label} style={si.item}>
             <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
               {done ? (
-                <Ionicons name="checkmark" size={10} color={colors.blanco} />
+                <ICONS.check size={10} color={colors.blanco} strokeWidth={ICON_STROKE} />
               ) : (
                 <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
               )}
@@ -89,7 +89,7 @@ function StepIndicator({
         disabled={disabled}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name="close" size={18} color={colors.ink60} />
+        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
     </View>
   )
@@ -175,17 +175,17 @@ function DatePickerModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Seleccionar fecha</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={colors.ink} />
+            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
         <View style={{ padding: 16 }}>
           <View style={dp.navRow}>
             <TouchableOpacity onPress={prevMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-back" size={18} color={colors.ink} />
+              <ICONS.atras size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
             <Text style={dp.monthLabel}>{MONTH_NAMES[calMonth]} {calYear}</Text>
             <TouchableOpacity onPress={nextMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-forward" size={18} color={colors.ink} />
+              <ICONS.avance size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <View style={dp.dayNamesRow}>
@@ -270,7 +270,7 @@ function TimePickerModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Seleccionar hora</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={colors.ink} />
+            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
         <View style={{ padding: 16 }}>
@@ -310,7 +310,7 @@ function TimePickerModal({
               setM(String(Math.floor(parseInt(now[1], 10) / 5) * 5).padStart(2, '0'))
             }}
           >
-            <Ionicons name="time-outline" size={14} color={colors.ink60} />
+            <ICONS.hora size={14} color={colors.ink60} strokeWidth={ICON_STROKE} />
             <Text style={tp.nowBtnText}>Ahora</Text>
           </TouchableOpacity>
         </View>
@@ -474,11 +474,8 @@ function StepUbicacion({
                   onPress={() => toggleValvula(v.nombre)}
                   activeOpacity={0.75}
                 >
-                  <Ionicons
-                    name="water"
-                    size={14}
-                    color={valvulas.has(v.nombre) ? colors.blanco : colors.cielo}
-                  />
+                  <ICONS.riego size={14}
+                    color={valvulas.has(v.nombre) ? colors.blanco : colors.cielo} strokeWidth={ICON_STROKE} />
                   <Text style={[styles.valvulaChipText, valvulas.has(v.nombre) && styles.valvulaChipTextActive]}>
                     Válvula {v.nombre}
                   </Text>
@@ -519,25 +516,25 @@ function StepModo({
           onPress={onCancelar}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="close" size={18} color={colors.ink60} />
+          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
       </View>
       <View style={{ padding: 16, gap: 12 }}>
         <TouchableOpacity style={styles.modoCard} onPress={onElegirRetroactivo} activeOpacity={0.8}>
-          <Ionicons name="calendar-outline" size={26} color={colors.cielo} />
+          <ICONS.fecha size={26} color={colors.cielo} strokeWidth={ICON_STROKE} />
           <View style={{ flex: 1 }}>
             <Text style={styles.modoCardTitle}>Ya se hizo</Text>
             <Text style={styles.modoCardSub}>Cargar un riego que ya terminó, con inicio y fin conocidos.</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.niebla} />
+          <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.modoCard} onPress={onElegirIniciar} activeOpacity={0.8}>
-          <Ionicons name="play-circle-outline" size={26} color={colors.cielo} />
+          <ICONS.iniciar size={26} color={colors.cielo} strokeWidth={ICON_STROKE} />
           <View style={{ flex: 1 }}>
             <Text style={styles.modoCardTitle}>Iniciar ahora</Text>
             <Text style={styles.modoCardSub}>Arranca el riego ya mismo, sin hora de fin — lo cerrás después.</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.niebla} />
+          <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
       </View>
     </View>
@@ -593,11 +590,11 @@ function StepHorario({
             onConfirm={setHoraInicio} onClose={() => setTimeModal(null)}
           />
           <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setDateModal('inicio')}>
-            <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+            <ICONS.fecha size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
             <Text style={styles.dateBtnText}>{formatDateDisplay(fechaInicio)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setTimeModal('inicio')}>
-            <Ionicons name="time-outline" size={16} color={colors.ink60} />
+            <ICONS.hora size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
             <Text style={styles.dateBtnText}>{horaInicio || 'Hora'}</Text>
           </TouchableOpacity>
         </View>
@@ -613,18 +610,18 @@ function StepHorario({
             onConfirm={setHoraFin} onClose={() => setTimeModal(null)}
           />
           <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setDateModal('fin')}>
-            <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+            <ICONS.fecha size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
             <Text style={styles.dateBtnText}>{formatDateDisplay(fechaFin)}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.dateBtn, { flex: 1 }]} onPress={() => setTimeModal('fin')}>
-            <Ionicons name="time-outline" size={16} color={colors.ink60} />
+            <ICONS.hora size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
             <Text style={styles.dateBtnText}>{horaFin || 'Hora'}</Text>
           </TouchableOpacity>
         </View>
 
         {preview ? (
           <View style={styles.previewCard}>
-            <Ionicons name="time" size={16} color={colors.cielo} />
+            <ICONS.hora size={16} color={colors.cielo} strokeWidth={ICON_STROKE} />
             <Text style={styles.previewText}>Duración: {preview.horas} h</Text>
           </View>
         ) : (horaInicio && horaFin) ? (
@@ -909,7 +906,7 @@ function StepConfirmar({
               <ActivityIndicator color={colors.blanco} size="small" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
                 <Text style={styles.primaryBtnText}>Confirmar</Text>
               </>
             )}
@@ -1006,12 +1003,12 @@ function StepIniciarConfirmar({
           disabled={loading}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="close" size={18} color={colors.ink60} />
+          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={styles.previewCard}>
-          <Ionicons name="play" size={16} color={colors.cielo} />
+          <ICONS.iniciar size={16} color={colors.cielo} strokeWidth={ICON_STROKE} />
           <Text style={styles.previewText}>Arranca ahora — se cierra después desde &quot;En curso&quot;</Text>
         </View>
 
@@ -1042,7 +1039,7 @@ function StepIniciarConfirmar({
               <ActivityIndicator color={colors.blanco} size="small" />
             ) : (
               <>
-                <Ionicons name="play" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <ICONS.iniciar size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
                 <Text style={styles.primaryBtnText}>Iniciar riego</Text>
               </>
             )}
@@ -1116,7 +1113,7 @@ function RecentRiegos({
 
       {riegos.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="water-outline" size={36} color={colors.hueso} />
+          <ICONS.riego size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
           <Text style={styles.emptyStateTitle}>Sin riegos recientes</Text>
         </View>
       ) : (
@@ -1413,7 +1410,7 @@ export default function RiegoScreen() {
     <View style={{ flex: 1 }}>
       {toast && (
         <View style={styles.toast} pointerEvents="none">
-          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <ICONS.completado size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
@@ -1422,7 +1419,7 @@ export default function RiegoScreen() {
         onPress={startWizard}
         activeOpacity={0.85}
       >
-        <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+        <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
         <Text style={styles.newBtnText}>Registrar riego</Text>
       </TouchableOpacity>
       <View style={{ marginHorizontal: 16 }}>
@@ -1519,7 +1516,7 @@ const styles = StyleSheet.create({
 
   input: {
     backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14, height: 48,
   },
 

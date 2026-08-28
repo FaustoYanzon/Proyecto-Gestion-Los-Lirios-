@@ -1,0 +1,9 @@
+<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" width="80" height="100" role="img" aria-label="Los Lirios SA">
+  <path d="M26 40 C16 30 13 17 20 6 C28 15 31 28 30 40 Z" fill="#c89a3a"></path>
+  <path d="M30 40 C30 26 36 13 46 6 C45 20 40 32 33 42 Z" fill="#c89a3a"></path>
+  <path d="M26 43 C15 41 6 34 3 23 C14 25 22 32 28 40 Z" fill="#c89a3a"></path>
+  <path d="M29 45 C34 54 42 58 50 59" fill="none" stroke="#c89a3a" stroke-width="3" stroke-linecap="round"></path>
+  <circle cx="42" cy="64" r="8" fill="#5a1320"></circle><circle cx="58" cy="64" r="8" fill="#5a1320"></circle>
+  <circle cx="35" cy="78" r="8" fill="#5a1320"></circle><circle cx="50" cy="79" r="8" fill="#5a1320"></circle><circle cx="65" cy="78" r="8" fill="#5a1320"></circle>
+  <circle cx="43" cy="91" r="8" fill="#5a1320"></circle><circle cx="58" cy="91" r="8" fill="#5a1320"></circle>
+</svg>

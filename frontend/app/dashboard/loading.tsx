@@ -15,7 +15,7 @@ export default function DashboardLoading() {
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
-            className="bg-white rounded-[10px] border border-[#fbfaf6] p-4"
+            className="bg-white rounded-[10px] border border-[#e2dbcc] p-4"
             style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
           >
             <div className="h-3 w-20 bg-[#fbfaf6] rounded" />
@@ -26,7 +26,7 @@ export default function DashboardLoading() {
 
       {/* Main panel */}
       <div
-        className="bg-white rounded-[10px] border border-[#fbfaf6] p-4"
+        className="bg-white rounded-[10px] border border-[#e2dbcc] p-4"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)', minHeight: 320 }}
       >
         <div className="h-3 w-48 bg-[#fbfaf6] rounded" />

@@ -12,7 +12,7 @@ import {
   SectionList,
   Modal,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
@@ -60,7 +60,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel
           <View key={label} style={si.item}>
             <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
               {done ? (
-                <Ionicons name="checkmark" size={10} color={colors.blanco} />
+                <ICONS.check size={10} color={colors.blanco} strokeWidth={ICON_STROKE} />
               ) : (
                 <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
               )}
@@ -77,7 +77,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel
         onPress={onCancel}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name="close" size={18} color={colors.ink60} />
+        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
     </View>
   )
@@ -162,17 +162,17 @@ function DatePickerModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Seleccionar fecha</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={colors.ink} />
+            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
         <View style={{ padding: 16 }}>
           <View style={dp.navRow}>
             <TouchableOpacity onPress={prevMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-back" size={18} color={colors.ink} />
+              <ICONS.atras size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
             <Text style={dp.monthLabel}>{MONTH_NAMES[calMonth]} {calYear}</Text>
             <TouchableOpacity onPress={nextMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-forward" size={18} color={colors.ink} />
+              <ICONS.avance size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <View style={dp.dayNamesRow}>
@@ -289,13 +289,13 @@ function StepTareaFecha({
             activeOpacity={0.75}
           >
             <Text style={[styles.taskChipText, { color: colors.ink60 }]}>Otra</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.ink60} style={{ marginLeft: 4 }} />
+            <ICONS.desplegar size={13} color={colors.ink60} style={{ marginLeft: 4 }} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
 
         {selTarea ? (
           <View style={styles.selectedTag}>
-            <Ionicons name="checkmark-circle" size={16} color={colors.burdeos[600]} />
+            <ICONS.completado size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
             <Text style={styles.selectedTagText}>
               {selTarea}
               {selClasificacion ? ` · ${TEMPORADAS.find((t) => t.value === selClasificacion)?.label}` : ''}
@@ -311,9 +311,9 @@ function StepTareaFecha({
           onClose={() => setDateVisible(false)}
         />
         <TouchableOpacity style={styles.dateBtn} onPress={() => setDateVisible(true)}>
-          <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+          <ICONS.fecha size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.dateBtnText}>{formatDateDisplay(fecha)}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.niebla} />
+          <ICONS.desplegar size={14} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -332,7 +332,7 @@ function StepTareaFecha({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Todas las tareas</Text>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
-              <Ionicons name="close" size={20} color={colors.ink} />
+              <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <SectionList
@@ -345,7 +345,7 @@ function StepTareaFecha({
                 activeOpacity={0.7}
               >
                 <Text style={[styles.listItemTitle, { color: colors.burdeos[600] }]}>+ Nueva tarea...</Text>
-                <Ionicons name="add-circle-outline" size={18} color={colors.burdeos[600]} />
+                <ICONS.agregar size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
             )}
             renderSectionHeader={({ section }) => (
@@ -360,7 +360,7 @@ function StepTareaFecha({
                 activeOpacity={0.7}
               >
                 <Text style={styles.listItemTitle}>{item}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.niebla} />
+                <ICONS.avance size={16} color={colors.niebla} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -373,7 +373,7 @@ function StepTareaFecha({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Nueva tarea</Text>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setNuevaModalVisible(false)}>
-              <Ionicons name="close" size={20} color={colors.ink} />
+              <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <View style={{ padding: 16 }}>
@@ -483,9 +483,9 @@ function StepDetalle({
 
         <Text style={styles.fieldLabel}>UBICACIÓN</Text>
         <TouchableOpacity style={styles.dateBtn} onPress={() => setUbicacionModalVisible(true)}>
-          <Ionicons name="location-outline" size={16} color={colors.ink60} />
+          <ICONS.ubicacion size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.dateBtnText}>{parcela ? parcela.nombre : 'Sin ubicación específica'}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.niebla} />
+          <ICONS.desplegar size={14} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
 
         <Text style={[styles.fieldLabel, { marginTop: 20 }]}>UNIDAD</Text>
@@ -508,12 +508,9 @@ function StepDetalle({
             <Text style={[styles.unidadChipText, unidadEsOtra && styles.unidadChipTextActive]}>
               {unidadEsOtra ? UNIDAD_LABELS[unidad] : 'Otros'}
             </Text>
-            <Ionicons
-              name="chevron-down"
-              size={13}
+            <ICONS.desplegar size={13}
               color={unidadEsOtra ? colors.blanco : colors.ink60}
-              style={{ marginLeft: 4 }}
-            />
+              style={{ marginLeft: 4 }} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
 
@@ -554,7 +551,7 @@ function StepDetalle({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Ubicación</Text>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setUbicacionModalVisible(false)}>
-              <Ionicons name="close" size={20} color={colors.ink} />
+              <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <View style={{ padding: 16, paddingBottom: 8 }}>
@@ -577,7 +574,7 @@ function StepDetalle({
                 activeOpacity={0.7}
               >
                 <Text style={[styles.listItemTitle, { color: colors.ink60 }]}>Sin ubicación específica</Text>
-                {!parcela && <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />}
+                {!parcela && <ICONS.check size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />}
               </TouchableOpacity>
             )}
             renderSectionHeader={({ section }) => (
@@ -598,7 +595,7 @@ function StepDetalle({
                   )}
                 </View>
                 {parcela?.id === item.id && (
-                  <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />
+                  <ICONS.check size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
                 )}
               </TouchableOpacity>
             )}
@@ -613,7 +610,7 @@ function StepDetalle({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Otras unidades</Text>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setUnidadModalVisible(false)}>
-              <Ionicons name="close" size={20} color={colors.ink} />
+              <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           {UNIDADES_OTRAS.map((u) => (
@@ -624,7 +621,7 @@ function StepDetalle({
               activeOpacity={0.7}
             >
               <Text style={styles.listItemTitle}>{UNIDAD_LABELS[u]}</Text>
-              {unidad === u && <Ionicons name="checkmark" size={16} color={colors.burdeos[600]} />}
+              {unidad === u && <ICONS.check size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />}
             </TouchableOpacity>
           ))}
         </View>
@@ -755,14 +752,14 @@ function StepTrabajadores({
             </View>
             {workers.length > 1 && (
               <TouchableOpacity style={styles.removeWorkerBtn} onPress={() => removeWorker(idx)}>
-                <Ionicons name="close-circle" size={20} color={colors.niebla} />
+                <ICONS.cancelar size={20} color={colors.niebla} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
             )}
           </View>
         ))}
 
         <TouchableOpacity style={styles.addWorkerBtn} onPress={addWorker}>
-          <Ionicons name="add-circle-outline" size={18} color={colors.burdeos[600]} />
+          <ICONS.agregar size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
           <Text style={styles.addWorkerBtnText}>Agregar trabajador</Text>
         </TouchableOpacity>
 
@@ -946,7 +943,7 @@ function StepConfirmar({
               <ActivityIndicator color={colors.blanco} size="small" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
                 <Text style={styles.primaryBtnText}>Confirmar</Text>
               </>
             )}
@@ -980,7 +977,7 @@ function RecentList({ registros, onRefresh }: { registros: RegistroTrabajo[]; on
   if (registros.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="clipboard-outline" size={36} color={colors.hueso} />
+        <ICONS.tarea size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
         <Text style={styles.emptyStateTitle}>Sin registros recientes</Text>
       </View>
     )
@@ -997,7 +994,7 @@ function RecentList({ registros, onRefresh }: { registros: RegistroTrabajo[]; on
             <Text style={styles.registroMonto}>{formatMonto(r.monto_total)}</Text>
           </View>
           <TouchableOpacity onPress={() => handleDelete(r.id, r.trabajador_nombre)} style={styles.deleteBtn}>
-            <Ionicons name="trash-outline" size={17} color="#ef4444" />
+            <ICONS.eliminar size={17} color="#ef4444" strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
       ))}
@@ -1141,7 +1138,7 @@ export default function TareasScreen() {
     <View style={{ flex: 1 }}>
       {toast && (
         <View style={styles.toast} pointerEvents="none">
-          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <ICONS.completado size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
@@ -1153,7 +1150,7 @@ export default function TareasScreen() {
         }
       >
         <TouchableOpacity style={styles.newBtn} onPress={() => setStep('tarea_fecha')} activeOpacity={0.85}>
-          <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+          <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.newBtnText}>Nueva carga de tareas</Text>
         </TouchableOpacity>
 
@@ -1223,7 +1220,7 @@ const styles = StyleSheet.create({
   // parcela list (modal de ubicación)
   searchInput: {
     height: 46, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 8,
   },
   parcelaItemSub: { fontSize: 12, color: colors.ink60, marginTop: 1, textTransform: 'capitalize' },
@@ -1239,7 +1236,7 @@ const styles = StyleSheet.create({
   workerBottomRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   cantidadInput: {
     height: 44, minWidth: 72, backgroundColor: colors.hueso, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.hueso, textAlign: 'center',
+    borderWidth: 1.5, borderColor: colors.borde, textAlign: 'center',
     fontSize: 20, fontWeight: '800', color: colors.ink, paddingHorizontal: 8,
   },
   workerAmountBox: { flex: 1, alignItems: 'flex-end' },
@@ -1290,7 +1287,7 @@ const styles = StyleSheet.create({
   dateBtnText: { flex: 1, fontSize: 15, color: colors.ink, fontWeight: '500' },
   input: {
     height: 48, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1, borderColor: colors.borde,
     paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14,
   },
 

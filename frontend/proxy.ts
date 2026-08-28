@@ -7,6 +7,11 @@ import type { NextRequest } from 'next/server'
 const unauthOnlyRoutes = ['/login']
 const alwaysPublicRoutes = ['/privacy']
 
+// Cualquier archivo estático de public/ (logos, favicons, imágenes) tiene que
+// servirse siempre, sin cookie de sesión — si no, un <img src="/logo.svg">
+// en una pantalla pública (login) recibe el 307 a /login en vez del archivo.
+const STATIC_ASSET_EXT = /\.(svg|png|jpe?g|ico|webp)$/
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const token = request.cookies.get('auth_token')?.value
@@ -15,6 +20,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(
       new URL(token ? '/dashboard' : '/login', request.url)
     )
+  }
+
+  if (STATIC_ASSET_EXT.test(pathname)) {
+    return NextResponse.next()
   }
 
   if (alwaysPublicRoutes.some((route) => pathname.startsWith(route))) {

@@ -18,7 +18,7 @@
 
 ### Logo
 - Se usa el logo **actual** (lirio dorado + Andes + racimo + wordmark serif).
-- Vectorizar el PNG en `frontend/public/logo.svg` y guardar también una variante `logo-mark.svg` que sea **sólo el racimo** (para favicon, sidebar slim y notificaciones push).
+- Vectorizado en `frontend/public/logo.svg` (marca completa, ≥64px), con dos variantes reducidas según tamaño (definidas en `docs/ESTETICA.md` §2.2, fuente de verdad vigente para la marca): `logo-reducido.svg` (24–64px, sidebar/topbar/header mobile) y `logo-glifo.svg` (≤24px, favicon/notificaciones — sólo el racimo). `logo-mark.svg` quedó reemplazado por estas tres y se borró.
 - Para mobile Expo: `mobile/assets/icon.png` (1024×1024 con padding) + `mobile/assets/splash.png` (logo centrado sobre fondo crema).
 
 ### Aplicaciones (cuándo cuál)
@@ -447,8 +447,8 @@ Emojis: **no** en la UI productiva. Sí permitidos en mensajes del banner offlin
 |---|---|
 | `frontend/app/globals.css` | Reescribir con @theme tokens |
 | `frontend/lib/theme.ts` | NUEVO — exportar tokens y helpers |
-| `frontend/public/logo.svg` | NUEVO — vectorizar PNG actual |
-| `frontend/public/logo-mark.svg` | NUEVO — sólo racimo |
+| `frontend/public/logo.svg` | vectorizado del PNG original — marca completa |
+| `frontend/public/logo-reducido.svg` / `logo-glifo.svg` | variantes reducidas por tamaño (ver `docs/ESTETICA.md` §2.2) — reemplazan a `logo-mark.svg`, borrado |
 | `frontend/app/layout.tsx` | Cargar fonts (Public Sans, Fraunces, JetBrains Mono) |
 | `frontend/app/login/page.tsx` | Reescribir con layout split |
 | `frontend/app/dashboard/layout.tsx` | Reescribir: sidebar slim + topbar |

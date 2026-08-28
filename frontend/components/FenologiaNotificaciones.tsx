@@ -25,7 +25,7 @@ export default function FenologiaNotificaciones() {
   if (isLoading) {
     return (
       <div
-        className="bg-white rounded-[10px] border border-[#fbfaf6] p-4 h-[76px] animate-pulse"
+        className="bg-white rounded-[10px] border border-[#e2dbcc] p-4 h-[76px] animate-pulse"
         style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
       />
     )
@@ -35,7 +35,7 @@ export default function FenologiaNotificaciones() {
 
   return (
     <div
-      className="bg-white rounded-[10px] border border-[#fbfaf6] p-4 flex items-center gap-4"
+      className="bg-white rounded-[10px] border border-[#e2dbcc] p-4 flex items-center gap-4"
       style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
     >
       <Sprout size={18} strokeWidth={1.75} color="#7c3aed" className="flex-shrink-0" />

@@ -100,7 +100,7 @@ export default function RiegosEnCurso({
   function Fila({ r, conBoton }: { r: RiegoEnCurso; conBoton: boolean }) {
     const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas)
     return (
-      <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#fbfaf6] rounded-md px-4 py-3">
+      <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <Droplets size={18} className="text-blue-500 flex-shrink-0" />
           <div className="text-sm min-w-0">

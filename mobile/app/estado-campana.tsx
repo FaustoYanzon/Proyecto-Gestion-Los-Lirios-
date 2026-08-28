@@ -11,7 +11,7 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../lib/icons'
 import api from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import type { EstadoFenologico } from '../lib/types'
@@ -79,7 +79,7 @@ function UpdateModal({
             <Text style={styles.modalSubtitle}>Seleccioná el estado fenológico actual</Text>
           </View>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-            <Ionicons name="close" size={18} color="#374151" />
+            <ICONS.cerrar size={18} color="#374151" strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
 
@@ -103,7 +103,7 @@ function UpdateModal({
                 </Text>
                 {isSelected && (
                   <View style={[styles.checkCircle, { backgroundColor: color }]}>
-                    <Ionicons name="checkmark" size={12} color="#fff" />
+                    <ICONS.check size={12} color="#fff" strokeWidth={ICON_STROKE} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -222,7 +222,7 @@ export default function EstadoCampanaScreen() {
           <ActivityIndicator color="#16a34a" style={{ marginTop: 32 }} />
         ) : estados.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="leaf-outline" size={40} color="#d1d5db" />
+            <ICONS.hoja size={40} color="#d1d5db" strokeWidth={ICON_STROKE} />
             <Text style={styles.emptyTitle}>Sin parrales activos</Text>
             <Text style={styles.emptySub}>No hay parrales activos en el sistema</Text>
           </View>
@@ -254,7 +254,7 @@ export default function EstadoCampanaScreen() {
                   </Text>
                 </View>
                 <View style={styles.editIcon}>
-                  <Ionicons name="create-outline" size={16} color="#9ca3af" />
+                  <ICONS.editar size={16} color="#9ca3af" strokeWidth={ICON_STROKE} />
                 </View>
               </TouchableOpacity>
             )
