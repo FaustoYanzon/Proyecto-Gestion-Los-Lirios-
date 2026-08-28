@@ -96,6 +96,7 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/finanzas/dashboard',    label: 'Dashboard'    },
       { href: '/dashboard/finanzas/mano-de-obra', label: 'Mano de Obra' },
       { href: '/dashboard/finanzas/flujo',        label: 'Flujo Anual'  },
+      { href: '/dashboard/finanzas/a-pagar',       label: 'A pagar'      },
     ],
   },
   {
@@ -103,6 +104,7 @@ export const SUB_NAVS: SubNav[] = [
     items: [
       { href: '/dashboard/admin/usuarios', label: 'Usuarios' },
       { href: '/dashboard/admin/notificaciones', label: 'Notificaciones' },
+      { href: '/dashboard/admin/whatsapp', label: 'WhatsApp' },
     ],
   },
   {

@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-13 (5 mejoras al mapa — fenología, cuadrantes clickeables, mm/año, riego en curso en tiempo real — ver [[2026-08-13-mejoras-mapa]])
+> Última revisión: 2026-08-26 (costo por kg, avatar + cumpleaños — ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]])
 
 ---
 
@@ -27,6 +27,8 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **Cualquier campo `Decimal` de un endpoint de este backend llega al frontend como string, no `number`** — Pydantic lo serializa así por default. Mordió dos veces: "$NaN" en los totales de Egresos ([[2026-08-18-fix-totales-egresos-tareas-dashboards-por-rango]], causa distinta ahí) y `gdd_acumulado.toFixed is not a function` en la pestaña Clima ([[2026-08-19-clima-termografo-pronostico-extendido]]). Los tipos TS que declaran estos campos como `number` son una mentira estructural — TypeScript no valida contra la respuesta real de la API. Antes de usar `.toFixed()`, pasarlo a un gráfico, o hacer aritmética sobre un campo que en el backend es `Decimal`, convertir explícitamente con `Number(...)` en la capa de API del frontend (no en cada punto de uso).
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
 - **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
+- **Cualquier dependencia nueva en mobile puede ser un módulo nativo sin darse cuenta** — publicarla solo con `eas update` (OTA) rompe la pantalla en los celulares ya instalados, porque el JS llama a un módulo que no está enlazado en el binario nativo (mismo bug que `@react-native-community/netinfo` en agosto y que casi se repite con `@react-native-picker/picker` el 2026-08-26, revertido a tiempo por un selector propio en JS puro). Antes de agregar cualquier paquete nuevo a `mobile/package.json` para publicar solo por OTA, confirmar que sea 100% JS — si tiene código nativo (Android/iOS), hace falta un `eas build` nuevo y resubir a Play Store.
+- **`uvicorn --reload` en Windows deja procesos worker huérfanos si se mata solo el proceso reloader** — `Stop-Process -Id <PID del reloader>` no mata al worker hijo que WatchFiles spawnea; el worker viejo se queda vivo en el puerto 8000 sirviendo código desactualizado, aunque el proceso nuevo loguee "Application startup complete" sin errores (causó ~30 min de confusión real el 2026-08-26, ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]]). Antes de reiniciar el backend local en este entorno, matar el árbol completo: `taskkill /F /IM python.exe /T`.
 
 ---
 
@@ -155,6 +157,7 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-08-26-costo-por-kg-avatar-cumpleanos]]
 - [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
 - [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]
 - [[2026-08-05-trabajador-combobox-refresh-token-backup-check]]

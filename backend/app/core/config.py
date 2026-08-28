@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str | None = None
     CLOUDINARY_API_SECRET: str | None = None
 
+    # WhatsApp Business Cloud API (Meta). None deshabilita el envío de
+    # mensajes salientes; WHATSAPP_APP_SECRET en None hace que el webhook
+    # omita la validación de firma (con warning) en vez de romper el arranque
+    # local sin credenciales -- mismo criterio que CLOUDINARY_*/SENTRY_DSN.
+    WHATSAPP_VERIFY_TOKEN: str | None = None
+    WHATSAPP_ACCESS_TOKEN: str | None = None
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    WHATSAPP_APP_SECRET: str | None = None
+
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

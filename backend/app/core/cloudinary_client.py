@@ -89,3 +89,42 @@ async def upload_avatar(raw: bytes, content_type: str, user_id: str) -> str:
             detail=f"Cloudinary rechazó la subida: {response.text}",
         )
     return response.json()["secure_url"]
+
+
+async def upload_comprobante_whatsapp(raw: bytes, content_type: str, wa_message_id: str) -> str | None:
+    """Sube la foto de un comprobante recibido por WhatsApp. A diferencia de
+    upload_avatar, cada comprobante es único (no se pisa uno anterior) y no se
+    valida tamaño/formato con la misma exigencia -- una foto que Meta ya
+    aceptó como imagen es suficiente. Devuelve None (en vez de levantar) si
+    Cloudinary no está configurado o la subida falla, para que el webhook
+    pueda seguir guardando el mensaje sin foto en vez de perder el gasto
+    entero por un problema de infra ajeno al usuario.
+    """
+    try:
+        cloud_name, api_key, api_secret = _require_config()
+    except CloudinaryNotConfigured:
+        return None
+
+    public_id = f"comprobantes_whatsapp/{wa_message_id}"
+    timestamp = int(time.time())
+    params_to_sign = f"public_id={public_id}&timestamp={timestamp}"
+    signature = hashlib.sha1((params_to_sign + api_secret).encode()).hexdigest()
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload",
+                data={
+                    "public_id": public_id,
+                    "timestamp": timestamp,
+                    "api_key": api_key,
+                    "signature": signature,
+                },
+                files={"file": ("comprobante", raw, content_type)},
+            )
+    except httpx.HTTPError:
+        return None
+
+    if response.status_code != 200:
+        return None
+    return response.json()["secure_url"]

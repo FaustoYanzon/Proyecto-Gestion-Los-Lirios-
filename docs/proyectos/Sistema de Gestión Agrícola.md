@@ -72,18 +72,23 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-25)
+## Próximos pasos (actualizado 2026-08-26)
 
 Pilot estable.
 
 ### Pendiente real
 
-1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — sigue sin hacerse, Fausto ya lo pospuso dos veces (08-19, 08-21). No urgente por infraestructura, sí por higiene de seguridad. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
+1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — el mecanismo se confirmó y explicó a Fausto el 08-26 (self-service desde la app, sin tocar código), pero **no hay confirmación de que ya lo haya hecho**. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
 2. **Confirmar que los 2 usuarios `regador` nuevos (Lucas y Heber Mercado, Media Agua) ven la finca fija en mobile sin poder cambiarla**, y que encargado/regador/obrero en general ven bien la finca asignada tras el OTA del 2026-08-24 (requiere cerrar la app del todo y reabrirla — mismo patrón de siempre).
 3. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
 4. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó esta sesión, puede que ya se haya resuelto solo con algún reinicio de la app; revisar si Fausto no lo vuelve a mencionar.
+5. Fausto todavía no cargó su propia foto de perfil ni cumpleaños reales en producción (feature nueva del 08-26, probada con datos de prueba en local).
 
 **Resuelto desde la última actualización (no repetir):** el deploy de Railway del 08-18 (bloqueado por el incidente de plataforma) terminó activándose solo. Sin pendientes de esa sesión.
+
+### Hecho en la sesión del 2026-08-26 (costo por kg, perfil con avatar + cumpleaños)
+
+Ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]] para el detalle completo. Resumen: **1) Costo por kg** en el dashboard de Finanzas — encontró y reemplazó un endpoint de mayo (`f4a6c12`) nunca conectado a ningún frontend, que calculaba con la fórmula equivocada (todos los egresos, rendimiento estimado por hectárea en vez de cosecha real). Fórmula nueva acordada con Fausto: solo costos de producción directos (materia prima + producción + insumos varios + repuestos y reparación) sobre kg reales de uva cosechada. Verificado en vivo: $45/kg. **2) Perfil personalizable** (avatar + cumpleaños) en web y mobile: foto sincronizada vía Cloudinary (self-service, `POST /users/me/avatar`), cumpleaños con notificación push automática a todo el equipo (scheduler in-process nuevo — el proyecto no tenía ningún cron hasta ahora). Corrección real de proceso: se había instalado un picker nativo de React Native para el selector de mes en mobile, revertido a tiempo por JS puro para poder publicar por OTA sin necesitar un build nuevo de Play Store (mismo tipo de bug que el incidente de `netinfo` de agosto). Deploy: 2 commits, Railway + Vercel + `eas update` (OTA), todo verificado — sin pendientes bloqueantes.
 
 ### Hecho en la sesión del 2026-08-25 (nuevo tipo de egreso "Repuestos y Reparación")
 
@@ -156,6 +161,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-08-26-costo-por-kg-avatar-cumpleanos]]
 - [[2026-08-25-tipo-egreso-repuestos-reparacion]]
 - [[2026-08-24-documentacion-selectores-finca-campana-ctrlk]]
 - [[2026-08-19-clima-termografo-pronostico-extendido]]

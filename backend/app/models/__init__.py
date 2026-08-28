@@ -29,6 +29,11 @@ from app.models.arca import (
     TipoArchivoArca,
 )
 from app.models.termografo import LecturaTermografo, LoteImportacionTermografo
+from app.models.whatsapp import (
+    EstadoMensajeWhatsapp,
+    MensajeWhatsappPendiente,
+    TelefonoUsuarioWhatsapp,
+)
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     TAREAS_POR_CLASIFICACION,
@@ -89,4 +94,7 @@ __all__ = [
     "ComprobanteArcaImportado",
     "LoteImportacionTermografo",
     "LecturaTermografo",
+    "EstadoMensajeWhatsapp",
+    "MensajeWhatsappPendiente",
+    "TelefonoUsuarioWhatsapp",
 ]
