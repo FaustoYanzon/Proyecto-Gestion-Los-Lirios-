@@ -14,7 +14,7 @@ import { useFincaStore } from '../../store/fincaStore'
 import api, { getRiegosEnCurso } from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
-import { colors, fonts, FINCA_COORDS } from '../../lib/theme'
+import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
 import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
 import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
 
@@ -239,6 +239,7 @@ function FenologiaNotificaciones({
   if (fases.length === 0) return null
 
   const f = fases[idx % fases.length]
+  const faseColor = fenologiaColors[f.fase] ?? colors.ink60
 
   return (
     <View style={{ marginBottom: 24 }}>
@@ -246,14 +247,14 @@ function FenologiaNotificaciones({
       <View style={styles.fenologiaCard}>
         <View style={styles.fenologiaHeader}>
           <Text style={styles.fenologiaVariedad}>{VARIEDAD_LABELS[f.variedad] ?? f.variedad}</Text>
-          <View style={styles.fenologiaBadge}>
-            <Text style={styles.fenologiaBadgeText}>{f.fase_label}</Text>
+          <View style={[styles.fenologiaBadge, { backgroundColor: withAlpha(faseColor, 0.12) }]}>
+            <Text style={[styles.fenologiaBadgeText, { color: faseColor }]}>{f.fase_label}</Text>
           </View>
         </View>
         <Text style={styles.fenologiaFuente}>
           {f.fuente === 'manual'
-            ? `✎ Confirmado a mano${f.fecha_confirmacion ? ` · ${f.fecha_confirmacion.split('-').reverse().join('/')}` : ''}`
-            : '✦ Estimado automático'}
+            ? `Confirmado a mano${f.fecha_confirmacion ? ` · ${f.fecha_confirmacion.split('-').reverse().join('/')}` : ''}`
+            : 'Estimado según fecha de campaña'}
         </Text>
         {f.tareas_recomendadas.slice(0, 2).map((t, i) => (
           <Text key={i} style={styles.fenologiaTarea}>• {t}</Text>
@@ -463,10 +464,10 @@ const styles = StyleSheet.create({
   },
   fenologiaVariedad: { fontSize: 14, fontWeight: '700', color: colors.ink },
   fenologiaBadge: {
-    backgroundColor: '#f3e8ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
   },
-  fenologiaBadgeText: { fontSize: 10, fontWeight: '700', color: '#7c3aed', textTransform: 'uppercase' },
-  fenologiaFuente: { fontSize: 10, color: colors.niebla, marginBottom: 6 },
+  fenologiaBadgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  fenologiaFuente: { fontSize: 13, color: colors.ink60, marginBottom: 6 },
   fenologiaTarea: { fontSize: 12, color: colors.ink60, lineHeight: 17 },
   fenologiaContador: { fontSize: 10, color: colors.niebla, marginTop: 6, textAlign: 'right' },
   sectionLabel: {

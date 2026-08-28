@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
 import {
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import FincaMap from '@/components/map/FincaMap'
@@ -179,10 +179,10 @@ function DireccionSection() {
             <YAxis tick={{ fontSize: 10 }} width={55} tickFormatter={(v) => fmtM(Number(v))} />
             <Tooltip formatter={(v, name) => [fmtM(Number(v)), name]} contentStyle={{ fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Area dataKey="Ingresos presup." fill="#3f5c3a" fillOpacity={0.12} stroke="none" />
+            <Area dataKey="Egresos presup." fill="#9a3140" fillOpacity={0.12} stroke="none" />
             <Line dataKey="Ingresos real" stroke="#3f5c3a" strokeWidth={2} dot={false} />
-            <Line dataKey="Ingresos presup." stroke="#3f5c3a" strokeWidth={1.5} strokeDasharray="6 4" dot={false} />
-            <Line dataKey="Egresos real" stroke="#a3293a" strokeWidth={2} dot={false} />
-            <Line dataKey="Egresos presup." stroke="#a3293a" strokeWidth={1.5} strokeDasharray="6 4" dot={false} />
+            <Line dataKey="Egresos real" stroke="#9a3140" strokeWidth={2} dot={false} />
             <ReferenceLine y={0} stroke="#5a544c" />
           </ComposedChart>
         </ResponsiveContainer>

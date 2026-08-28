@@ -1,18 +1,22 @@
+import { useRef, useState } from 'react'
 import { View } from 'react-native'
+import { StatusBar } from 'expo-status-bar'
 import { Tabs } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { ICONS, ICON_SIZE, ICON_STROKE } from '../../lib/icons'
-import { UserBadge } from '../../components/UserBadge'
+import { AppHeader } from '../../components/AppHeader'
+import { type UserBadgeHandle } from '../../components/UserBadge'
 import { SyncBar } from '../../components/SyncBar'
 
-// Altura del header nativo actual (headerStyle.height más abajo) — la
-// barra se ancla justo debajo. Si el header cambia de alto (Fase 7:
-// header blanco propio, ~41px) hay que actualizar este número.
-const HEADER_HEIGHT = 64
-
 export default function TabsLayout() {
+  const headerRef = useRef<UserBadgeHandle>(null)
+  // Alto real del header ya renderizado (fijo + el safe-area inset de arriba,
+  // que varía por dispositivo — notch, isla dinámica). SyncBar se ancla ahí.
+  const [headerHeight, setHeaderHeight] = useState(41)
+
   return (
     <View style={{ flex: 1 }}>
+    <StatusBar style="dark" />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.burdeos[600],
@@ -28,11 +32,7 @@ export default function TabsLayout() {
           elevation: 8,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
-        headerStyle: { backgroundColor: colors.burdeos[600], height: 64 },
-        headerTintColor: colors.blanco,
-        headerTitleStyle: { fontWeight: '700', fontSize: 17 },
-        headerShadowVisible: false,
-        headerRight: () => <UserBadge />,
+        header: () => <AppHeader ref={headerRef} onHeightChange={setHeaderHeight} />,
       }}
     >
       <Tabs.Screen
@@ -92,7 +92,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="campana" options={{ href: null }} />
       <Tabs.Screen name="perfil"  options={{ href: null }} />
     </Tabs>
-    <SyncBar style={{ position: 'absolute', top: HEADER_HEIGHT, left: 0, right: 0, zIndex: 10 }} />
+    <SyncBar style={{ position: 'absolute', top: headerHeight, left: 0, right: 0, zIndex: 10 }} />
     </View>
   )
 }

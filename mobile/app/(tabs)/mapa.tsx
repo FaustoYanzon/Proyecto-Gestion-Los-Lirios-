@@ -165,7 +165,7 @@ html,body,#map { width:100%; height:100%; }
   display:none; position:absolute; top:calc(100% + 6px); right:0;
   background:#fff; border:1px solid #e5e7eb; border-radius:10px;
   padding:10px 12px; box-shadow:0 2px 8px rgba(0,0,0,0.15);
-  min-width:164px;
+  min-width:172px; max-height:70vh; overflow-y:auto;
 }
 .lp-title {
   font-size:10px; font-weight:700; color:#6b7280;
@@ -184,19 +184,19 @@ html,body,#map { width:100%; height:100%; }
 .lp-poly { width:12px; height:12px; border-radius:2px; border:1px solid #6b7280; flex-shrink:0; }
 .lp-lbl  { font-size:12px; color:#374151; }
 
-/* ── Legend ───────────────────────────────────── */
-#legend {
-  position:absolute; bottom:20px; left:10px; z-index:1000;
-  background:rgba(255,255,255,0.96); border:1px solid #e5e7eb;
-  border-radius:10px; padding:10px 12px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.12); min-width:110px;
-}
+/* ── Legend (fusionada dentro del panel de Capas) ── */
 .legend-title { font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:7px; }
 .legend-item  { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
 .legend-dot   { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
 .legend-label { font-size:12px; color:#374151; }
-.legend-sep   { border-top:1px solid #e5e7eb; margin:6px 0 5px; }
-.legend-item-sm { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.lp-sep       { border-top:1px solid #e5e7eb; margin:8px 0; }
+
+/* ── Zoom (reubicado abajo a la derecha, en columna con el refresh nativo
+   que ya existe del lado React Native, superpuesto encima del WebView) ── */
+.leaflet-bottom.leaflet-right { margin-bottom:66px; margin-right:6px; }
+.leaflet-control-zoom {
+  border:1px solid #d1d5db !important; box-shadow:0 1px 4px rgba(0,0,0,0.12) !important;
+}
 </style>
 </head>
 <body>
@@ -216,6 +216,9 @@ html,body,#map { width:100%; height:100%; }
     Capas
   </button>
   <div id="layer-panel">
+    <div class="lp-title" id="legend-title">Tipo</div>
+    <div id="legend-items"></div>
+    <div class="lp-sep"></div>
     <div class="lp-title">Infraestructura</div>
     <label class="lp-row"><input type="checkbox" id="cb-acequias" onchange="toggleLayer('acequias')"><span class="lp-line" style="background:#38bdf8"></span><span class="lp-lbl">Acequias</span></label>
     <label class="lp-row"><input type="checkbox" id="cb-lineaElectrica" onchange="toggleLayer('lineaElectrica')"><span class="lp-line" style="background:#facc15"></span><span class="lp-lbl">Línea eléctrica</span></label>
@@ -223,18 +226,6 @@ html,body,#map { width:100%; height:100%; }
     <label class="lp-row"><input type="checkbox" id="cb-valvulas" onchange="toggleLayer('valvulas')"><span class="lp-dot" style="background:#1e3a8a"></span><span class="lp-lbl">Válvulas</span></label>
     <label class="lp-row"><input type="checkbox" id="cb-cuadrantesRiego" onchange="toggleLayer('cuadrantesRiego')"><span class="lp-poly" style="background:#d1d5db"></span><span class="lp-lbl">Cuadrantes</span></label>
   </div>
-</div>
-
-<!-- Legend -->
-<div id="legend">
-  <div class="legend-title" id="legend-title">Tipo</div>
-  <div id="legend-items"></div>
-  <div class="legend-sep"></div>
-  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#38bdf8;flex-shrink:0"></div><span class="legend-label">Acequias</span></div>
-  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#facc15;flex-shrink:0"></div><span class="legend-label">L. eléctrica</span></div>
-  <div class="legend-item-sm"><div style="width:16px;height:3px;border-radius:2px;background:#1e3a8a;flex-shrink:0"></div><span class="legend-label">Cañerías</span></div>
-  <div class="legend-item-sm"><div style="width:10px;height:10px;border-radius:50%;background:#1e3a8a;flex-shrink:0"></div><span class="legend-label">Válvulas</span></div>
-  <div class="legend-item-sm"><div style="width:12px;height:12px;border-radius:2px;border:1px solid #6b7280;background:#d1d5db;flex-shrink:0"></div><span class="legend-label">Cuadrantes</span></div>
 </div>
 
 <script>
@@ -276,8 +267,13 @@ let selectedName = null;
 const polyMap = {};
 const layerGroups = {};
 
-const map = L.map('map', { center: [-32.027, -68.397], zoom: 15, attributionControl: false });
+// zoomControl:false porque el default de Leaflet cae en top-left, la misma
+// esquina que #mode-btn (el botón "Por tipo") -- se superponían y por eso
+// a veces sólo se veía el "-" asomando. Lo reubicamos abajo a la derecha,
+// en columna con el botón de refrescar nativo.
+const map = L.map('map', { center: [-32.027, -68.397], zoom: 15, attributionControl: false, zoomControl: false });
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 
 // ── KML parcelas ────────────────────────────────────────────────────────────
 function getStyle(f, selected) {

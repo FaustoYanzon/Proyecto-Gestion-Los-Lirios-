@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Image,
 } from 'react-native';
@@ -13,20 +13,27 @@ import { logout } from '../lib/auth';
 // Drawer "views" — navigate within the drawer without stacking Modals
 type DrawerView = 'main' | 'finca' | 'notif' | 'pref'
 
-export function UserBadge() {
+export type UserBadgeHandle = { open: (view?: DrawerView) => void }
+
+export const UserBadge = forwardRef<UserBadgeHandle>((_props, ref) => {
   const user = useAuthStore(s => s.user);
   const [open, setOpen] = useState(false);
+  const [initialView, setInitialView] = useState<DrawerView>('main');
 
   // Load persisted finca selection on mount
   useEffect(() => { loadFinca() }, []);
+
+  useImperativeHandle(ref, () => ({
+    open: (view: DrawerView = 'main') => { setInitialView(view); setOpen(true) },
+  }));
 
   return (
     <>
       <TouchableOpacity
         accessibilityLabel="Cuenta y opciones"
-        onPress={() => setOpen(true)}
+        onPress={() => { setInitialView('main'); setOpen(true) }}
         style={styles.badge}
-        hitSlop={10}
+        hitSlop={12}
       >
         {user?.avatar_url ? (
           <Image source={{ uri: user.avatar_url }} style={styles.badgeImg} />
@@ -35,19 +42,23 @@ export function UserBadge() {
         )}
       </TouchableOpacity>
 
-      <UserDrawer open={open} onClose={() => setOpen(false)} />
+      <UserDrawer open={open} initialView={initialView} onClose={() => setOpen(false)} />
     </>
   );
-}
+});
 
-function UserDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function UserDrawer({ open, initialView, onClose }: {
+  open: boolean; initialView: DrawerView; onClose: () => void
+}) {
   const router = useRouter();
   const user = useAuthStore(s => s.user);
   const clearUser = useAuthStore(s => s.clearUser);
-  const [view, setView] = useState<DrawerView>('main');
+  const [view, setView] = useState<DrawerView>(initialView);
 
-  // Reset to main whenever drawer reopens
-  useEffect(() => { if (!open) setView('main') }, [open]);
+  // Cada vez que se abre, arranca en la vista pedida (ej. la campanita del
+  // header abre directo en "notif"); al cerrar vuelve a "main" para la
+  // próxima vez que se abra desde el avatar.
+  useEffect(() => { if (open) setView(initialView); else setView('main') }, [open, initialView]);
 
   const handleLogout = async () => {
     onClose();
@@ -318,12 +329,12 @@ function DrawerItem({ icon, label, badge, badgeVariant = 'label', danger, onPres
 
 const styles = StyleSheet.create({
   badge: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.oro, justifyContent: 'center', alignItems: 'center',
-    overflow: 'hidden',
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#ddd6ca',
+    justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
   },
-  badgeText: { color: colors.burdeos[600], fontWeight: '800', fontSize: 11 },
-  badgeImg: { width: 28, height: 28 },
+  badgeText: { color: colors.ink, fontWeight: '800', fontSize: 10 },
+  badgeImg: { width: 26, height: 26 },
 
   overlay: { flex: 1, backgroundColor: 'rgba(31,26,23,0.4)' },
   drawer: {
