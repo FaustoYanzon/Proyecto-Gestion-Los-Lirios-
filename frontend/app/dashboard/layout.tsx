@@ -12,28 +12,34 @@ import FincaSwitcher from '@/components/FincaSwitcher'
 import CampanaSwitcher from '@/components/CampanaSwitcher'
 import UserBadge from '@/components/UserBadge'
 import CommandPalette from '@/components/CommandPalette'
+import { ClimateMini } from '@/components/ClimateWidget'
+
+function Tooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="absolute left-full ml-2 px-2 py-1 rounded-md text-white text-[11px]
+                 whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible
+                 transition-opacity duration-150 delay-[120ms] pointer-events-none z-50"
+      style={{ backgroundColor: '#1f1a17' }}
+    >
+      {children}
+    </span>
+  )
+}
 
 function SidebarItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
-  const iconColor  = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)'
-  const labelColor = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)'
+  const iconColor = isActive ? '#7a1f2c' : 'rgba(255,255,255,0.82)'
 
   return (
     <Link
       href={item.href}
       title={item.label}
-      className={`flex flex-col items-center justify-center gap-1 w-14 py-2.5 rounded-xl mx-auto
-                  transition-colors duration-150 ${
-                    isActive ? 'hover:bg-white/20' : 'hover:bg-white/10'
-                  }`}
-      style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.12)' : undefined }}
+      className={`group relative flex items-center justify-center w-10 h-10 rounded-[10px] mx-auto
+                  transition-colors duration-150 ${isActive ? '' : 'hover:bg-white/10'}`}
+      style={{ backgroundColor: isActive ? '#FFFFFF' : undefined }}
     >
       <item.icon size={20} strokeWidth={1.5} color={iconColor} />
-      <span
-        className="text-[9px] font-bold uppercase tracking-wide leading-none"
-        style={{ color: labelColor }}
-      >
-        {item.short}
-      </span>
+      <Tooltip>{item.label}</Tooltip>
     </Link>
   )
 }
@@ -97,15 +103,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
-      {/* Sidebar 68px */}
+      {/* Sidebar 56px */}
       <aside
-        className="flex flex-col w-[68px] flex-shrink-0 py-3 items-center gap-1"
+        className="flex flex-col w-[56px] flex-shrink-0 py-3 items-center gap-1"
         style={{ backgroundColor: '#7a1f2c' }}
       >
         {/* Logo mark */}
         <Link
           href="/dashboard"
-          className="flex items-center justify-center w-14 h-11 mb-3"
+          className="flex items-center justify-center w-10 h-10 mb-3"
           aria-label="Inicio"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -133,13 +139,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onClick={handleLogout}
           title="Cerrar sesión"
           aria-label="Cerrar sesión"
-          className="flex flex-col items-center justify-center gap-1 w-14 py-2.5 rounded-xl
+          className="group relative flex items-center justify-center w-10 h-10 rounded-[10px]
                      hover:bg-white/10 transition-colors duration-150 mb-1"
         >
-          <LogOut size={20} strokeWidth={1.5} color="rgba(255,255,255,0.55)" />
-          <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Salir
-          </span>
+          <LogOut size={20} strokeWidth={1.5} color="rgba(255,255,255,0.82)" />
+          <Tooltip>Cerrar sesión</Tooltip>
         </button>
       </aside>
 
@@ -148,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Topbar 56px */}
         <header
           className="flex items-center gap-3 h-14 px-4 flex-shrink-0 border-b bg-white"
-          style={{ borderColor: '#fbfaf6' }}
+          style={{ borderColor: '#e2dbcc' }}
         >
           <div className="flex items-center gap-2">
             <FincaSwitcher />
@@ -161,7 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border
                          text-sm text-[#a09584] hover:bg-[#fbfaf6]
                          transition-colors duration-150 min-w-[200px]"
-              style={{ borderColor: '#fbfaf6' }}
+              style={{ borderColor: '#e2dbcc' }}
             >
               <span className="flex-1 text-left">Buscar...</span>
               <kbd className="text-xs font-mono border border-[#a09584]/30 rounded px-1.5 py-0.5 bg-[#fbfaf6]">
@@ -171,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-[#5a544c]" aria-label="Clima">☀ 22°</span>
+            <ClimateMini />
             <button
               aria-label="Notificaciones"
               className="flex items-center justify-center w-8 h-8 rounded-lg
@@ -187,7 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {subNav && (
           <div
             className="flex items-end gap-1 px-4 border-b flex-shrink-0"
-            style={{ borderColor: '#fbfaf6', backgroundColor: '#ffffff' }}
+            style={{ borderColor: '#e2dbcc', backgroundColor: '#ffffff' }}
           >
             {subNav.items.map((tab) => {
               const active = pathname.startsWith(tab.href)

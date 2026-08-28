@@ -31,15 +31,15 @@ export default function FincaSwitcher() {
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                   border-[1.5px] border-[#7a1f2c] bg-[#faf6ec] text-[#7a1f2c]
-                   text-sm font-medium hover:bg-[#f0e8d8] transition-colors duration-150"
+                   border-[1.5px] border-[#e2dbcc] bg-white text-[#1f1a17]
+                   text-sm font-medium hover:bg-[#fbfaf6] transition-colors duration-150"
       >
         <MapPin size={13} strokeWidth={2} />
         <span>{active.label}</span>
         <ChevronDown
           size={13}
           strokeWidth={2}
-          className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          className={`text-[#a09584] transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
