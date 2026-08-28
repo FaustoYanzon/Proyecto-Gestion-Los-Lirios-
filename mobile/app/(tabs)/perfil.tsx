@@ -11,7 +11,7 @@ import {
   Image,
   Switch,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../../store/authStore'
@@ -214,7 +214,7 @@ export default function PerfilScreen() {
             {uploadingAvatar ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Ionicons name="camera" size={13} color="#fff" />
+              <ICONS.camara size={13} color="#fff" strokeWidth={ICON_STROKE} />
             )}
           </View>
         </TouchableOpacity>
@@ -233,7 +233,7 @@ export default function PerfilScreen() {
         <Text style={styles.cardTitle}>INFORMACIÓN DE CUENTA</Text>
         <View style={styles.infoRow}>
           <View style={styles.infoIcon}>
-            <Ionicons name="person-outline" size={16} color="#6b7280" />
+            <ICONS.usuario size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>Nombre completo</Text>
@@ -243,7 +243,7 @@ export default function PerfilScreen() {
         <View style={styles.divider} />
         <View style={styles.infoRow}>
           <View style={styles.infoIcon}>
-            <Ionicons name="at-outline" size={16} color="#6b7280" />
+            <ICONS.arroba size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>Usuario</Text>
@@ -253,7 +253,7 @@ export default function PerfilScreen() {
         <View style={styles.divider} />
         <View style={styles.infoRow}>
           <View style={styles.infoIcon}>
-            <Ionicons name="mail-outline" size={16} color="#6b7280" />
+            <ICONS.correo size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>Email</Text>
@@ -263,7 +263,7 @@ export default function PerfilScreen() {
         <View style={styles.divider} />
         <View style={styles.infoRow}>
           <View style={styles.infoIcon}>
-            <Ionicons name="shield-checkmark-outline" size={16} color="#6b7280" />
+            <ICONS.escudo size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.infoLabel}>Rol</Text>
@@ -296,15 +296,13 @@ export default function PerfilScreen() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={styles.infoIcon}>
-              <Ionicons name="lock-closed-outline" size={16} color="#6b7280" />
+              <ICONS.candado size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
             </View>
             <Text style={styles.cardTitle}>CAMBIAR CONTRASEÑA</Text>
           </View>
-          <Ionicons
-            name={showPasswordForm ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color="#9ca3af"
-          />
+          {showPasswordForm
+            ? <ICONS.plegar size={16} color="#9ca3af" strokeWidth={ICON_STROKE} />
+            : <ICONS.desplegar size={16} color="#9ca3af" strokeWidth={ICON_STROKE} />}
         </TouchableOpacity>
 
         {showPasswordForm && (
@@ -321,7 +319,9 @@ export default function PerfilScreen() {
                 autoCapitalize="none"
               />
               <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowCurrentPwd(!showCurrentPwd)}>
-                <Ionicons name={showCurrentPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9ca3af" />
+                {showCurrentPwd
+                  ? <ICONS.ocultar size={18} color="#9ca3af" strokeWidth={ICON_STROKE} />
+                  : <ICONS.ver size={18} color="#9ca3af" strokeWidth={ICON_STROKE} />}
               </TouchableOpacity>
             </View>
 
@@ -337,7 +337,9 @@ export default function PerfilScreen() {
                 autoCapitalize="none"
               />
               <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowNewPwd(!showNewPwd)}>
-                <Ionicons name={showNewPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9ca3af" />
+                {showNewPwd
+                  ? <ICONS.ocultar size={18} color="#9ca3af" strokeWidth={ICON_STROKE} />
+                  : <ICONS.ver size={18} color="#9ca3af" strokeWidth={ICON_STROKE} />}
               </TouchableOpacity>
             </View>
 
@@ -371,7 +373,7 @@ export default function PerfilScreen() {
       <View style={styles.card}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={styles.infoIcon}>
-            <Ionicons name="gift-outline" size={16} color="#6b7280" />
+            <ICONS.regalo size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
           </View>
           <Text style={styles.cardTitle}>FECHA DE CUMPLEAÑOS</Text>
         </View>
@@ -433,7 +435,7 @@ export default function PerfilScreen() {
           <View style={styles.pwdHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={styles.infoIcon}>
-                <Ionicons name="finger-print-outline" size={16} color="#6b7280" />
+                <ICONS.huella size={16} color="#6b7280" strokeWidth={ICON_STROKE} />
               </View>
               <Text style={styles.cardTitle}>INGRESO CON HUELLA</Text>
             </View>
@@ -444,7 +446,7 @@ export default function PerfilScreen() {
 
       {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={18} color="#ef4444" />
+        <ICONS.salir size={18} color="#ef4444" strokeWidth={ICON_STROKE} />
         <Text style={styles.logoutBtnText}>Cerrar sesión</Text>
       </TouchableOpacity>
     </ScrollView>

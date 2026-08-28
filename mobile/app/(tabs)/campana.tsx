@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { useRouter } from 'expo-router'
 import { getEstadoCampanaActual, postEstadoVariedadCampana } from '../../lib/api'
 import { colors } from '../../lib/theme'
@@ -48,7 +48,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1; onCancel: () => 
           <View key={label} style={si.item}>
             <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
               {done ? (
-                <Ionicons name="checkmark" size={11} color={colors.blanco} />
+                <ICONS.check size={11} color={colors.blanco} strokeWidth={ICON_STROKE} />
               ) : (
                 <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
               )}
@@ -65,7 +65,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1; onCancel: () => 
         onPress={onCancel}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name="close" size={18} color={colors.ink60} />
+        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
     </View>
   )
@@ -231,7 +231,7 @@ function StepConfirmar({
               <ActivityIndicator color={colors.blanco} size="small" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
                 <Text style={styles.primaryBtnText}>Confirmar</Text>
               </>
             )}
@@ -278,7 +278,7 @@ function VariedadCard({
 
       {canEdit && (
         <TouchableOpacity style={styles.editBtn} onPress={onEdit} activeOpacity={0.8}>
-          <Ionicons name="create-outline" size={15} color={colors.burdeos[600]} />
+          <ICONS.editar size={15} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
           <Text style={styles.editBtnText}>Editar estado</Text>
         </TouchableOpacity>
       )}
@@ -371,7 +371,7 @@ export default function CampanaScreen() {
     <View style={{ flex: 1 }}>
       {toast && (
         <View style={styles.toast} pointerEvents="none">
-          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <ICONS.completado size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
@@ -386,7 +386,7 @@ export default function CampanaScreen() {
           <ActivityIndicator color={colors.burdeos[600]} style={{ marginTop: 32 }} />
         ) : items.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="leaf-outline" size={36} color={colors.hueso} />
+            <ICONS.hoja size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
             <Text style={styles.emptyStateTitle}>Sin variedades activas</Text>
           </View>
         ) : (

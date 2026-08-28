@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
 import { useRouter } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import api, { getCumplimientoRiego, getEstadoCampanaActual, getRiegosEnCurso } from '../../lib/api'
 import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad, RiegoEnCurso } from '../../lib/types'
 import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA } from '../../lib/types'
@@ -574,7 +574,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           </Text>
         </View>
         <TouchableOpacity style={panelStyles.closeBtn} onPress={onClose}>
-          <Ionicons name="close" size={16} color="#374151" />
+          <ICONS.cerrar size={16} color="#374151" strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
       </View>
 
@@ -978,7 +978,7 @@ export default function MapaScreen() {
         style={[styles.refreshBtn, panel && { bottom: 480 }]}
         onPress={refresh}
       >
-        <Ionicons name="refresh-outline" size={18} color="#374151" />
+        <ICONS.refrescar size={18} color="#374151" strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
     </View>
   )

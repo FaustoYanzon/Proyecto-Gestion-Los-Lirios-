@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { ICONS, ICON_STROKE, type IconKey } from '../lib/icons';
 import { colors, space, radius, text, getInitials, ROLE_LABELS } from '../lib/theme';
 import { useAuthStore } from '../store/authStore';
 import { useFincaStore, FINCAS, loadFinca } from '../store/fincaStore';
@@ -116,23 +116,23 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
         onPress={puedeCambiarFinca ? () => onNav('finca') : undefined}
         disabled={!puedeCambiarFinca}
       >
-        <Ionicons name="location" size={18} color={colors.burdeos[600]} />
+        <ICONS.ubicacion size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
         <Text style={styles.fincaName}>{active.label}</Text>
         {puedeCambiarFinca && <Text style={styles.fincaChevron}>cambiar ▾</Text>}
       </TouchableOpacity>
 
       <View style={styles.divider} />
 
-      <DrawerItem icon="person-outline" label="Mi perfil" onPress={() => { onClose(); router.push('/(tabs)/perfil') }} />
-      <DrawerItem icon="notifications-outline" label="Notificaciones" badge="3" onPress={() => onNav('notif')} />
-      <DrawerItem icon="settings-outline" label="Preferencias" onPress={() => onNav('pref')} />
+      <DrawerItem icon="usuario" label="Mi perfil" onPress={() => { onClose(); router.push('/(tabs)/perfil') }} />
+      <DrawerItem icon="notificacion" label="Notificaciones" badge="3" onPress={() => onNav('notif')} />
+      <DrawerItem icon="admin" label="Preferencias" onPress={() => onNav('pref')} />
       <DrawerItem
-        icon="cloud-offline-outline"
+        icon="desconectado"
         label="Modo offline"
         badge="SINCR."
         onPress={() => {}}
       />
-      <DrawerItem icon="log-out-outline" label="Cerrar sesión" danger onPress={onLogout} />
+      <DrawerItem icon="salir" label="Cerrar sesión" danger onPress={onLogout} />
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Los Lirios SA · v1.0.0</Text>
@@ -151,7 +151,7 @@ function FincaView({ onBack }: { onBack: () => void }) {
     <>
       <View style={styles.subHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color={colors.ink} />
+          <ICONS.atras size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
         <Text style={styles.subTitle}>Cambiar Finca</Text>
       </View>
@@ -172,7 +172,7 @@ function FincaView({ onBack }: { onBack: () => void }) {
               {f.label}
             </Text>
             {isActive && (
-              <Ionicons name="checkmark" size={18} color={colors.burdeos[600]} />
+              <ICONS.check size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
             )}
           </TouchableOpacity>
         )
@@ -187,10 +187,10 @@ function FincaView({ onBack }: { onBack: () => void }) {
 
 // ─── Notificaciones view ──────────────────────────────────────────────────────
 
-const NOTIFS = [
-  { id: '1', icon: 'water-outline' as const, title: 'Riego programado', body: 'Cabezal 2 — hoy 14:00', time: 'hace 10 min' },
-  { id: '2', icon: 'leaf-outline' as const, title: 'Campaña actualizada', body: 'Parral 5 — Floración registrada', time: 'hace 1 h' },
-  { id: '3', icon: 'flask-outline' as const, title: 'Carencia vencida', body: 'Karate — Parral 2 habilitado', time: 'hoy 08:00' },
+const NOTIFS: { id: string; icon: IconKey; title: string; body: string; time: string }[] = [
+  { id: '1', icon: 'riego', title: 'Riego programado', body: 'Cabezal 2 — hoy 14:00', time: 'hace 10 min' },
+  { id: '2', icon: 'hoja', title: 'Campaña actualizada', body: 'Parral 5 — Floración registrada', time: 'hace 1 h' },
+  { id: '3', icon: 'fitosanitario', title: 'Carencia vencida', body: 'Karate — Parral 2 habilitado', time: 'hoy 08:00' },
 ]
 
 function NotifView({ onBack }: { onBack: () => void }) {
@@ -200,7 +200,7 @@ function NotifView({ onBack }: { onBack: () => void }) {
     <>
       <View style={styles.subHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color={colors.ink} />
+          <ICONS.atras size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
         <Text style={styles.subTitle}>Notificaciones</Text>
         <TouchableOpacity onPress={() => setRead(new Set(NOTIFS.map(n => n.id)))}>
@@ -210,6 +210,7 @@ function NotifView({ onBack }: { onBack: () => void }) {
 
       {NOTIFS.map((n) => {
         const isRead = read.has(n.id)
+        const NotifIcon = ICONS[n.icon]
         return (
           <TouchableOpacity
             key={n.id}
@@ -218,7 +219,7 @@ function NotifView({ onBack }: { onBack: () => void }) {
             activeOpacity={0.7}
           >
             <View style={[styles.notifIconWrap, isRead && { backgroundColor: colors.hueso }]}>
-              <Ionicons name={n.icon} size={16} color={isRead ? colors.niebla : colors.burdeos[600]} />
+              <NotifIcon size={16} color={isRead ? colors.niebla : colors.burdeos[600]} strokeWidth={ICON_STROKE} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.notifTitle, isRead && { color: colors.ink60 }]}>{n.title}</Text>
@@ -246,7 +247,7 @@ function PrefView({ onBack }: { onBack: () => void }) {
     <>
       <View style={styles.subHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color={colors.ink} />
+          <ICONS.atras size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
         <Text style={styles.subTitle}>Preferencias</Text>
       </View>
@@ -295,15 +296,16 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 function DrawerItem({ icon, label, badge, danger, onPress }: {
-  icon: keyof typeof Ionicons.glyphMap
+  icon: IconKey
   label: string
   badge?: string
   danger?: boolean
   onPress: () => void
 }) {
+  const Icon = ICONS[icon]
   return (
     <TouchableOpacity style={styles.drawerItem} onPress={onPress} activeOpacity={0.7}>
-      <Ionicons name={icon} size={20} color={danger ? colors.sangre : colors.ink60} />
+      <Icon size={20} color={danger ? colors.sangre : colors.ink60} strokeWidth={ICON_STROKE} />
       <Text style={[styles.drawerItemLabel, danger && { color: colors.sangre, fontWeight: '700' }]}>
         {label}
       </Text>

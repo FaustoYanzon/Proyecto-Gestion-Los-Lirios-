@@ -11,7 +11,7 @@ import {
   Modal,
   RefreshControl,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../lib/icons'
 import api from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import { newIdempotencyKey } from '../lib/idempotency'
@@ -44,7 +44,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2; onCancel: ()
           <View key={label} style={si.item}>
             <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
               {done ? (
-                <Ionicons name="checkmark" size={11} color={colors.blanco} />
+                <ICONS.check size={11} color={colors.blanco} strokeWidth={ICON_STROKE} />
               ) : (
                 <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
               )}
@@ -61,7 +61,7 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2; onCancel: ()
         onPress={onCancel}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name="close" size={18} color={colors.ink60} />
+        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
       </TouchableOpacity>
     </View>
   )
@@ -145,17 +145,17 @@ function DatePickerModal({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Seleccionar fecha</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={colors.ink} />
+            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
           </TouchableOpacity>
         </View>
         <View style={{ padding: 16 }}>
           <View style={dp.navRow}>
             <TouchableOpacity onPress={prevMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-back" size={18} color={colors.ink} />
+              <ICONS.atras size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
             <Text style={dp.monthLabel}>{MONTH_NAMES[calMonth]} {calYear}</Text>
             <TouchableOpacity onPress={nextMonth} style={dp.navBtn}>
-              <Ionicons name="chevron-forward" size={18} color={colors.ink} />
+              <ICONS.avance size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
           <View style={dp.dayNamesRow}>
@@ -247,9 +247,9 @@ function StepFechaResp({
           onClose={() => setDateVisible(false)}
         />
         <TouchableOpacity style={styles.dateBtn} onPress={() => setDateVisible(true)}>
-          <Ionicons name="calendar-outline" size={16} color={colors.ink60} />
+          <ICONS.fecha size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.dateBtnText}>{formatDateDisplay(fecha)}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.niebla} />
+          <ICONS.desplegar size={14} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
 
         <Text style={[styles.fieldLabel, { marginTop: 8 }]}>RESPONSABLE</Text>
@@ -354,7 +354,7 @@ function StepDetalle({
 
         {/* Mini resumen */}
         <View style={styles.summaryMini}>
-          <Ionicons name="calendar-outline" size={14} color={colors.ink60} />
+          <ICONS.fecha size={14} color={colors.ink60} strokeWidth={ICON_STROKE} />
           <Text style={styles.summaryMiniText}>{formatDateDisplay(fecha)} · {responsable}</Text>
         </View>
 
@@ -385,7 +385,7 @@ function StepDetalle({
                   </Text>
                 )}
               </View>
-              {parcela?.id === p.id && <Ionicons name="checkmark" size={16} color={colors.blanco} />}
+              {parcela?.id === p.id && <ICONS.check size={16} color={colors.blanco} strokeWidth={ICON_STROKE} />}
             </TouchableOpacity>
           ))}
           {filtered.length === 0 && <Text style={styles.emptyText}>Sin resultados</Text>}
@@ -442,11 +442,11 @@ function StepDetalle({
             <Text style={styles.fieldLabel}>DÍAS CARENCIA</Text>
             <View style={styles.daysStepperRow}>
               <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasCarencia((v) => Math.max(0, v - 1))}>
-                <Ionicons name="remove" size={16} color={colors.ink} />
+                <ICONS.quitar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
               <Text style={styles.daysValue}>{diasCarencia}</Text>
               <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasCarencia((v) => v + 1)}>
-                <Ionicons name="add" size={16} color={colors.ink} />
+                <ICONS.agregar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
             </View>
             <Text style={styles.daysHint}>
@@ -458,11 +458,11 @@ function StepDetalle({
             <Text style={styles.fieldLabel}>DÍAS REINGRESO</Text>
             <View style={styles.daysStepperRow}>
               <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasReingreso((v) => Math.max(0, v - 1))}>
-                <Ionicons name="remove" size={16} color={colors.ink} />
+                <ICONS.quitar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
               <Text style={styles.daysValue}>{diasReingreso}</Text>
               <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasReingreso((v) => v + 1)}>
-                <Ionicons name="add" size={16} color={colors.ink} />
+                <ICONS.agregar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
             </View>
             <Text style={styles.daysHint}>
@@ -614,7 +614,7 @@ function StepConfirmar({
               <ActivityIndicator color={colors.blanco} size="small" />
             ) : (
               <>
-                <Ionicons name="checkmark" size={18} color={colors.blanco} style={{ marginRight: 6 }} />
+                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
                 <Text style={styles.primaryBtnText}>Confirmar</Text>
               </>
             )}
@@ -654,7 +654,7 @@ function RecentList({
   if (registros.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="flask-outline" size={36} color={colors.hueso} />
+        <ICONS.fitosanitario size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
         <Text style={styles.emptyStateTitle}>Sin registros recientes</Text>
       </View>
     )
@@ -675,7 +675,7 @@ function RecentList({
               <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_lt_ha} lt/ha</Text>
             </View>
             <TouchableOpacity onPress={() => handleDelete(r.id, r.producto_nombre)} style={styles.deleteBtn}>
-              <Ionicons name="trash-outline" size={17} color="#ef4444" />
+              <ICONS.eliminar size={17} color="#ef4444" strokeWidth={ICON_STROKE} />
             </TouchableOpacity>
           </View>
         )
@@ -812,7 +812,7 @@ export default function FitoScreen() {
     <View style={{ flex: 1 }}>
       {toast && (
         <View style={styles.toast} pointerEvents="none">
-          <Ionicons name="checkmark-circle" size={18} color={colors.blanco} />
+          <ICONS.completado size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
@@ -824,7 +824,7 @@ export default function FitoScreen() {
         }
       >
         <TouchableOpacity style={styles.newBtn} onPress={() => setStep('fecha_resp')} activeOpacity={0.85}>
-          <Ionicons name="add-circle-outline" size={20} color={colors.blanco} />
+          <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
         </TouchableOpacity>
 

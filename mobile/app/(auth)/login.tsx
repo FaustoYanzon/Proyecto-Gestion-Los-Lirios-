@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../../lib/icons'
 import {
   login, fetchCurrentUser, getRememberedUsername, setRememberedUsername, hasStoredSession,
 } from '../../lib/auth'
@@ -174,11 +174,9 @@ export default function LoginScreen() {
               style={styles.eyeBtn}
               onPress={() => setShowPwd((v) => !v)}
             >
-              <Ionicons
-                name={showPwd ? 'eye-off-outline' : 'eye-outline'}
-                size={19}
-                color={colors.niebla}
-              />
+              {showPwd
+                ? <ICONS.ocultar size={19} color={colors.niebla} strokeWidth={ICON_STROKE} />
+                : <ICONS.ver size={19} color={colors.niebla} strokeWidth={ICON_STROKE} />}
             </TouchableOpacity>
           </View>
 
@@ -187,11 +185,9 @@ export default function LoginScreen() {
             onPress={() => setRecordarme((v) => !v)}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={recordarme ? 'checkbox' : 'square-outline'}
-              size={19}
-              color={recordarme ? colors.burdeos[600] : colors.niebla}
-            />
+            {recordarme
+              ? <ICONS.casillamarcada size={19} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
+              : <ICONS.casilla size={19} color={colors.niebla} strokeWidth={ICON_STROKE} />}
             <Text style={styles.recordarmeText}>Recordar usuario</Text>
           </TouchableOpacity>
 
@@ -222,7 +218,7 @@ export default function LoginScreen() {
               onPress={handleBiometricLogin}
               activeOpacity={0.8}
             >
-              <Ionicons name="finger-print-outline" size={22} color={colors.burdeos[600]} />
+              <ICONS.huella size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
               <Text style={styles.faceIdText}>Ingresar con huella dactilar</Text>
             </TouchableOpacity>
           </>

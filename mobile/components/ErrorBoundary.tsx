@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { ICONS, ICON_STROKE } from '../lib/icons'
 import { router } from 'expo-router'
 import { colors, fonts } from '../lib/theme'
 
@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <View style={styles.container}>
           <View style={styles.iconCircle}>
-            <Ionicons name="alert-circle-outline" size={32} color={colors.blanco} />
+            <ICONS.aviso size={32} color={colors.blanco} strokeWidth={ICON_STROKE} />
           </View>
           <Text style={[styles.title, { fontFamily: fonts.display }]}>Algo salió mal</Text>
           <Text style={styles.subtitle}>

@@ -4,7 +4,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ICONS, ICON_STROKE } from '../lib/icons';
 import { colors, space, radius, text, tapTarget } from '../lib/theme';
 
 export interface WizardStep<T> {
@@ -77,7 +77,7 @@ export function Wizard<T>({
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.headerBack} hitSlop={12}>
-          <Ionicons name="chevron-back" size={22} color={colors.blanco} />
+          <ICONS.atras size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{headerTitle}</Text>
         <View style={{ width: 22 }} />
@@ -118,7 +118,7 @@ export function Wizard<T>({
       {/* Error banner */}
       {error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={16} color={colors.sangre} />
+          <ICONS.aviso size={16} color={colors.sangre} strokeWidth={ICON_STROKE} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
