@@ -72,4 +72,5 @@ Fausto confirmó que probar el flujo ARCA en producción y el build mobile v4 en
 ## Ver también
 
 - [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
+- [[2026-09-01-arca-egresos-ingresos-neto-sin-iva]] — cambio posterior: el monto del Egreso/Ingreso pasó a ser el neto sin IVA
 - [[Sistema de Gestión Agrícola]]

@@ -152,6 +152,8 @@ Ver [[2026-08-19-clima-termografo-pronostico-extendido]] para el detalle complet
 
 Importación de comprobantes ARCA (CSV) → Egresos/Ingresos + IVA compra/venta/saldo, completa (modelo, backend, frontend, alertas, verificada end-to-end con datos reales). Ver [[2026-08-12-importacion-comprobantes-arca-iva]].
 
+Ajuste posterior (2026-09-01): el monto del Egreso/Ingreso al clasificar pasó a ser el **neto sin IVA** (`imp_total - total_iva`), porque Fausto es responsable inscripto y toma crédito fiscal solo de Facturas A — el IVA ya se computa aparte en `resumen-iva`. Ver [[2026-09-01-arca-egresos-ingresos-neto-sin-iva]].
+
 ### Hecho en la sesión del 2026-08-11 (para referencia — no repetir)
 
 Ver el resumen completo en [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]. Cierra los puntos 2-4 del roadmap anterior (logging/Sentry, tests de idempotencia riego/fito/cosecha, test de registro de routers) y adelanta el punto 1 (cola offline) con un build nuevo tras detectar que el publicado no tenía el módulo nativo necesario.
