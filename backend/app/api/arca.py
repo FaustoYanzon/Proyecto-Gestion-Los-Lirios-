@@ -216,12 +216,17 @@ async def clasificar_comprobante_egreso(
     comprobante = await _get_comprobante_pendiente(db, comprobante_id, TipoArchivoArca.recibido)
 
     signo = Decimal("-1") if comprobante.es_nota_credito else Decimal("1")
+    # Somos responsables inscriptos: el IVA discriminado (Factura/Tique A) es
+    # crédito fiscal recuperable, no costo -- el Egreso guarda el neto. En las
+    # Facturas B/C el CSV de ARCA trae total_iva = 0, así que esto deja el
+    # Imp. Total completo, que sí es el costo real de esos comprobantes.
+    neto = comprobante.imp_total - comprobante.total_iva
     egreso = Egreso(
         fecha=comprobante.fecha_emision,
         tipo=data.tipo,
         clasificacion=data.clasificacion,
         descripcion=data.descripcion or comprobante.denominacion_contraparte,
-        monto=comprobante.imp_total * signo,
+        monto=neto * signo,
         moneda=MonedaTipo(comprobante.moneda),
         tipo_cambio=comprobante.tipo_cambio if comprobante.moneda == "usd" else None,
         origen=OrigenPago.oficial,
@@ -257,6 +262,10 @@ async def clasificar_comprobante_ingreso(
     comprobante = await _get_comprobante_pendiente(db, comprobante_id, TipoArchivoArca.emitido)
 
     signo = Decimal("-1") if comprobante.es_nota_credito else Decimal("1")
+    # Igual criterio que en egresos: el IVA débito no es ingreso propio -- el
+    # Ingreso guarda el neto facturado (el IVA venta se suma aparte en
+    # resumen-iva).
+    neto = comprobante.imp_total - comprobante.total_iva
     ingreso = Ingreso(
         fecha=comprobante.fecha_emision,
         destino=data.destino,
@@ -264,7 +273,7 @@ async def clasificar_comprobante_ingreso(
         forma_pago=data.forma_pago,
         estado=EstadoIngreso.facturado,
         cuenta_destino=data.cuenta_destino,
-        monto=comprobante.imp_total * signo,
+        monto=neto * signo,
         moneda=MonedaTipo(comprobante.moneda),
         tipo_cambio=comprobante.tipo_cambio if comprobante.moneda == "usd" else None,
         origen=OrigenPago.oficial,

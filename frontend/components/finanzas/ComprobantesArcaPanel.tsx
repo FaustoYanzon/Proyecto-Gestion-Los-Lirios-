@@ -269,9 +269,12 @@ function PendientesModal({ tipoArchivo, onClose }: { tipoArchivo: TipoArchivoArc
                 </div>
                 <div className="text-right flex-shrink-0">
                   <div className="text-sm font-mono text-gray-800">
-                    {c.moneda.toUpperCase()} {formatMonto(c.imp_total)}
+                    {c.moneda.toUpperCase()}{' '}
+                    {formatMonto((Number(c.imp_total) - Number(c.total_iva)) * (c.es_nota_credito ? -1 : 1))}
                   </div>
-                  <div className="text-[11px] text-gray-400">IVA {formatMonto(c.total_iva)}</div>
+                  <div className="text-[11px] text-gray-400">
+                    Total {formatMonto(c.imp_total)} · IVA {formatMonto(c.total_iva)}
+                  </div>
                 </div>
               </div>
 

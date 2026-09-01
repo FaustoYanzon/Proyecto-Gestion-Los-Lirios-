@@ -169,7 +169,9 @@ async def test_clasificar_egreso_from_factura_uses_positive_monto(client, create
     )
     assert resp.status_code == 201
     egreso = resp.json()
-    assert Decimal(egreso["monto"]) == Decimal("1425450.00")
+    # Neto sin IVA: Imp. Total 1425450.00 - Total IVA 135450.00 (crédito fiscal
+    # recuperable, no es costo para un responsable inscripto).
+    assert Decimal(egreso["monto"]) == Decimal("1290000.00")
     assert egreso["origen"] == "oficial"
     assert egreso["fuente"] == "arca_csv"
 
@@ -207,7 +209,9 @@ async def test_clasificar_egreso_from_nota_credito_uses_negative_monto(client, c
         headers=headers,
     )
     assert resp.status_code == 201
-    assert Decimal(resp.json()["monto"]) == Decimal("-61017.88")
+    # Neto sin IVA y con signo negativo por ser nota de crédito:
+    # -(61017.88 - 10589.88) = -50428.00
+    assert Decimal(resp.json()["monto"]) == Decimal("-50428.00")
 
 
 async def test_clasificar_ingreso_marks_facturado_and_prefills_comprador(client, create_user):
@@ -229,7 +233,8 @@ async def test_clasificar_ingreso_marks_facturado_and_prefills_comprador(client,
     assert ingreso["estado"] == "facturado"
     assert ingreso["comprador"] == "OVAR S. A."
     assert ingreso["fuente"] == "arca_csv"
-    assert Decimal(ingreso["monto"]) == Decimal("40409098.60")
+    # Neto sin IVA débito: Imp. Total 40409098.60 - Total IVA 3839778.60.
+    assert Decimal(ingreso["monto"]) == Decimal("36569320.00")
 
 
 async def test_clasificar_recibido_as_ingreso_is_rejected(client, create_user):
