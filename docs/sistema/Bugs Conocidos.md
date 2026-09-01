@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-26 (costo por kg, avatar + cumpleaños — ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]])
+> Última revisión: 2026-08-28 (rediseño estético + fix de permisos de parcelas — ver [[2026-08-28-estetica-v1-rediseno-web-mobile]] y [[2026-08-28-play-store-produccion-ios-fix-parcelas]])
 
 ---
 
@@ -28,11 +28,18 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **Lockfiles pueden desincronizarse silenciosamente**: `npm install` local resuelve conflictos de peer dependencies con solo un warning, pero `npm ci` (usado en CI/EAS Build) los rechaza en seco. Antes de cualquier deploy que dependa de un lockfile, correr `rm -rf node_modules && npm ci` localmente para detectar el problema antes que el servidor de build.
 - **OTA de mobile a veces necesita cerrar/reabrir la app dos veces** para aplicarse (expo-updates descarga en un launch, aplica en el siguiente) — causó confusión real el 2026-07-27 (Fausto vio comportamiento viejo — botón "Terminar" en Inicio — después de un `eas update` ya publicado). Si un fix mobile "no aparece" después de un deploy, antes de investigar código: cerrar la app del todo y reabrirla, dos veces si hace falta.
 - **Cualquier dependencia nueva en mobile puede ser un módulo nativo sin darse cuenta** — publicarla solo con `eas update` (OTA) rompe la pantalla en los celulares ya instalados, porque el JS llama a un módulo que no está enlazado en el binario nativo (mismo bug que `@react-native-community/netinfo` en agosto y que casi se repite con `@react-native-picker/picker` el 2026-08-26, revertido a tiempo por un selector propio en JS puro). Antes de agregar cualquier paquete nuevo a `mobile/package.json` para publicar solo por OTA, confirmar que sea 100% JS — si tiene código nativo (Android/iOS), hace falta un `eas build` nuevo y resubir a Play Store.
+- **Incidentes de plataforma de Railway (deploys trabados) no siempre aparecen de entrada en el resumen de status.railway.com** — pasó el 08-18 y de nuevo el 08-28: el resumen general decía "Fully Operational" mientras había un incidente real y activo ("deployments taking longer than normal to initialize", las 4 regiones) solo visible entrando a la página completa de status, no en el resumen que devuelve un fetch rápido. Si un deploy queda trabado en "Building"/"Initializing" por varios minutos sin error y `redeploy`/`railway up` tampoco avanzan, revisar `status.railway.com` completo (no solo el resumen) antes de asumir que es un problema de nuestro código. No hay nada para hacer del lado nuestro salvo esperar — el deploy anterior sigue sirviendo sin caída mientras tanto.
 - **`uvicorn --reload` en Windows deja procesos worker huérfanos si se mata solo el proceso reloader** — `Stop-Process -Id <PID del reloader>` no mata al worker hijo que WatchFiles spawnea; el worker viejo se queda vivo en el puerto 8000 sirviendo código desactualizado, aunque el proceso nuevo loguee "Application startup complete" sin errores (causó ~30 min de confusión real el 2026-08-26, ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]]). Antes de reiniciar el backend local en este entorno, matar el árbol completo: `taskkill /F /IM python.exe /T`.
+- **Google Play "quema" un `versionCode` apenas se sube el `.aab` a un borrador, aunque ese borrador nunca se guarde ni se publique.** El 2026-09-01, un primer intento de subir `los-lirios-v1.0.0-5.aab` (versionCode 5) a Prueba cerrada quedó a medio camino — se subió el archivo pero nunca se hizo click en "Siguiente", y la sesión del navegador se cerró antes de guardar el borrador. Al volver, el editor mostraba el borrador vacío (sin archivo) como si nada se hubiera subido — pero un reintento con el mismo `.aab` dio error real: *"Ya se usó el código de la versión 5. Prueba con otro código."* Hubo que generar un build nuevo completo (`eas build` de nuevo, versionCode 6) solo para poder reintentar. **Lección:** el flujo de "Crear versión" de Play Console (Subir → Siguiente → Revisar → Guardar → Enviar a revisión) hay que completarlo de punta a punta en la misma pasada — dejarlo a medias no es gratis, cuesta un build nuevo entero. Ver [[2026-09-01-ios-primer-build-play-store-14-dias]].
+- **En Play Console, "estar en la lista de verificadores" no es lo mismo que "haber aceptado participar".** El checklist real de elegibilidad para Producción (Panel de la app → sección "Producción") lo distingue explícitamente: agregar 12 emails a la lista de verificadores de un segmento de Prueba cerrada dejaba, el 2026-09-01, "0 verificadores aceptaron participar" — cada persona tiene que abrir el link de opt-in (`https://play.google.com/apps/testing/<package>`) desde el celular, logueada con esa cuenta de Gmail exacta, y tocar "Convertirme en probador". Recién ahí arrancan a contar los 14 días corridos exigidos. No asumir que mandar el link alcanza — hay que confirmar la aceptación real en ese mismo panel antes de dar el requisito por cumplido.
 
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-08-28** (ver [[2026-08-28-play-store-produccion-ios-fix-parcelas]]):
+- **Selector de "Ubicación" vacío para encargado/regador en el formulario web de Tareas (y potencialmente Cosecha/Fitosanitarios/Riego, misma función) — resuelto.** `GET /parcelas/` exigía `require_gerencial_up`; encargado/regador sacaban 403 silencioso y el selector solo mostraba "General (sin parcela)". El endpoint hermano `/parcelas/mapa` ya exponía los mismos datos a cualquier rol — inconsistencia, no una protección real. Bajado a `require_encargado_up` (mismo grupo que ya puede crear tareas/riego/fito/cosecha). Verificado con un usuario de prueba real: 403→200, sin regresión en super_admin.
+- Recurrencia del bug de procesos zombie de `uvicorn --reload` (ver 🟡 arriba) — mismo fix, `taskkill /F /IM python.exe /T`.
 
 **Sesión del 2026-08-13** (ver [[2026-08-13-mejoras-mapa]]):
 - **Modo "Fenología" del mapa mostraba estados viejos (Latencia/Madurez, sin Post-Cosecha) — resuelto.** Leía del motor viejo (`fenologia.py`/`EstadoFenologico`) en vez del Ciclo de Campaña nuevo (`EstadoCampana`, ya se pedía pero no se usaba para pintar). El endpoint viejo queda intacto — sigue alimentando "tareas recomendadas".
@@ -157,6 +164,9 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-09-01-ios-primer-build-play-store-14-dias]]
+- [[2026-08-28-play-store-produccion-ios-fix-parcelas]]
+- [[2026-08-28-estetica-v1-rediseno-web-mobile]]
 - [[2026-08-26-costo-por-kg-avatar-cumpleanos]]
 - [[2026-08-11-logging-sentry-tests-idempotencia-router-build-offline]]
 - [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]

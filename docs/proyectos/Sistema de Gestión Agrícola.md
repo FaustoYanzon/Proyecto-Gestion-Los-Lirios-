@@ -72,19 +72,29 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-08-26)
+## Próximos pasos (actualizado 2026-09-01)
 
-Pilot estable.
+Pilot estable. Primer build de iOS ya en TestFlight (interno); Android con los íconos nuevos en revisión de Play Store; faltan los últimos pasos administrativos de ambas tiendas.
 
 ### Pendiente real
 
-1. **Rotar credenciales de producción expuestas por accidente el 2026-08-19** — el mecanismo se confirmó y explicó a Fausto el 08-26 (self-service desde la app, sin tocar código), pero **no hay confirmación de que ya lo haya hecho**. Prioridad: (a) contraseña de `administracion@losliriossa.com` en producción, (b) evaluar rotar `SECRET_KEY` en Railway (desloguea a todos los usuarios activos), (c) evaluar rotar la contraseña de Postgres. Detalle: [[2026-08-19-clima-termografo-pronostico-extendido]].
-2. **Confirmar que los 2 usuarios `regador` nuevos (Lucas y Heber Mercado, Media Agua) ven la finca fija en mobile sin poder cambiarla**, y que encargado/regador/obrero en general ven bien la finca asignada tras el OTA del 2026-08-24 (requiere cerrar la app del todo y reabrirla — mismo patrón de siempre).
-3. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
-4. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó esta sesión, puede que ya se haya resuelto solo con algún reinicio de la app; revisar si Fausto no lo vuelve a mencionar.
-5. Fausto todavía no cargó su propia foto de perfil ni cumpleaños reales en producción (feature nueva del 08-26, probada con datos de prueba en local).
+1. **Play Store — confirmar aceptación real de los 12 verificadores, no solo que estén en la lista.** El panel oficial de Google (Panel de la app → "Producción") distingue "en la lista" de "aceptó participar" — al 2026-09-01 los 12 emails estaban cargados pero 0 habían aceptado. Cada uno tiene que abrir `https://play.google.com/apps/testing/com.loslirios.app` desde el celular (logueado con esa cuenta exacta de Gmail) y tocar "Convertirme en probador". Recién ahí arrancan los 14 días corridos exigidos antes de poder pedir "Acceso a producción". Detalle: [[2026-09-01-ios-primer-build-play-store-14-dias]].
+2. **iOS — sumar testers reales cuando haga falta.** Ninguno de los 12 verificadores de Android tiene cuenta de Apple todavía. Cuando se necesite, armar un grupo de **pruebas externas** en TestFlight (requiere Beta App Review de Apple la primera vez, a diferencia del grupo interno que ya tiene a Fausto probando). No hay mínimo de testers ni período de espera exigido por Apple, a diferencia de Google.
+3. Confirmar con Fausto los nombres completos reales de los 4 usuarios nuevos del sistema creados el 2026-09-01 (se usaron nombres inferidos del email: "El Cauquen SRL", "Leticia Yanzon", "Mari Barcelo", "Fausto Yanzon") — corregir en Admin > Usuarios si hace falta.
+4. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
+5. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó, puede que ya se haya resuelto solo; revisar si Fausto no lo vuelve a mencionar.
+6. Chatbot de WhatsApp (egresos no oficiales) sigue pausado desde el 08-27 — código completo y probado en local, esperando que Fausto consiga un chip prepago nuevo para registrar un número real en Meta (su número personal no sirve, se "migraría" a la API).
 
-**Resuelto desde la última actualización (no repetir):** el deploy de Railway del 08-18 (bloqueado por el incidente de plataforma) terminó activándose solo. Sin pendientes de esa sesión.
+**Resuelto desde la última actualización (no repetir):**
+- Deploy del fix de permisos de parcelas (`ce971a6`) — confirmado con `railway status --json` el 2026-09-01: terminó con éxito (el texto plano del CLI mostraba "Deploy failed" engañosamente, pero el JSON confirma `SUCCESS`/`RUNNING`). Ya está en producción.
+- Build nuevo de mobile por `react-native-svg` (íconos Fase 2) — hecho el 2026-09-01 (Android versionCode 6, en revisión de Google; iOS build 4, ya en TestFlight).
+- Cuenta Apple Developer Individual inscripta y activa (Fausto) — primer build de iOS compilado y subido a App Store Connect el 2026-09-01.
+- Rotación de credenciales de producción del 08-19 — confirmado hecho por Fausto el 08-28 ("las roté y arreglé").
+- Fausto ya cargó su propia foto/cumpleaños reales en producción.
+
+### Hecho en la sesión del 2026-08-28 (rediseño estético completo + camino a Play Store Producción + fix de permisos)
+
+Dos frentes grandes en la misma sesión. **1) Rediseño estético completo (7 fases, web + mobile)** a partir de un paquete armado con Claude Design — logo repintado a los colores oficiales, íconos unificados a Lucide en las dos plataformas (60 conceptos), tokens de borde/formularios corregidos, login rediseñado, shell web (sidebar + clima real en el topbar, antes texto fijo) y header mobile reconstruidos (con un fix real de safe-area tras probar en dispositivo), mapa mobile con las dos leyendas duplicadas fusionadas y el zoom reubicado (causa real: colisionaba con el botón de modo de color). Ver [[2026-08-28-estetica-v1-rediseno-web-mobile]] para el detalle completo, incluidos 3 bugs reales encontrados de paso (script de assets roto en Windows, proxy.ts bloqueando assets estáticos para visitantes sin sesión, pill de fenología con color fuera de paleta). **2) Camino a Producción de Play Store + arranque de iOS + bug real de permisos.** Confirmado en vivo en Play Console el requisito real de Google (12 verificadores, 14 días de prueba cerrada) — arrancada la prueba cerrada, link de opt-in listo. Decidida la cuenta de Apple Developer (Individual). Bug real encontrado y arreglado: `GET /parcelas/` bloqueaba a encargado/regador con 403, dejando el selector de "Ubicación" vacío en el formulario de Tareas — corregido y verificado con un usuario de prueba real, pero el deploy quedó trabado por un incidente de plataforma de Railway (no nuestro). Ver [[2026-08-28-play-store-produccion-ios-fix-parcelas]] para el detalle completo.
 
 ### Hecho en la sesión del 2026-08-26 (costo por kg, perfil con avatar + cumpleaños)
 
@@ -161,6 +171,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-09-01-ios-primer-build-play-store-14-dias]]
 - [[2026-08-26-costo-por-kg-avatar-cumpleanos]]
 - [[2026-08-25-tipo-egreso-repuestos-reparacion]]
 - [[2026-08-24-documentacion-selectores-finca-campana-ctrlk]]

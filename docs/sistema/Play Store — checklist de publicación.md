@@ -35,6 +35,26 @@ tags: [sistema, mobile, deploy, playstore]
   - **Link de opt-in para mandar a los testers:** `https://play.google.com/apps/internaltest/4701122264001326317`
 - **Pendiente:** nada bloqueante del lado técnico. Fausto tiene que 1) mandarles el link de opt-in a los testers (Rafael, y a sí mismo) para que instalen desde ahí, 2) resolver el tema de la cuenta de Google de Camilo si lo quiere sumar como tester, 3) esperar la revisión de Google de la ficha/contenido (puede tardar horas/días, no bloquea que los testers ya invitados instalen mientras tanto).
 
+## Actualización 2026-08-28 — arrancada la prueba cerrada, camino a Producción
+
+Fausto pidió avanzar a que la app esté en **Producción** de Play Store (para que los regadores la descarguen sin necesitar link de opt-in). Se entró a Play Console (Claude in Chrome) a confirmar el requisito real en vez de asumirlo: **Producción está inactiva**, y desde 2023 Google exige a cuentas de desarrollador personales (la de Fausto lo es):
+
+1. Publicar una versión en **Prueba cerrada** (Closed testing).
+2. Tener al menos **12 verificadores** que acepten participar (había 0 — la lista de Internal testing solo tenía 3).
+3. Correr la prueba cerrada con esos 12+ durante **mínimo 14 días corridos**.
+
+Trabajo hecho en la consola: activado el segmento "Prueba cerrada - Alpha" (existía por default, nunca usado), Argentina agregada como país disponible, lista de verificadores nueva creada con los 3 emails ya conocidos como punto de partida, el build ya existente (versión 4, 1.0.0 — el mismo de Internal testing) promovido al segmento sin recompilar, para arrancar el reloj de 14 días el mismo día. Enviado a revisión de Google (la de prueba cerrada es rápida, horas — no confundir con la revisión larga de producción).
+
+**Link de opt-in nuevo, para los 12 verificadores:** `https://play.google.com/apps/testing/com.loslirios.app`
+
+**Pendiente real:**
+1. Fausto manda el link de arriba a 12 personas reales, esperan a que acepten.
+2. Pasan 14 días corridos con los 12+ aceptados.
+3. Se solicita "Acceso a producción" en Play Console (hoy bloqueado, se habilita solo).
+4. **Antes de pedir producción, conviene ya tener el build nuevo con `react-native-svg`** (íconos del rediseño estético de la misma sesión, ver [[2026-08-28-estetica-v1-rediseno-web-mobile]]) — juntar ese build con el paso a producción evita publicar dos veces seguidas.
+
+Detalle completo de la sesión (incluye también el arranque de iOS y un bug de permisos no relacionado): [[2026-08-28-play-store-produccion-ios-fix-parcelas]].
+
 ## Actualización 2026-08-05 — la ficha nunca se había enviado a revisión
 
 Al revisar Play Console se encontró que todo el contenido armado el 07-29 (ficha, las 10 declaraciones de "Contenido de la app", categoría de tienda) había quedado guardado como borrador — **nunca se había hecho clic en "Enviar a revisión"**. Por eso la app seguía mostrando `com.loslirios.app (unreviewed)` una semana después: no era Google demorado, el proceso nunca había arrancado (no bloqueaba a los testers ya invitados, sí bloquea pasar a producción pública).
@@ -130,6 +150,8 @@ contraseña — no es una aplicación de uso público.
 
 ## Ver también
 
+- [[2026-09-01-ios-primer-build-play-store-14-dias]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
+- [[2026-08-28-play-store-produccion-ios-fix-parcelas]]
 - [[Sistema de Gestión Agrícola]]
 - [[Bugs Conocidos]]
