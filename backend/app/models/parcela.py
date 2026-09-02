@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         RegistroRiego,
         RegistroTrabajo,
     )
+    from app.models.trazabilidad import AnalisisCalidad, Foto
     from app.models.valvula import Valvula
 
 
@@ -86,4 +87,10 @@ class Parcela(Base):
     )
     valvulas: Mapped[list[Valvula]] = relationship(
         "Valvula", back_populates="parcela"
+    )
+    fotos: Mapped[list[Foto]] = relationship(
+        "Foto", back_populates="parcela"
+    )
+    analisis_calidad: Mapped[list[AnalisisCalidad]] = relationship(
+        "AnalisisCalidad", back_populates="parcela"
     )

@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen,
+  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History,
 } from 'lucide-react'
 import type { Role } from '@/lib/theme'
 
@@ -43,6 +43,13 @@ export const ALL_NAV: NavItem[] = [
     matchFn: (p) =>
       p.startsWith('/dashboard/produccion') &&
       !p.startsWith('/dashboard/produccion/dashboard'),
+  },
+  {
+    href: '/dashboard/trazabilidad',
+    label: 'Trazabilidad',
+    short: 'Trazab.',
+    icon: History,
+    matchFn: (p) => p.startsWith('/dashboard/trazabilidad'),
   },
   {
     href: '/dashboard/finanzas/egresos',

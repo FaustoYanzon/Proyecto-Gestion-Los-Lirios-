@@ -34,6 +34,12 @@ from app.models.whatsapp import (
     MensajeWhatsappPendiente,
     TelefonoUsuarioWhatsapp,
 )
+from app.models.trazabilidad import (
+    AnalisisCalidad,
+    EstadoSanitarioAnalisis,
+    Foto,
+    OrigenAnalisis,
+)
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     TAREAS_POR_CLASIFICACION,
@@ -97,4 +103,8 @@ __all__ = [
     "EstadoMensajeWhatsapp",
     "MensajeWhatsappPendiente",
     "TelefonoUsuarioWhatsapp",
+    "Foto",
+    "AnalisisCalidad",
+    "OrigenAnalisis",
+    "EstadoSanitarioAnalisis",
 ]

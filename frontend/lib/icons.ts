@@ -9,7 +9,7 @@
 // ALL_NAV: se adoptan tal cual, no se reemplazan.
 
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, BookOpen, Settings, LogOut, ClipboardList, Droplet, FlaskConical, ShoppingBasket, Grape, Wheat, Bell, User, Search, Layers, BarChart3, AlertTriangle, Sun, Gauge,
+  LayoutDashboard, Map, Sprout, DollarSign, BookOpen, Settings, LogOut, ClipboardList, Droplet, FlaskConical, ShoppingBasket, Grape, Wheat, Bell, User, Search, Layers, BarChart3, AlertTriangle, Sun, Gauge, History,
   X, Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Plus, Minus, Trash2, CheckCircle2, Leaf, Pencil, Fingerprint, AlertCircle, XCircle, MapPin, Camera, AtSign, Mail, ShieldCheck, Lock, Eye, EyeOff, Gift, CloudUpload, Clock, Play, RefreshCw, Wind, Zap, CloudOff, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, SquareCheck, Square,
 } from 'lucide-react'
 
@@ -36,6 +36,7 @@ export const ICONS = {
   alerta:          AlertTriangle,
   clima:           Sun,
   termografo:      Gauge,
+  trazabilidad:    History,
 
   // Acciones e íconos de interfaz — agregados en la Fase 2 al migrar mobile
   // desde Ionicons. Cada clave nueva reemplaza uno o más nombres de Ionicons
