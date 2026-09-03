@@ -53,8 +53,21 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
 
+    # Base URL publica del frontend, sin barra final. Se usa para construir el
+    # link de la pagina publica de trazabilidad (QR en la carta PDF + endpoint
+    # publico del PDF). En produccion apuntar al dominio de Vercel; el default
+    # sirve para desarrollo local.
+    PUBLIC_BASE_URL: str = "http://localhost:3000"
+
     # Login throttling. Applied per client IP via slowapi.
     LOGIN_RATE_LIMIT: str = "10/minute"
+
+    @field_validator("PUBLIC_BASE_URL", mode="before")
+    @classmethod
+    def _strip_trailing_slash(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.rstrip("/")
+        return value
 
     # Per-username throttle for failed logins (defends against distributed
     # password spraying that the per-IP limit above would miss). Sliding window:

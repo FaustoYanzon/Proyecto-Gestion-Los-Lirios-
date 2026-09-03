@@ -216,3 +216,115 @@ export async function downloadCartaPdf(
   })
   return data
 }
+
+// ── Enlace público (Fase 3: QR sin login) ────────────────────────────────────
+
+export interface EnlacePublicoResponse {
+  id: string
+  parcela_id: string
+  token: string
+  desde: string
+  hasta: string
+  activo: boolean
+  created_at: string
+  revoked_at: string | null
+}
+
+export async function crearEnlacePublico(
+  parcelaId: string, desde: string, hasta: string,
+): Promise<EnlacePublicoResponse> {
+  const { data } = await api.post(`/trazabilidad/parcela/${parcelaId}/enlaces`, { desde, hasta })
+  return data
+}
+
+export async function listEnlacesPublicos(parcelaId: string): Promise<EnlacePublicoResponse[]> {
+  const { data } = await api.get(`/trazabilidad/parcela/${parcelaId}/enlaces`)
+  return data
+}
+
+export async function revocarEnlacePublico(enlaceId: string): Promise<EnlacePublicoResponse> {
+  const { data } = await api.post(`/trazabilidad/enlaces/${enlaceId}/revocar`)
+  return data
+}
+
+// ── Vista pública (schema curado por el backend, sin responsable/comprador) ───
+
+export interface FitosanitarioPublicoItem {
+  fecha: string
+  producto_nombre: string
+  dosis_lt_ha: number
+  dias_carencia: number
+  fecha_habilitacion_cosecha: string
+  dias_reingreso: number
+  fecha_habilitacion_reingreso: string
+  estado_compliance: ComplianceEstado
+}
+
+export interface FotoPublicaItem {
+  url: string
+  categoria: string
+  fecha: string
+  descripcion: string | null
+}
+
+export interface AnalisisPublicoItem {
+  fecha: string
+  origen: OrigenAnalisis
+  brix: number | null
+  acidez: number | null
+  ph: number | null
+  estado_sanitario: EstadoSanitarioAnalisis | null
+  laboratorio_nombre: string | null
+  informe_url: string | null
+}
+
+export interface ResumenPublicoItem {
+  kg_total: number
+  meta_produccion_kg: number | null
+  pct_meta_produccion: number | null
+  mm_riego_total: number
+  mm_objetivo_anual: number
+  pct_objetivo_riego: number | null
+  horas_de_frio: number | null
+  fitos_cumplidos: number
+  fitos_pendientes: number
+  fitos_incumplidos: number
+}
+
+export interface EmpresaItem {
+  razon_social: string
+  cuit: string
+  domicilio: string
+}
+
+export interface HistorialPublicoResponse {
+  parcela_nombre: string
+  parcela_tipo: string
+  parcela_variedad: string | null
+  parcela_variedad_descripcion: string | null
+  parcela_superficie_ha: number | null
+  parcela_finca: string | null
+  parcela_tipo_riego: string | null
+  parcela_cobertura_invierno: string | null
+  parcela_centroide: CentroideItem | null
+  desde: string
+  hasta: string
+  resumen: ResumenPublicoItem
+  fitosanitarios: FitosanitarioPublicoItem[]
+  cumplimiento_riego_por_estado: CumplimientoEstadoItem[]
+  resumen_destino: ResumenDestinoItem[]
+  tareas_resumen: TareaResumenItem[]
+  fotos: FotoPublicaItem[]
+  analisis_calidad: AnalisisPublicoItem[]
+  empresa: EmpresaItem
+}
+
+export async function getHistorialPublico(token: string): Promise<HistorialPublicoResponse> {
+  const { data } = await api.get(`/trazabilidad/publica/${token}`)
+  return data
+}
+
+export async function downloadCartaPdfPublica(token: string): Promise<Blob> {
+  const { data } = await api.get(`/trazabilidad/publica/${token}/pdf`, { responseType: 'blob' })
+  return data
+}

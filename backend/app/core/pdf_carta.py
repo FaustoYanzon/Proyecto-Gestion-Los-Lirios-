@@ -16,6 +16,7 @@ from xhtml2pdf import pisa
 
 from app.core import labels
 from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCIAL
+from app.core.qr import generar_qr_data_uri
 
 if TYPE_CHECKING:
     from app.models.parcela import Parcela
@@ -68,7 +69,15 @@ def generar_pdf_carta(
     desde: date,
     hasta: date,
     generado_por: str,
+    publico: bool = False,
+    publico_url: str | None = None,
 ) -> bytes:
+    # `publico=True`: la carta se sirve desde el enlace publico sin login, asi
+    # que se omiten los datos internos (responsable de riego/fito, comprador de
+    # cosecha) -- un `if publico` puntual en las comprehensions de abajo, no un
+    # context paralelo. `publico_url` (tipicamente en la descarga interna,
+    # cuando ya existe un enlace activo para ese rango) hace que se embeba el
+    # QR de esa pagina publica.
     compliance_por_id = {c.fitosanitario_id: c for c in compliance}
 
     fitosanitarios_ctx = []
@@ -83,7 +92,7 @@ def generar_pdf_carta(
             "fecha_habilitacion_cosecha": _fmt_fecha(f.fecha_habilitacion_cosecha),
             "dias_reingreso": f.dias_reingreso,
             "fecha_habilitacion_reingreso": _fmt_fecha(f.fecha_habilitacion_reingreso),
-            "responsable": f.responsable,
+            "responsable": None if publico else f.responsable,
             "estado_label": labels.COMPLIANCE_LABELS[estado],
             "row_class": COMPLIANCE_ROW_CLASS[estado],
         })
@@ -96,6 +105,9 @@ def generar_pdf_carta(
     fitos_incumplidos = sum(1 for c in compliance if c.estado == "incumplido")
 
     context = {
+        "publico": publico,
+        "qr_data_uri": generar_qr_data_uri(publico_url) if publico_url else None,
+        "publico_url": publico_url,
         "empresa": {
             "razon_social": EMPRESA_RAZON_SOCIAL,
             "cuit": EMPRESA_CUIT,
@@ -140,13 +152,13 @@ def generar_pdf_carta(
         "riegos": [{
             "fecha": _fmt_fecha(r.fecha), "cabezal": r.cabezal, "valvula": r.valvula,
             "mm_aplicados": r.mm_aplicados, "litros_aplicados": round(r.litros_aplicados),
-            "responsable": r.responsable,
+            "responsable": None if publico else r.responsable,
         } for r in riegos],
         "fitosanitarios": fitosanitarios_ctx,
         "cosechas": [{
             "fecha": _fmt_fecha(c.fecha), "kg_total": c.kg_total,
             "destino_label": labels.DESTINO_LABELS.get(c.destino.value, c.destino.value),
-            "comprador": c.comprador, "n_remito": c.n_remito,
+            "comprador": None if publico else c.comprador, "n_remito": c.n_remito,
         } for c in cosechas],
         "tareas_resumen": [{
             "tarea": t.tarea,

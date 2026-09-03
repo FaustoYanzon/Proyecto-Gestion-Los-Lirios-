@@ -1,3 +1,4 @@
+import secrets
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
@@ -7,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
-from app.api.deps import get_db, require_any_role, require_encargado_up
+from app.api.deps import get_db, require_any_role, require_encargado_up, require_gerencial_up
 from app.core import ciclo_campana, labels, termografo_metrics
 from app.core.cloudinary_client import upload_foto_parcela, upload_informe_analisis
+from app.core.config import settings
+from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCIAL
 from app.core.geo import centroide_poligono
 from app.core.pdf_carta import generar_pdf_carta
 from app.core.termografo_import import FINCA_TZ
@@ -24,22 +27,40 @@ from app.models.produccion import (
     RegistroTrabajo,
 )
 from app.models.termografo import LecturaTermografo
-from app.models.trazabilidad import AnalisisCalidad, EstadoSanitarioAnalisis, Foto, OrigenAnalisis
+from app.models.trazabilidad import (
+    AnalisisCalidad,
+    EnlacePublico,
+    EstadoSanitarioAnalisis,
+    Foto,
+    OrigenAnalisis,
+)
 from app.models.user import User
 from app.schemas.trazabilidad import (
     AnalisisCalidadCreate,
     AnalisisCalidadResponse,
+    AnalisisPublicoItem,
     CentroideItem,
     ComplianceFitosanitario,
     CumplimientoEstadoItem,
+    EmpresaItem,
+    EnlacePublicoCreate,
+    EnlacePublicoResponse,
+    FitosanitarioPublicoItem,
     FotoCreate,
+    FotoPublicaItem,
     FotoResponse,
     HistorialParcelaResponse,
+    HistorialPublicoResponse,
     ResumenDestinoItem,
+    ResumenPublicoItem,
     TareaResumenItem,
 )
 
 router = APIRouter(prefix="/trazabilidad", tags=["Trazabilidad"])
+
+
+def _url_publica(token: str) -> str:
+    return f"{settings.PUBLIC_BASE_URL}/trazabilidad/publica/{token}"
 
 # 1mm sobre 1ha = 10.000 L -- el objetivo en mm no depende de la superficie.
 # Mismo valor que ya usan el mapa web/mobile (LITROS_OBJETIVO_ANUAL_POR_HA /
@@ -347,6 +368,137 @@ async def _fetch_historial(
     )
 
 
+def _resumen_publico(data: HistorialData) -> ResumenPublicoItem:
+    """Mismo calculo que el resumen ejecutivo de la carta PDF
+    (app/core/pdf_carta.py) -- kg cosechados, mm de riego, horas de frio y
+    conteo del semaforo de carencia. Sin nombres ni datos comerciales."""
+    kg_total = sum(c.kg_total for c in data.cosechas)
+    mm_riego_total = sum(r.mm_aplicados or 0 for r in data.riegos)
+    cumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "cumplido")
+    pendientes = sum(1 for c in data.compliance_fitosanitarios if c.estado == "pendiente")
+    incumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "incumplido")
+    return ResumenPublicoItem(
+        kg_total=round(kg_total, 1),
+        meta_produccion_kg=data.meta_produccion_kg,
+        pct_meta_produccion=(
+            round(kg_total / data.meta_produccion_kg * 100, 1)
+            if data.meta_produccion_kg else None
+        ),
+        mm_riego_total=round(mm_riego_total, 1),
+        mm_objetivo_anual=MM_OBJETIVO_ANUAL,
+        pct_objetivo_riego=(
+            round(mm_riego_total / MM_OBJETIVO_ANUAL * 100, 1) if MM_OBJETIVO_ANUAL else None
+        ),
+        horas_de_frio=data.horas_de_frio,
+        fitos_cumplidos=cumplidos,
+        fitos_pendientes=pendientes,
+        fitos_incumplidos=incumplidos,
+    )
+
+
+def _build_historial_publico(
+    data: HistorialData, desde: date, hasta: date,
+) -> HistorialPublicoResponse:
+    """Arma la respuesta de la vista publica a mano, campo por campo -- nunca
+    pasa por los schemas internos (que arrastran responsable/comprador)."""
+    parcela = data.parcela
+    estado_por_fito = {
+        c.fitosanitario_id: c.estado for c in data.compliance_fitosanitarios
+    }
+    return HistorialPublicoResponse(
+        parcela_nombre=parcela.nombre,
+        parcela_tipo=labels.TIPO_LABELS.get(parcela.tipo.value, parcela.tipo.value),
+        parcela_variedad=(
+            parcela.variedad.value.replace("_", " ").title() if parcela.variedad else None
+        ),
+        parcela_variedad_descripcion=data.parcela_variedad_descripcion,
+        parcela_superficie_ha=parcela.superficie_ha,
+        parcela_finca=(
+            labels.FINCA_LABELS.get(parcela.finca.value, parcela.finca.value)
+            if parcela.finca else None
+        ),
+        parcela_tipo_riego=data.parcela_tipo_riego,
+        parcela_cobertura_invierno=data.parcela_cobertura_invierno,
+        parcela_centroide=(
+            CentroideItem(lat=data.parcela_centroide[0], lng=data.parcela_centroide[1])
+            if data.parcela_centroide else None
+        ),
+        desde=desde,
+        hasta=hasta,
+        resumen=_resumen_publico(data),
+        fitosanitarios=[
+            FitosanitarioPublicoItem(
+                fecha=f.fecha,
+                producto_nombre=f.producto_nombre,
+                dosis_lt_ha=f.dosis_lt_ha,
+                dias_carencia=f.dias_carencia,
+                fecha_habilitacion_cosecha=f.fecha_habilitacion_cosecha,
+                dias_reingreso=f.dias_reingreso,
+                fecha_habilitacion_reingreso=f.fecha_habilitacion_reingreso,
+                estado_compliance=estado_por_fito.get(f.id, "pendiente"),
+            )
+            for f in data.fitosanitarios
+        ],
+        cumplimiento_riego_por_estado=data.cumplimiento_riego_por_estado,
+        resumen_destino=data.resumen_destino,
+        tareas_resumen=data.tareas_resumen,
+        fotos=[
+            FotoPublicaItem(
+                url=f.url, categoria=f.categoria, fecha=f.fecha, descripcion=f.descripcion,
+            )
+            for f in data.fotos
+        ],
+        analisis_calidad=[
+            AnalisisPublicoItem(
+                fecha=a.fecha,
+                origen=a.origen,
+                brix=a.brix,
+                acidez=a.acidez,
+                ph=a.ph,
+                estado_sanitario=a.estado_sanitario,
+                laboratorio_nombre=a.laboratorio_nombre,
+                informe_url=a.informe_url,
+            )
+            for a in data.analisis_calidad
+        ],
+        empresa=EmpresaItem(
+            razon_social=EMPRESA_RAZON_SOCIAL,
+            cuit=EMPRESA_CUIT,
+            domicilio=EMPRESA_DOMICILIO,
+        ),
+    )
+
+
+async def _enlace_activo_por_rango(
+    db: AsyncSession, parcela_id: str, desde: date, hasta: date,
+) -> EnlacePublico | None:
+    """Enlace publico activo para exactamente esa parcela + ese rango. Usado
+    para auto-embeber el QR en la carta PDF interna sin cambiar sus permisos."""
+    return (await db.execute(
+        select(EnlacePublico)
+        .where(
+            EnlacePublico.parcela_id == parcela_id,
+            EnlacePublico.desde == desde,
+            EnlacePublico.hasta == hasta,
+            EnlacePublico.activo.is_(True),
+        )
+        .order_by(EnlacePublico.created_at.desc())
+    )).scalars().first()
+
+
+async def _get_enlace_por_token_or_404(db: AsyncSession, token: str) -> EnlacePublico:
+    """Un solo 404 generico para "token inexistente" y "token revocado" -- no
+    se distingue por el mensaje si alguien prueba un token viejo."""
+    enlace = (await db.execute(
+        select(EnlacePublico).where(EnlacePublico.token == token)
+    )).scalar_one_or_none()
+    if enlace is None or not enlace.activo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Enlace no disponible",
+        )
+    return enlace
+
+
 @router.get("/parcela/{parcela_id}/historial", response_model=HistorialParcelaResponse)
 async def historial_parcela(
     parcela_id: str,
@@ -397,6 +549,13 @@ async def carta_pdf_parcela(
     parcela = await _get_parcela_or_404(db, parcela_id)
     data = await _fetch_historial(db, parcela, desde, hasta)
 
+    # Si ya existe un enlace publico activo para esta parcela + este rango
+    # exacto, la carta embebe su QR. Si no, se genera igual que siempre (sin
+    # QR) -- crear el enlace sigue siendo exclusivo de gerencial_up, cualquiera
+    # que descargue el PDF despues simplemente hereda el QR si ya existe.
+    enlace = await _enlace_activo_por_rango(db, parcela_id, desde, hasta)
+    publico_url = _url_publica(enlace.token) if enlace else None
+
     # xhtml2pdf/reportlab son sincronicos y CPU-bound -- correrlos inline
     # bloquearia el event loop async para todas las demas requests mientras
     # se genera el PDF. Mismo cuidado que el proyecto ya tiene con Cloudinary
@@ -404,6 +563,7 @@ async def carta_pdf_parcela(
     pdf_bytes = await run_in_threadpool(
         generar_pdf_carta,
         parcela=data.parcela,
+        publico_url=publico_url,
         riegos=data.riegos,
         fitosanitarios=data.fitosanitarios,
         cosechas=data.cosechas,
@@ -426,6 +586,129 @@ async def carta_pdf_parcela(
     )
 
     filename = f"trazabilidad-{data.parcela.nombre}-{desde}_{hasta}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Enlaces publicos: gestion (gerencial+) ──────────────────────────────────
+
+@router.post(
+    "/parcela/{parcela_id}/enlaces",
+    response_model=EnlacePublicoResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crear_enlace_publico(
+    parcela_id: str,
+    body: EnlacePublicoCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_gerencial_up),
+) -> EnlacePublico:
+    await _get_parcela_or_404(db, parcela_id)
+    enlace = EnlacePublico(
+        parcela_id=parcela_id,
+        token=secrets.token_urlsafe(24),
+        desde=body.desde,
+        hasta=body.hasta,
+        created_by=current_user.id,
+    )
+    db.add(enlace)
+    await db.flush()
+    await db.refresh(enlace)
+    return enlace
+
+
+@router.get(
+    "/parcela/{parcela_id}/enlaces",
+    response_model=list[EnlacePublicoResponse],
+)
+async def list_enlaces_publicos(
+    parcela_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> list[EnlacePublico]:
+    filas = (await db.execute(
+        select(EnlacePublico)
+        .where(EnlacePublico.parcela_id == parcela_id)
+        .order_by(EnlacePublico.activo.desc(), EnlacePublico.created_at.desc())
+    )).scalars().all()
+    return list(filas)
+
+
+@router.post(
+    "/enlaces/{enlace_id}/revocar",
+    response_model=EnlacePublicoResponse,
+)
+async def revocar_enlace_publico(
+    enlace_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_gerencial_up),
+) -> EnlacePublico:
+    enlace = (await db.execute(
+        select(EnlacePublico).where(EnlacePublico.id == enlace_id)
+    )).scalar_one_or_none()
+    if enlace is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enlace not found")
+    # Soft: no se borra el historial -- mismo criterio que "descartar" en ARCA.
+    if enlace.activo:
+        enlace.activo = False
+        enlace.revoked_at = datetime.now(timezone.utc)
+        await db.flush()
+        await db.refresh(enlace)
+    return enlace
+
+
+# ── Enlaces publicos: vista publica (sin auth) ─────────────────────────────
+
+@router.get("/publica/{token}", response_model=HistorialPublicoResponse)
+async def historial_publico(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+) -> HistorialPublicoResponse:
+    enlace = await _get_enlace_por_token_or_404(db, token)
+    parcela = await _get_parcela_or_404(db, enlace.parcela_id)
+    data = await _fetch_historial(db, parcela, enlace.desde, enlace.hasta)
+    return _build_historial_publico(data, enlace.desde, enlace.hasta)
+
+
+@router.get("/publica/{token}/pdf")
+async def carta_pdf_publica(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    enlace = await _get_enlace_por_token_or_404(db, token)
+    parcela = await _get_parcela_or_404(db, enlace.parcela_id)
+    data = await _fetch_historial(db, parcela, enlace.desde, enlace.hasta)
+
+    pdf_bytes = await run_in_threadpool(
+        generar_pdf_carta,
+        parcela=data.parcela,
+        publico=True,
+        publico_url=_url_publica(enlace.token),
+        riegos=data.riegos,
+        fitosanitarios=data.fitosanitarios,
+        cosechas=data.cosechas,
+        fotos=data.fotos,
+        analisis=data.analisis_calidad,
+        compliance=data.compliance_fitosanitarios,
+        parcela_variedad_descripcion=data.parcela_variedad_descripcion,
+        parcela_centroide=data.parcela_centroide,
+        parcela_tipo_riego=data.parcela_tipo_riego,
+        parcela_cobertura_invierno=data.parcela_cobertura_invierno,
+        cumplimiento_riego_por_estado=data.cumplimiento_riego_por_estado,
+        resumen_destino=data.resumen_destino,
+        tareas_resumen=data.tareas_resumen,
+        horas_de_frio=data.horas_de_frio,
+        mm_objetivo_anual=MM_OBJETIVO_ANUAL,
+        meta_produccion_kg=data.meta_produccion_kg,
+        desde=enlace.desde,
+        hasta=enlace.hasta,
+        generado_por=EMPRESA_RAZON_SOCIAL,
+    )
+
+    filename = f"trazabilidad-{data.parcela.nombre}-{enlace.desde}_{enlace.hasta}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

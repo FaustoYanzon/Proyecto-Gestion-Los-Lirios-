@@ -151,6 +151,12 @@
         CUIT {{ empresa.cuit }}<br>
         {{ empresa.domicilio }}
       </td>
+      {% if qr_data_uri %}
+      <td style="width: 90px; text-align: center; padding-left: 8px;">
+        <img src="{{ qr_data_uri }}" style="width: 78px; height: 78px;">
+        <div style="font-size: 6.5pt; color: #5a544c; margin-top: 2px;">Verificá esta<br>trazabilidad en línea</div>
+      </td>
+      {% endif %}
     </tr>
   </table>
 
@@ -213,11 +219,11 @@
   <h2>Riego</h2>
   {% if riegos %}
   <table class="datos">
-    <tr><th>Fecha</th><th>Cabezal</th><th>Válvula</th><th>mm</th><th>Litros</th><th>Responsable</th></tr>
+    <tr><th>Fecha</th><th>Cabezal</th><th>Válvula</th><th>mm</th><th>Litros</th>{% if not publico %}<th>Responsable</th>{% endif %}</tr>
     {% for r in riegos %}
     <tr>
       <td>{{ r.fecha }}</td><td>{{ r.cabezal }}</td><td>{{ r.valvula }}</td>
-      <td>{{ r.mm_aplicados or '—' }}</td><td>{{ r.litros_aplicados }}</td><td>{{ r.responsable }}</td>
+      <td>{{ r.mm_aplicados or '—' }}</td><td>{{ r.litros_aplicados }}</td>{% if not publico %}<td>{{ r.responsable }}</td>{% endif %}
     </tr>
     {% endfor %}
   </table>
@@ -230,14 +236,14 @@
   <table class="datos">
     <tr>
       <th>Fecha</th><th>Producto</th><th>Dosis L/ha</th><th>Carencia</th>
-      <th>Hab. cosecha</th><th>Reingreso</th><th>Hab. reingreso</th><th>Responsable</th><th>Estado</th>
+      <th>Hab. cosecha</th><th>Reingreso</th><th>Hab. reingreso</th>{% if not publico %}<th>Responsable</th>{% endif %}<th>Estado</th>
     </tr>
     {% for f in fitosanitarios %}
     <tr class="{{ f.row_class }}">
       <td>{{ f.fecha }}</td><td>{{ f.producto_nombre }}</td><td>{{ f.dosis_lt_ha }}</td>
       <td>{{ f.dias_carencia }} d</td><td>{{ f.fecha_habilitacion_cosecha }}</td>
       <td>{{ f.dias_reingreso }} d</td><td>{{ f.fecha_habilitacion_reingreso }}</td>
-      <td>{{ f.responsable }}</td><td><strong>{{ f.estado_label }}</strong></td>
+      {% if not publico %}<td>{{ f.responsable }}</td>{% endif %}<td><strong>{{ f.estado_label }}</strong></td>
     </tr>
     {% endfor %}
   </table>
@@ -264,11 +270,11 @@
   <h2>Cosecha</h2>
   {% if cosechas %}
   <table class="datos">
-    <tr><th>Fecha</th><th>Kg</th><th>Destino</th><th>Comprador</th><th>Remito</th></tr>
+    <tr><th>Fecha</th><th>Kg</th><th>Destino</th>{% if not publico %}<th>Comprador</th>{% endif %}<th>Remito</th></tr>
     {% for c in cosechas %}
     <tr>
       <td>{{ c.fecha }}</td><td>{{ c.kg_total }}</td><td>{{ c.destino_label }}</td>
-      <td>{{ c.comprador or '—' }}</td><td>{{ c.n_remito or '—' }}</td>
+      {% if not publico %}<td>{{ c.comprador or '—' }}</td>{% endif %}<td>{{ c.n_remito or '—' }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -339,6 +345,7 @@
 
   <div class="pie">
     Generado por {{ generado_por }} — {{ empresa.razon_social }}, sistema de gestión — {{ generado_en }}<br>
+    {% if publico_url %}Versión en línea: <a href="{{ publico_url }}">{{ publico_url }}</a><br>{% endif %}
     Documento generado automáticamente a partir de los registros cargados en el sistema. No constituye una firma digital.
   </div>
 

@@ -5,7 +5,9 @@ import type { NextRequest } from 'next/server'
 // /privacy: siempre pública, incluso con sesión iniciada — la pide Play Store
 // y tiene que ser accesible sin depender de si quien la visita está logueado.
 const unauthOnlyRoutes = ['/login']
-const alwaysPublicRoutes = ['/privacy']
+// /trazabilidad/publica/<token>: la vista pública de trazabilidad que se abre
+// desde el QR de la carta, sin sesión — la mira un comprador, no un usuario.
+const alwaysPublicRoutes = ['/privacy', '/trazabilidad/publica']
 
 // Cualquier archivo estático de public/ (logos, favicons, imágenes) tiene que
 // servirse siempre, sin cookie de sesión — si no, un <img src="/logo.svg">

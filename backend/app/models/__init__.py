@@ -36,6 +36,7 @@ from app.models.whatsapp import (
 )
 from app.models.trazabilidad import (
     AnalisisCalidad,
+    EnlacePublico,
     EstadoSanitarioAnalisis,
     Foto,
     OrigenAnalisis,
@@ -105,6 +106,7 @@ __all__ = [
     "TelefonoUsuarioWhatsapp",
     "Foto",
     "AnalisisCalidad",
+    "EnlacePublico",
     "OrigenAnalisis",
     "EstadoSanitarioAnalisis",
 ]

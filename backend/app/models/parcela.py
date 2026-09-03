@@ -20,7 +20,7 @@ if TYPE_CHECKING:
         RegistroRiego,
         RegistroTrabajo,
     )
-    from app.models.trazabilidad import AnalisisCalidad, Foto
+    from app.models.trazabilidad import AnalisisCalidad, EnlacePublico, Foto
     from app.models.valvula import Valvula
 
 
@@ -103,4 +103,7 @@ class Parcela(Base):
     )
     analisis_calidad: Mapped[list[AnalisisCalidad]] = relationship(
         "AnalisisCalidad", back_populates="parcela"
+    )
+    enlaces_publicos: Mapped[list[EnlacePublico]] = relationship(
+        "EnlacePublico", back_populates="parcela"
     )

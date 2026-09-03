@@ -5,7 +5,16 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index, String
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum as SAEnum,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -106,4 +115,41 @@ class AnalisisCalidad(Base):
     )
 
     parcela: Mapped[Parcela] = relationship("Parcela", back_populates="analisis_calidad")
+    created_by_user: Mapped[User] = relationship("User")
+
+
+class EnlacePublico(Base):
+    """Enlace publico (QR, sin login) para que un comprador vea la trazabilidad
+    de una parcela sobre un rango de fechas fijo. Consulta los datos en vivo
+    (una correccion posterior dentro de la ventana se refleja), pero el rango
+    queda congelado al generarse. Revocable (soft: activo=False + revoked_at),
+    sin vencimiento automatico -- vive pegado a una caja/pallet fisico."""
+
+    __tablename__ = "enlaces_publicos_trazabilidad"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    parcela_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("parcelas.id"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    desde: Mapped[date] = mapped_column(Date, nullable=False)
+    hasta: Mapped[date] = mapped_column(Date, nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_enlaces_publicos_parcela", "parcela_id"),
+    )
+
+    parcela: Mapped[Parcela] = relationship("Parcela", back_populates="enlaces_publicos")
     created_by_user: Mapped[User] = relationship("User")

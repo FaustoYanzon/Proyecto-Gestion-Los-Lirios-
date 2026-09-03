@@ -15,6 +15,7 @@ import RiegoPorEstado from '@/components/trazabilidad/RiegoPorEstado'
 import DestinoResumen from '@/components/trazabilidad/DestinoResumen'
 import FotoAlbum from '@/components/trazabilidad/FotoAlbum'
 import AnalisisList from '@/components/trazabilidad/AnalisisList'
+import EnlacesPublicos from '@/components/trazabilidad/EnlacesPublicos'
 
 // Mismo orden/campos que finanzas/dashboard/page.tsx y MesRangeQuickButtons.tsx
 // (mayo→abril) -- se repite acá en vez de compartir un modulo porque no existe
@@ -29,6 +30,9 @@ const MES_LABELS: Record<number, string> = {
 // regador pese al nombre) -- ver app/api/deps.py.
 const PUEDE_EDITAR_ROLES = ['super_admin', 'gerencial', 'encargado', 'regador']
 
+// Gestión de enlaces públicos: sólo gerencial+ (require_gerencial_up).
+const PUEDE_GESTIONAR_ENLACES_ROLES = ['super_admin', 'gerencial']
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
@@ -42,6 +46,7 @@ const selectCls = 'rounded-md border border-gray-300 px-3 py-2 text-sm bg-white 
 export default function TrazabilidadPage() {
   const user = useAuthStore((s) => s.user)
   const puedeEditar = !!user && PUEDE_EDITAR_ROLES.includes(user.role)
+  const puedeGestionarEnlaces = !!user && PUEDE_GESTIONAR_ENLACES_ROLES.includes(user.role)
 
   const campanaGlobal = useContextStore((s) => s.campana)
   const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
@@ -186,6 +191,9 @@ export default function TrazabilidadPage() {
         <>
           {parcelaSeleccionada && <ParcelaHeader parcela={parcelaSeleccionada} historial={historial} />}
           <ComplianceBanner compliance={historial.compliance_fitosanitarios} />
+          {puedeGestionarEnlaces && (
+            <EnlacesPublicos parcelaId={parcelaId} desde={desde} hasta={hasta} />
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="space-y-5">
               <Timeline historial={historial} />
