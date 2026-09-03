@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     # Login throttling. Applied per client IP via slowapi.
     LOGIN_RATE_LIMIT: str = "10/minute"
 
+    # Throttle per IP de los endpoints publicos de trazabilidad (JSON + PDF).
+    # El token de 24 bytes ya hace impracticable adivinar enlaces por fuerza
+    # bruta; esto acota ademas el costo de que alguien pida el PDF (CPU-bound)
+    # en loop. Un comprador que refresca la pagina un par de veces entra
+    # comodo en 30/min.
+    PUBLIC_TRAZABILIDAD_RATE_LIMIT: str = "30/minute"
+
     @field_validator("PUBLIC_BASE_URL", mode="before")
     @classmethod
     def _strip_trailing_slash(cls, value: object) -> object:

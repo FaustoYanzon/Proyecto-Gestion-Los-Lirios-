@@ -2,7 +2,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -12,6 +12,7 @@ from app.api.deps import get_db, require_any_role, require_encargado_up, require
 from app.core import ciclo_campana, labels, termografo_metrics
 from app.core.cloudinary_client import upload_foto_parcela, upload_informe_analisis
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCIAL
 from app.core.geo import centroide_poligono
 from app.core.pdf_carta import generar_pdf_carta
@@ -663,7 +664,9 @@ async def revocar_enlace_publico(
 # ── Enlaces publicos: vista publica (sin auth) ─────────────────────────────
 
 @router.get("/publica/{token}", response_model=HistorialPublicoResponse)
+@limiter.limit(settings.PUBLIC_TRAZABILIDAD_RATE_LIMIT)
 async def historial_publico(
+    request: Request,  # requerido por slowapi para keyear el limite por IP
     token: str,
     db: AsyncSession = Depends(get_db),
 ) -> HistorialPublicoResponse:
@@ -674,7 +677,9 @@ async def historial_publico(
 
 
 @router.get("/publica/{token}/pdf")
+@limiter.limit(settings.PUBLIC_TRAZABILIDAD_RATE_LIMIT)
 async def carta_pdf_publica(
+    request: Request,  # requerido por slowapi para keyear el limite por IP
     token: str,
     db: AsyncSession = Depends(get_db),
 ) -> Response:

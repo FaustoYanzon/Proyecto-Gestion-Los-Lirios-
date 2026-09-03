@@ -24,6 +24,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-not-used-in-production-0123456789"
 # Keep the slowapi per-IP limit out of the way; these tests exercise the
 # per-username throttle explicitly with a low threshold.
 os.environ["LOGIN_RATE_LIMIT"] = "1000/minute"
+os.environ["PUBLIC_TRAZABILIDAD_RATE_LIMIT"] = "1000/minute"
 os.environ["LOGIN_MAX_FAILURES"] = "3"
 os.environ["LOGIN_FAILURE_WINDOW_SECONDS"] = "300"
 
