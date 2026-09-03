@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.produccion import DestinoCosecha, EstadoCampana
 from app.models.trazabilidad import EstadoSanitarioAnalisis, OrigenAnalisis
 from app.schemas.produccion import (
     CicloCampanaResponse,
@@ -74,6 +75,39 @@ class ComplianceFitosanitario(BaseModel):
     cosecha_conflictiva_fecha: date | None = None
 
 
+class CumplimientoEstadoItem(BaseModel):
+    estado_campana: EstadoCampana
+    estado_campana_label: str
+    fecha_inicio: date
+    fecha_fin: date
+    riegos_esperados: int
+    mm_aplicados: float
+    riegos_equivalentes: float
+    cumplimiento_pct: float
+    cumplido: bool
+
+
+class ResumenDestinoItem(BaseModel):
+    destino: DestinoCosecha
+    destino_label: str
+    kg_total: float
+    n_registros: int
+    pct_del_total: float
+
+
+class CentroideItem(BaseModel):
+    lat: float
+    lng: float
+
+
+class TareaResumenItem(BaseModel):
+    tarea: str
+    unidad_medida_label: str
+    fecha_inicio: date
+    fecha_fin: date
+    registros: int
+
+
 class HistorialParcelaResponse(BaseModel):
     parcela_id: str
     parcela_nombre: str
@@ -87,3 +121,13 @@ class HistorialParcelaResponse(BaseModel):
     fotos: list[FotoResponse]
     analisis_calidad: list[AnalisisCalidadResponse]
     compliance_fitosanitarios: list[ComplianceFitosanitario]
+    parcela_variedad_descripcion: str | None = None
+    parcela_centroide: CentroideItem | None = None
+    parcela_tipo_riego: str | None = None
+    parcela_cobertura_invierno: str | None = None
+    cumplimiento_riego_por_estado: list[CumplimientoEstadoItem]
+    resumen_destino: list[ResumenDestinoItem]
+    tareas_resumen: list[TareaResumenItem]
+    horas_de_frio: float | None = None
+    mm_objetivo_anual: float
+    meta_produccion_kg: float | None = None

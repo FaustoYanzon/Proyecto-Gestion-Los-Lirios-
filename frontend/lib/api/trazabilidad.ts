@@ -140,6 +140,39 @@ export interface ComplianceFitosanitarioItem {
   cosecha_conflictiva_fecha: string | null
 }
 
+export interface CumplimientoEstadoItem {
+  estado_campana: string
+  estado_campana_label: string
+  fecha_inicio: string
+  fecha_fin: string
+  riegos_esperados: number
+  mm_aplicados: number
+  riegos_equivalentes: number
+  cumplimiento_pct: number
+  cumplido: boolean
+}
+
+export interface ResumenDestinoItem {
+  destino: string
+  destino_label: string
+  kg_total: number
+  n_registros: number
+  pct_del_total: number
+}
+
+export interface CentroideItem {
+  lat: number
+  lng: number
+}
+
+export interface TareaResumenItem {
+  tarea: string
+  unidad_medida_label: string
+  fecha_inicio: string
+  fecha_fin: string
+  registros: number
+}
+
 export interface HistorialParcelaResponse {
   parcela_id: string
   parcela_nombre: string
@@ -153,6 +186,16 @@ export interface HistorialParcelaResponse {
   fotos: FotoResponse[]
   analisis_calidad: AnalisisCalidadResponse[]
   compliance_fitosanitarios: ComplianceFitosanitarioItem[]
+  parcela_variedad_descripcion: string | null
+  parcela_centroide: CentroideItem | null
+  parcela_tipo_riego: string | null
+  parcela_cobertura_invierno: string | null
+  cumplimiento_riego_por_estado: CumplimientoEstadoItem[]
+  resumen_destino: ResumenDestinoItem[]
+  tareas_resumen: TareaResumenItem[]
+  horas_de_frio: number | null
+  mm_objetivo_anual: number
+  meta_produccion_kg: number | null
 }
 
 export async function getHistorialParcela(

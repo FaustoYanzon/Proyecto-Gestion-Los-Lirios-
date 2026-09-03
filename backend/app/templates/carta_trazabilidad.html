@@ -168,26 +168,44 @@
       <td class="label">Finca</td><td>{{ parcela.finca_label or '—' }}</td>
       <td class="label">Período cubierto</td><td>{{ desde }} al {{ hasta }}</td>
     </tr>
+    <tr>
+      <td class="label">Tipo de riego</td><td>{{ parcela.tipo_riego or '—' }}</td>
+      <td class="label">Cobertura de invierno</td><td>{{ parcela.cobertura_invierno or 'No' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Ubicación</td>
+      <td colspan="3">
+        {% if parcela.ubicacion %}
+          {{ parcela.ubicacion }} — <a href="{{ parcela.maps_url }}">Ver en Google Maps</a>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
   </table>
+  {% if parcela.variedad_descripcion %}
+  <p style="font-size: 8.5pt; color: #5a544c; margin: 2px 0 8px 0;">{{ parcela.variedad_descripcion }}</p>
+  {% endif %}
 
   <h2>Resumen del período</h2>
   <table class="resumen-table">
     <tr>
       <td>
         <div class="resumen-valor">{{ resumen.kg_total }} kg</div>
-        <div class="resumen-label">Cosechado</div>
+        <div class="resumen-label">
+          Cosechado
+          {% if resumen.meta_produccion_kg %}— {{ resumen.pct_meta_produccion }}% de {{ resumen.meta_produccion_kg }} kg plan{% endif %}
+        </div>
       </td>
       <td>
-        <div class="resumen-valor">{{ resumen.litros_riego_total }} L</div>
-        <div class="resumen-label">Riego aplicado ({{ resumen.mm_riego_total }} mm)</div>
+        <div class="resumen-valor">{{ resumen.mm_riego_total }} mm</div>
+        <div class="resumen-label">Riego aplicado ({{ resumen.litros_riego_total }} L) — {{ resumen.pct_objetivo_riego }}% de {{ resumen.mm_objetivo_anual }} mm/año objetivo</div>
       </td>
       <td>
-        <div class="resumen-valor">{{ resumen.fitos_cumplidos }}</div>
-        <div class="resumen-label">Aplicaciones cumplidas</div>
+        <div class="resumen-valor">{{ resumen.horas_de_frio if resumen.horas_de_frio is not none else '—' }}</div>
+        <div class="resumen-label">Horas de frío del período (clima de finca)</div>
       </td>
       <td>
-        <div class="resumen-valor">{{ resumen.fitos_incumplidos }}</div>
-        <div class="resumen-label">Aplicaciones incumplidas</div>
+        <div class="resumen-valor">{{ resumen.fitos_cumplidos }} / {{ resumen.fitos_incumplidos }}</div>
+        <div class="resumen-label">Aplicaciones cumplidas / incumplidas</div>
       </td>
     </tr>
   </table>
@@ -227,6 +245,22 @@
   <div class="vacio">Sin aplicaciones fitosanitarias registradas en el período.</div>
   {% endif %}
 
+  <h2>Cumplimiento de riego por estado de campaña</h2>
+  {% if riego_por_estado %}
+  <table class="datos">
+    <tr><th>Estado</th><th>Desde</th><th>Hasta</th><th>Riegos esperados</th><th>mm aplicados</th><th>Cumplimiento</th></tr>
+    {% for e in riego_por_estado %}
+    <tr class="{{ e.row_class }}">
+      <td>{{ e.estado_label }}</td><td>{{ e.fecha_inicio }}</td><td>{{ e.fecha_fin }}</td>
+      <td>{{ e.riegos_esperados }}</td><td>{{ e.mm_aplicados }}</td>
+      <td><strong>{{ e.cumplimiento_pct }}%</strong></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin estados de campaña dentro del período elegido.</div>
+  {% endif %}
+
   <h2>Cosecha</h2>
   {% if cosechas %}
   <table class="datos">
@@ -242,13 +276,27 @@
   <div class="vacio">Sin cosechas registradas en el período.</div>
   {% endif %}
 
+  <h2>Destino de la producción</h2>
+  {% if destino_resumen %}
+  <table class="datos">
+    <tr><th>Destino</th><th>Kg</th><th>%</th><th>Registros</th></tr>
+    {% for d in destino_resumen %}
+    <tr>
+      <td>{{ d.destino_label }}</td><td>{{ d.kg_total }}</td><td>{{ d.pct_del_total }}%</td><td>{{ d.n_registros }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin cosechas registradas en el período.</div>
+  {% endif %}
+
   <h2>Tareas realizadas (resumen)</h2>
   {% if tareas_resumen %}
   <table class="datos">
-    <tr><th>Tarea</th><th>Registros</th><th>Cantidad total</th></tr>
+    <tr><th>Tarea</th><th>Inicio</th><th>Fin</th><th>Registros</th></tr>
     {% for t in tareas_resumen %}
     <tr>
-      <td>{{ t.tarea }}</td><td>{{ t.registros }}</td><td>{{ t.cantidad_total }} {{ t.unidad }}</td>
+      <td>{{ t.tarea }}</td><td>{{ t.fecha_inicio }}</td><td>{{ t.fecha_fin }}</td><td>{{ t.registros }}</td>
     </tr>
     {% endfor %}
   </table>

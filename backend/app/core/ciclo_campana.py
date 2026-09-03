@@ -13,7 +13,7 @@ El estado se calcula igual para todas las variedades; el override manual
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 # Reuso los helpers de fecha de fenologia.py: son genéricos (mes, dia, hoy),
 # no dependen de variedad, y resuelven el wraparound de año sin duplicar
@@ -31,6 +31,7 @@ __all__ = [
     "estado_y_ventana_actual",
     "calcular_proximo_estado",
     "riegos_esperados",
+    "ventanas_en_rango",
 ]
 
 ESTADO_CAMPANA_LABELS: dict[EstadoCampana, str] = {
@@ -119,3 +120,32 @@ def calcular_proximo_estado(hoy: date | None = None) -> tuple[EstadoCampana, dat
 
 def riegos_esperados(estado: EstadoCampana) -> int:
     return RIEGOS_ESPERADOS[estado]
+
+
+def ventanas_en_rango(desde: date, hasta: date) -> list[tuple[EstadoCampana, date, date]]:
+    """Ventanas [fecha_inicio, fecha_fin] de cada estado del calendario unico
+    que se solapan con [desde, hasta], recortadas a ese rango -- para medir
+    cumplimiento de riego historico por estado, no solo el vigente hoy (ver
+    estado_y_ventana_actual, que solo resuelve el caso "hoy").
+
+    Genera las anclas de CALENDARIO_CAMPANA en un rango de anios que cubra
+    [desde, hasta] con margen (desde.year-1 .. hasta.year+1) y las ordena --
+    mismo criterio que calcular_estado_actual (buscar la ancla "mas reciente
+    <= fecha") en vez de razonar a mano la semantica de que anio calendario
+    le toca a cada estado dentro de una campana mayo->abril.
+    """
+    anclas: list[tuple[date, EstadoCampana]] = []
+    for anio in range(desde.year - 1, hasta.year + 2):
+        for a in CALENDARIO_CAMPANA:
+            anclas.append((date(anio, a.mes, a.dia), a.estado))
+    anclas.sort(key=lambda item: item[0])
+
+    ventanas: list[tuple[EstadoCampana, date, date]] = []
+    for i, (fecha_inicio, estado) in enumerate(anclas):
+        fecha_fin_real = (
+            anclas[i + 1][0] - timedelta(days=1) if i + 1 < len(anclas) else fecha_inicio
+        )
+        if fecha_fin_real < desde or fecha_inicio > hasta:
+            continue
+        ventanas.append((estado, max(fecha_inicio, desde), min(fecha_fin_real, hasta)))
+    return ventanas

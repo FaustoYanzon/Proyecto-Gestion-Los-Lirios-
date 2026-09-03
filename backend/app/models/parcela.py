@@ -43,6 +43,11 @@ class VariedadUva(str, enum.Enum):
     otro = "otro"
 
 
+class TipoRiego(str, enum.Enum):
+    goteo = "goteo"
+    manto = "manto"
+
+
 class Parcela(Base):
     __tablename__ = "parcelas"
 
@@ -56,6 +61,9 @@ class Parcela(Base):
     )
     superficie_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
     finca: Mapped[Finca | None] = mapped_column(SAEnum(Finca), nullable=True)
+    tipo_riego: Mapped[TipoRiego | None] = mapped_column(SAEnum(TipoRiego), nullable=True)
+    usa_cobertura_invierno: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    especie_cobertura_invierno: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cabezal_riego: Mapped[str | None] = mapped_column(String(20), nullable=True)
     coordenadas: Mapped[list | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

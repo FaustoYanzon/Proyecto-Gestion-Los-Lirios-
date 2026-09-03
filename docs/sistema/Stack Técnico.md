@@ -14,6 +14,7 @@ tags: [sistema, stack]
 - **PyJWT** — JWT (reemplaza a `python-jose`, migrado 2026-07 por hardening de seguridad)
 - **bcrypt** — hash de contraseñas
 - **slowapi** — rate limiting (`LOGIN_RATE_LIMIT` por IP + throttle propio por username, ver [[Arquitectura]])
+- **xhtml2pdf** + **Jinja2** — generación de PDF (carta de trazabilidad, desde 2026-09-02). Elegido sobre WeasyPrint a propósito: 100% Python, sin dependencias de sistema (Pango/Cairo) que Railway no puede instalar sin `Dockerfile`/`nixpacks.toml` — ver [[Arquitectura]] § Trazabilidad.
 
 ## Testing
 

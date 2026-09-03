@@ -31,6 +31,13 @@ export const FINCA_LABELS: Record<Finca, string> = {
   los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete',
 }
 
+export const TIPO_RIEGO_VALUES = ['goteo', 'manto'] as const
+export type TipoRiego = (typeof TIPO_RIEGO_VALUES)[number]
+
+export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = {
+  goteo: 'Goteo', manto: 'Manto',
+}
+
 export interface ParcelaAdminResponse {
   id: string
   nombre: string
@@ -38,6 +45,9 @@ export interface ParcelaAdminResponse {
   variedad: VariedadUva | null
   superficie_ha: number | null
   finca: Finca | null
+  tipo_riego: TipoRiego | null
+  usa_cobertura_invierno: boolean
+  especie_cobertura_invierno: string | null
   cabezal_riego: string | null
   is_active: boolean
   created_at: string
@@ -46,10 +56,13 @@ export interface ParcelaAdminResponse {
 export interface ParcelaCreate {
   nombre: string
   tipo: TipoParcela
-  variedad?: VariedadUva
+  variedad?: VariedadUva | null
   superficie_ha?: number
-  finca?: Finca
-  cabezal_riego?: string
+  finca?: Finca | null
+  tipo_riego?: TipoRiego | null
+  usa_cobertura_invierno?: boolean
+  especie_cobertura_invierno?: string | null
+  cabezal_riego?: string | null
 }
 
 export interface ParcelaUpdate {
@@ -58,6 +71,9 @@ export interface ParcelaUpdate {
   variedad?: VariedadUva | null
   superficie_ha?: number | null
   finca?: Finca | null
+  tipo_riego?: TipoRiego | null
+  usa_cobertura_invierno?: boolean | null
+  especie_cobertura_invierno?: string | null
   cabezal_riego?: string | null
 }
 

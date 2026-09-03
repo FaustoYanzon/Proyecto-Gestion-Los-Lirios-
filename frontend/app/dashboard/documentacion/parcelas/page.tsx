@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Loader2, Leaf } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,12 +14,14 @@ import {
   TIPO_PARCELA_VALUES,
   VARIEDAD_VALUES,
   FINCA_VALUES,
+  TIPO_RIEGO_VALUES,
   TIPO_LABELS,
   TIPO_BADGE,
   VARIEDAD_LABELS,
   FINCA_LABELS,
+  TIPO_RIEGO_LABELS,
   type ParcelaAdminResponse,
-  type ParcelaCreate,
+  type ParcelaUpdate,
   type TipoParcela,
   type VariedadUva,
 } from '@/lib/api/parcelas'
@@ -38,6 +40,9 @@ const schema = z.object({
     z.number().positive('Debe ser mayor a 0').optional()
   ),
   finca:        z.string().optional(),
+  tipo_riego:   z.string().optional(),
+  usa_cobertura_invierno: z.boolean().optional(),
+  especie_cobertura_invierno: z.string().optional(),
   cabezal_riego: z.string().optional(),
 })
 
@@ -95,23 +100,40 @@ function ParcelaForm({
           variedad:      parcela.variedad ?? '',
           superficie_ha: parcela.superficie_ha ?? undefined,
           finca:         parcela.finca ?? '',
+          tipo_riego:    parcela.tipo_riego ?? '',
+          usa_cobertura_invierno: parcela.usa_cobertura_invierno,
+          especie_cobertura_invierno: parcela.especie_cobertura_invierno ?? '',
           cabezal_riego: parcela.cabezal_riego ?? '',
         }
-      : { nombre: '', tipo: 'parral', variedad: '', superficie_ha: undefined, finca: '', cabezal_riego: '' },
+      : {
+          nombre: '', tipo: 'parral', variedad: '', superficie_ha: undefined, finca: '',
+          tipo_riego: '', usa_cobertura_invierno: false, especie_cobertura_invierno: '',
+          cabezal_riego: '',
+        },
   })
 
   const tipoW = watch('tipo')
+  const usaCoberturaW = watch('usa_cobertura_invierno')
 
   async function onSubmit(data: FormData) {
     try {
       setSubmitError(null)
+      // null (no undefined) para los selects opcionales -- el schema del
+      // backend acepta null tanto al crear como al editar, y a diferencia de
+      // undefined (que axios/JSON.stringify omite del body) sí llega y
+      // efectivamente limpia el campo si el usuario lo vuelve a "Sin asignar".
       const payload = {
         nombre:        data.nombre,
         tipo:          data.tipo,
-        variedad:      (data.variedad || undefined) as VariedadUva | undefined,
+        variedad:      (data.variedad || null) as VariedadUva | null,
         superficie_ha: data.superficie_ha,
-        finca:         (data.finca || undefined) as ParcelaCreate['finca'],
-        cabezal_riego: data.cabezal_riego || undefined,
+        finca:         (data.finca || null) as ParcelaUpdate['finca'],
+        tipo_riego:    (data.tipo_riego || null) as ParcelaUpdate['tipo_riego'],
+        usa_cobertura_invierno: data.usa_cobertura_invierno ?? false,
+        especie_cobertura_invierno: data.usa_cobertura_invierno
+          ? (data.especie_cobertura_invierno || null)
+          : null,
+        cabezal_riego: data.cabezal_riego || null,
       }
       if (isEdit) {
         await updateParcela(parcela.id, payload)
@@ -179,15 +201,41 @@ function ParcelaForm({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={label}>Tipo de riego</label>
+          <select {...register('tipo_riego')} className={field}>
+            <option value="">— Sin asignar —</option>
+            {TIPO_RIEGO_VALUES.map((t) => (
+              <option key={t} value={t}>{TIPO_RIEGO_LABELS[t]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={label}>Cabezal de riego</label>
+          <input
+            type="text"
+            {...register('cabezal_riego')}
+            className={field}
+            placeholder="Ej: A, B, MANTO"
+            disabled={tipoW === 'cabezal'}
+          />
+        </div>
+      </div>
+
       <div>
-        <label className={label}>Cabezal de riego</label>
-        <input
-          type="text"
-          {...register('cabezal_riego')}
-          className={field}
-          placeholder="Ej: A, B, MANTO"
-          disabled={tipoW === 'cabezal'}
-        />
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input type="checkbox" {...register('usa_cobertura_invierno')} className="rounded border-gray-300" />
+          Usa cultivo de cobertura de invierno
+        </label>
+        {usaCoberturaW && (
+          <input
+            type="text"
+            {...register('especie_cobertura_invierno')}
+            className={`${field} mt-2`}
+            placeholder="Especie (ej: avena, centeno)"
+          />
+        )}
       </div>
 
       {submitError && (
@@ -295,6 +343,7 @@ export default function ParcelasPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Variedad</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Sup. (ha)</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Finca</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Riego</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cabezal</th>
                 {isSuperAdmin && (
                   <th className="px-4 py-3 font-medium text-gray-600 text-center">Acciones</th>
@@ -305,7 +354,7 @@ export default function ParcelasPage() {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: isSuperAdmin ? 7 : 6 }).map((_, j) => (
+                    {Array.from({ length: isSuperAdmin ? 8 : 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-gray-200 rounded animate-pulse" />
                       </td>
@@ -314,7 +363,7 @@ export default function ParcelasPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 7 : 6} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={isSuperAdmin ? 8 : 7} className="px-4 py-10 text-center text-gray-400">
                     {tipoFilter ? `No hay parcelas de tipo "${TIPO_LABELS[tipoFilter as TipoParcela]}"` : 'No hay parcelas activas'}
                   </td>
                 </tr>
@@ -335,6 +384,14 @@ export default function ParcelasPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {p.finca ? (FINCA_LABELS[p.finca] ?? p.finca) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <span className="inline-flex items-center gap-1">
+                        {p.tipo_riego ? (TIPO_RIEGO_LABELS[p.tipo_riego] ?? p.tipo_riego) : '—'}
+                        {p.usa_cobertura_invierno && (
+                          <Leaf size={13} className="text-green-600" aria-label="Usa cobertura de invierno" />
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {p.cabezal_riego ?? '—'}

@@ -38,6 +38,7 @@ repo/
 | `produccion.py` | `/produccion` | Tareas, riego (incl. "riegos en curso" desde 2026-07-17: `GET /riego/en-curso`, `POST /riego/iniciar`, `POST /riego/{id}/terminar`), fitosanitarios, campaña (viejo, por parcela), estado-campaña (nuevo desde 2026-07-22, calendario único por variedad — ver sección dedicada abajo) |
 | `clima.py` | `/clima` | Open-Meteo vía `services/clima.py`, cache 30 min en tabla `clima_cache`. **Existe desde hace meses pero nunca se registró en `main.py` hasta 2026-08-10** — el endpoint daba 404 en producción todo ese tiempo, ver [[Bugs Conocidos]]. Al registrar el router, verificar siempre que quede en `app.include_router(...)` en `main.py` y el modelo en `app/models/__init__.py` — ningún test cubre eso hoy. |
 | `alertas.py` | `/alertas` | Desde 2026-08-10. Solo `GET /descartadas` y `POST /descartar` — las alertas en sí se calculan en el frontend (`Alertas.tsx`) a partir de datos ya existentes (riego, carencia, fenología), este endpoint solo guarda qué `alerta_id` se descartó (48h, tabla `alertas_descartadas`, compartida entre usuarios). |
+| `trazabilidad.py` | `/trazabilidad` | Desde 2026-09-02. Ficha por parcela: `GET /parcela/{id}/historial` (agrega riego/fito/tareas/cosecha/ciclo de campaña/fotos/análisis + semáforo de carencia real, no solo contra "hoy") y `GET /parcela/{id}/carta-pdf` (misma data, renderizada a PDF). CRUD de `fotos`/`analisis` (tablas nuevas `fotos_parcela`/`analisis_calidad`). Ver sección dedicada abajo. |
 
 ## Ciclo de Campaña — dos sistemas separados a propósito (desde 2026-07-22)
 
@@ -45,6 +46,14 @@ repo/
 - **`app.core.ciclo_campana`** (nuevo): calendario **único, igual para todas las variedades** — Brotación (20/9), Floración (20/10), Cuaje (10/11), Cierre de Racimo (5/12), Envero (5/1), Cosecha (1/2), Post-Cosecha (1/5) — cada uno con una cantidad de riegos esperados (1/1/3/4/4/3/1) para medir cumplimiento. Enum `EstadoCampana` y tabla `EstadoVariedadCampana` (override manual **por variedad entera**, no por parcela) son independientes del sistema viejo — a propósito, para no romper `fenologia.py` ni migrar el enum viejo con datos reales. Endpoints: `GET /produccion/estado-campana/actual` y `/cumplimiento-riego` (ver: cualquier usuario autenticado), `POST /produccion/estado-campana/` (editar: solo `gerencial`/`super_admin`).
 - 1 riego "estándar" = 24h × `RegistroRiego.MM_POR_HORA` (1.6mm/h) = 38.4mm = 384.000 L/ha. El mapa (mobile y web, ambos desde 2026-07-27) colorea por `cumplimiento_pct` = riegos equivalentes aplicados ÷ riegos esperados del estado actual — modo aparte del modo "Riego" viejo (objetivo anual 6M L/ha/año), no lo reemplaza.
 - Detalle completo de la sesión original: [[2026-07-20-login-mobile-y-ciclo-campana]]. Espejo web completado: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
+
+## Trazabilidad y generación de PDF (desde 2026-09-02)
+
+- **Agregador reutilizado, no duplicado:** `_fetch_historial()` en `trazabilidad.py` hace las 7 queries (sin límite de paginación, a diferencia de los endpoints de lista de `/produccion`) + el cálculo del semáforo, y lo usan tanto el endpoint JSON (`/historial`) como el de PDF (`/carta-pdf`). El semáforo compara `fecha_habilitacion_cosecha` de cada fitosanitario contra las cosechas reales posteriores de esa parcela (`cumplido`/`incumplido`/`pendiente`) — no existía en ningún lado antes de esto, lo único parecido (`/produccion/fitosanitarios/alertas/carencia`) solo compara contra la fecha de hoy.
+- **PDF: `xhtml2pdf`, decisión explícita sobre WeasyPrint.** WeasyPrint depende de Pango/Cairo a nivel de sistema — la sesión del 08-28 ya tuvo un problema real con `cairosvg` (misma familia de dependencia) en Windows, y Railway no tiene `Dockerfile`/`nixpacks.toml` para instalar paquetes de sistema. `xhtml2pdf` + `Jinja2` son 100% Python, confirmado instalando limpio antes de comprometerse. Template en `backend/app/templates/carta_trazabilidad.html`, lógica de armado en `backend/app/core/pdf_carta.py`. La generación es síncrona/CPU-bound — corre en threadpool (`starlette.concurrency.run_in_threadpool`) para no bloquear el event loop.
+- **Logo:** el backend no tiene acceso al filesystem del frontend en producción (Railway despliega solo `backend/`) — el logo vive copiado en `backend/app/assets/logo.png`, no referenciado desde `frontend/public/`.
+- Datos institucionales (razón social, CUIT, domicilio) hardcodeados en `backend/app/core/empresa.py` — no hay modelo de "Empresa" todavía (esa pantalla de Documentación sigue en placeholder).
+- Detalle completo de la sesión: [[2026-09-02-trazabilidad-fase-0-1-2]].
 
 ## Mobile — wizards de carga
 
@@ -67,6 +76,8 @@ Los 4 formularios multi-paso (`tareas.tsx`, `fito.tsx`/`fitosanitario.tsx`, `rie
 - `los_mimbres`
 - `media_agua`
 - `caucete`
+
+`Parcela.finca` existe desde 2026-09-02 (antes no había ninguna relación entre parcela y finca en el modelo — el selector global "Media Agua/Los Mimbres" del header es un contexto de Finanzas, sin filtrar parcelas). Las 37 parcelas activas están todas en `media_agua` (confirmado por Fausto, backfill corrido).
 
 ## Año de campaña
 
@@ -118,6 +129,7 @@ python -m app.api.seed_parcelas        # seed parcelas
 
 ## Ver también
 
+- [[2026-09-02-trazabilidad-fase-0-1-2]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
 - [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]

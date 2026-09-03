@@ -11,6 +11,8 @@ import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 import ComplianceBanner from '@/components/trazabilidad/ComplianceBanner'
 import ParcelaHeader from '@/components/trazabilidad/ParcelaHeader'
 import Timeline from '@/components/trazabilidad/Timeline'
+import RiegoPorEstado from '@/components/trazabilidad/RiegoPorEstado'
+import DestinoResumen from '@/components/trazabilidad/DestinoResumen'
 import FotoAlbum from '@/components/trazabilidad/FotoAlbum'
 import AnalisisList from '@/components/trazabilidad/AnalisisList'
 
@@ -182,11 +184,15 @@ export default function TrazabilidadPage() {
 
       {parcelaId && historial && (
         <>
-          {parcelaSeleccionada && <ParcelaHeader parcela={parcelaSeleccionada} />}
+          {parcelaSeleccionada && <ParcelaHeader parcela={parcelaSeleccionada} historial={historial} />}
           <ComplianceBanner compliance={historial.compliance_fitosanitarios} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Timeline historial={historial} />
             <div className="space-y-5">
+              <Timeline historial={historial} />
+              <RiegoPorEstado items={historial.cumplimiento_riego_por_estado} />
+            </div>
+            <div className="space-y-5">
+              <DestinoResumen items={historial.resumen_destino} />
               <FotoAlbum
                 parcelaId={parcelaId}
                 fotos={historial.fotos}

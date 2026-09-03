@@ -17,6 +17,7 @@ Reemplazar/complementar los workflows manuales de Excel y Power BI con un sistem
 | Finanzas (ingresos/egresos/cheques) | ✅ | ✅ | — |
 | Producción (tareas/riego/fito) | ✅ | parcial | parcial |
 | Dashboards analíticos | — | en curso | — |
+| Trazabilidad (ficha por parcela + carta PDF) | ✅ | ✅ | — (solo ícono registrado) |
 | Deploy / infraestructura | ✅ producción (piloto) | ✅ producción (piloto) | ✅ build distribuido (piloto) |
 
 ## Estado actual (2026-07-11 — piloto de prueba en producción)
@@ -72,25 +73,32 @@ Detalle completo: [[2026-08-10-clima-fix-inicio-layout-riego-alertas]]. Resumen:
 - **Layout del Inicio:** mapa más angosto y clickeable (lleva al mapa completo), "Riegos en curso" con el mismo patrón de panel que Alertas, dos bugs de superposición corregidos (altura del grid, z-index de los modales vs. Leaflet).
 - Camilo confirmado y agregado como tester de Play Store (no estaba, a pesar de creerse hecho el 08-05).
 
-## Próximos pasos (actualizado 2026-09-01)
+## Próximos pasos (actualizado 2026-09-02)
 
-Pilot estable. Primer build de iOS ya en TestFlight (interno); Android con los íconos nuevos en revisión de Play Store; faltan los últimos pasos administrativos de ambas tiendas.
+Pilot estable. Trazabilidad (ficha por parcela + carta PDF, Fase 0-1-2) en producción. Primer build de iOS ya en TestFlight (interno); Android con los íconos nuevos en revisión de Play Store; faltan los últimos pasos administrativos de ambas tiendas.
 
 ### Pendiente real
 
-1. **Play Store — confirmar aceptación real de los 12 verificadores, no solo que estén en la lista.** El panel oficial de Google (Panel de la app → "Producción") distingue "en la lista" de "aceptó participar" — al 2026-09-01 los 12 emails estaban cargados pero 0 habían aceptado. Cada uno tiene que abrir `https://play.google.com/apps/testing/com.loslirios.app` desde el celular (logueado con esa cuenta exacta de Gmail) y tocar "Convertirme en probador". Recién ahí arrancan los 14 días corridos exigidos antes de poder pedir "Acceso a producción". Detalle: [[2026-09-01-ios-primer-build-play-store-14-dias]].
-2. **iOS — sumar testers reales cuando haga falta.** Ninguno de los 12 verificadores de Android tiene cuenta de Apple todavía. Cuando se necesite, armar un grupo de **pruebas externas** en TestFlight (requiere Beta App Review de Apple la primera vez, a diferencia del grupo interno que ya tiene a Fausto probando). No hay mínimo de testers ni período de espera exigido por Apple, a diferencia de Google.
-3. Confirmar con Fausto los nombres completos reales de los 4 usuarios nuevos del sistema creados el 2026-09-01 (se usaron nombres inferidos del email: "El Cauquen SRL", "Leticia Yanzon", "Mari Barcelo", "Fausto Yanzon") — corregir en Admin > Usuarios si hace falta.
-4. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
-5. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó, puede que ya se haya resuelto solo; revisar si Fausto no lo vuelve a mencionar.
-6. Chatbot de WhatsApp (egresos no oficiales) sigue pausado desde el 08-27 — código completo y probado en local, esperando que Fausto consiga un chip prepago nuevo para registrar un número real en Meta (su número personal no sirve, se "migraría" a la API).
+1. **Trazabilidad — Fase 3 (link público/QR por lote) y Fase 4 (landing institucional), no iniciadas.** Decisión ya tomada con Fausto: el acceso externo arranca por link público sin login (no portal con usuarios). Detalle: [[2026-09-02-trazabilidad-fase-0-1-2]].
+2. **Chatbot de WhatsApp — Fausto ya compró el chip prepago**, pero esta sesión se fue entera a Trazabilidad y no se retomó. Sigue en el mismo punto del 08-27: falta el Paso 2 en Meta for Developers ("Register your WhatsApp phone number"), actualizar `WHATSAPP_PHONE_NUMBER_ID`, reabrir `ngrok`.
+3. **Play Store — confirmar aceptación real de los 12 verificadores, no solo que estén en la lista.** El panel oficial de Google (Panel de la app → "Producción") distingue "en la lista" de "aceptó participar" — al 2026-09-01 los 12 emails estaban cargados pero 0 habían aceptado. Cada uno tiene que abrir `https://play.google.com/apps/testing/com.loslirios.app` desde el celular (logueado con esa cuenta exacta de Gmail) y tocar "Convertirme en probador". Recién ahí arrancan los 14 días corridos exigidos antes de poder pedir "Acceso a producción". Detalle: [[2026-09-01-ios-primer-build-play-store-14-dias]].
+4. **iOS — sumar testers reales cuando haga falta.** Ninguno de los 12 verificadores de Android tiene cuenta de Apple todavía. Cuando se necesite, armar un grupo de **pruebas externas** en TestFlight (requiere Beta App Review de Apple la primera vez, a diferencia del grupo interno que ya tiene a Fausto probando). No hay mínimo de testers ni período de espera exigido por Apple, a diferencia de Google.
+5. Confirmar con Fausto los nombres completos reales de los 4 usuarios nuevos del sistema creados el 2026-09-01 (se usaron nombres inferidos del email: "El Cauquen SRL", "Leticia Yanzon", "Mari Barcelo", "Fausto Yanzon") — corregir en Admin > Usuarios si hace falta.
+6. **Misión, Visión y Valores** en Documentación > Empresa quedaron como placeholder "(a definir)" — contenido pendiente de que Fausto lo dicte.
+7. Sin confirmación reciente sobre el catálogo de válvulas reales en mobile (pendiente desde el 08-21) — no se retomó, puede que ya se haya resuelto solo; revisar si Fausto no lo vuelve a mencionar.
+8. Opcional, sin apuro: borrar a mano el proyecto Vercel roto `fausto-yanzon/los-lirios` (creado por accidente el 09-02 al correr `vercel --prod` desde la raíz del repo en vez de `frontend/`) — no afecta a nada, es solo basura en la cuenta.
 
 **Resuelto desde la última actualización (no repetir):**
+- **Trazabilidad completa (Fase 0, 1 y 2)** — ficha por parcela (riego/fitosanitarios con semáforo de carencia/tareas/cosecha/fotos/análisis de calidad) + carta exportable en PDF, campo `finca` en Parcela (backfill corrido, 37/37 parcelas activas). En producción, verificado end-to-end. Detalle: [[2026-09-02-trazabilidad-fase-0-1-2]].
 - Deploy del fix de permisos de parcelas (`ce971a6`) — confirmado con `railway status --json` el 2026-09-01: terminó con éxito (el texto plano del CLI mostraba "Deploy failed" engañosamente, pero el JSON confirma `SUCCESS`/`RUNNING`). Ya está en producción.
 - Build nuevo de mobile por `react-native-svg` (íconos Fase 2) — hecho el 2026-09-01 (Android versionCode 6, en revisión de Google; iOS build 4, ya en TestFlight).
 - Cuenta Apple Developer Individual inscripta y activa (Fausto) — primer build de iOS compilado y subido a App Store Connect el 2026-09-01.
 - Rotación de credenciales de producción del 08-19 — confirmado hecho por Fausto el 08-28 ("las roté y arreglé").
 - Fausto ya cargó su propia foto/cumpleaños reales en producción.
+
+### Hecho en la sesión del 2026-09-02 (Trazabilidad: ficha por parcela + carta en PDF)
+
+Ver [[2026-09-02-trazabilidad-fase-0-1-2]] para el detalle completo. Resumen: **Fase 0-1** — ficha continua de trazabilidad por parcela (`GET /trazabilidad/parcela/{id}/historial`), agregando riego/fitosanitarios/tareas/cosechas/ciclo de campaña/fotos/análisis de calidad, con un semáforo de cumplimiento de carencia nuevo (compara la fecha de habilitación de cosecha contra cosechas reales, algo que no existía en ningún lado del sistema — todo lo anterior solo comparaba contra la fecha de hoy). Pantalla nueva `/dashboard/trazabilidad`. **Fase 2** — la misma ficha exportable como "carta de trazabilidad" en PDF (`xhtml2pdf`, elegido explícitamente sobre WeasyPrint por el precedente real de `cairosvg`/GTK del 08-28 y porque Railway no tiene infraestructura para instalar paquetes de sistema), con encabezado institucional, resumen ejecutivo, tablas con semáforo de color y tareas resumidas por tipo. Corregido en el camino un gap real (la ficha no mostraba variedad/superficie/ubicación de la parcela) agregando el campo `finca` a `Parcela` (no existía) con backfill a las 37 parcelas activas. Incidente real de deploy (proyecto Vercel equivocado creado por correr el comando desde el directorio raíz) diagnosticado y corregido en la misma sesión.
 
 ### Hecho en la sesión del 2026-08-28 (rediseño estético completo + camino a Play Store Producción + fix de permisos)
 
@@ -173,6 +181,7 @@ Decidido y arrancado el 2026-07-27, publicado en Internal testing el 2026-07-29,
 
 ## Ver también
 
+- [[2026-09-02-trazabilidad-fase-0-1-2]]
 - [[2026-09-01-ios-primer-build-play-store-14-dias]]
 - [[2026-08-26-costo-por-kg-avatar-cumpleanos]]
 - [[2026-08-25-tipo-egreso-repuestos-reparacion]]

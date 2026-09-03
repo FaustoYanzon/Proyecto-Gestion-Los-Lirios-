@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
@@ -8,9 +8,14 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app.api.deps import get_db, require_any_role, require_encargado_up
+from app.core import ciclo_campana, labels, termografo_metrics
 from app.core.cloudinary_client import upload_foto_parcela, upload_informe_analisis
+from app.core.geo import centroide_poligono
 from app.core.pdf_carta import generar_pdf_carta
+from app.core.termografo_import import FINCA_TZ
+from app.core.variedades import VARIEDAD_DESCRIPCIONES
 from app.models.parcela import Parcela
+from app.models.presupuesto import MetaProduccion
 from app.models.produccion import (
     CicloCampana,
     RegistroCosecha,
@@ -18,27 +23,38 @@ from app.models.produccion import (
     RegistroRiego,
     RegistroTrabajo,
 )
+from app.models.termografo import LecturaTermografo
 from app.models.trazabilidad import AnalisisCalidad, EstadoSanitarioAnalisis, Foto, OrigenAnalisis
 from app.models.user import User
 from app.schemas.trazabilidad import (
     AnalisisCalidadCreate,
     AnalisisCalidadResponse,
+    CentroideItem,
     ComplianceFitosanitario,
+    CumplimientoEstadoItem,
     FotoCreate,
     FotoResponse,
     HistorialParcelaResponse,
+    ResumenDestinoItem,
+    TareaResumenItem,
 )
 
 router = APIRouter(prefix="/trazabilidad", tags=["Trazabilidad"])
+
+# 1mm sobre 1ha = 10.000 L -- el objetivo en mm no depende de la superficie.
+# Mismo valor que ya usan el mapa web/mobile (LITROS_OBJETIVO_ANUAL_POR_HA /
+# 10_000), derivado de la constante del modelo en vez de un numero suelto.
+MM_OBJETIVO_ANUAL = RegistroRiego.LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
 
 # ── Aggregador ──────────────────────────────────────────────────────────────
 
 @dataclass
 class HistorialData:
-    """Resultado crudo (objetos ORM) de _fetch_historial -- compartido entre
-    el endpoint JSON y el de PDF, para no duplicar las 7 queries + el calculo
-    de cumplimiento en dos lugares."""
+    """Resultado de _fetch_historial -- compartido entre el endpoint JSON y
+    el de PDF, para no duplicar las queries ni los calculos (semaforo de
+    carencia, cumplimiento de riego por estado, resumen de tareas/destino)
+    en dos lugares."""
 
     parcela: Parcela
     riegos: list[RegistroRiego]
@@ -49,6 +65,15 @@ class HistorialData:
     fotos: list[Foto]
     analisis_calidad: list[AnalisisCalidad]
     compliance_fitosanitarios: list[ComplianceFitosanitario]
+    parcela_variedad_descripcion: str | None
+    parcela_centroide: tuple[float, float] | None
+    parcela_tipo_riego: str | None
+    parcela_cobertura_invierno: str | None
+    cumplimiento_riego_por_estado: list[CumplimientoEstadoItem]
+    resumen_destino: list[ResumenDestinoItem]
+    tareas_resumen: list[TareaResumenItem]
+    horas_de_frio: float | None
+    meta_produccion_kg: float | None
 
 
 async def _get_parcela_or_404(db: AsyncSession, parcela_id: str) -> Parcela:
@@ -101,6 +126,127 @@ async def _calcular_compliance(
             cosecha_conflictiva_fecha=conflictiva_fecha,
         ))
     return resultado
+
+
+def _cumplimiento_riego_por_estado(
+    riegos: list[RegistroRiego], desde: date, hasta: date,
+) -> list[CumplimientoEstadoItem]:
+    """Cumplimiento de riego por CADA estado de campaña que cayo dentro del
+    rango elegido -- a diferencia de /produccion/estado-campana/cumplimiento-riego,
+    que solo resuelve el estado vigente hoy. Reusa los `riegos` ya traidos por
+    _fetch_historial, no dispara queries nuevas."""
+    items: list[CumplimientoEstadoItem] = []
+    for estado, v_desde, v_hasta in ciclo_campana.ventanas_en_rango(desde, hasta):
+        mm = sum(r.mm_aplicados or 0.0 for r in riegos if v_desde <= r.fecha <= v_hasta)
+        esperados = ciclo_campana.riegos_esperados(estado)
+        equivalentes = round(mm / ciclo_campana.MM_POR_RIEGO_ESTANDAR, 2)
+        pct = round(equivalentes / esperados * 100, 1) if esperados else 0.0
+        items.append(CumplimientoEstadoItem(
+            estado_campana=estado,
+            estado_campana_label=ciclo_campana.ESTADO_CAMPANA_LABELS[estado],
+            fecha_inicio=v_desde,
+            fecha_fin=v_hasta,
+            riegos_esperados=esperados,
+            mm_aplicados=round(mm, 1),
+            riegos_equivalentes=equivalentes,
+            cumplimiento_pct=pct,
+            cumplido=pct >= 100,
+        ))
+    return items
+
+
+def _resumen_destino(cosechas: list[RegistroCosecha]) -> list[ResumenDestinoItem]:
+    """Agrupa las cosechas ya traidas por destino -- mismo patron que
+    cosecha_totales en app/api/produccion.py (agrupar por destino.value, sumar
+    kg, contar filas), con el agregado del porcentaje sobre el total."""
+    por_destino: dict[str, dict] = {}
+    kg_total_general = 0.0
+    for c in cosechas:
+        d = por_destino.setdefault(c.destino.value, {"kg": 0.0, "n": 0})
+        d["kg"] += c.kg_total
+        d["n"] += 1
+        kg_total_general += c.kg_total
+
+    items = [
+        ResumenDestinoItem(
+            destino=destino,
+            destino_label=labels.DESTINO_LABELS.get(destino, destino),
+            kg_total=round(v["kg"], 2),
+            n_registros=v["n"],
+            pct_del_total=round(v["kg"] / kg_total_general * 100, 1) if kg_total_general else 0.0,
+        )
+        for destino, v in por_destino.items()
+    ]
+    return sorted(items, key=lambda i: i.kg_total, reverse=True)
+
+
+def _tareas_resumen(trabajos: list[RegistroTrabajo]) -> list[TareaResumenItem]:
+    """Agrupa las tareas ya traidas por (tarea, unidad_medida) -- primer y
+    ultimo registro + cantidad, sin sumar cantidades (a diferencia de un
+    resumen anterior que sumaba `cantidad`, sacado a pedido explicito).
+    Usado tanto por la pantalla (Timeline) como por el PDF -- un solo calculo,
+    no dos implementaciones que se puedan desincronizar."""
+    grupos: dict[tuple[str, str], dict] = {}
+    for t in trabajos:
+        unidad = t.unidad_medida.value if hasattr(t.unidad_medida, "value") else str(t.unidad_medida)
+        clave = (t.tarea, unidad)
+        g = grupos.setdefault(clave, {
+            "tarea": t.tarea, "unidad": unidad, "fecha_inicio": t.fecha, "fecha_fin": t.fecha, "registros": 0,
+        })
+        g["fecha_inicio"] = min(g["fecha_inicio"], t.fecha)
+        g["fecha_fin"] = max(g["fecha_fin"], t.fecha)
+        g["registros"] += 1
+
+    items = [
+        TareaResumenItem(
+            tarea=g["tarea"],
+            unidad_medida_label=labels.UNIDAD_LABELS.get(g["unidad"], g["unidad"]),
+            fecha_inicio=g["fecha_inicio"],
+            fecha_fin=g["fecha_fin"],
+            registros=g["registros"],
+        )
+        for g in grupos.values()
+    ]
+    return sorted(items, key=lambda i: (i.fecha_inicio, i.tarea))
+
+
+async def _horas_de_frio(db: AsyncSession, desde: date, hasta: date) -> float | None:
+    """Horas de frio (0-7 C) del periodo, sobre las lecturas del termografo
+    de campo -- dato de TODA la finca, no de la parcela puntual (un solo
+    dispositivo mide el clima general, ver app/models/termografo.py). None si
+    no hay lecturas cargadas en el rango (distinto de "0 horas")."""
+    inicio = datetime.combine(desde, time.min, tzinfo=FINCA_TZ).astimezone(timezone.utc)
+    fin = datetime.combine(hasta, time.max, tzinfo=FINCA_TZ).astimezone(timezone.utc)
+    filas = (await db.execute(
+        select(LecturaTermografo)
+        .where(LecturaTermografo.fecha_hora >= inicio, LecturaTermografo.fecha_hora <= fin)
+        .order_by(LecturaTermografo.fecha_hora)
+    )).scalars().all()
+    if not filas:
+        return None
+
+    # SQLite (tests) descarta el tzinfo al guardar una columna DateTime(timezone=True);
+    # Postgres (produccion) lo preserva. Mismo criterio que termografo.py:_como_utc.
+    lecturas = [
+        termografo_metrics.Lectura(
+            fecha_hora=f.fecha_hora if f.fecha_hora.tzinfo is not None else f.fecha_hora.replace(tzinfo=timezone.utc),
+            temperatura=f.temperatura,
+            humedad=f.humedad,
+        )
+        for f in filas
+    ]
+    intervalo = termografo_metrics.intervalo_efectivo_seg(lecturas)
+    return round(termografo_metrics.horas_de_frio(lecturas, intervalo), 1)
+
+
+async def _meta_produccion_kg(db: AsyncSession, parcela_id: str, desde: date) -> float | None:
+    temporada = desde.year if desde.month >= 5 else desde.year - 1
+    meta = (await db.execute(
+        select(MetaProduccion).where(
+            MetaProduccion.parcela_id == parcela_id, MetaProduccion.temporada == temporada,
+        )
+    )).scalar_one_or_none()
+    return float(meta.kg_plan) if meta is not None else None
 
 
 async def _fetch_historial(
@@ -164,6 +310,20 @@ async def _fetch_historial(
     )).scalars().all()
 
     compliance = await _calcular_compliance(db, parcela_id, list(fitosanitarios))
+    horas_de_frio = await _horas_de_frio(db, desde, hasta)
+    meta_produccion_kg = await _meta_produccion_kg(db, parcela_id, desde)
+
+    variedad_descripcion = (
+        VARIEDAD_DESCRIPCIONES.get(parcela.variedad.value) if parcela.variedad else None
+    )
+    tipo_riego_label = (
+        labels.TIPO_RIEGO_LABELS.get(parcela.tipo_riego.value) if parcela.tipo_riego else None
+    )
+    cobertura_invierno = None
+    if parcela.usa_cobertura_invierno:
+        cobertura_invierno = (
+            f"Sí — {parcela.especie_cobertura_invierno}" if parcela.especie_cobertura_invierno else "Sí"
+        )
 
     return HistorialData(
         parcela=parcela,
@@ -175,6 +335,15 @@ async def _fetch_historial(
         fotos=list(fotos),
         analisis_calidad=list(analisis),
         compliance_fitosanitarios=compliance,
+        parcela_variedad_descripcion=variedad_descripcion,
+        parcela_centroide=centroide_poligono(parcela.coordenadas),
+        parcela_tipo_riego=tipo_riego_label,
+        parcela_cobertura_invierno=cobertura_invierno,
+        cumplimiento_riego_por_estado=_cumplimiento_riego_por_estado(list(riegos), desde, hasta),
+        resumen_destino=_resumen_destino(list(cosechas)),
+        tareas_resumen=_tareas_resumen(list(trabajos)),
+        horas_de_frio=horas_de_frio,
+        meta_produccion_kg=meta_produccion_kg,
     )
 
 
@@ -201,6 +370,19 @@ async def historial_parcela(
         fotos=data.fotos,
         analisis_calidad=data.analisis_calidad,
         compliance_fitosanitarios=data.compliance_fitosanitarios,
+        parcela_variedad_descripcion=data.parcela_variedad_descripcion,
+        parcela_centroide=(
+            CentroideItem(lat=data.parcela_centroide[0], lng=data.parcela_centroide[1])
+            if data.parcela_centroide else None
+        ),
+        parcela_tipo_riego=data.parcela_tipo_riego,
+        parcela_cobertura_invierno=data.parcela_cobertura_invierno,
+        cumplimiento_riego_por_estado=data.cumplimiento_riego_por_estado,
+        resumen_destino=data.resumen_destino,
+        tareas_resumen=data.tareas_resumen,
+        horas_de_frio=data.horas_de_frio,
+        mm_objetivo_anual=MM_OBJETIVO_ANUAL,
+        meta_produccion_kg=data.meta_produccion_kg,
     )
 
 
@@ -224,11 +406,20 @@ async def carta_pdf_parcela(
         parcela=data.parcela,
         riegos=data.riegos,
         fitosanitarios=data.fitosanitarios,
-        trabajos=data.trabajos,
         cosechas=data.cosechas,
         fotos=data.fotos,
         analisis=data.analisis_calidad,
         compliance=data.compliance_fitosanitarios,
+        parcela_variedad_descripcion=data.parcela_variedad_descripcion,
+        parcela_centroide=data.parcela_centroide,
+        parcela_tipo_riego=data.parcela_tipo_riego,
+        parcela_cobertura_invierno=data.parcela_cobertura_invierno,
+        cumplimiento_riego_por_estado=data.cumplimiento_riego_por_estado,
+        resumen_destino=data.resumen_destino,
+        tareas_resumen=data.tareas_resumen,
+        horas_de_frio=data.horas_de_frio,
+        mm_objetivo_anual=MM_OBJETIVO_ANUAL,
+        meta_produccion_kg=data.meta_produccion_kg,
         desde=desde,
         hasta=hasta,
         generado_por=current_user.full_name,
