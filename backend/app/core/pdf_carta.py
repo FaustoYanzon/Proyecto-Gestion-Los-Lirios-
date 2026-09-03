@@ -42,7 +42,11 @@ def _fmt_fecha(d: date) -> str:
 
 
 def _link_callback(uri: str, _rel: str) -> str:
-    if uri.startswith("http://") or uri.startswith("https://"):
+    # Los data: URIs (el QR va embebido asi) ya traen la imagen adentro --
+    # xhtml2pdf los resuelve solo, no hay que tocarlos. Sin este early return
+    # caerian en el os.path.join de abajo y se buscaria un archivo llamado
+    # como la cola del base64 -> el QR no se dibujaba (bug real de la Fase 3).
+    if uri.startswith(("http://", "https://", "data:")):
         return uri
     return os.path.join(ASSETS_DIR, os.path.basename(uri))
 

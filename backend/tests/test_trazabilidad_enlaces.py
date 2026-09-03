@@ -91,6 +91,13 @@ async def _crear_enlace(client, headers, parcela_id: str, *, desde=DESDE, hasta=
     return resp.json()
 
 
+def _imagenes_pag0(pdf_bytes: bytes) -> int:
+    """Cuántas imágenes quedaron embebidas en la primera página del PDF.
+    La carta lleva el logo (1). Cuando embebe el QR del enlace público son 2
+    -- si el data: URI del QR se rompe (no lo dibuja), este número baja a 1."""
+    return len(PdfReader(BytesIO(pdf_bytes)).pages[0].images)
+
+
 def _todas_las_claves(obj) -> set[str]:
     claves: set[str] = set()
     if isinstance(obj, dict):
@@ -218,6 +225,9 @@ async def test_pdf_publico_es_pdf_y_no_expone_datos_internos(client, create_user
     assert APLICADOR_SECRETO not in texto
     assert COMPRADOR_SECRETO not in texto
 
+    # el PDF público SIEMPRE embebe el QR -> logo + QR en la primera página
+    assert _imagenes_pag0(resp.content) >= 2
+
 
 # ── QR auto-embebido en la carta interna ───────────────────────────────────
 
@@ -233,6 +243,7 @@ async def test_carta_interna_incluye_url_publica_si_hay_enlace_activo(client, cr
     assert sin_enlace.status_code == 200
     texto_sin = "".join(p.extract_text() for p in PdfReader(BytesIO(sin_enlace.content)).pages)
     assert "trazabilidad/publica" not in texto_sin.lower()
+    imgs_sin = _imagenes_pag0(sin_enlace.content)  # solo el logo
 
     enlace = await _crear_enlace(client, headers, parcela.id)
 
@@ -243,6 +254,8 @@ async def test_carta_interna_incluye_url_publica_si_hay_enlace_activo(client, cr
     assert con_enlace.status_code == 200
     texto_con = "".join(p.extract_text() for p in PdfReader(BytesIO(con_enlace.content)).pages)
     assert enlace["token"] in texto_con or "trazabilidad/publica" in texto_con.lower()
+    # el QR tiene que haberse dibujado: una imagen más que sin enlace
+    assert _imagenes_pag0(con_enlace.content) == imgs_sin + 1
 
 
 async def test_carta_interna_ignora_enlace_de_otro_rango(client, create_user, create_parcela):
