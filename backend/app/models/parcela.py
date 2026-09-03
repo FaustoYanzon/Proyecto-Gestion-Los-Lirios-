@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.finanzas import Finca
 
 if TYPE_CHECKING:
     from app.models.finanzas import Egreso
@@ -54,6 +55,7 @@ class Parcela(Base):
         SAEnum(VariedadUva), nullable=True
     )
     superficie_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
+    finca: Mapped[Finca | None] = mapped_column(SAEnum(Finca), nullable=True)
     cabezal_riego: Mapped[str | None] = mapped_column(String(20), nullable=True)
     coordenadas: Mapped[list | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

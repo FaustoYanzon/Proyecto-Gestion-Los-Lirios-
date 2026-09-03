@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4;
+    margin: 1.8cm 1.5cm;
+  }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1f1a17;
+    font-size: 9.5pt;
+  }
+  h1 {
+    font-size: 16pt;
+    color: #5a1320;
+    margin: 0 0 2px 0;
+  }
+  h2 {
+    font-size: 11pt;
+    color: #7a1f2c;
+    background-color: #fbfaf6;
+    border-bottom: 1pt solid #e2dbcc;
+    padding: 4px 6px;
+    margin: 16px 0 6px 0;
+  }
+  .header-table {
+    width: 100%;
+    border-bottom: 2pt solid #7a1f2c;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .header-table td {
+    vertical-align: top;
+  }
+  .empresa-datos {
+    font-size: 8pt;
+    color: #5a544c;
+    text-align: right;
+  }
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+  }
+  .info-table td {
+    padding: 3px 6px;
+    border: 0.5pt solid #e2dbcc;
+    font-size: 9pt;
+  }
+  .info-table td.label {
+    background-color: #fbfaf6;
+    color: #5a544c;
+    width: 22%;
+    font-weight: bold;
+  }
+  .resumen-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+  }
+  .resumen-table td {
+    border: 0.5pt solid #e2dbcc;
+    padding: 6px;
+    text-align: center;
+    width: 25%;
+  }
+  .resumen-valor {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #7a1f2c;
+  }
+  .resumen-label {
+    font-size: 7.5pt;
+    color: #5a544c;
+    text-transform: uppercase;
+  }
+  table.datos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+  }
+  table.datos th {
+    background-color: #7a1f2c;
+    color: #ffffff;
+    font-size: 8pt;
+    padding: 4px;
+    text-align: left;
+  }
+  table.datos td {
+    font-size: 8pt;
+    padding: 4px;
+    border-bottom: 0.5pt solid #e2dbcc;
+  }
+  tr.fila-cumplido td {
+    background-color: #e9f5ea;
+  }
+  tr.fila-incumplido td {
+    background-color: #fbe9ea;
+    color: #a3293a;
+  }
+  tr.fila-pendiente td {
+    background-color: #fdf6e3;
+  }
+  .vacio {
+    color: #a09584;
+    font-style: italic;
+    font-size: 8.5pt;
+    padding: 4px 0;
+  }
+  .foto {
+    display: inline-block;
+    width: 100px;
+    margin: 0 8px 8px 0;
+    text-align: center;
+    font-size: 7pt;
+    color: #5a544c;
+  }
+  .foto img {
+    width: 100px;
+    height: 100px;
+    border: 0.5pt solid #e2dbcc;
+  }
+  .pie {
+    margin-top: 18px;
+    padding-top: 6px;
+    border-top: 0.5pt solid #e2dbcc;
+    font-size: 7.5pt;
+    color: #a09584;
+    text-align: center;
+  }
+  a {
+    color: #7a1f2c;
+  }
+</style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td style="width: 70px;">
+        <img src="logo.png" style="width: 60px;">
+      </td>
+      <td>
+        <h1>Carta de Trazabilidad</h1>
+        <div style="color:#5a544c;">Período: {{ desde }} — {{ hasta }}</div>
+      </td>
+      <td class="empresa-datos">
+        <strong>{{ empresa.razon_social }}</strong><br>
+        CUIT {{ empresa.cuit }}<br>
+        {{ empresa.domicilio }}
+      </td>
+    </tr>
+  </table>
+
+  <h2>Identificación de la parcela</h2>
+  <table class="info-table">
+    <tr>
+      <td class="label">Parcela</td><td>{{ parcela.nombre }}</td>
+      <td class="label">Tipo</td><td>{{ parcela.tipo_label }}</td>
+    </tr>
+    <tr>
+      <td class="label">Variedad</td><td>{{ parcela.variedad_label or '—' }}</td>
+      <td class="label">Superficie</td><td>{{ '%.2f'|format(parcela.superficie_ha) ~ ' ha' if parcela.superficie_ha else '—' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Finca</td><td>{{ parcela.finca_label or '—' }}</td>
+      <td class="label">Período cubierto</td><td>{{ desde }} al {{ hasta }}</td>
+    </tr>
+  </table>
+
+  <h2>Resumen del período</h2>
+  <table class="resumen-table">
+    <tr>
+      <td>
+        <div class="resumen-valor">{{ resumen.kg_total }} kg</div>
+        <div class="resumen-label">Cosechado</div>
+      </td>
+      <td>
+        <div class="resumen-valor">{{ resumen.litros_riego_total }} L</div>
+        <div class="resumen-label">Riego aplicado ({{ resumen.mm_riego_total }} mm)</div>
+      </td>
+      <td>
+        <div class="resumen-valor">{{ resumen.fitos_cumplidos }}</div>
+        <div class="resumen-label">Aplicaciones cumplidas</div>
+      </td>
+      <td>
+        <div class="resumen-valor">{{ resumen.fitos_incumplidos }}</div>
+        <div class="resumen-label">Aplicaciones incumplidas</div>
+      </td>
+    </tr>
+  </table>
+
+  <h2>Riego</h2>
+  {% if riegos %}
+  <table class="datos">
+    <tr><th>Fecha</th><th>Cabezal</th><th>Válvula</th><th>mm</th><th>Litros</th><th>Responsable</th></tr>
+    {% for r in riegos %}
+    <tr>
+      <td>{{ r.fecha }}</td><td>{{ r.cabezal }}</td><td>{{ r.valvula }}</td>
+      <td>{{ r.mm_aplicados or '—' }}</td><td>{{ r.litros_aplicados }}</td><td>{{ r.responsable }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin riegos registrados en el período.</div>
+  {% endif %}
+
+  <h2>Manejo fitosanitario</h2>
+  {% if fitosanitarios %}
+  <table class="datos">
+    <tr>
+      <th>Fecha</th><th>Producto</th><th>Dosis L/ha</th><th>Carencia</th>
+      <th>Hab. cosecha</th><th>Reingreso</th><th>Hab. reingreso</th><th>Responsable</th><th>Estado</th>
+    </tr>
+    {% for f in fitosanitarios %}
+    <tr class="{{ f.row_class }}">
+      <td>{{ f.fecha }}</td><td>{{ f.producto_nombre }}</td><td>{{ f.dosis_lt_ha }}</td>
+      <td>{{ f.dias_carencia }} d</td><td>{{ f.fecha_habilitacion_cosecha }}</td>
+      <td>{{ f.dias_reingreso }} d</td><td>{{ f.fecha_habilitacion_reingreso }}</td>
+      <td>{{ f.responsable }}</td><td><strong>{{ f.estado_label }}</strong></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin aplicaciones fitosanitarias registradas en el período.</div>
+  {% endif %}
+
+  <h2>Cosecha</h2>
+  {% if cosechas %}
+  <table class="datos">
+    <tr><th>Fecha</th><th>Kg</th><th>Destino</th><th>Comprador</th><th>Remito</th></tr>
+    {% for c in cosechas %}
+    <tr>
+      <td>{{ c.fecha }}</td><td>{{ c.kg_total }}</td><td>{{ c.destino_label }}</td>
+      <td>{{ c.comprador or '—' }}</td><td>{{ c.n_remito or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin cosechas registradas en el período.</div>
+  {% endif %}
+
+  <h2>Tareas realizadas (resumen)</h2>
+  {% if tareas_resumen %}
+  <table class="datos">
+    <tr><th>Tarea</th><th>Registros</th><th>Cantidad total</th></tr>
+    {% for t in tareas_resumen %}
+    <tr>
+      <td>{{ t.tarea }}</td><td>{{ t.registros }}</td><td>{{ t.cantidad_total }} {{ t.unidad }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin tareas registradas en el período.</div>
+  {% endif %}
+
+  <h2>Análisis de calidad</h2>
+  {% if analisis %}
+  <table class="datos">
+    <tr><th>Fecha</th><th>Origen</th><th>Brix</th><th>Acidez</th><th>pH</th><th>Sanidad</th><th>Informe</th></tr>
+    {% for a in analisis %}
+    <tr>
+      <td>{{ a.fecha }}</td><td>{{ a.origen_label }}</td>
+      <td>{{ a.brix if a.brix is not none else '—' }}</td>
+      <td>{{ a.acidez if a.acidez is not none else '—' }}</td>
+      <td>{{ a.ph if a.ph is not none else '—' }}</td>
+      <td>{{ a.estado_sanitario_label or '—' }}</td>
+      <td>{% if a.informe_url %}<a href="{{ a.informe_url }}">Ver informe</a>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="vacio">Sin análisis de calidad registrados en el período.</div>
+  {% endif %}
+
+  <h2>Fotos</h2>
+  {% if fotos %}
+  <div>
+    {% for f in fotos %}
+    <div class="foto">
+      <a href="{{ f.url }}"><img src="{{ f.url }}"></a><br>
+      {{ f.categoria }} — {{ f.fecha }}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="vacio">Sin fotos registradas en el período.</div>
+  {% endif %}
+
+  <div class="pie">
+    Generado por {{ generado_por }} — {{ empresa.razon_social }}, sistema de gestión — {{ generado_en }}<br>
+    Documento generado automáticamente a partir de los registros cargados en el sistema. No constituye una firma digital.
+  </div>
+
+</body>
+</html>

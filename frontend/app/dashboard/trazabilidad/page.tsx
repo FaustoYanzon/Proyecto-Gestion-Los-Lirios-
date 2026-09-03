@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Download } from 'lucide-react'
 import { useContextStore, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
-import { getHistorialParcela } from '@/lib/api/trazabilidad'
+import { downloadCartaPdf, getHistorialParcela } from '@/lib/api/trazabilidad'
 import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 import ComplianceBanner from '@/components/trazabilidad/ComplianceBanner'
+import ParcelaHeader from '@/components/trazabilidad/ParcelaHeader'
 import Timeline from '@/components/trazabilidad/Timeline'
 import FotoAlbum from '@/components/trazabilidad/FotoAlbum'
 import AnalisisList from '@/components/trazabilidad/AnalisisList'
@@ -71,6 +73,7 @@ export default function TrazabilidadPage() {
   // válvula son todos datos de viña). Se puede ampliar a otros tipos después
   // si hace falta trazabilidad de potreros.
   const parralesActivos = parcelas.filter((p) => p.is_active && p.tipo === 'parral')
+  const parcelaSeleccionada = parcelas.find((p) => p.id === parcelaId)
 
   const queryClient = useQueryClient()
   const { data: historial, isLoading } = useQuery({
@@ -82,6 +85,26 @@ export default function TrazabilidadPage() {
 
   function invalidar() {
     queryClient.invalidateQueries({ queryKey: ['trazabilidad-historial', parcelaId] })
+  }
+
+  const [descargando, setDescargando] = useState(false)
+
+  async function handleDescargarPdf() {
+    if (!historial) return
+    setDescargando(true)
+    try {
+      const blob = await downloadCartaPdf(parcelaId, desde, hasta)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `trazabilidad-${historial.parcela_nombre}-${desde}_${hasta}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setDescargando(false)
+    }
   }
 
   return (
@@ -132,6 +155,16 @@ export default function TrazabilidadPage() {
           <MesRangeQuickButtons
             onApply={(a, d, h) => { setAnio(a); setMesDesdeIdx(d); setMesHastaIdx(h) }}
           />
+          {historial && (
+            <button
+              onClick={handleDescargarPdf}
+              disabled={descargando}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors disabled:opacity-50 ml-auto"
+            >
+              <Download size={15} />
+              {descargando ? 'Generando...' : 'Descargar carta (PDF)'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -149,6 +182,7 @@ export default function TrazabilidadPage() {
 
       {parcelaId && historial && (
         <>
+          {parcelaSeleccionada && <ParcelaHeader parcela={parcelaSeleccionada} />}
           <ComplianceBanner compliance={historial.compliance_fitosanitarios} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Timeline historial={historial} />

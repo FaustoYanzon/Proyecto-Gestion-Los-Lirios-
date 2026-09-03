@@ -36,3 +36,5 @@ uvicorn_out.txt
 
 # ── Database backups (contain real data, never commit) ────────────────────────
 pg_backups/
+
+.vercel

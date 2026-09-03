@@ -163,3 +163,13 @@ export async function getHistorialParcela(
   })
   return data
 }
+
+export async function downloadCartaPdf(
+  parcelaId: string, desde: string, hasta: string,
+): Promise<Blob> {
+  const { data } = await api.get(`/trazabilidad/parcela/${parcelaId}/carta-pdf`, {
+    params: { desde, hasta },
+    responseType: 'blob',
+  })
+  return data
+}

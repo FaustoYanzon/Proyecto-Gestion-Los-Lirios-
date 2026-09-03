@@ -140,6 +140,7 @@ export interface ParcelaItem {
   nombre: string
   tipo: string
   variedad: string | null
+  finca: string | null
   cabezal_riego: string | null
   superficie_ha: number | null
   is_active: boolean

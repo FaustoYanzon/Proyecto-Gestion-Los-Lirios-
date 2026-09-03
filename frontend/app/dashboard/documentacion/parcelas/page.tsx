@@ -13,10 +13,13 @@ import {
   deactivateParcela,
   TIPO_PARCELA_VALUES,
   VARIEDAD_VALUES,
+  FINCA_VALUES,
   TIPO_LABELS,
   TIPO_BADGE,
   VARIEDAD_LABELS,
+  FINCA_LABELS,
   type ParcelaAdminResponse,
+  type ParcelaCreate,
   type TipoParcela,
   type VariedadUva,
 } from '@/lib/api/parcelas'
@@ -34,6 +37,7 @@ const schema = z.object({
     (v) => (!v || v === '' ? undefined : Number(v)),
     z.number().positive('Debe ser mayor a 0').optional()
   ),
+  finca:        z.string().optional(),
   cabezal_riego: z.string().optional(),
 })
 
@@ -90,9 +94,10 @@ function ParcelaForm({
           tipo:          parcela.tipo,
           variedad:      parcela.variedad ?? '',
           superficie_ha: parcela.superficie_ha ?? undefined,
+          finca:         parcela.finca ?? '',
           cabezal_riego: parcela.cabezal_riego ?? '',
         }
-      : { nombre: '', tipo: 'parral', variedad: '', superficie_ha: undefined, cabezal_riego: '' },
+      : { nombre: '', tipo: 'parral', variedad: '', superficie_ha: undefined, finca: '', cabezal_riego: '' },
   })
 
   const tipoW = watch('tipo')
@@ -105,6 +110,7 @@ function ParcelaForm({
         tipo:          data.tipo,
         variedad:      (data.variedad || undefined) as VariedadUva | undefined,
         superficie_ha: data.superficie_ha,
+        finca:         (data.finca || undefined) as ParcelaCreate['finca'],
         cabezal_riego: data.cabezal_riego || undefined,
       }
       if (isEdit) {
@@ -163,15 +169,25 @@ function ParcelaForm({
           {errors.superficie_ha && <p className={err}>{errors.superficie_ha.message}</p>}
         </div>
         <div>
-          <label className={label}>Cabezal de riego</label>
-          <input
-            type="text"
-            {...register('cabezal_riego')}
-            className={field}
-            placeholder="Ej: A, B, MANTO"
-            disabled={tipoW === 'cabezal'}
-          />
+          <label className={label}>Finca</label>
+          <select {...register('finca')} className={field}>
+            <option value="">— Sin asignar —</option>
+            {FINCA_VALUES.map((f) => (
+              <option key={f} value={f}>{FINCA_LABELS[f]}</option>
+            ))}
+          </select>
         </div>
+      </div>
+
+      <div>
+        <label className={label}>Cabezal de riego</label>
+        <input
+          type="text"
+          {...register('cabezal_riego')}
+          className={field}
+          placeholder="Ej: A, B, MANTO"
+          disabled={tipoW === 'cabezal'}
+        />
       </div>
 
       {submitError && (
@@ -278,6 +294,7 @@ export default function ParcelasPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Tipo</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Variedad</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Sup. (ha)</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Finca</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cabezal</th>
                 {isSuperAdmin && (
                   <th className="px-4 py-3 font-medium text-gray-600 text-center">Acciones</th>
@@ -288,7 +305,7 @@ export default function ParcelasPage() {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: isSuperAdmin ? 6 : 5 }).map((_, j) => (
+                    {Array.from({ length: isSuperAdmin ? 7 : 6 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-gray-200 rounded animate-pulse" />
                       </td>
@@ -297,7 +314,7 @@ export default function ParcelasPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 6 : 5} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={isSuperAdmin ? 7 : 6} className="px-4 py-10 text-center text-gray-400">
                     {tipoFilter ? `No hay parcelas de tipo "${TIPO_LABELS[tipoFilter as TipoParcela]}"` : 'No hay parcelas activas'}
                   </td>
                 </tr>
@@ -315,6 +332,9 @@ export default function ParcelasPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-gray-700">
                       {p.superficie_ha != null ? p.superficie_ha.toFixed(2) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {p.finca ? (FINCA_LABELS[p.finca] ?? p.finca) : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {p.cabezal_riego ?? '—'}

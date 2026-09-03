@@ -1,11 +1,15 @@
+from dataclasses import dataclass
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from app.api.deps import get_db, require_any_role, require_encargado_up
 from app.core.cloudinary_client import upload_foto_parcela, upload_informe_analisis
+from app.core.pdf_carta import generar_pdf_carta
 from app.models.parcela import Parcela
 from app.models.produccion import (
     CicloCampana,
@@ -29,6 +33,31 @@ router = APIRouter(prefix="/trazabilidad", tags=["Trazabilidad"])
 
 
 # ── Aggregador ──────────────────────────────────────────────────────────────
+
+@dataclass
+class HistorialData:
+    """Resultado crudo (objetos ORM) de _fetch_historial -- compartido entre
+    el endpoint JSON y el de PDF, para no duplicar las 7 queries + el calculo
+    de cumplimiento en dos lugares."""
+
+    parcela: Parcela
+    riegos: list[RegistroRiego]
+    fitosanitarios: list[RegistroFitosanitario]
+    trabajos: list[RegistroTrabajo]
+    cosechas: list[RegistroCosecha]
+    ciclos_campana: list[CicloCampana]
+    fotos: list[Foto]
+    analisis_calidad: list[AnalisisCalidad]
+    compliance_fitosanitarios: list[ComplianceFitosanitario]
+
+
+async def _get_parcela_or_404(db: AsyncSession, parcela_id: str) -> Parcela:
+    parcela = (await db.execute(
+        select(Parcela).where(Parcela.id == parcela_id)
+    )).scalar_one_or_none()
+    if parcela is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parcela not found")
+    return parcela
 
 async def _calcular_compliance(
     db: AsyncSession, parcela_id: str, fitosanitarios: list[RegistroFitosanitario],
@@ -74,19 +103,10 @@ async def _calcular_compliance(
     return resultado
 
 
-@router.get("/parcela/{parcela_id}/historial", response_model=HistorialParcelaResponse)
-async def historial_parcela(
-    parcela_id: str,
-    desde: date = Query(...),
-    hasta: date = Query(...),
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_any_role),
-) -> HistorialParcelaResponse:
-    parcela = (await db.execute(
-        select(Parcela).where(Parcela.id == parcela_id)
-    )).scalar_one_or_none()
-    if parcela is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parcela not found")
+async def _fetch_historial(
+    db: AsyncSession, parcela: Parcela, desde: date, hasta: date,
+) -> HistorialData:
+    parcela_id = parcela.id
 
     # Consultas directas al ORM, sin limit -- los endpoints de lista de
     # /produccion truncan en 100 (max 1000) filas incluso filtrados por
@@ -145,11 +165,8 @@ async def historial_parcela(
 
     compliance = await _calcular_compliance(db, parcela_id, list(fitosanitarios))
 
-    return HistorialParcelaResponse(
-        parcela_id=parcela.id,
-        parcela_nombre=parcela.nombre,
-        desde=desde,
-        hasta=hasta,
+    return HistorialData(
+        parcela=parcela,
         riegos=list(riegos),
         fitosanitarios=list(fitosanitarios),
         trabajos=list(trabajos),
@@ -158,6 +175,70 @@ async def historial_parcela(
         fotos=list(fotos),
         analisis_calidad=list(analisis),
         compliance_fitosanitarios=compliance,
+    )
+
+
+@router.get("/parcela/{parcela_id}/historial", response_model=HistorialParcelaResponse)
+async def historial_parcela(
+    parcela_id: str,
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_any_role),
+) -> HistorialParcelaResponse:
+    parcela = await _get_parcela_or_404(db, parcela_id)
+    data = await _fetch_historial(db, parcela, desde, hasta)
+    return HistorialParcelaResponse(
+        parcela_id=data.parcela.id,
+        parcela_nombre=data.parcela.nombre,
+        desde=desde,
+        hasta=hasta,
+        riegos=data.riegos,
+        fitosanitarios=data.fitosanitarios,
+        trabajos=data.trabajos,
+        cosechas=data.cosechas,
+        ciclos_campana=data.ciclos_campana,
+        fotos=data.fotos,
+        analisis_calidad=data.analisis_calidad,
+        compliance_fitosanitarios=data.compliance_fitosanitarios,
+    )
+
+
+@router.get("/parcela/{parcela_id}/carta-pdf")
+async def carta_pdf_parcela(
+    parcela_id: str,
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_role),
+) -> Response:
+    parcela = await _get_parcela_or_404(db, parcela_id)
+    data = await _fetch_historial(db, parcela, desde, hasta)
+
+    # xhtml2pdf/reportlab son sincronicos y CPU-bound -- correrlos inline
+    # bloquearia el event loop async para todas las demas requests mientras
+    # se genera el PDF. Mismo cuidado que el proyecto ya tiene con Cloudinary
+    # (httpx async en vez del SDK sincronico).
+    pdf_bytes = await run_in_threadpool(
+        generar_pdf_carta,
+        parcela=data.parcela,
+        riegos=data.riegos,
+        fitosanitarios=data.fitosanitarios,
+        trabajos=data.trabajos,
+        cosechas=data.cosechas,
+        fotos=data.fotos,
+        analisis=data.analisis_calidad,
+        compliance=data.compliance_fitosanitarios,
+        desde=desde,
+        hasta=hasta,
+        generado_por=current_user.full_name,
+    )
+
+    filename = f"trazabilidad-{data.parcela.nombre}-{desde}_{hasta}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

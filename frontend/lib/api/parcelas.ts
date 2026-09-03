@@ -24,12 +24,20 @@ export const VARIEDAD_LABELS: Record<VariedadUva, string> = {
   sultanina: 'Sultanina', syrah: 'Syrah', aspirant: 'Aspirant', alfalfa: 'Alfalfa', otro: 'Otro',
 }
 
+export const FINCA_VALUES = ['los_mimbres', 'media_agua', 'caucete'] as const
+export type Finca = (typeof FINCA_VALUES)[number]
+
+export const FINCA_LABELS: Record<Finca, string> = {
+  los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete',
+}
+
 export interface ParcelaAdminResponse {
   id: string
   nombre: string
   tipo: TipoParcela
   variedad: VariedadUva | null
   superficie_ha: number | null
+  finca: Finca | null
   cabezal_riego: string | null
   is_active: boolean
   created_at: string
@@ -40,6 +48,7 @@ export interface ParcelaCreate {
   tipo: TipoParcela
   variedad?: VariedadUva
   superficie_ha?: number
+  finca?: Finca
   cabezal_riego?: string
 }
 
@@ -48,6 +57,7 @@ export interface ParcelaUpdate {
   tipo?: TipoParcela
   variedad?: VariedadUva | null
   superficie_ha?: number | null
+  finca?: Finca | null
   cabezal_riego?: string | null
 }
 

@@ -37,7 +37,7 @@ function construirEventos(h: HistorialParcelaResponse): EventoItem[] {
       tipo: 'fitosanitario',
       fecha: f.fecha,
       titulo: `Fitosanitario — ${f.producto_nombre}`,
-      detalle: `${f.dosis_lt_ha} L/ha · carencia ${f.dias_carencia}d (habilita ${fmt(f.fecha_habilitacion_cosecha)}) · ${f.responsable}`,
+      detalle: `${f.dosis_lt_ha} L/ha · carencia ${f.dias_carencia}d (habilita ${fmt(f.fecha_habilitacion_cosecha)}) · reingreso ${f.dias_reingreso}d (habilita ${fmt(f.fecha_habilitacion_reingreso)}) · ${f.responsable}`,
     })
   }
   for (const t of h.trabajos) {
