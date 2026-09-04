@@ -293,3 +293,362 @@ input:-webkit-autofill:active {
 /* Surface helpers */
 .surface-paper { background-color: var(--color-crema); }
 .surface-bone  { background-color: var(--color-hueso); }
+
+/* ===================================================================
+ * LANDING INSTITUCIONAL (app/page.tsx) — todo scopeado bajo .landing
+ * para que nada de esto toque el shell de /dashboard.
+ * =================================================================== */
+
+.landing {
+  /* Paleta OKLCH tintada al vino de la marca (neutros con algo de croma). */
+  --l-wine:        oklch(0.36 0.108 18);   /* #7a1f2c aprox */
+  --l-wine-deep:   oklch(0.29 0.10 18);    /* #5a1320 aprox */
+  --l-gold:        oklch(0.72 0.11 78);    /* #c89a3a aprox */
+  --l-ink:         oklch(0.24 0.012 55);
+  --l-ink-soft:    oklch(0.44 0.014 55);
+  --l-paper:       oklch(0.965 0.012 82);  /* crema */
+  --l-bone:        oklch(0.985 0.006 82);
+  --l-line:        oklch(0.89 0.014 74);
+  --l-cream-on-wine: oklch(0.94 0.02 74);
+
+  /* Colores del mapa por variedad — familias por rubro, no confeti.
+   * Mesa: rojos/rosas cálidos.  Vino: púrpuras.  Forraje: verde. */
+  --v-flame:     oklch(0.63 0.16 25);
+  --v-red_globe: oklch(0.50 0.15 20);
+  --v-fiesta:    oklch(0.72 0.13 45);
+  --v-sultanina: oklch(0.78 0.10 108);
+  --v-syrah:     oklch(0.42 0.12 355);
+  --v-bonarda:   oklch(0.47 0.11 340);
+  --v-aspirant:  oklch(0.36 0.10 348);
+  --v-none:      oklch(0.90 0.012 74);
+
+  /* Escala fluida. Ratio ~1.33. */
+  --step-0: clamp(0.95rem, 0.9rem + 0.25vw, 1.05rem);
+  --step-1: clamp(1.1rem, 1rem + 0.6vw, 1.4rem);
+  --step-2: clamp(1.6rem, 1.3rem + 1.6vw, 2.5rem);
+  --step-3: clamp(2.1rem, 1.55rem + 2.75vw, 3.6rem);
+  --step-hero: clamp(2.6rem, 1.5rem + 5vw, 5.4rem);
+
+  background-color: var(--l-paper);
+  color: var(--l-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing ::selection { background: var(--l-gold); color: var(--l-wine-deep); }
+
+/* El grano se aplica como pseudo-elemento fijo, muy sutil, para unificar
+ * las 4 fotos de celular y disimular la compresión de WhatsApp. */
+.landing::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.landing__wrap {
+  width: min(1140px, 100% - clamp(2rem, 8vw, 8rem));
+  margin-inline: auto;
+}
+
+.landing__display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.landing__lead {
+  font-size: var(--step-1);
+  line-height: 1.5;
+  max-width: 34ch;
+  color: var(--l-ink-soft);
+}
+
+.landing__body {
+  font-size: var(--step-0);
+  line-height: 1.65;
+  max-width: 62ch;
+  color: var(--l-ink-soft);
+}
+
+/* Kicker — se usa UNA vez (en el mapa), no como gramática repetida. */
+.landing__kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--l-ink-soft);
+}
+
+/* --- Header sobre el hero. Se desvanece al salir del hero; para volver a
+ *     "Ingresar" está el link del footer. Sin JS. --- */
+.landing__header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  padding: clamp(0.9rem, 2vh, 1.4rem) 0;
+}
+.landing__header > .landing__wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+@supports (animation-timeline: scroll()) {
+  .landing__header {
+    position: fixed;
+    animation: l-fade-out linear both;
+    animation-timeline: scroll(root);
+    animation-range: 62svh 88svh;
+  }
+}
+@keyframes l-fade-out { to { opacity: 0; visibility: hidden; } }
+.landing__header .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: oklch(0.97 0.02 78);
+  text-shadow: 0 1px 12px oklch(0.15 0.04 18 / 0.6);
+}
+.landing__header .enter {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: oklch(0.97 0.02 78);
+  text-shadow: 0 1px 12px oklch(0.15 0.04 18 / 0.6);
+  padding: 0.5rem 0;
+}
+.landing__header .enter:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+/* --- Hero fijo que se oscurece al bajar --- */
+.landing__hero {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  z-index: 0;
+  overflow: hidden;
+}
+.landing__hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 62%;
+}
+.landing__hero-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, var(--l-wine-deep) 0%, oklch(0.18 0.04 18 / 0.55) 22%, transparent 58%),
+    linear-gradient(to right, oklch(0.16 0.04 18 / 0.5), transparent 55%);
+  opacity: 0.4;
+}
+.landing__hero-copy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: clamp(3.25rem, 11vh, 7rem);
+}
+.landing__hero-copy h1 {
+  font-size: var(--step-hero);
+  line-height: 1.05;
+  color: oklch(0.98 0.018 82);
+  text-shadow: 0 2px 40px oklch(0.12 0.04 18 / 0.6);
+}
+.landing__hero-copy p {
+  margin-top: clamp(1.1rem, 3vh, 1.9rem);
+  font-size: var(--step-1);
+  line-height: 1.5;
+  color: oklch(0.94 0.018 80);
+  max-width: 32ch;
+}
+.landing__scroll-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 1.4rem;
+  translate: -50% 0;
+  width: 1px;
+  height: 2.4rem;
+  background: linear-gradient(oklch(1 0 0 / 0), oklch(1 0 0 / 0.7));
+  animation: hint 2.4s ease-in-out infinite;
+}
+@keyframes hint { 0%,100% { opacity: 0.2; } 50% { opacity: 0.8; } }
+
+/* Las secciones se apoyan por encima del hero fijo. */
+.landing__flow {
+  position: relative;
+  z-index: 1;
+}
+
+.landing__section {
+  padding-block: clamp(4.5rem, 12vh, 9rem);
+}
+.landing__section--tail {
+  padding-bottom: clamp(2.5rem, 6vh, 4rem);
+}
+.landing__section--wine {
+  background: var(--l-wine);
+  color: var(--l-cream-on-wine);
+}
+.landing__section--wine .landing__display { color: oklch(0.96 0.025 80); }
+.landing__section--wine .landing__body { color: oklch(0.9 0.02 78); line-height: 1.72; }
+.landing__section--paper { background: var(--l-paper); }
+.landing__section--bone  { background: var(--l-bone); }
+
+/* Marco de foto con parallax interno sutil. */
+.landing__frame {
+  overflow: hidden;
+  border-radius: 2px;
+}
+.landing__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Duotono vino real: la foto aporta la luminancia, la capa de color el tono. */
+.landing__frame--duo {
+  position: relative;
+  background: var(--l-wine-deep);
+  isolation: isolate;
+}
+.landing__frame--duo img {
+  filter: grayscale(1) contrast(1.15) brightness(1.05);
+  opacity: 0.9;
+}
+.landing__frame--duo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--l-wine-deep);
+  mix-blend-mode: color;
+  pointer-events: none;
+}
+.landing__frame--duo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to bottom, transparent 55%, var(--l-wine) 100%);
+  pointer-events: none;
+}
+
+/* Regla fina de oro, usada como separador de acento (no en cada sección). */
+.landing__rule {
+  width: 3rem;
+  height: 2px;
+  background: var(--l-gold);
+  border: 0;
+}
+
+/* --- Mapa de variedades --- */
+.landing__map-svg {
+  width: 100%;
+  height: auto;
+  max-height: 60svh;
+  display: block;
+}
+.landing__map-svg .plot {
+  stroke: var(--l-paper);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms;
+  transform-box: fill-box;
+  transform-origin: center;
+  cursor: pointer;
+}
+.landing__map-svg .plot[data-active="true"] {
+  transform: scale(1.06);
+  filter: drop-shadow(0 6px 14px oklch(0.2 0.04 18 / 0.35));
+}
+.landing__map-svg .plot:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 0 3px var(--l-gold));
+}
+.landing__map-svg .ctx {
+  fill: var(--v-none);
+  stroke: var(--l-bone);
+  stroke-width: 2;
+}
+.landing__map-svg .outline {
+  fill: none;
+  stroke: var(--l-line);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.landing__legend { list-style: none; margin: 0; padding: 0; }
+.landing__legend li {
+  display: grid;
+  grid-template-columns: 0.85rem 1fr;
+  column-gap: 0.7rem;
+  row-gap: 0.15rem;
+  padding-block: 0.8rem;
+  border-top: 1px solid var(--l-line);
+  cursor: default;
+}
+.landing__legend li:last-child { border-bottom: 1px solid var(--l-line); }
+.landing__legend .swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  translate: 0 0.2rem;
+}
+.landing__legend .v-name {
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--l-ink);
+  transition: color 160ms;
+}
+.landing__legend .v-meta {
+  grid-column: 2;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+  color: var(--l-ink-soft);
+}
+.landing__legend li[data-active="true"] .v-name { color: var(--l-wine); }
+
+/* --- Scroll-driven CSS. El contenido SIEMPRE queda visible: estas reglas
+ *     solo aplican donde hay soporte y no hay prefers-reduced-motion. --- */
+@keyframes l-reveal-in {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes l-hero-darken {
+  from { opacity: 0.34; }
+  to   { opacity: 0.9; }
+}
+@keyframes l-parallax {
+  from { transform: translateY(-6%) scale(1.14); }
+  to   { transform: translateY(6%) scale(1.14); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .landing .reveal-scroll {
+      animation: l-reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 8% entry 92%;
+    }
+    .landing__frame--parallax img {
+      animation: l-parallax linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+  }
+  @supports (animation-timeline: scroll()) {
+    .landing__hero-scrim {
+      opacity: 0.34;
+      animation: l-hero-darken linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 90svh;
+    }
+  }
+}

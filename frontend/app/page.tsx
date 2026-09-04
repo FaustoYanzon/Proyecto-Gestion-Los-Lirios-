@@ -1,152 +1,183 @@
 import Link from 'next/link'
 import { LANDING as C } from '@/lib/content/landing'
+import Reveal from '@/components/landing/Reveal'
+import VarietyMap from '@/components/landing/VarietyMap'
 
 // Landing institucional (Fase 4 de Trazabilidad). Vive en `/`.
 // proxy.ts manda a /dashboard a quien ya tiene sesión; el visitante anónimo
-// (típicamente alguien que llegó desde el QR de una carta o buscando la
-// empresa) ve esta página. Contenido editable en lib/content/landing.ts.
+// (llegó por el QR de una carta, o buscando la finca) ve esta página.
+// Contenido editable en lib/content/landing.ts. Movimiento: globals.css (.landing).
 
 export const metadata = {
-  title: `${C.empresa.nombre} — ${C.empresa.tagline}`,
-  description: C.empresa.descripcionCorta,
+  // Dominio público del sitio, para resolver la imagen de OpenGraph.
+  metadataBase: new URL('https://frontend-six-jade-79.vercel.app'),
+  title: `${C.empresa.nombre} — uva con nombre y procedencia`,
+  description: C.hero.bajada,
+  openGraph: {
+    title: C.empresa.razonSocial,
+    description: C.hero.bajada,
+    images: [{ url: C.hero.foto.src }],
+  },
 }
 
-const display = { fontFamily: 'var(--font-display)' }
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-2xl font-bold text-[#1f1a17] sm:text-3xl" style={display}>
-      {children}
-    </h2>
-  )
-}
+const preLine = { whiteSpace: 'pre-line' as const }
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-white text-[#1f1a17]">
-      {/* ── Nav ── */}
-      <header className="border-b border-[#e2dbcc]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo-reducido.svg" alt="" className="h-8 w-auto" />
-            <span className="text-lg font-bold" style={display}>
-              {C.empresa.nombre}
-            </span>
-          </div>
-          {/* .btn/.btn--primary del design system: el color del texto lo fija
-             esa clase, no `text-white` (globals.css tiene un `a { color }`
-             sin @layer que le gana a las utilities de Tailwind). */}
-          <Link href="/login" className="btn btn--primary btn--sm">
+    <main className="landing">
+      <header className="landing__header">
+        <div className="landing__wrap">
+          <span className="brand">
+            <img src="/logo-reducido.svg" alt="" width={26} height={26} />
+            {C.empresa.razonSocial}
+          </span>
+          <Link href="/login" className="enter">
             Ingresar al sistema
           </Link>
         </div>
       </header>
 
-      {/* ── Hero ── */}
-      <section
-        className="border-b border-[#e2dbcc]"
-        style={{ backgroundColor: '#faf6ec', borderTop: '3px solid #7a1f2c' }}
-      >
-        <div className="mx-auto max-w-5xl px-5 py-16 sm:py-24">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#a09584]">
-            {C.empresa.nombre} · {C.empresa.ubicacion}
-          </p>
-          <h1
-            className="mt-4 max-w-2xl text-3xl font-bold leading-tight text-[#1f1a17] sm:text-4xl"
-            style={display}
-          >
-            {C.empresa.tagline}
-          </h1>
-          <p className="mt-4 max-w-xl text-base leading-relaxed text-[#5a544c]">
-            {C.empresa.descripcionCorta}
-          </p>
-          <div className="mt-7 h-0.5 w-8" style={{ backgroundColor: '#c89a3a' }} />
+      {/* ── Hero fijo ── */}
+      <section className="landing__hero">
+        <img
+          src={C.hero.foto.src}
+          width={C.hero.foto.w}
+          height={C.hero.foto.h}
+          alt={C.hero.foto.alt}
+          fetchPriority="high"
+        />
+        <div className="landing__hero-scrim" />
+        <div className="landing__hero-copy">
+          <div className="landing__wrap">
+            <h1 className="landing__display" style={preLine}>
+              {C.hero.titulo}
+            </h1>
+            <p>{C.hero.bajada}</p>
+          </div>
         </div>
+        <span className="landing__scroll-hint" aria-hidden="true" />
       </section>
 
-      {/* ── Quiénes somos ── */}
-      <section className="mx-auto max-w-5xl px-5 py-14 sm:py-20">
-        <SectionTitle>{C.nosotros.titulo}</SectionTitle>
-        <div className="mt-5 max-w-2xl space-y-4">
-          {C.nosotros.parrafos.map((p, i) => (
-            <p key={i} className="text-[15px] leading-relaxed text-[#5a544c]">
-              {p}
-            </p>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Qué producimos ── */}
-      <section className="border-y border-[#e2dbcc] bg-[#fbfaf6]">
-        <div className="mx-auto max-w-5xl px-5 py-14 sm:py-20">
-          <SectionTitle>{C.produccion.titulo}</SectionTitle>
-          <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-[#5a544c]">
-            {C.produccion.intro}
-          </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {C.produccion.grupos.map((g) => (
-              <div
-                key={g.rubro}
-                className="rounded-lg border border-[#e2dbcc] bg-white p-4"
-              >
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#a09584]">
-                  {g.rubro}
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {g.variedades.map((v) => (
-                    <li key={v} className="text-sm text-[#1f1a17]">
-                      {v}
-                    </li>
+      <div className="landing__flow">
+        {/* ── Quiénes somos ── */}
+        <section className="landing__section landing__section--paper">
+          <div className="mx-auto grid max-w-[1400px] items-center gap-y-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,40%)]">
+            <div className="landing__wrap lg:mx-0 lg:ml-auto lg:max-w-[52ch] lg:pr-14">
+              <Reveal>
+                <h2 className="landing__display text-[length:var(--step-3)]" style={preLine}>
+                  {C.nosotros.titulo}
+                </h2>
+                <div className="mt-6 space-y-4">
+                  {C.nosotros.parrafos.map((p, i) => (
+                    <p key={i} className="landing__body">
+                      {p}
+                    </p>
                   ))}
-                </ul>
-              </div>
-            ))}
+                </div>
+              </Reveal>
+            </div>
+            <Reveal
+              className="landing__frame landing__frame--parallax h-[62vh] max-h-[560px] w-full self-stretch lg:h-full"
+            >
+              <img
+                src={C.nosotros.foto.src}
+                width={C.nosotros.foto.w}
+                height={C.nosotros.foto.h}
+                alt={C.nosotros.foto.alt}
+                loading="lazy"
+              />
+            </Reveal>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── Trazabilidad ── */}
-      <section className="mx-auto max-w-5xl px-5 py-14 sm:py-20">
-        <SectionTitle>{C.trazabilidad.titulo}</SectionTitle>
-        <div className="mt-5 max-w-2xl space-y-4">
-          {C.trazabilidad.parrafos.map((p, i) => (
-            <p key={i} className="text-[15px] leading-relaxed text-[#5a544c]">
-              {p}
-            </p>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Contacto ── */}
-      <section className="border-t border-[#e2dbcc] bg-[#faf6ec]">
-        <div className="mx-auto max-w-5xl px-5 py-14 sm:py-16">
-          <SectionTitle>Contacto</SectionTitle>
-          <div className="mt-5 space-y-1 text-[15px] text-[#5a544c]">
-            <p>
-              <a
-                href={`mailto:${C.contacto.email}`}
-                className="text-[#7a1f2c] underline underline-offset-2"
+        {/* ── Dónde está cada variedad ── */}
+        <section className="landing__section landing__section--bone">
+          <div className="landing__wrap">
+            <Reveal>
+              <p className="landing__kicker">{C.mapa.kicker}</p>
+              <h2
+                className="landing__display mt-3 text-[length:var(--step-3)]"
+                style={preLine}
               >
-                {C.contacto.email}
-              </a>
-            </p>
-            <p>{C.contacto.domicilio}</p>
-            {C.contacto.telefono && <p>{C.contacto.telefono}</p>}
+                {C.mapa.titulo}
+              </h2>
+              <p className="landing__body mt-5">{C.mapa.intro}</p>
+            </Reveal>
+            <Reveal className="mt-12">
+              <VarietyMap />
+            </Reveal>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-[#e2dbcc]">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-6 text-xs text-[#a09584] sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            {C.empresa.nombre} · Desde 1991 · {C.empresa.ubicacion}
-          </span>
-          <Link href="/privacy" className="hover:text-[#7a1f2c]">
-            Política de privacidad
-          </Link>
-        </div>
-      </footer>
+        {/* ── Trazabilidad ── */}
+        <section className="landing__section landing__section--wine !pt-0">
+          <div className="landing__frame landing__frame--duo landing__frame--parallax h-[38svh] min-h-[260px] w-full">
+            <img
+              src={C.trazabilidad.foto.src}
+              width={C.trazabilidad.foto.w}
+              height={C.trazabilidad.foto.h}
+              alt={C.trazabilidad.foto.alt}
+              loading="lazy"
+            />
+          </div>
+          <div className="landing__wrap pt-[clamp(3.5rem,10vh,7rem)]">
+            <div className="grid gap-x-14 gap-y-8 lg:grid-cols-[0.9fr_1.1fr]">
+              <Reveal>
+                <h2 className="landing__display text-[length:var(--step-3)]" style={preLine}>
+                  {C.trazabilidad.titulo}
+                </h2>
+              </Reveal>
+              <Reveal>
+                <div className="space-y-4">
+                  {C.trazabilidad.parrafos.map((p, i) => (
+                    <p key={i} className="landing__body">
+                      {p}
+                    </p>
+                  ))}
+                </div>
+                <p className="mt-7 font-mono text-[0.8rem] tracking-wide text-[color:var(--l-cream-on-wine)] opacity-80">
+                  {C.trazabilidad.urlEjemplo}
+                </p>
+              </Reveal>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Contacto + footer ── */}
+        <section className="landing__section landing__section--tail landing__section--paper">
+          <div className="landing__wrap">
+            <Reveal>
+              <h2 className="landing__display text-[length:var(--step-2)]">Contacto</h2>
+              <div className="landing__body mt-5 space-y-1">
+                <p>
+                  <a
+                    href={`mailto:${C.contacto.email}`}
+                    className="text-[color:var(--l-wine)] underline underline-offset-4"
+                  >
+                    {C.contacto.email}
+                  </a>
+                </p>
+                <p>{C.contacto.domicilio}</p>
+              </div>
+            </Reveal>
+
+            <hr className="landing__rule mt-14" />
+            <div className="mt-6 flex flex-col gap-3 text-[0.8rem] text-[color:var(--l-ink-soft)] sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {C.empresa.razonSocial} · Desde {C.empresa.desde} · {C.empresa.ubicacion}
+              </span>
+              <span className="flex gap-5">
+                <Link href="/login" className="hover:text-[color:var(--l-wine)]">
+                  Ingresar al sistema
+                </Link>
+                <Link href="/privacy" className="hover:text-[color:var(--l-wine)]">
+                  Privacidad
+                </Link>
+              </span>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   )
 }
