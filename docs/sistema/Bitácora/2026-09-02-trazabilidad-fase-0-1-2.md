@@ -44,8 +44,8 @@ Dos commits a `main`: `6151176` (Fase 0-1) y `83f925d` (Fase 2). Railway corrió
 
 ## Pendiente real para la próxima sesión
 
-1. **Fase 3 de Trazabilidad** (no iniciada): link público/QR por lote de cosecha, para que un comprador vea la carta sin necesitar login — decisión ya tomada con Fausto de arrancar por acá en vez de un portal con usuarios.
-2. **Fase 4 de Trazabilidad** (no iniciada): landing institucional ("quiénes somos" + buscador de cartas públicas), depende de la Fase 3 solo en contenido/branding, no en lo técnico.
+1. ~~**Fase 3 de Trazabilidad**: link público/QR para que un comprador vea la carta sin login.~~ **Hecha el 2026-09-03** — ver [[2026-09-03-trazabilidad-fase-3-4]] (terminó siendo por parcela, no por lote de cosecha).
+2. ~~**Fase 4 de Trazabilidad**: landing institucional.~~ **Hecha el 2026-09-03** — ver [[2026-09-03-trazabilidad-fase-3-4]] (sin buscador de cartas: Fausto lo descartó para no romper el acceso por token no adivinable).
 3. Mapa estático del polígono de la parcela en el PDF — quedó fuera a propósito de la Fase 2 (no hay infraestructura para renderizarlo del lado del servidor), anotado como mejora futura, no bloqueante.
 4. Proyecto Vercel roto `fausto-yanzon/los-lirios` (del incidente de deploy) sigue en la cuenta — borrar a mano desde el dashboard si se quiere, no urge.
 5. **Chatbot de WhatsApp — sigue pausado.** Fausto avisó al arrancar esta sesión que ya había comprado el chip prepago, pero la sesión se fue entera a Trazabilidad y no se retomó el registro del número real en Meta for Developers. Sigue exactamente donde quedó el 08-27: falta el Paso 2 ("Register your WhatsApp phone number"), actualizar `WHATSAPP_PHONE_NUMBER_ID`, reabrir `ngrok` con el Callback URL nuevo.
