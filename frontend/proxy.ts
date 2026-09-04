@@ -18,10 +18,14 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const token = request.cookies.get('auth_token')?.value
 
+  // Con sesión, / manda al sistema. Sin sesión, / muestra la landing
+  // institucional (app/page.tsx) en vez de forzar el login — la puede ver
+  // cualquiera que llegue desde el QR de una carta o buscando la empresa.
   if (pathname === '/') {
-    return NextResponse.redirect(
-      new URL(token ? '/dashboard' : '/login', request.url)
-    )
+    if (token) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return NextResponse.next()
   }
 
   if (STATIC_ASSET_EXT.test(pathname)) {
