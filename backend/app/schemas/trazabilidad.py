@@ -137,7 +137,7 @@ class EnlacePublicoResponse(BaseModel):
 class FitosanitarioPublicoItem(BaseModel):
     fecha: date
     producto_nombre: str
-    dosis_lt_ha: float
+    dosis_por_ha: float
     dias_carencia: int
     fecha_habilitacion_cosecha: date
     dias_reingreso: int

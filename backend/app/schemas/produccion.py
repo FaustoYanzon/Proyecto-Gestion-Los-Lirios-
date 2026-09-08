@@ -4,6 +4,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 from app.models.finanzas import Finca
+from app.models.insumo import UnidadInsumo
 from app.models.parcela import VariedadUva
 from app.models.produccion import (
     ClasificacionTarea,
@@ -191,8 +192,8 @@ class RegistroRiegoTerminar(BaseModel):
 class RegistroFitosanitarioBase(BaseModel):
     fecha: date
     parcela_id: str
-    producto_nombre: str
-    dosis_lt_ha: float
+    insumo_id: str
+    dosis_por_ha: float
     motivo: str
     dias_carencia: int
     dias_reingreso: int
@@ -207,8 +208,8 @@ class RegistroFitosanitarioCreate(RegistroFitosanitarioBase):
 class RegistroFitosanitarioUpdate(BaseModel):
     fecha: date | None = None
     parcela_id: str | None = None
-    producto_nombre: str | None = None
-    dosis_lt_ha: float | None = None
+    insumo_id: str | None = None
+    dosis_por_ha: float | None = None
     motivo: str | None = None
     dias_carencia: int | None = None
     dias_reingreso: int | None = None
@@ -216,8 +217,20 @@ class RegistroFitosanitarioUpdate(BaseModel):
     responsable_id: str | None = None
 
 
-class RegistroFitosanitarioResponse(RegistroFitosanitarioBase):
+class RegistroFitosanitarioResponse(BaseModel):
     id: str
+    fecha: date
+    parcela_id: str
+    producto_nombre: str
+    insumo_id: str | None = None
+    dosis_por_ha: float
+    unidad: UnidadInsumo | None = None
+    cantidad_total: Decimal | None = None
+    motivo: str
+    dias_carencia: int
+    dias_reingreso: int
+    responsable: str
+    responsable_id: str | None = None
     fecha_habilitacion_cosecha: date
     fecha_habilitacion_reingreso: date
     created_by: str

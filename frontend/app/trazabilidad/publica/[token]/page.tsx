@@ -245,7 +245,7 @@ export default function TrazabilidadPublicaPage({
                     <tr key={i} className={`border-b border-gray-50 ${ESTADO_ROW[f.estado_compliance]}`}>
                       <td className="py-1.5 pr-2 text-gray-500">{fmtFecha(f.fecha)}</td>
                       <td className="py-1.5 pr-2 text-gray-800">{f.producto_nombre}</td>
-                      <td className="py-1.5 pr-2 text-right text-gray-700">{f.dosis_lt_ha}</td>
+                      <td className="py-1.5 pr-2 text-right text-gray-700">{f.dosis_por_ha}</td>
                       <td className="py-1.5 pr-2 text-right text-gray-700">{f.dias_carencia} d</td>
                       <td className="py-1.5 pr-2 text-gray-500">{fmtFecha(f.fecha_habilitacion_cosecha)}</td>
                       <td className={`py-1.5 font-medium ${ESTADO_TEXT[f.estado_compliance]}`}>

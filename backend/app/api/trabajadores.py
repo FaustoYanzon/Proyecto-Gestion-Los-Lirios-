@@ -1,10 +1,9 @@
-import unicodedata
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
+from app.core.normalizacion import normalizar_nombre as _normalizar_nombre
 from app.models.produccion import RegistroFitosanitario, RegistroRiego, RegistroTrabajo
 from app.models.trabajador import RolTrabajador, Trabajador
 from app.models.user import User
@@ -12,14 +11,6 @@ from app.schemas.produccion import RegistroTrabajoResponse
 from app.schemas.trabajador import TrabajadorCreate, TrabajadorResponse, TrabajadorUpdate
 
 router = APIRouter(prefix="/trabajadores", tags=["Trabajadores"])
-
-
-def _normalizar_nombre(nombre: str) -> str:
-    """Trim + minusculas + sin tildes, para comparar nombres sin exigir
-    que coincidan letra por letra (evita que "Jose Perez" y "José Pérez"
-    convivan como dos Trabajador distintos)."""
-    sin_tildes = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode("ascii")
-    return " ".join(sin_tildes.strip().lower().split())
 
 
 @router.get("/", response_model=list[TrabajadorResponse])

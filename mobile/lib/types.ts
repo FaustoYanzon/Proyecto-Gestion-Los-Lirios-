@@ -104,7 +104,10 @@ export interface RegistroFitosanitario {
   fecha: string
   parcela_id: string
   producto_nombre: string
-  dosis_lt_ha: number
+  insumo_id: string | null
+  dosis_por_ha: number
+  unidad: 'kg' | 'lt' | null
+  cantidad_total: number | null
   motivo: string
   dias_carencia: number
   dias_reingreso: number
@@ -113,6 +116,15 @@ export interface RegistroFitosanitario {
   fecha_habilitacion_cosecha: string
   fecha_habilitacion_reingreso: string
   created_at: string
+}
+
+export interface Insumo {
+  id: string
+  nombre: string
+  unidad: 'kg' | 'lt'
+  categoria: string | null
+  stock_actual: number
+  is_active: boolean
 }
 
 export interface RegistroRiego {

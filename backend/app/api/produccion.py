@@ -18,6 +18,7 @@ from app.models.finanzas import (
     OrigenPago,
     TipoEgreso,
 )
+from app.models.insumo import Insumo, MovimientoStock, TipoMovimientoStock
 from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
@@ -104,6 +105,62 @@ async def _resolve_responsable_nombre(db: AsyncSession, responsable_id: str) -> 
     if t is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
     return t.nombre_completo
+
+
+async def _resolve_insumo(db: AsyncSession, insumo_id: str) -> Insumo:
+    insumo = await db.get(Insumo, insumo_id)
+    if insumo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insumo not found")
+    return insumo
+
+
+def _calcular_cantidad_total(dosis_por_ha: float, parcela: Parcela) -> Decimal:
+    if parcela.superficie_ha is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La parcela no tiene hectáreas cargadas — no se puede calcular la cantidad total aplicada.",
+        )
+    return (Decimal(str(dosis_por_ha)) * Decimal(str(parcela.superficie_ha))).quantize(Decimal("0.01"))
+
+
+async def _revertir_movimiento_stock(db: AsyncSession, fito: RegistroFitosanitario) -> None:
+    """Deshace el egreso de stock asociado a un RegistroFitosanitario (si existe):
+    devuelve la cantidad al insumo y borra el movimiento. Usado antes de recalcular
+    en un update, y siempre antes de un delete."""
+    result = await db.execute(
+        select(MovimientoStock).where(MovimientoStock.registro_fitosanitario_id == fito.id)
+    )
+    movimiento = result.scalar_one_or_none()
+    if movimiento is None:
+        return
+    insumo = await db.get(Insumo, movimiento.insumo_id)
+    if insumo is not None:
+        insumo.stock_actual = insumo.stock_actual + movimiento.cantidad
+    await db.delete(movimiento)
+    await db.flush()
+
+
+async def _aplicar_movimiento_stock(
+    db: AsyncSession,
+    fito: RegistroFitosanitario,
+    insumo: Insumo,
+    cantidad_total: Decimal,
+    created_by: str,
+) -> None:
+    """Descuenta `cantidad_total` del insumo y deja un MovimientoStock trazable,
+    vinculado 1:1 al RegistroFitosanitario que lo generó."""
+    insumo.stock_actual = insumo.stock_actual - cantidad_total
+    db.add(
+        MovimientoStock(
+            insumo_id=insumo.id,
+            tipo=TipoMovimientoStock.egreso_aplicacion,
+            cantidad=cantidad_total,
+            fecha=fito.fecha,
+            registro_fitosanitario_id=fito.id,
+            created_by=created_by,
+        )
+    )
+    await db.flush()
 
 
 def _build_egreso_for_trabajo(
@@ -894,11 +951,23 @@ async def create_fitosanitario(
     data = fito_data.model_dump()
     if data.get("responsable_id"):
         data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
+
+    insumo = await _resolve_insumo(db, data["insumo_id"])
+    parcela = await db.get(Parcela, data["parcela_id"])
+    if parcela is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parcela not found")
+    cantidad_total = _calcular_cantidad_total(data["dosis_por_ha"], parcela)
+    data["producto_nombre"] = insumo.nombre
+    data["unidad"] = insumo.unidad
+    data["cantidad_total"] = cantidad_total
     data["created_by"] = current_user.id
     # fecha_habilitacion_* computed by RegistroFitosanitario.__init__
     fito = RegistroFitosanitario(**data)
     db.add(fito)
     await db.flush()
+
+    await _aplicar_movimiento_stock(db, fito, insumo, cantidad_total, current_user.id)
+
     await db.refresh(fito)
     return fito
 
@@ -908,7 +977,7 @@ async def update_fitosanitario(
     fitosanitario_id: str,
     fito_data: RegistroFitosanitarioUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_gerencial_up),
+    current_user: User = Depends(require_gerencial_up),
 ) -> RegistroFitosanitario:
     result = await db.execute(
         select(RegistroFitosanitario).where(RegistroFitosanitario.id == fitosanitario_id)
@@ -918,12 +987,30 @@ async def update_fitosanitario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
 
     update_data = fito_data.model_dump(exclude_unset=True)
+    recalcular_stock = any(
+        campo in update_data for campo in ("insumo_id", "dosis_por_ha", "parcela_id")
+    )
+
     for field, value in update_data.items():
         setattr(fito, field, value)
     if "fecha" in update_data or "dias_carencia" in update_data:
         fito.fecha_habilitacion_cosecha = fito.fecha + timedelta(days=fito.dias_carencia)
     if "fecha" in update_data or "dias_reingreso" in update_data:
         fito.fecha_habilitacion_reingreso = fito.fecha + timedelta(days=fito.dias_reingreso)
+
+    if recalcular_stock:
+        await _revertir_movimiento_stock(db, fito)
+        if fito.insumo_id:
+            insumo = await _resolve_insumo(db, fito.insumo_id)
+            parcela = await db.get(Parcela, fito.parcela_id)
+            if parcela is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parcela not found")
+            cantidad_total = _calcular_cantidad_total(fito.dosis_por_ha, parcela)
+            fito.producto_nombre = insumo.nombre
+            fito.unidad = insumo.unidad
+            fito.cantidad_total = cantidad_total
+            await db.flush()
+            await _aplicar_movimiento_stock(db, fito, insumo, cantidad_total, current_user.id)
 
     await db.flush()
     await db.refresh(fito)
@@ -942,6 +1029,7 @@ async def delete_fitosanitario(
     fito = result.scalar_one_or_none()
     if fito is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    await _revertir_movimiento_stock(db, fito)
     await db.delete(fito)
     await db.flush()
 

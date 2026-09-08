@@ -51,13 +51,18 @@ async def _sembrar_historial(client, headers, parcela_id: str) -> None:
     )
     assert r.status_code == 201, r.text
 
+    insumo = await client.post(
+        "/insumos/", json={"nombre": "Azufre", "unidad": "kg"}, headers=headers,
+    )
+    assert insumo.status_code == 201, insumo.text
+
     f = await client.post(
         "/produccion/fitosanitarios/",
         json={
             "fecha": "2026-09-10",
             "parcela_id": parcela_id,
-            "producto_nombre": "Azufre",
-            "dosis_lt_ha": 2.0,
+            "insumo_id": insumo.json()["id"],
+            "dosis_por_ha": 2.0,
             "motivo": "Preventivo",
             "dias_carencia": 14,
             "dias_reingreso": 3,

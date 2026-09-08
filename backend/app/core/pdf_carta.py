@@ -91,7 +91,7 @@ def generar_pdf_carta(
         fitosanitarios_ctx.append({
             "fecha": _fmt_fecha(f.fecha),
             "producto_nombre": f.producto_nombre,
-            "dosis_lt_ha": f.dosis_lt_ha,
+            "dosis_por_ha": f.dosis_por_ha,
             "dias_carencia": f.dias_carencia,
             "fecha_habilitacion_cosecha": _fmt_fecha(f.fecha_habilitacion_cosecha),
             "dias_reingreso": f.dias_reingreso,

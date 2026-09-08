@@ -88,9 +88,10 @@ async def test_renombrar_trabajador_actualiza_riego_historico(client, create_use
     assert fila["responsable"] == "Juan Perez Corregido"
 
 
-async def test_renombrar_trabajador_actualiza_fitosanitario_historico(client, create_user, create_parcela):
+async def test_renombrar_trabajador_actualiza_fitosanitario_historico(client, create_user, create_parcela, create_insumo):
     headers = await _auth(client, create_user)
     parcela = await create_parcela()
+    insumo = await create_insumo()
     trabajador_id = await _crear_trabajador(client, headers, "Maria Lopez")
 
     creado = await client.post(
@@ -98,8 +99,8 @@ async def test_renombrar_trabajador_actualiza_fitosanitario_historico(client, cr
         json={
             "fecha": "2026-08-25",
             "parcela_id": parcela.id,
-            "producto_nombre": "Cobre",
-            "dosis_lt_ha": 1.5,
+            "insumo_id": insumo.id,
+            "dosis_por_ha": 1.5,
             "motivo": "Preventivo",
             "dias_carencia": 7,
             "dias_reingreso": 2,

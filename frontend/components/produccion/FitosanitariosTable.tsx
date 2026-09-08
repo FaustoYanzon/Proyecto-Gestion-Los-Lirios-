@@ -28,7 +28,7 @@ interface Props {
 function SkeletonRow() {
   return (
     <tr>
-      {Array.from({ length: 9 }).map((_, i) => (
+      {Array.from({ length: 10 }).map((_, i) => (
         <td key={i} className="px-3 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse" /></td>
       ))}
     </tr>
@@ -59,7 +59,8 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Fecha</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Parcela</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Producto</th>
-              <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Dosis L/ha</th>
+              <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Dosis/ha</th>
+              <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Total aplicado</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Motivo</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Carencia</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Hab. Cosecha</th>
@@ -72,7 +73,7 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
               Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
             ) : registros.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-gray-400">
+                <td colSpan={11} className="px-3 py-12 text-center text-gray-400">
                   No hay registros fitosanitarios
                 </td>
               </tr>
@@ -95,7 +96,8 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                     <td className="px-3 py-3 whitespace-nowrap text-gray-700">{formatDate(r.fecha)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-gray-900 font-medium">{parcelaNombre(r.parcela_id)}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-gray-800 font-medium">{r.producto_nombre}</td>
-                    <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-gray-700">{r.dosis_lt_ha}</td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-gray-700">{r.dosis_por_ha} {r.unidad ?? ''}</td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-gray-700">{r.cantidad_total ?? '—'} {r.cantidad_total != null ? r.unidad : ''}</td>
                     <td className="px-3 py-3 text-gray-600 max-w-[180px] truncate">{r.motivo}</td>
                     <td className="px-3 py-3 text-right whitespace-nowrap">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded ${enCarencia ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>

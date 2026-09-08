@@ -18,11 +18,10 @@ import { newIdempotencyKey } from '../lib/idempotency'
 import { enqueue } from '../lib/offlineQueue'
 import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
 import TrabajadorPicker from '../components/TrabajadorPicker'
+import InsumoPicker from '../components/InsumoPicker'
 import { colors } from '../lib/theme'
-import type { Parcela, RegistroFitosanitario, Trabajador as TrabajadorDb } from '../lib/types'
+import type { Insumo, Parcela, RegistroFitosanitario, Trabajador as TrabajadorDb } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
-
-const FAVORITOS = ['Mancozeb', 'Azufre', 'Karate', 'Cobre', 'Folpet']
 
 function isoToday() { return new Date().toISOString().split('T')[0] }
 
@@ -277,6 +276,8 @@ function StepFechaResp({
 type DetalleData = {
   parcela: Parcela | null
   producto: string
+  insumoId?: string
+  unidad?: 'kg' | 'lt'
   dosis: string
   motivo: string
   diasCarencia: number
@@ -284,20 +285,23 @@ type DetalleData = {
 }
 
 function StepDetalle({
-  fecha, responsable, parcelas,
+  fecha, responsable, parcelas, insumosDb, onInsumoCreado,
   onNext, onBack, onCancelar,
 }: {
   fecha: string
   responsable: string
   parcelas: Parcela[]
+  insumosDb: Insumo[]
+  onInsumoCreado: (nuevo: Insumo) => void
   onNext: (data: DetalleData) => void
   onBack: () => void
   onCancelar: () => void
 }) {
   const [search, setSearch] = useState('')
   const [parcela, setParcela] = useState<Parcela | null>(null)
-  const [selFav, setSelFav] = useState<string | null>(null)
   const [producto, setProducto] = useState('')
+  const [insumoId, setInsumoId] = useState<string | undefined>(undefined)
+  const [unidad, setUnidad] = useState<'kg' | 'lt' | undefined>(undefined)
   const [dosis, setDosis] = useState('')
   const [motivo, setMotivo] = useState('')
   const [diasCarencia, setDiasCarencia] = useState(14)
@@ -307,11 +311,6 @@ function StepDetalle({
     .filter((p) => p.tipo === 'parral')
     .filter((p) => p.nombre.toLowerCase().includes(search.toLowerCase()))
 
-  function selectFav(fav: string) {
-    setSelFav(fav)
-    setProducto(fav)
-  }
-
   function addDays(iso: string, days: number): string {
     const d = new Date(iso)
     d.setDate(d.getDate() + days)
@@ -320,12 +319,12 @@ function StepDetalle({
 
   function handleNext() {
     const prod = producto.trim()
-    if (!prod) { Alert.alert('Error', 'Ingresá o seleccioná un producto.'); return }
+    if (!prod || !insumoId) { Alert.alert('Error', 'Elegí un insumo de la lista (o agregalo como nuevo).'); return }
     if (!parcela) { Alert.alert('Error', 'Seleccioná una parcela.'); return }
     if (!motivo.trim()) { Alert.alert('Error', 'Ingresá el motivo de la aplicación.'); return }
     const dosisNum = parseFloat(dosis.replace(',', '.'))
-    if (isNaN(dosisNum) || dosisNum <= 0) { Alert.alert('Error', 'Ingresá una dosis válida (lt/ha).'); return }
-    onNext({ parcela, producto: prod, dosis, motivo: motivo.trim(), diasCarencia, diasReingreso })
+    if (isNaN(dosisNum) || dosisNum <= 0) { Alert.alert('Error', 'Ingresá una dosis válida.'); return }
+    onNext({ parcela, producto: prod, insumoId, unidad, dosis, motivo: motivo.trim(), diasCarencia, diasReingreso })
   }
 
   return (
@@ -375,29 +374,17 @@ function StepDetalle({
 
         {/* Producto */}
         <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PRODUCTO</Text>
-        <View style={styles.favGrid}>
-          {FAVORITOS.map((fav) => (
-            <TouchableOpacity
-              key={fav}
-              style={[styles.favChip, selFav === fav && styles.favChipActive]}
-              onPress={() => selectFav(fav)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.favChipText, selFav === fav && styles.favChipTextActive]}>{fav}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <TextInput
-          style={styles.input}
+        <InsumoPicker
           value={producto}
-          onChangeText={(v) => { setProducto(v); setSelFav(null) }}
-          placeholder="Otro producto..."
-          placeholderTextColor={colors.niebla}
-          autoCapitalize="words"
+          insumoId={insumoId}
+          insumosDb={insumosDb}
+          onChange={(nombre, id, u) => { setProducto(nombre); setInsumoId(id); setUnidad(u) }}
+          onCreated={onInsumoCreado}
+          placeholder="Buscar insumo..."
         />
 
         {/* Dosis */}
-        <Text style={styles.fieldLabel}>DOSIS (lt/ha)</Text>
+        <Text style={[styles.fieldLabel, { marginTop: 14 }]}>DOSIS ({unidad ?? '?'}/ha)</Text>
         <TextInput
           style={styles.input}
           value={dosis}
@@ -472,7 +459,7 @@ function StepDetalle({
 // ─── Step 3: Confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  fecha, responsable, responsableId, parcela, producto, dosis, motivo, diasCarencia, diasReingreso,
+  fecha, responsable, responsableId, parcela, producto, insumoId, unidad, dosis, motivo, diasCarencia, diasReingreso,
   onSuccess, onBack, onCancelar,
 }: {
   fecha: string
@@ -480,6 +467,8 @@ function StepConfirmar({
   responsableId?: string
   parcela: Parcela | null
   producto: string
+  insumoId?: string
+  unidad?: 'kg' | 'lt'
   dosis: string
   motivo: string
   diasCarencia: number
@@ -505,8 +494,8 @@ function StepConfirmar({
     const payload = {
       fecha,
       parcela_id: parcela?.id,
-      producto_nombre: producto,
-      dosis_lt_ha: dosisNum,
+      insumo_id: insumoId,
+      dosis_por_ha: dosisNum,
       motivo,
       dias_carencia: diasCarencia,
       dias_reingreso: diasReingreso,
@@ -542,7 +531,7 @@ function StepConfirmar({
     { label: 'Responsable',  value: responsable },
     { label: 'Parcela',      value: parcela?.nombre ?? 'Sin parcela' },
     { label: 'Producto',     value: producto },
-    { label: 'Dosis',        value: `${dosis} lt/ha` },
+    { label: 'Dosis',        value: `${dosis} ${unidad ?? ''}/ha` },
     { label: 'Motivo',       value: motivo },
     { label: 'Días carencia',  value: `${diasCarencia} días` },
     { label: 'Días reingreso', value: `${diasReingreso} días` },
@@ -636,7 +625,7 @@ function RecentList({
               <Text style={styles.registroSub}>
                 {parcela?.nombre ?? 'Sin parcela'} · {formatDateDisplay(r.fecha)}
               </Text>
-              <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_lt_ha} lt/ha</Text>
+              <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_por_ha} {r.unidad ?? ''}/ha</Text>
             </View>
             <TouchableOpacity onPress={() => handleDelete(r.id, r.producto_nombre)} style={styles.deleteBtn}>
               <ICONS.eliminar size={17} color="#ef4444" strokeWidth={ICON_STROKE} />
@@ -666,6 +655,7 @@ export default function FitoScreen() {
   const [selResponsableId, setSelResponsableId] = useState<string | undefined>(undefined)
   const [selDetalle, setSelDetalle] = useState<DetalleData | null>(null)
   const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
+  const [insumosDb, setInsumosDb] = useState<Insumo[]>([])
 
   const initialResponsable = user?.full_name?.split(' ')[0] ?? ''
 
@@ -676,6 +666,16 @@ export default function FitoScreen() {
       const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
       setTrabajadoresDb(data)
       await setCache('trabajadores', data)
+    } catch { /* offline */ }
+  }, [])
+
+  const loadInsumosDb = useCallback(async () => {
+    const cached = await getCache<Insumo[]>('insumos', CACHE_TTL.insumos)
+    if (cached) setInsumosDb(cached)
+    try {
+      const { data } = await api.get<Insumo[]>('/insumos/', { params: { is_active: true } })
+      setInsumosDb(data)
+      await setCache('insumos', data)
     } catch { /* offline */ }
   }, [])
 
@@ -699,7 +699,9 @@ export default function FitoScreen() {
     finally { setLoadingRegistros(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadParcelas(); loadRegistros(); loadTrabajadoresDb() }, [loadParcelas, loadRegistros, loadTrabajadoresDb])
+  useEffect(() => {
+    loadParcelas(); loadRegistros(); loadTrabajadoresDb(); loadInsumosDb()
+  }, [loadParcelas, loadRegistros, loadTrabajadoresDb, loadInsumosDb])
 
   useEffect(() => {
     if (!toast) return
@@ -734,6 +736,8 @@ export default function FitoScreen() {
         fecha={selFecha}
         responsable={selResponsable}
         parcelas={parcelas}
+        insumosDb={insumosDb}
+        onInsumoCreado={(nuevo) => setInsumosDb((prev) => [...prev, nuevo])}
         onNext={(data) => { setSelDetalle(data); setStep('confirmar') }}
         onBack={() => setStep('fecha_resp')}
         onCancelar={handleCancelar}
@@ -749,6 +753,8 @@ export default function FitoScreen() {
         responsableId={selResponsableId}
         parcela={selDetalle.parcela}
         producto={selDetalle.producto}
+        insumoId={selDetalle.insumoId}
+        unidad={selDetalle.unidad}
         dosis={selDetalle.dosis}
         motivo={selDetalle.motivo}
         diasCarencia={selDetalle.diasCarencia}
@@ -855,16 +861,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.hueso,
   },
   summaryMiniText: { fontSize: 14, fontWeight: '600', color: colors.ink },
-
-  // favoritos
-  favGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  favChip: {
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.hueso, backgroundColor: colors.blanco,
-  },
-  favChipActive: { backgroundColor: colors.tierra, borderColor: colors.tierra },
-  favChipText: { fontSize: 13, fontWeight: '600', color: colors.ink },
-  favChipTextActive: { color: colors.blanco },
 
   // input
   input: {

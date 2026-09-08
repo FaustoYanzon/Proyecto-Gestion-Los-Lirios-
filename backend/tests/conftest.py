@@ -39,6 +39,7 @@ import app.models  # noqa: E402,F401
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.insumo import Insumo, UnidadInsumo  # noqa: E402
 from app.models.parcela import Parcela, TipoParcela  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.models.valvula import Valvula  # noqa: E402
@@ -131,13 +132,33 @@ async def create_parcela():
     async def _create(
         nombre: str = "Parcela Test",
         tipo: TipoParcela = TipoParcela.parral,
+        superficie_ha: float | None = 10.0,
     ) -> Parcela:
         async with TestSessionLocal() as session:
-            parcela = Parcela(nombre=nombre, tipo=tipo)
+            parcela = Parcela(nombre=nombre, tipo=tipo, superficie_ha=superficie_ha)
             session.add(parcela)
             await session.commit()
             await session.refresh(parcela)
             return parcela
+
+    return _create
+
+
+@pytest_asyncio.fixture
+async def create_insumo():
+    """Factory to insert an Insumo directly into the test DB."""
+
+    async def _create(
+        nombre: str = "Cobre",
+        unidad: UnidadInsumo = UnidadInsumo.lt,
+        stock_actual: float = 100.0,
+    ) -> Insumo:
+        async with TestSessionLocal() as session:
+            insumo = Insumo(nombre=nombre, unidad=unidad, stock_actual=stock_actual)
+            session.add(insumo)
+            await session.commit()
+            await session.refresh(insumo)
+            return insumo
 
     return _create
 

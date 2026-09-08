@@ -10,9 +10,11 @@ from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index,
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.insumo import UnidadInsumo
 from app.models.parcela import VariedadUva
 
 if TYPE_CHECKING:
+    from app.models.insumo import Insumo, MovimientoStock
     from app.models.parcela import Parcela
     from app.models.trabajador import Trabajador
     from app.models.user import User
@@ -307,7 +309,12 @@ class RegistroFitosanitario(Base):
         String(36), ForeignKey("parcelas.id"), nullable=False
     )
     producto_nombre: Mapped[str] = mapped_column(String(200), nullable=False)
-    dosis_lt_ha: Mapped[float] = mapped_column(Float, nullable=False)
+    dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
+    insumo_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("insumos.id"), nullable=True
+    )
+    unidad: Mapped[UnidadInsumo | None] = mapped_column(SAEnum(UnidadInsumo), nullable=True)
+    cantidad_total: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     motivo: Mapped[str] = mapped_column(String(500), nullable=False)
     dias_carencia: Mapped[int] = mapped_column(Integer, nullable=False)
     dias_reingreso: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -360,6 +367,12 @@ class RegistroFitosanitario(Base):
     )
     created_by_user: Mapped[User] = relationship(
         "User", back_populates="registros_fitosanitarios"
+    )
+    insumo: Mapped[Insumo | None] = relationship(
+        "Insumo", back_populates="registros_fitosanitarios"
+    )
+    movimiento_stock: Mapped[MovimientoStock | None] = relationship(
+        "MovimientoStock", back_populates="registro_fitosanitario", uselist=False
     )
 
 

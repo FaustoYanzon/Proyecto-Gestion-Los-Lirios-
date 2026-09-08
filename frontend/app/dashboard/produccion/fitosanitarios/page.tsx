@@ -14,12 +14,14 @@ import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
 function exportCSV(data: FitosanitarioResponse[], parcelaNombre: (id: string) => string) {
-  const headers = ['Fecha', 'Parcela', 'Producto', 'Dosis L/ha', 'Motivo', 'Carencia (d)', 'Reingreso (d)', 'Hab. Cosecha', 'Hab. Reingreso', 'Responsable']
+  const headers = ['Fecha', 'Parcela', 'Producto', 'Dosis/ha', 'Unidad', 'Total aplicado', 'Motivo', 'Carencia (d)', 'Reingreso (d)', 'Hab. Cosecha', 'Hab. Reingreso', 'Responsable']
   const rows = data.map((r) => [
     r.fecha,
     parcelaNombre(r.parcela_id),
     r.producto_nombre,
-    r.dosis_lt_ha,
+    r.dosis_por_ha,
+    r.unidad ?? '',
+    r.cantidad_total ?? '',
     r.motivo,
     r.dias_carencia,
     r.dias_reingreso,

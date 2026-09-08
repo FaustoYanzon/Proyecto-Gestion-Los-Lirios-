@@ -252,7 +252,7 @@ export async function revocarEnlacePublico(enlaceId: string): Promise<EnlacePubl
 export interface FitosanitarioPublicoItem {
   fecha: string
   producto_nombre: string
-  dosis_lt_ha: number
+  dosis_por_ha: number
   dias_carencia: number
   fecha_habilitacion_cosecha: string
   dias_reingreso: number

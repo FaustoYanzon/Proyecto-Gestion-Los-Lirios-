@@ -20,6 +20,7 @@ from app.models.presupuesto import (
     Presupuesto,
 )
 from app.models.trabajador import RolTrabajador, Trabajador
+from app.models.insumo import Insumo, MovimientoStock, TipoMovimientoStock, UnidadInsumo
 from app.models.valvula import Valvula
 from app.models.precio_tarea import PrecioTarea
 from app.models.arca import (
@@ -93,6 +94,10 @@ __all__ = [
     "MetaProduccion",
     "Trabajador",
     "RolTrabajador",
+    "Insumo",
+    "MovimientoStock",
+    "TipoMovimientoStock",
+    "UnidadInsumo",
     "Valvula",
     "PrecioTarea",
     "TipoArchivoArca",

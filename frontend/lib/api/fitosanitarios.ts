@@ -3,8 +3,8 @@ import api from '@/lib/api'
 export interface FitosanitarioCreate {
   fecha: string
   parcela_id: string
-  producto_nombre: string
-  dosis_lt_ha: number
+  insumo_id: string
+  dosis_por_ha: number
   motivo: string
   dias_carencia: number
   dias_reingreso: number
@@ -16,8 +16,8 @@ export interface FitosanitarioCreate {
 export interface FitosanitarioUpdate {
   fecha?: string
   parcela_id?: string
-  producto_nombre?: string
-  dosis_lt_ha?: number
+  insumo_id?: string
+  dosis_por_ha?: number
   motivo?: string
   dias_carencia?: number
   dias_reingreso?: number
@@ -30,7 +30,10 @@ export interface FitosanitarioResponse {
   fecha: string
   parcela_id: string
   producto_nombre: string
-  dosis_lt_ha: number
+  insumo_id: string | null
+  dosis_por_ha: number
+  unidad: 'kg' | 'lt' | null
+  cantidad_total: number | null
   motivo: string
   dias_carencia: number
   dias_reingreso: number

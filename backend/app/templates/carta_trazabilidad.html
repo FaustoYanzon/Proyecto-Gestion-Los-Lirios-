@@ -240,7 +240,7 @@
     </tr>
     {% for f in fitosanitarios %}
     <tr class="{{ f.row_class }}">
-      <td>{{ f.fecha }}</td><td>{{ f.producto_nombre }}</td><td>{{ f.dosis_lt_ha }}</td>
+      <td>{{ f.fecha }}</td><td>{{ f.producto_nombre }}</td><td>{{ f.dosis_por_ha }}</td>
       <td>{{ f.dias_carencia }} d</td><td>{{ f.fecha_habilitacion_cosecha }}</td>
       <td>{{ f.dias_reingreso }} d</td><td>{{ f.fecha_habilitacion_reingreso }}</td>
       {% if not publico %}<td>{{ f.responsable }}</td>{% endif %}<td><strong>{{ f.estado_label }}</strong></td>

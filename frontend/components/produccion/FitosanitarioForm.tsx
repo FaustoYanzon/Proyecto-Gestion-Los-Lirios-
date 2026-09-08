@@ -4,19 +4,21 @@ import { useState, useRef } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, CalendarCheck } from 'lucide-react'
+import { Loader2, CalendarCheck, AlertTriangle } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createFitosanitario, updateFitosanitario, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
+import type { InsumoResponse } from '@/lib/api/insumos'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import TrabajadorSelect from './TrabajadorSelect'
+import InsumoSelect from './InsumoSelect'
 
 const schema = z.object({
   fecha: z.string().min(1, 'Requerido'),
   parcela_id: z.string().min(1, 'Requerido'),
-  producto_nombre: z.string().min(1, 'Requerido'),
-  dosis_lt_ha: z.coerce.number().positive('Debe ser mayor a 0'),
+  insumo_id: z.string().min(1, 'Elegí un insumo de la lista'),
+  dosis_por_ha: z.coerce.number().positive('Debe ser mayor a 0'),
   motivo: z.string().min(1, 'Requerido'),
   dias_carencia: z.coerce.number().int().min(0, 'Mínimo 0'),
   dias_reingreso: z.coerce.number().int().min(0, 'Mínimo 0'),
@@ -52,6 +54,8 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
   const submittingRef = useRef(false)
   const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [insumoNombre, setInsumoNombre] = useState(registro?.producto_nombre ?? '')
+  const [insumoInfo, setInsumoInfo] = useState<InsumoResponse | null>(null)
 
   const {
     register,
@@ -65,15 +69,15 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
       ? {
           fecha: registro.fecha,
           parcela_id: registro.parcela_id,
-          producto_nombre: registro.producto_nombre,
-          dosis_lt_ha: registro.dosis_lt_ha,
+          insumo_id: registro.insumo_id ?? '',
+          dosis_por_ha: registro.dosis_por_ha,
           motivo: registro.motivo,
           dias_carencia: registro.dias_carencia,
           dias_reingreso: registro.dias_reingreso,
           responsable: registro.responsable,
           responsable_id: registro.responsable_id ?? '',
         }
-      : { fecha: today, parcela_id: '', producto_nombre: '', motivo: '', responsable: '', responsable_id: '', dias_carencia: 0, dias_reingreso: 0 },
+      : { fecha: today, parcela_id: '', insumo_id: '', motivo: '', responsable: '', responsable_id: '', dias_carencia: 0, dias_reingreso: 0 },
   })
 
   const fechaW = watch('fecha')
@@ -81,11 +85,21 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
   const diasReingresoW = watch('dias_reingreso')
   const responsableW = watch('responsable')
   const responsableIdW = watch('responsable_id')
+  const insumoIdW = watch('insumo_id')
+  const parcelaIdW = watch('parcela_id')
+  const dosisPorHaW = watch('dosis_por_ha')
 
   const habCosecha = addDays(fechaW, Number(diasCarenciaW))
   const habReingreso = addDays(fechaW, Number(diasReingresoW))
 
   const parcelasActivas = parcelas.filter((p) => p.is_active && p.tipo === 'parral')
+  const parcelaSeleccionada = parcelasActivas.find((p) => p.id === parcelaIdW)
+
+  const cantidadTotalPreview =
+    insumoInfo && parcelaSeleccionada?.superficie_ha && dosisPorHaW > 0
+      ? Number(dosisPorHaW) * parcelaSeleccionada.superficie_ha
+      : null
+  const stockResultante = insumoInfo && cantidadTotalPreview != null ? insumoInfo.stock_actual - cantidadTotalPreview : null
 
   async function onSubmit(data: FormData) {
     if (submittingRef.current) return
@@ -99,9 +113,11 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
         await createFitosanitario({ ...payload, idempotency_key: idempotencyKeyRef.current })
       }
       queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       onSuccess()
-    } catch {
-      setSubmitError('Error al guardar. Intente nuevamente.')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setSubmitError(typeof detail === 'string' ? detail : 'Error al guardar. Intente nuevamente.')
     } finally {
       submittingRef.current = false
     }
@@ -145,13 +161,22 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={label}>Producto</label>
-          <input type="text" placeholder="Nombre comercial" {...register('producto_nombre')} className={field} />
-          {errors.producto_nombre && <p className={err}>{errors.producto_nombre.message}</p>}
+          <InsumoSelect
+            value={insumoNombre}
+            insumoId={insumoIdW}
+            onChange={(nombre, insumoId, insumo) => {
+              setInsumoNombre(nombre)
+              setInsumoInfo(insumo ?? null)
+              setValue('insumo_id', insumoId ?? '', { shouldValidate: true })
+            }}
+            className={field}
+            error={errors.insumo_id?.message}
+          />
         </div>
         <div>
-          <label className={label}>Dosis (L/ha)</label>
-          <input type="number" step="0.01" min="0" placeholder="0.00" {...register('dosis_lt_ha')} className={field} />
-          {errors.dosis_lt_ha && <p className={err}>{errors.dosis_lt_ha.message}</p>}
+          <label className={label}>Dosis {insumoInfo ? `(${insumoInfo.unidad}/ha)` : registro?.unidad ? `(${registro.unidad}/ha)` : '/ha'}</label>
+          <input type="number" step="0.01" min="0" placeholder="0.00" {...register('dosis_por_ha')} className={field} />
+          {errors.dosis_por_ha && <p className={err}>{errors.dosis_por_ha.message}</p>}
         </div>
       </div>
 
@@ -173,6 +198,30 @@ export default function FitosanitarioForm({ registro, parcelas, onSuccess, onCan
           {errors.dias_reingreso && <p className={err}>{errors.dias_reingreso.message}</p>}
         </div>
       </div>
+
+      {/* Preview cantidad total / stock */}
+      {cantidadTotalPreview != null && insumoInfo && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md px-4 py-3 space-y-1">
+          <p className="text-sm text-blue-900">
+            Se van a descontar <span className="font-semibold">{cantidadTotalPreview.toFixed(2)} {insumoInfo.unidad}</span> de stock
+            {parcelaSeleccionada && <> ({dosisPorHaW} {insumoInfo.unidad}/ha × {parcelaSeleccionada.superficie_ha} ha)</>}.
+          </p>
+          <p className="text-sm text-blue-900">
+            Stock actual: <span className="font-semibold">{insumoInfo.stock_actual} {insumoInfo.unidad}</span> → quedarían{' '}
+            <span className="font-semibold">{stockResultante?.toFixed(2)} {insumoInfo.unidad}</span>
+          </p>
+          {stockResultante != null && stockResultante < 0 && (
+            <p className="flex items-center gap-1.5 text-sm text-red-700 font-medium">
+              <AlertTriangle size={14} /> El stock quedaría negativo — igual se puede registrar la aplicación.
+            </p>
+          )}
+        </div>
+      )}
+      {parcelaIdW && !parcelaSeleccionada?.superficie_ha && (
+        <p className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <AlertTriangle size={14} /> Esta parcela no tiene hectáreas cargadas — no se va a poder calcular la cantidad total.
+        </p>
+      )}
 
       {/* Preview habilitaciones */}
       {fechaW && (habCosecha || habReingreso) && (

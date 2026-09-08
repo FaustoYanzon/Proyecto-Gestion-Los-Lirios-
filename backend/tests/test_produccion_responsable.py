@@ -75,9 +75,10 @@ async def test_riego_con_responsable_id_inexistente_da_404(client, create_user, 
 # --- registros_fitosanitarios ---------------------------------------------------
 
 
-async def test_fitosanitario_con_responsable_id_sincroniza_nombre(client, create_user, create_parcela):
+async def test_fitosanitario_con_responsable_id_sincroniza_nombre(client, create_user, create_parcela, create_insumo):
     headers = await _auth(client, create_user)
     parcela = await create_parcela()
+    insumo = await create_insumo()
     trabajador_id = await _crear_trabajador(client, headers, "Maria Lopez")
 
     resp = await client.post(
@@ -85,8 +86,8 @@ async def test_fitosanitario_con_responsable_id_sincroniza_nombre(client, create
         json={
             "fecha": "2026-08-12",
             "parcela_id": parcela.id,
-            "producto_nombre": "Cobre",
-            "dosis_lt_ha": 1.5,
+            "insumo_id": insumo.id,
+            "dosis_por_ha": 1.5,
             "motivo": "Preventivo",
             "dias_carencia": 7,
             "dias_reingreso": 2,
