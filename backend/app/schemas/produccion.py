@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -281,6 +282,29 @@ class PlanFitosanitarioResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CumplimientoPlanItem(BaseModel):
+    plan_id: str
+    variedad: VariedadUva
+    numero_aplicacion: int
+    mes: int
+    insumo_nombre: str
+    objetivo: str
+    dosis_por_ha: float
+    parcelas_total: int
+    parcelas_aplicadas: int
+    porcentaje: int
+    estado: Literal["pendiente", "parcial", "completo"]
+
+
+class NecesidadInsumoItem(BaseModel):
+    insumo_id: str
+    insumo_nombre: str
+    unidad: UnidadInsumo
+    cantidad_pendiente: float
+    stock_actual: Decimal
+    faltante: float
 
 
 # ── Ciclo Campaña ─────────────────────────────────────────────────────────────

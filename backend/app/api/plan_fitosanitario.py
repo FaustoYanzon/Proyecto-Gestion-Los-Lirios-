@@ -1,3 +1,7 @@
+from collections import defaultdict
+from datetime import date
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,10 +9,12 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up, require_gerencial_up
 from app.models.insumo import Insumo
-from app.models.parcela import VariedadUva
-from app.models.produccion import PlanFitosanitario
+from app.models.parcela import Parcela, VariedadUva
+from app.models.produccion import PlanFitosanitario, RegistroFitosanitario
 from app.models.user import User
 from app.schemas.produccion import (
+    CumplimientoPlanItem,
+    NecesidadInsumoItem,
     PlanFitosanitarioCreate,
     PlanFitosanitarioResponse,
     PlanFitosanitarioUpdate,
@@ -52,6 +58,157 @@ async def list_plan_fitosanitario(
         stmt = stmt.where(PlanFitosanitario.variedad == variedad)
     planes = (await db.execute(stmt)).scalars().all()
     return [_to_response(p) for p in planes]
+
+
+async def _calcular_cumplimiento(
+    db: AsyncSession, temporada: int, variedad: VariedadUva | None = None,
+) -> tuple[list[CumplimientoPlanItem], dict[str, float]]:
+    """Cruza el plan cargado a mano contra lo realmente aplicado (RegistroFitosanitario)
+    dentro de la ventana de campaña (mayo->abril). No hay vínculo explícito entre una
+    aplicación real y una fila del plan (decisión de Fausto: no tocar el formulario de
+    Fitosanitarios) -- se hace matching automático por variedad+insumo, y cuando el mismo
+    insumo tiene varias rondas planificadas para una variedad, la N-ésima aplicación real
+    de ese insumo en una parcela (por orden cronológico) cubre la N-ésima ronda planificada.
+    Heurística razonable, no infalible si las rondas se aplican fuera de orden.
+    """
+    planes_stmt = (
+        select(PlanFitosanitario)
+        .options(selectinload(PlanFitosanitario.insumo))
+        .where(PlanFitosanitario.temporada == temporada)
+        .order_by(PlanFitosanitario.variedad, PlanFitosanitario.insumo_id, PlanFitosanitario.numero_aplicacion)
+    )
+    if variedad is not None:
+        planes_stmt = planes_stmt.where(PlanFitosanitario.variedad == variedad)
+    planes = (await db.execute(planes_stmt)).scalars().all()
+    if not planes:
+        return [], {}
+
+    variedades_en_plan = {p.variedad for p in planes}
+    parcelas = (
+        await db.execute(
+            select(Parcela).where(
+                Parcela.is_active.is_(True), Parcela.variedad.in_(variedades_en_plan)
+            )
+        )
+    ).scalars().all()
+    parcelas_por_variedad: dict[VariedadUva, list[Parcela]] = defaultdict(list)
+    for p in parcelas:
+        parcelas_por_variedad[p.variedad].append(p)
+
+    desde = date(temporada, 5, 1)
+    hasta = date(temporada + 1, 4, 30)
+    aplicaciones: dict[tuple[str, str], list[date]] = defaultdict(list)
+    parcela_ids = [p.id for p in parcelas]
+    if parcela_ids:
+        registros = (
+            await db.execute(
+                select(RegistroFitosanitario).where(
+                    RegistroFitosanitario.parcela_id.in_(parcela_ids),
+                    RegistroFitosanitario.fecha >= desde,
+                    RegistroFitosanitario.fecha <= hasta,
+                    RegistroFitosanitario.insumo_id.is_not(None),
+                )
+            )
+        ).scalars().all()
+        for r in registros:
+            aplicaciones[(r.parcela_id, r.insumo_id)].append(r.fecha)
+        for fechas in aplicaciones.values():
+            fechas.sort()
+
+    contador_grupo: dict[tuple[VariedadUva, str], int] = defaultdict(int)
+    resultado: list[CumplimientoPlanItem] = []
+    pendiente_por_insumo: dict[str, float] = defaultdict(float)
+
+    for plan in planes:
+        grupo_key = (plan.variedad, plan.insumo_id)
+        indice = contador_grupo[grupo_key]
+        contador_grupo[grupo_key] += 1
+
+        parcelas_variedad = parcelas_por_variedad.get(plan.variedad, [])
+        parcelas_total = len(parcelas_variedad)
+        parcelas_aplicadas = 0
+
+        for parcela in parcelas_variedad:
+            fechas = aplicaciones.get((parcela.id, plan.insumo_id), [])
+            if len(fechas) > indice:
+                parcelas_aplicadas += 1
+            elif parcela.superficie_ha:
+                pendiente_por_insumo[plan.insumo_id] += plan.dosis_por_ha * parcela.superficie_ha
+
+        porcentaje = round(100 * parcelas_aplicadas / parcelas_total) if parcelas_total else 0
+        if parcelas_aplicadas == 0:
+            estado = "pendiente"
+        elif parcelas_aplicadas == parcelas_total:
+            estado = "completo"
+        else:
+            estado = "parcial"
+
+        resultado.append(
+            CumplimientoPlanItem(
+                plan_id=plan.id,
+                variedad=plan.variedad,
+                numero_aplicacion=plan.numero_aplicacion,
+                mes=plan.mes,
+                insumo_nombre=plan.insumo.nombre,
+                objetivo=plan.objetivo,
+                dosis_por_ha=plan.dosis_por_ha,
+                parcelas_total=parcelas_total,
+                parcelas_aplicadas=parcelas_aplicadas,
+                porcentaje=porcentaje,
+                estado=estado,
+            )
+        )
+
+    return resultado, dict(pendiente_por_insumo)
+
+
+@router.get("/cumplimiento", response_model=list[CumplimientoPlanItem])
+async def cumplimiento_plan_fitosanitario(
+    temporada: int = Query(...),
+    variedad: VariedadUva | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[CumplimientoPlanItem]:
+    resultado, _pendiente = await _calcular_cumplimiento(db, temporada, variedad)
+    return resultado
+
+
+@router.get("/necesidad-stock", response_model=list[NecesidadInsumoItem])
+async def necesidad_stock(
+    temporada: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[NecesidadInsumoItem]:
+    _resultado, pendiente_por_insumo = await _calcular_cumplimiento(db, temporada)
+    if not pendiente_por_insumo:
+        return []
+
+    insumos = {
+        i.id: i
+        for i in (
+            await db.execute(select(Insumo).where(Insumo.id.in_(pendiente_por_insumo.keys())))
+        ).scalars().all()
+    }
+
+    items: list[NecesidadInsumoItem] = []
+    for insumo_id, cantidad_pendiente in pendiente_por_insumo.items():
+        insumo = insumos.get(insumo_id)
+        if insumo is None:
+            continue
+        stock_actual = Decimal(str(insumo.stock_actual))
+        faltante = max(0.0, cantidad_pendiente - float(stock_actual))
+        items.append(
+            NecesidadInsumoItem(
+                insumo_id=insumo_id,
+                insumo_nombre=insumo.nombre,
+                unidad=insumo.unidad,
+                cantidad_pendiente=round(cantidad_pendiente, 2),
+                stock_actual=stock_actual,
+                faltante=round(faltante, 2),
+            )
+        )
+    items.sort(key=lambda x: x.faltante, reverse=True)
+    return items
 
 
 @router.post("/", response_model=list[PlanFitosanitarioResponse], status_code=status.HTTP_201_CREATED)

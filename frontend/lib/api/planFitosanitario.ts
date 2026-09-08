@@ -57,3 +57,38 @@ export async function updatePlanFitosanitario(id: string, payload: PlanFitosanit
 export async function deletePlanFitosanitario(id: string): Promise<void> {
   await api.delete(`/plan-fitosanitario/${id}`)
 }
+
+export interface CumplimientoPlanItem {
+  plan_id: string
+  variedad: string
+  numero_aplicacion: number
+  mes: number
+  insumo_nombre: string
+  objetivo: string
+  dosis_por_ha: number
+  parcelas_total: number
+  parcelas_aplicadas: number
+  porcentaje: number
+  estado: 'pendiente' | 'parcial' | 'completo'
+}
+
+export interface NecesidadInsumoItem {
+  insumo_id: string
+  insumo_nombre: string
+  unidad: 'kg' | 'lt'
+  cantidad_pendiente: number
+  stock_actual: number
+  faltante: number
+}
+
+export async function getCumplimiento(temporada: number, variedad?: string): Promise<CumplimientoPlanItem[]> {
+  const { data } = await api.get('/plan-fitosanitario/cumplimiento', {
+    params: variedad ? { temporada, variedad } : { temporada },
+  })
+  return data
+}
+
+export async function getNecesidadStock(temporada: number): Promise<NecesidadInsumoItem[]> {
+  const { data } = await api.get('/plan-fitosanitario/necesidad-stock', { params: { temporada } })
+  return data
+}

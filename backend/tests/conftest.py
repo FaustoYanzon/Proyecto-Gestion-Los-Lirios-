@@ -40,7 +40,7 @@ from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.insumo import Insumo, UnidadInsumo  # noqa: E402
-from app.models.parcela import Parcela, TipoParcela  # noqa: E402
+from app.models.parcela import Parcela, TipoParcela, VariedadUva  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.models.valvula import Valvula  # noqa: E402
 
@@ -133,9 +133,10 @@ async def create_parcela():
         nombre: str = "Parcela Test",
         tipo: TipoParcela = TipoParcela.parral,
         superficie_ha: float | None = 10.0,
+        variedad: VariedadUva | None = None,
     ) -> Parcela:
         async with TestSessionLocal() as session:
-            parcela = Parcela(nombre=nombre, tipo=tipo, superficie_ha=superficie_ha)
+            parcela = Parcela(nombre=nombre, tipo=tipo, superficie_ha=superficie_ha, variedad=variedad)
             session.add(parcela)
             await session.commit()
             await session.refresh(parcela)

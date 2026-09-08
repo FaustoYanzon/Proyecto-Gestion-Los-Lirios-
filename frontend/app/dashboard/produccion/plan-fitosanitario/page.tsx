@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { ClipboardList, ClipboardCheck, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -322,13 +323,22 @@ export default function PlanFitosanitarioPage() {
             Programa de aplicaciones por variedad, cargado a mano cada temporada
           </p>
         </div>
-        <select
-          value={temporada}
-          onChange={(e) => setTemporada(Number(e.target.value))}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
-        </select>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/produccion/cumplimiento-fitosanitario"
+            className="flex items-center gap-1.5 text-sm font-medium text-[#7a1f2c] hover:underline"
+          >
+            <ClipboardCheck size={15} />
+            Ver cumplimiento →
+          </Link>
+          <select
+            value={temporada}
+            onChange={(e) => setTemporada(Number(e.target.value))}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
+          </select>
+        </div>
       </div>
 
       {variedadesDisponibles.length === 0 ? (
