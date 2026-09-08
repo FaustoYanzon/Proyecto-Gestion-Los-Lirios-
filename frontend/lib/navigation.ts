@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History,
+  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History, Warehouse,
 } from 'lucide-react'
 import type { Role } from '@/lib/theme'
 
@@ -43,6 +43,14 @@ export const ALL_NAV: NavItem[] = [
     matchFn: (p) =>
       p.startsWith('/dashboard/produccion') &&
       !p.startsWith('/dashboard/produccion/dashboard'),
+  },
+  {
+    href: '/dashboard/inventarios/insumos',
+    label: 'Inventarios',
+    short: 'Invent.',
+    icon: Warehouse,
+    matchFn: (p) => p.startsWith('/dashboard/inventarios'),
+    allowedRoles: ['super_admin', 'gerencial'],
   },
   {
     href: '/dashboard/trazabilidad',
@@ -94,6 +102,13 @@ export const SUB_NAVS: SubNav[] = [
     ],
   },
   {
+    prefix: '/dashboard/inventarios',
+    items: [
+      { href: '/dashboard/inventarios/producto-terminado', label: 'Producto Terminado' },
+      { href: '/dashboard/inventarios/insumos',             label: 'Insumos'            },
+    ],
+  },
+  {
     prefix: '/dashboard/finanzas',
     items: [
       { href: '/dashboard/finanzas/egresos',     label: 'Egresos'     },
@@ -119,7 +134,6 @@ export const SUB_NAVS: SubNav[] = [
     items: [
       { href: '/dashboard/documentacion/parcelas',     label: 'Parcelas'     },
       { href: '/dashboard/documentacion/trabajadores', label: 'Trabajadores' },
-      { href: '/dashboard/documentacion/insumos',      label: 'Insumos'      },
       { href: '/dashboard/documentacion/riego',        label: 'Riego'        },
       { href: '/dashboard/documentacion/precios',      label: 'Precios'      },
       { href: '/dashboard/documentacion/melgas',       label: 'Melgas'       },
