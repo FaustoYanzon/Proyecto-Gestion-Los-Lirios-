@@ -376,6 +376,50 @@ class RegistroFitosanitario(Base):
     )
 
 
+class PlanFitosanitario(Base):
+    """Plan de aplicación cargado a mano por Fausto, temporada tras temporada,
+    variedad real por variedad (sin agrupar en "Tintas" -- esa agrupación es
+    solo cómo el agrónomo lo comunica en su hoja, no cómo vive el dato acá).
+    Es una lista abierta de eventos por (temporada, variedad), no un valor
+    único como MetaProduccion -- puede haber más de un producto en la misma
+    ronda (numero_aplicacion)."""
+
+    __tablename__ = "planes_fitosanitarios"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    temporada: Mapped[int] = mapped_column(Integer, nullable=False)
+    variedad: Mapped[VariedadUva] = mapped_column(SAEnum(VariedadUva), nullable=False)
+    numero_aplicacion: Mapped[int] = mapped_column(Integer, nullable=False)
+    mes: Mapped[int] = mapped_column(Integer, nullable=False)
+    insumo_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("insumos.id"), nullable=False
+    )
+    objetivo: Mapped[str] = mapped_column(String(200), nullable=False)
+    dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
+    notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_planes_fitosanitarios_temporada_variedad", "temporada", "variedad"),
+    )
+
+    insumo: Mapped[Insumo] = relationship("Insumo")
+    created_by_user: Mapped[User] = relationship("User")
+
+
 class CicloCampana(Base):
     __tablename__ = "ciclos_campana"
 

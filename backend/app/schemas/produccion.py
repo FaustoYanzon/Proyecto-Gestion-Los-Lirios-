@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.finanzas import Finca
 from app.models.insumo import UnidadInsumo
@@ -233,6 +233,50 @@ class RegistroFitosanitarioResponse(BaseModel):
     responsable_id: str | None = None
     fecha_habilitacion_cosecha: date
     fecha_habilitacion_reingreso: date
+    created_by: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ── Plan Fitosanitario ──────────────────────────────────────────────────────
+
+class PlanFitosanitarioBase(BaseModel):
+    numero_aplicacion: int
+    mes: int = Field(ge=1, le=12)
+    insumo_id: str
+    objetivo: str
+    dosis_por_ha: float
+    notas: str | None = None
+
+
+class PlanFitosanitarioCreate(PlanFitosanitarioBase):
+    temporada: int
+    variedades: list[VariedadUva] = Field(min_length=1)
+
+
+class PlanFitosanitarioUpdate(BaseModel):
+    variedad: VariedadUva | None = None
+    numero_aplicacion: int | None = None
+    mes: int | None = Field(None, ge=1, le=12)
+    insumo_id: str | None = None
+    objetivo: str | None = None
+    dosis_por_ha: float | None = None
+    notas: str | None = None
+
+
+class PlanFitosanitarioResponse(BaseModel):
+    id: str
+    temporada: int
+    variedad: VariedadUva
+    numero_aplicacion: int
+    mes: int
+    insumo_id: str
+    insumo_nombre: str
+    insumo_unidad: UnidadInsumo
+    objetivo: str
+    dosis_por_ha: float
+    notas: str | None = None
     created_by: str
     created_at: datetime
 
