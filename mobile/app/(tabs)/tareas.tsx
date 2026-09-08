@@ -18,6 +18,7 @@ import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
+import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
 import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb, PrecioTarea } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS, temporadaDeFecha, buscarPrecio } from '../../lib/types'
@@ -645,14 +646,9 @@ function StepTrabajadores({
   onCancelar: () => void
 }) {
   const [workers, setWorkers] = useState<WorkerInput[]>([{ nombre: '', cantidad: '1' }])
-  const [focusedIdx, setFocusedIdx] = useState<number | null>(null)
 
-  function setNombre(idx: number, v: string) {
-    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: v, trabajadorId: undefined } : w))
-  }
-  function selectTrabajador(idx: number, t: TrabajadorDb) {
-    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre: t.nombre_completo, trabajadorId: t.id } : w))
-    setFocusedIdx(null)
+  function setTrabajador(idx: number, nombre: string, trabajadorId: string | undefined) {
+    setWorkers((prev) => prev.map((w, i) => i === idx ? { ...w, nombre, trabajadorId } : w))
   }
   function setCantidad(idx: number, v: string) {
     const cleaned = v.replace(/[^0-9.]/g, '')
@@ -669,6 +665,10 @@ function StepTrabajadores({
     const conNombre = workers.filter((w) => w.nombre.trim())
     if (conNombre.length === 0) {
       Alert.alert('Error', 'Ingresá al menos un trabajador con nombre.')
+      return
+    }
+    if (conNombre.some((w) => !w.trabajadorId)) {
+      Alert.alert('Error', 'Elegí cada trabajador de la lista (o agregalo como nuevo) antes de continuar.')
       return
     }
     if (conNombre.some((w) => !Number(w.cantidad) || Number(w.cantidad) <= 0)) {
@@ -700,36 +700,13 @@ function StepTrabajadores({
           <View key={idx} style={styles.workerCard}>
             <View style={{ flex: 1 }}>
               <Text style={styles.fieldLabel}>NOMBRE</Text>
-              <TextInput
-                style={styles.input}
+              <TrabajadorPicker
                 value={w.nombre}
-                onChangeText={(v) => setNombre(idx, v)}
-                onFocus={() => setFocusedIdx(idx)}
+                trabajadorId={w.trabajadorId}
+                trabajadoresDb={trabajadoresDb}
+                onChange={(nombre, trabajadorId) => setTrabajador(idx, nombre, trabajadorId)}
                 placeholder="Nombre del trabajador"
-                placeholderTextColor={colors.niebla}
-                autoCapitalize="words"
               />
-              {focusedIdx === idx && w.nombre.trim() && !w.trabajadorId && (
-                (() => {
-                  const matches = trabajadoresDb
-                    .filter((t) => t.nombre_completo.toLowerCase().includes(w.nombre.trim().toLowerCase()))
-                    .slice(0, 5)
-                  if (matches.length === 0) return null
-                  return (
-                    <View style={styles.suggestBox}>
-                      {matches.map((t) => (
-                        <TouchableOpacity
-                          key={t.id}
-                          style={styles.suggestItem}
-                          onPress={() => selectTrabajador(idx, t)}
-                        >
-                          <Text style={styles.suggestItemText}>{t.nombre_completo}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )
-                })()
-              )}
               <View style={styles.workerBottomRow}>
                 <View>
                   <Text style={styles.fieldLabel}>CANTIDAD</Text>
@@ -737,7 +714,6 @@ function StepTrabajadores({
                     style={styles.cantidadInput}
                     value={w.cantidad}
                     onChangeText={(v) => setCantidad(idx, v)}
-                    onFocus={() => setFocusedIdx(null)}
                     placeholder="0"
                     placeholderTextColor={colors.niebla}
                     keyboardType="decimal-pad"
@@ -789,7 +765,7 @@ function StepTrabajadores({
 // ─── Step 4: Confirmar ────────────────────────────────────────────────────────
 
 function StepConfirmar({
-  tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores, trabajadoresDb,
+  tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores,
   onSuccess, onBack, onCancelar,
 }: {
   tarea: string
@@ -800,7 +776,6 @@ function StepConfirmar({
   detalle: string
   clasificacion?: string
   trabajadores: Trabajador[]
-  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -815,31 +790,9 @@ function StepConfirmar({
   const totalCant = trabajadores.reduce((s, w) => s + w.cantidad, 0)
   const total = precio * totalCant
 
-  // Si no se eligió una sugerencia, intenta matchear por nombre exacto contra
-  // el catálogo cargado; si tampoco matchea, crea un Trabajador nuevo para que
-  // quede disponible la próxima vez (en vez de quedar como texto libre suelto).
-  async function resolveTrabajadorId(nombre: string, currentId?: string): Promise<string | undefined> {
-    if (currentId) return currentId
-    const trimmed = nombre.trim().toLowerCase()
-    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
-    if (exact) return exact.id
-    try {
-      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: nombre.trim() })
-      return data.id
-    } catch {
-      return undefined
-    }
-  }
-
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
-    const resueltos = await Promise.all(
-      trabajadores.map(async (w) => ({
-        ...w,
-        trabajadorId: await resolveTrabajadorId(w.nombre, w.trabajadorId),
-      }))
-    )
     const payload = {
       fecha,
       parcela_id: parcela?.id ?? null,
@@ -848,7 +801,7 @@ function StepConfirmar({
       precio_unitario: precio,
       detalle: detalle || undefined,
       clasificacion: clasificacion || undefined,
-      trabajadores: resueltos.map((w) => ({
+      trabajadores: trabajadores.map((w) => ({
         trabajador_nombre: w.nombre,
         cantidad: w.cantidad,
         trabajador_id: w.trabajadorId,
@@ -1126,7 +1079,6 @@ export default function TareasScreen() {
         detalle={selDetalle}
         clasificacion={selClasificacion}
         trabajadores={selTrabajadores}
-        trabajadoresDb={trabajadoresDb}
         onSuccess={() => { resetWizard(); loadRegistros(); loadTrabajadoresDb(); setToast('Tarea cargada ✓') }}
         onBack={() => setStep('trabajadores')}
         onCancelar={handleCancelar}

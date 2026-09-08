@@ -1,3 +1,5 @@
+import unicodedata
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +12,14 @@ from app.schemas.produccion import RegistroTrabajoResponse
 from app.schemas.trabajador import TrabajadorCreate, TrabajadorResponse, TrabajadorUpdate
 
 router = APIRouter(prefix="/trabajadores", tags=["Trabajadores"])
+
+
+def _normalizar_nombre(nombre: str) -> str:
+    """Trim + minusculas + sin tildes, para comparar nombres sin exigir
+    que coincidan letra por letra (evita que "Jose Perez" y "José Pérez"
+    convivan como dos Trabajador distintos)."""
+    sin_tildes = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode("ascii")
+    return " ".join(sin_tildes.strip().lower().split())
 
 
 @router.get("/", response_model=list[TrabajadorResponse])
@@ -45,6 +55,17 @@ async def create_trabajador(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> Trabajador:
+    nombre_normalizado = _normalizar_nombre(data.nombre_completo)
+    existentes = (
+        await db.execute(select(Trabajador).where(Trabajador.is_active.is_(True)))
+    ).scalars().all()
+    for existente in existentes:
+        if _normalizar_nombre(existente.nombre_completo) == nombre_normalizado:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f'Ya existe un trabajador activo con ese nombre: "{existente.nombre_completo}".',
+            )
+
     trabajador = Trabajador(**data.model_dump())
     db.add(trabajador)
     await db.flush()

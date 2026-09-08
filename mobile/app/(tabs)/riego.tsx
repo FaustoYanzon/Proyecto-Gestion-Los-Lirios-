@@ -17,6 +17,7 @@ import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
+import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb, ValvulaReal } from '../../lib/types'
@@ -660,21 +661,14 @@ function StepDetalle({
   const [dosis, setDosis] = useState(initialDosis)
   const [responsable, setResponsable] = useState(initialResponsable)
   const [responsableId, setResponsableId] = useState<string | undefined>(undefined)
-  const [focused, setFocused] = useState(false)
-
-  const matches = focused && responsable.trim() && !responsableId
-    ? trabajadoresDb
-        .filter((t) => t.nombre_completo.toLowerCase().includes(responsable.trim().toLowerCase()))
-        .slice(0, 5)
-    : []
 
   function handleContinue() {
     if (conFertirriego && !producto.trim()) {
       Alert.alert('Falta el producto', 'Indicá el nombre del fertilizante.')
       return
     }
-    if (!responsable.trim()) {
-      Alert.alert('Falta el responsable', 'Indicá quién realizó el riego.')
+    if (!responsable.trim() || !responsableId) {
+      Alert.alert('Falta el responsable', 'Elegí quién realizó el riego de la lista (o agregalo como nuevo).')
       return
     }
     onNext(conFertirriego, producto.trim(), dosis.trim(), responsable.trim(), responsableId)
@@ -725,27 +719,13 @@ function StepDetalle({
         )}
 
         <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RESPONSABLE</Text>
-        <TextInput
-          style={styles.input}
+        <TrabajadorPicker
           value={responsable}
-          onChangeText={(v) => { setResponsable(v); setResponsableId(undefined) }}
-          onFocus={() => setFocused(true)}
+          trabajadorId={responsableId}
+          trabajadoresDb={trabajadoresDb}
+          onChange={(nombre, trabajadorId) => { setResponsable(nombre); setResponsableId(trabajadorId) }}
           placeholder="Nombre del responsable..."
-          placeholderTextColor={colors.niebla}
         />
-        {matches.length > 0 && (
-          <View style={styles.suggestBox}>
-            {matches.map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={styles.suggestItem}
-                onPress={() => { setResponsable(t.nombre_completo); setResponsableId(t.id); setFocused(false) }}
-              >
-                <Text style={styles.suggestItemText}>{t.nombre_completo}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         <View style={[styles.actionRow, { marginTop: 24 }]}>
           <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
@@ -778,10 +758,9 @@ interface RiegoDraft {
 }
 
 function StepConfirmar({
-  draft, trabajadoresDb, onSuccess, onBack, onCancelar,
+  draft, onSuccess, onBack, onCancelar,
 }: {
   draft: RiegoDraft
-  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -794,27 +773,10 @@ function StepConfirmar({
   const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
   const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length)
 
-  // Si no se eligió una sugerencia, intenta matchear por nombre exacto contra
-  // el catálogo cargado; si tampoco matchea, crea un Trabajador nuevo para que
-  // quede disponible la próxima vez. Mismo patrón que tareas.tsx (2026-08-05).
-  async function resolveResponsableId(): Promise<string | undefined> {
-    if (draft.responsable_id) return draft.responsable_id
-    const trimmed = draft.responsable.trim().toLowerCase()
-    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
-    if (exact) return exact.id
-    try {
-      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: draft.responsable.trim() })
-      return data.id
-    } catch {
-      return undefined
-    }
-  }
-
   async function handleSubmit() {
     if (submittingRef.current) return
     if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
     submittingRef.current = true
-    const responsableId = await resolveResponsableId()
     const payload = {
       fecha: draft.fechaInicio,
       parcela_id: draft.parcela.id,
@@ -823,7 +785,7 @@ function StepConfirmar({
       inicio: inicioISO,
       fin: finISO,
       responsable: draft.responsable,
-      responsable_id: responsableId,
+      responsable_id: draft.responsable_id,
       fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
       fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
       idempotency_key: idempotencyKeyRef.current,
@@ -931,10 +893,9 @@ interface IniciarDraft {
 }
 
 function StepIniciarConfirmar({
-  draft, trabajadoresDb, onSuccess, onBack, onCancelar,
+  draft, onSuccess, onBack, onCancelar,
 }: {
   draft: IniciarDraft
-  trabajadoresDb: TrabajadorDb[]
   onSuccess: () => void
   onBack: () => void
   onCancelar: () => void
@@ -943,31 +904,17 @@ function StepIniciarConfirmar({
   const submittingRef = useRef(false)
   const idempotencyKeyRef = useRef(newIdempotencyKey())
 
-  async function resolveResponsableId(): Promise<string | undefined> {
-    if (draft.responsable_id) return draft.responsable_id
-    const trimmed = draft.responsable.trim().toLowerCase()
-    const exact = trabajadoresDb.find((t) => t.nombre_completo.trim().toLowerCase() === trimmed)
-    if (exact) return exact.id
-    try {
-      const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: draft.responsable.trim() })
-      return data.id
-    } catch {
-      return undefined
-    }
-  }
-
   async function handleSubmit() {
     if (submittingRef.current) return
     submittingRef.current = true
     try {
       setLoading(true)
-      const responsableId = await resolveResponsableId()
       await iniciarRiego({
         parcela_id: draft.parcela.id,
         cabezal: draft.cabezal,
         valvula: draft.valvulas.join(','),
         responsable: draft.responsable,
-        responsable_id: responsableId,
+        responsable_id: draft.responsable_id,
         fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
         fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
         idempotency_key: idempotencyKeyRef.current,
@@ -1386,7 +1333,6 @@ export default function RiegoScreen() {
     return (
       <StepConfirmar
         draft={draft}
-        trabajadoresDb={trabajadoresDb}
         onSuccess={() => { resetWizard(); loadData(); setToast('Riego cargado ✓') }}
         onBack={() => setStep('detalle')}
         onCancelar={handleCancelar}
@@ -1398,7 +1344,6 @@ export default function RiegoScreen() {
     return (
       <StepIniciarConfirmar
         draft={draft}
-        trabajadoresDb={trabajadoresDb}
         onSuccess={() => { resetWizard(); loadRiegosEnCurso(); setToast('Riego iniciado ✓') }}
         onBack={() => setStep('detalle')}
         onCancelar={handleCancelar}

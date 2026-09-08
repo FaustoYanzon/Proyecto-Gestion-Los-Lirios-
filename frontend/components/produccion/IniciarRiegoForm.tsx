@@ -10,14 +10,13 @@ import { getValvulasReales, iniciarRiego } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
-import { getTrabajadores, resolveTrabajadorId } from '@/lib/api/trabajadores'
-import ResponsableInput from './ResponsableInput'
+import TrabajadorSelect from './TrabajadorSelect'
 
 const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
   cabezal: z.string().min(1, 'Requerido'),
   responsable: z.string().min(1, 'Requerido'),
-  responsable_id: z.string().optional(),
+  responsable_id: z.string().min(1, 'Elegí un trabajador de la lista'),
   fertilizante_nombre: z.string().optional(),
   fertilizante_dosis_lt_ha: z.preprocess(
     (v) => (!v || v === '' ? undefined : Number(v)),
@@ -55,14 +54,9 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
-    defaultValues: { parcela_id: '', cabezal: '', responsable: '', responsable_id: undefined, fertilizante_nombre: '' },
+    defaultValues: { parcela_id: '', cabezal: '', responsable: '', responsable_id: '', fertilizante_nombre: '' },
   })
 
-  const { data: trabajadoresDb = [] } = useQuery({
-    queryKey: ['trabajadores'],
-    queryFn: getTrabajadores,
-    staleTime: 60_000,
-  })
   // Catálogo real de válvulas — 57 filas, se trae entero una vez y se filtra
   // client-side por parcela (evita un request por cada cambio de parcela).
   const { data: valvulasReales = [] } = useQuery({
@@ -118,7 +112,6 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     submittingRef.current = true
     try {
       setSubmitError(null)
-      const responsableId = await resolveTrabajadorId(data.responsable, data.responsable_id, trabajadoresDb)
       // Nombres reales en orden oeste->este (mismo orden que valvulasDisponibles).
       const valvulaOrdenada = valvulasDisponibles
         .filter((v) => selectedValvulas.has(v.nombre))
@@ -129,7 +122,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         cabezal: data.cabezal,
         valvula: valvulaOrdenada,
         responsable: data.responsable,
-        responsable_id: responsableId,
+        responsable_id: data.responsable_id,
         fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
         fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
         idempotency_key: idempotencyKeyRef.current,
@@ -208,12 +201,12 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
 
       <div>
         <label className={label}>Responsable</label>
-        <ResponsableInput
+        <TrabajadorSelect
           value={responsableW}
           trabajadorId={responsableIdW}
           onChange={(nombre, trabajadorId) => {
             setValue('responsable', nombre)
-            setValue('responsable_id', trabajadorId)
+            setValue('responsable_id', trabajadorId ?? '', { shouldValidate: true })
           }}
           className={field}
           error={errors.responsable?.message}
