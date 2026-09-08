@@ -105,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen overflow-hidden bg-white">
       {/* Sidebar 56px */}
       <aside
-        className="flex flex-col w-[56px] flex-shrink-0 py-3 items-center gap-1"
+        className="relative z-30 flex flex-col w-[56px] flex-shrink-0 py-3 items-center gap-1"
         style={{ backgroundColor: '#7a1f2c' }}
       >
         {/* Logo mark */}
@@ -151,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex flex-col flex-1 min-w-0">
         {/* Topbar 56px */}
         <header
-          className="flex items-center gap-3 h-14 px-4 flex-shrink-0 border-b bg-white"
+          className="relative z-20 flex items-center gap-3 h-14 px-4 flex-shrink-0 border-b bg-white"
           style={{ borderColor: '#e2dbcc' }}
         >
           <div className="flex items-center gap-2">
@@ -214,7 +214,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
 
         {/* Canvas */}
-        <main className="flex-1 overflow-y-auto bg-white p-6">
+        {/* isolate: crea un contexto de apilamiento propio para que los
+            z-index internos del mapa (controles, panel de detalle) no
+            compitan directamente contra el header/sidebar en el contexto raíz. */}
+        <main className="relative isolate flex-1 overflow-y-auto bg-white p-6">
           {children}
         </main>
       </div>

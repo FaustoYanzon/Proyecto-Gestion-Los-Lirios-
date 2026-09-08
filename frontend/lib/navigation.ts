@@ -45,6 +45,14 @@ export const ALL_NAV: NavItem[] = [
       !p.startsWith('/dashboard/produccion/dashboard'),
   },
   {
+    href: '/dashboard/finanzas/egresos',
+    label: 'Finanzas',
+    short: 'Finanzas',
+    icon: DollarSign,
+    matchFn: (p) => p.startsWith('/dashboard/finanzas'),
+    allowedRoles: ['super_admin', 'gerencial'],
+  },
+  {
     href: '/dashboard/inventarios/insumos',
     label: 'Inventarios',
     short: 'Invent.',
@@ -58,14 +66,6 @@ export const ALL_NAV: NavItem[] = [
     short: 'Trazab.',
     icon: History,
     matchFn: (p) => p.startsWith('/dashboard/trazabilidad'),
-  },
-  {
-    href: '/dashboard/finanzas/egresos',
-    label: 'Finanzas',
-    short: 'Finanzas',
-    icon: DollarSign,
-    matchFn: (p) => p.startsWith('/dashboard/finanzas'),
-    allowedRoles: ['super_admin', 'gerencial'],
   },
   {
     href: '/dashboard/documentacion/parcelas',

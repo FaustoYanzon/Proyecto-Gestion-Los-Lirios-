@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-08-28 (rediseño estético + fix de permisos de parcelas — ver [[2026-08-28-estetica-v1-rediseno-web-mobile]] y [[2026-08-28-play-store-produccion-ios-fix-parcelas]])
+> Última revisión: 2026-09-08 (fix definitivo de z-index mapa/sidebar — ver [[2026-09-08-fix-zindex-mapa-sidebar]])
 
 ---
 
@@ -36,6 +36,14 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-09-08** (ver [[2026-09-08-fix-zindex-mapa-sidebar]]):
+- **Recurrencia del bug de z-index "mapa tapa el selector de campaña"** (ver entrada del 2026-07-14 más abajo) — esta vez también afectaba el tooltip del nombre de ícono de la barra lateral al hacer hover. El fix del 07-14 (subir el z-index de los filtros a `z-[1000]` a mano) era un parche de valores sueltos, no una separación estructural — cuando los controles internos del mapa (chips de modo, leyenda, panel de detalle) también llegaron a `z-[1000]`/`z-[2000]`, volvieron a empatar/ganarle al header. **Fix real esta vez:** `isolate` en el `<main>` de `dashboard/layout.tsx` — crea un contexto de apilamiento propio que contiene todos los z-index internos del mapa, así compiten entre sí pero no contra el header/sidebar. Debería cerrar la recurrencia de raíz (cualquier z-index nuevo dentro del mapa queda contenido), no solo empatar números.
+- Reorden de íconos de la barra lateral (Inicio, Mapa, Producción, Finanzas, Inventarios, Trazabilidad, Documentación).
+
+**Sesión del 2026-09-07** (ver [[2026-09-07-normalizacion-trabajadores-combobox]]):
+- **14 nombres de `Trabajador` con 2-3 variantes duplicadas (mayús/minús, con/sin tilde, repetidos) — resuelto.** El combobox del 08-05 (ver entrada de abajo) creaba un `Trabajador` nuevo en silencio cada vez que el nombre tipeado no matcheaba exacto — esa es la causa real de los duplicados, no un caso aislado. `scripts/normalizar_trabajadores.py` fusionó los 18 duplicados + 3 filas "ZZZ..." de pruebas viejas nunca borradas (52→31 trabajadores), re-apuntó el historial de tareas/riego/fitosanitarios afectado, y vinculó retroactivamente 14 registros huérfanos (`trabajador_id`/`responsable_id` NULL, mismo patrón que el gap del 08-12 pero por typos/abreviaturas en vez de catálogo vacío). Backup previo, 0 duplicados/huérfanos verificado después.
+- **El combobox de Trabajador ya no crea uno nuevo en silencio — cierra la causa raíz de arriba y de la entrada "`TareaForm` sin selector de Trabajador" (08-05) más abajo, que quedaba desactualizada.** Ahora solo se puede elegir de la lista existente en los 4 puntos de carga (Tareas/Riego/Iniciar riego/Fitosanitarios, web y mobile); "+ Agregar nuevo trabajador" pide confirmar con un aviso de nombres parecidos. Defensa de servidor: `POST /trabajadores/` rechaza nombres duplicados (case/tilde-insensitive) con 409.
 
 **Sesión del 2026-08-28** (ver [[2026-08-28-play-store-produccion-ios-fix-parcelas]]):
 - **Selector de "Ubicación" vacío para encargado/regador en el formulario web de Tareas (y potencialmente Cosecha/Fitosanitarios/Riego, misma función) — resuelto.** `GET /parcelas/` exigía `require_gerencial_up`; encargado/regador sacaban 403 silencioso y el selector solo mostraba "General (sin parcela)". El endpoint hermano `/parcelas/mapa` ya exponía los mismos datos a cualquier rol — inconsistencia, no una protección real. Bajado a `require_encargado_up` (mismo grupo que ya puede crear tareas/riego/fito/cosecha). Verificado con un usuario de prueba real: 403→200, sin regresión en super_admin.
