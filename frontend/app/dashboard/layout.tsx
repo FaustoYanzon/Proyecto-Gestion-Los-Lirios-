@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { logout } from '@/lib/auth'
@@ -11,6 +11,7 @@ import { ALL_NAV, SUB_NAVS, type NavItem } from '@/lib/navigation'
 import FincaSwitcher from '@/components/FincaSwitcher'
 import CampanaSwitcher from '@/components/CampanaSwitcher'
 import UserBadge from '@/components/UserBadge'
+import NotificacionesBell from '@/components/NotificacionesBell'
 import CommandPalette from '@/components/CommandPalette'
 import { ClimateMini } from '@/components/ClimateWidget'
 
@@ -176,13 +177,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className="flex items-center gap-2">
             <ClimateMini />
-            <button
-              aria-label="Notificaciones"
-              className="flex items-center justify-center w-8 h-8 rounded-lg
-                         text-[#5a544c] hover:bg-[#fbfaf6] transition-colors"
-            >
-              <Bell size={18} strokeWidth={1.75} />
-            </button>
+            <NotificacionesBell />
             <UserBadge />
           </div>
         </header>

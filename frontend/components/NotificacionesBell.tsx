@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, X, Check } from 'lucide-react'
+import { Bell, Check } from 'lucide-react'
 import { getRiegos, type RiegoResponse } from '@/lib/api/riego'
 import { getEstadoActual, type EstadoActualItem } from '@/lib/api/produccion'
 import { getAlertasCarencia, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
@@ -127,26 +127,26 @@ function derivarAlertas(
   return alertas
 }
 
-// Panel tipo buzón: se abre al tocar el widget, muestra todas las alertas
-// (el widget de la tarjeta solo muestra un resumen de hasta 3). Tildar
-// (✓ completada) o cancelar (✕ cancelada) descarta la alerta 48h — no hay
-// forma de "resolverla" de verdad desde acá porque las alertas se calculan
-// en vivo a partir de datos reales, no son filas propias; 48h evita que un
-// descarte accidental silencie un problema real (ej. riego atrasado) para
-// siempre.
+// Panel tipo buzón, disparado desde la campanita del header. Tildar (✓)
+// descarta la alerta 48h — no hay forma de "resolverla" de verdad desde acá
+// porque las alertas se calculan en vivo a partir de datos reales, no son
+// filas propias; 48h evita que un descarte accidental silencie un problema
+// real (ej. riego atrasado) para siempre. Sin botón de cancelar a propósito
+// (antes existía "✕ cancelada" con el mismo efecto de descarte — se sacó
+// para no duplicar la única acción real que tiene sentido acá).
 function AlertasModal({
   alertas, onClose, onDescartar, descartandoId,
 }: {
   alertas: Alerta[]
   onClose: () => void
-  onDescartar: (id: string, tipo: 'completada' | 'cancelada') => void
+  onDescartar: (id: string) => void
   descartandoId: string | null
 }) {
   return (
     <BuzonModal
       title={`Alertas (${alertas.length})`}
       onClose={onClose}
-      footer="Al tildar o cancelar, la alerta se oculta por 48h — si el problema sigue, vuelve a aparecer sola."
+      footer="Al tildar, la alerta se oculta por 48h — si el problema sigue, vuelve a aparecer sola."
     >
       {alertas.length === 0 ? (
         <p className="text-sm text-[#a09584] px-2 py-4 text-center">Sin alertas activas</p>
@@ -172,24 +172,14 @@ function AlertasModal({
                   {a.mensaje}
                 </span>
               </span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => onDescartar(a.id, 'completada')}
-                  disabled={descartandoId === a.id}
-                  title="Marcar como completada"
-                  className="p-1.5 rounded-md text-[#3f5c3a] hover:bg-[#eef3ec] disabled:opacity-50 transition-colors"
-                >
-                  <Check size={15} />
-                </button>
-                <button
-                  onClick={() => onDescartar(a.id, 'cancelada')}
-                  disabled={descartandoId === a.id}
-                  title="Cancelar"
-                  className="p-1.5 rounded-md text-[#a09584] hover:bg-[#fbfaf6] disabled:opacity-50 transition-colors"
-                >
-                  <X size={15} />
-                </button>
-              </div>
+              <button
+                onClick={() => onDescartar(a.id)}
+                disabled={descartandoId === a.id}
+                title="Marcar como completada"
+                className="flex-shrink-0 p-1.5 rounded-md text-[#3f5c3a] hover:bg-[#eef3ec] disabled:opacity-50 transition-colors"
+              >
+                <Check size={15} />
+              </button>
             </div>
           ))}
         </div>
@@ -198,7 +188,7 @@ function AlertasModal({
   )
 }
 
-export default function Alertas() {
+export default function NotificacionesBell() {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [descartandoId, setDescartandoId] = useState<string | null>(null)
@@ -242,12 +232,11 @@ export default function Alertas() {
   const descartadasIds = new Set(descartadas.map((d) => d.alerta_id))
   const todasLasAlertas = derivarAlertas(riegos, estadoActual, carencias, lotesArca)
   const alertasVisibles = todasLasAlertas.filter((a) => !descartadasIds.has(a.id))
-  const resumen = alertasVisibles.slice(0, 3)
 
-  async function handleDescartar(id: string, tipo: 'completada' | 'cancelada') {
+  async function handleDescartar(id: string) {
     setDescartandoId(id)
     try {
-      await descartarAlerta(id, tipo)
+      await descartarAlerta(id, 'completada')
       queryClient.invalidateQueries({ queryKey: ['alertas-descartadas'] })
     } catch {
       // Si falla, la alerta simplemente sigue apareciendo — no hace falta
@@ -261,44 +250,19 @@ export default function Alertas() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="bg-white rounded-[10px] border border-[#e2dbcc] p-4 flex-shrink-0 w-full text-left hover:border-[#e6c8cd] transition-colors"
-        style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
+        aria-label="Notificaciones"
+        className="relative flex items-center justify-center w-8 h-8 rounded-lg
+                   text-[#5a544c] hover:bg-[#fbfaf6] transition-colors"
       >
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle size={16} strokeWidth={1.75} color="#a3293a" />
-          <span className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">
-            Alertas{alertasVisibles.length > 0 ? ` (${alertasVisibles.length})` : ''}
+        <Bell size={18} strokeWidth={1.75} />
+        {alertasVisibles.length > 0 && (
+          <span
+            className="absolute top-1 right-1 min-w-[15px] h-[15px] px-[3px] rounded-full text-white
+                       text-[9px] font-bold flex items-center justify-center"
+            style={{ backgroundColor: '#a3293a' }}
+          >
+            {alertasVisibles.length > 9 ? '9+' : alertasVisibles.length}
           </span>
-        </div>
-        {resumen.length === 0 ? (
-          <p className="text-sm text-[#a09584]">Sin alertas activas</p>
-        ) : (
-          <div className="space-y-2">
-            {resumen.map((a) => (
-              <div key={a.id} className="flex items-start gap-2 text-sm">
-                <span
-                  className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-[5px]"
-                  style={{ backgroundColor: a.nivel === 'warn' ? '#a3293a' : '#3d6b86' }}
-                />
-                <span>
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide mr-1.5"
-                    style={{ color: a.nivel === 'warn' ? '#a3293a' : '#8a6a1f' }}
-                  >
-                    {a.nivel === 'warn' ? 'URGENTE' : 'PENDIENTE'}
-                  </span>
-                  <span style={{ color: a.nivel === 'warn' ? '#a3293a' : '#5a544c' }}>
-                    {a.mensaje}
-                  </span>
-                </span>
-              </div>
-            ))}
-            {alertasVisibles.length > resumen.length && (
-              <p className="text-[11px] font-semibold text-[#7a1f2c] pt-1">
-                +{alertasVisibles.length - resumen.length} más — ver todas
-              </p>
-            )}
-          </div>
         )}
       </button>
 

@@ -18,7 +18,7 @@ import type { EstadoFenologico } from '../lib/types'
 import { ESTADO_LABELS, ESTADO_COLORS } from '../lib/types'
 
 const ESTADOS: EstadoFenologico[] = [
-  'brotacion', 'floracion', 'cuaje', 'envero', 'madurez', 'cosecha', 'latencia',
+  'brotacion', 'floracion', 'cuaje', 'cierre_racimo', 'envero', 'cosecha', 'post_cosecha',
 ]
 
 interface EstadoActual {

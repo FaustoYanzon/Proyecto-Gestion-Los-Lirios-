@@ -19,7 +19,9 @@ export interface User {
 export type TipoParcela = 'parral' | 'potrero' | 'pasero' | 'cabezal'
 export type VariedadUva = 'flame' | 'red_globe' | 'fiesta' | 'bonarda' | 'sultanina' | 'syrah' | 'aspirant' | 'alfalfa' | 'otro'
 export type UnidadMedida = 'dias' | 'plantas' | 'melgas' | 'metros' | 'vines' | 'cajas' | 'gamelas' | 'otros'
-export type EstadoFenologico = 'brotacion' | 'floracion' | 'cuaje' | 'envero' | 'madurez' | 'cosecha' | 'latencia'
+// Mismos 7 estados que ESTADO_CAMPANA_LABELS/COLORES abajo — unificado
+// 2026-09-08 (antes tenía madurez/latencia en vez de cierre_racimo/post_cosecha).
+export type EstadoFenologico = 'brotacion' | 'floracion' | 'cuaje' | 'cierre_racimo' | 'envero' | 'cosecha' | 'post_cosecha'
 
 export const VARIEDAD_LABELS: Record<string, string> = {
   flame: 'Flame', red_globe: 'Red Globe', fiesta: 'Fiesta', bonarda: 'Bonarda',
@@ -282,20 +284,20 @@ export const ESTADO_LABELS: Record<EstadoFenologico, string> = {
   brotacion: 'Brotación',
   floracion: 'Floración',
   cuaje: 'Cuaje',
+  cierre_racimo: 'Cierre de Racimo',
   envero: 'Envero',
-  madurez: 'Madurez',
   cosecha: 'Cosecha',
-  latencia: 'Latencia',
+  post_cosecha: 'Post-Cosecha',
 }
 
 export const ESTADO_COLORS: Record<EstadoFenologico, string> = {
   brotacion: '#eab308',
   floracion: '#ec4899',
   cuaje: '#f97316',
+  cierre_racimo: '#0ea5e9',
   envero: '#a855f7',
-  madurez: '#22c55e',
   cosecha: '#ef4444',
-  latencia: '#6b7280',
+  post_cosecha: '#6b7280',
 }
 
 // ── Ciclo de Campaña (calendario único, GET /produccion/estado-campana/*) ──

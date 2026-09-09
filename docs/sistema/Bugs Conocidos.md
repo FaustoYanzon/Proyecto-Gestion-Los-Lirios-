@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-09-08 (fix definitivo de z-index mapa/sidebar — ver [[2026-09-08-fix-zindex-mapa-sidebar]])
+> Última revisión: 2026-09-08 (unificación de estados fenológicos — ver [[2026-09-08-inicio-reorden-y-unificacion-fenologia]])
 
 ---
 
@@ -36,6 +36,12 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-09-08, segunda tanda** (ver [[2026-09-08-inicio-reorden-y-unificacion-fenologia]]):
+- **Estados fenológicos unificados con los del mapa.** Fenología/Ciclo de Campaña tenían 10 fases finas por variedad (Reposo invernal, Lloro, Grano de arveja, Madurez...) distintas de los 7 estados que ya pintaba el mapa (Cierre de Racimo, Post-Cosecha...). Migración de DB en 2 pasos sobre el enum `estadofenologico` (agregar valores nuevos, migrar filas viejas), motor de fenología reescrito para delegar el calendario a `ciclo_campana.py` y conservar solo tareas recomendadas + riesgo de oídio por variedad. Ver detalle completo en la bitácora — cambio de modelo de datos, no un bugfix simple.
+- **Alertas movidas del Inicio a la campanita del header**, sin botón de cancelar (redundante con tildar). Riegos en curso ahora ocupa el espacio libre.
+- **Reorden del Inicio:** Dirección → Fenología → Mapa/Clima/Riegos (gerenciales); Fenología → Mapa/Clima/Riegos (resto de roles).
+- Recurrencia (van 3) del bug de `uvicorn --reload` con workers huérfanos sirviendo código viejo — mismo fix, `taskkill /F /IM python.exe /T`.
 
 **Sesión del 2026-09-08** (ver [[2026-09-08-fix-zindex-mapa-sidebar]]):
 - **Recurrencia del bug de z-index "mapa tapa el selector de campaña"** (ver entrada del 2026-07-14 más abajo) — esta vez también afectaba el tooltip del nombre de ícono de la barra lateral al hacer hover. El fix del 07-14 (subir el z-index de los filtros a `z-[1000]` a mano) era un parche de valores sueltos, no una separación estructural — cuando los controles internos del mapa (chips de modo, leyenda, panel de detalle) también llegaron a `z-[1000]`/`z-[2000]`, volvieron a empatar/ganarle al header. **Fix real esta vez:** `isolate` en el `<main>` de `dashboard/layout.tsx` — crea un contexto de apilamiento propio que contiene todos los z-index internos del mapa, así compiten entre sí pero no contra el header/sidebar. Debería cerrar la recurrencia de raíz (cualquier z-index nuevo dentro del mapa queda contenido), no solo empatar números.

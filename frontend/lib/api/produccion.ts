@@ -218,6 +218,23 @@ export async function getFenologiaEstadoActual(): Promise<FaseVariedadItem[]> {
   return data
 }
 
+export interface FaseCalendarioItem {
+  fase: string
+  fase_label: string
+  desde_mes: number
+  desde_dia: number
+  hasta_mes: number
+  hasta_dia: number
+}
+
+// Calendario único de Ciclo de Campaña (no depende de la fecha de hoy, igual
+// para todas las variedades) — para la página de Documentación que muestra
+// "de cuándo a cuándo es cada estado".
+export async function getFenologiaCalendario(): Promise<FaseCalendarioItem[]> {
+  const { data } = await api.get<FaseCalendarioItem[]>('/produccion/fenologia/calendario')
+  return data
+}
+
 // Borra las confirmaciones manuales de CicloCampana usadas como override
 // (sin rendimiento_kg_ha asociado) para volver 100% al calendario
 // automático. No toca los registros con historial real de cosecha.

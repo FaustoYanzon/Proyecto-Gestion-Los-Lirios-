@@ -12,29 +12,32 @@ import { useContextStore } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Mismos 7 estados que usa el mapa (app.core.ciclo_campana.EstadoCampana) —
+// unificado 2026-09-08, ver [[2026-09-08]] en la bóveda. Antes tenía
+// madurez/latencia en vez de cierre_racimo/post_cosecha.
 const ESTADOS = [
-  'brotacion', 'floracion', 'cuaje', 'envero', 'madurez', 'cosecha', 'latencia',
+  'brotacion', 'floracion', 'cuaje', 'cierre_racimo', 'envero', 'cosecha', 'post_cosecha',
 ] as const
 type EstadoKey = (typeof ESTADOS)[number]
 
 const ESTADO_LABELS: Record<EstadoKey, string> = {
-  brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje',
-  envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
+  brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje', cierre_racimo: 'Cierre de Racimo',
+  envero: 'Envero', cosecha: 'Cosecha', post_cosecha: 'Post-Cosecha',
 }
 
 const ESTADO_COLORS: Record<EstadoKey, { bg: string; text: string; dot: string; border: string }> = {
-  brotacion: { bg: 'bg-lime-50',   text: 'text-lime-700',   dot: 'bg-lime-500',   border: 'border-lime-300' },
-  floracion:  { bg: 'bg-pink-50',   text: 'text-pink-700',   dot: 'bg-pink-500',   border: 'border-pink-300' },
-  cuaje:      { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', border: 'border-orange-300' },
-  envero:     { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500', border: 'border-purple-300' },
-  madurez:    { bg: 'bg-green-50',  text: 'text-green-700',  dot: 'bg-green-500',  border: 'border-green-300' },
-  cosecha:    { bg: 'bg-red-50',    text: 'text-red-700',    dot: 'bg-red-500',    border: 'border-red-300' },
-  latencia:   { bg: 'bg-gray-50',   text: 'text-gray-600',   dot: 'bg-gray-400',   border: 'border-gray-300' },
+  brotacion:      { bg: 'bg-lime-50',   text: 'text-lime-700',   dot: 'bg-lime-500',   border: 'border-lime-300' },
+  floracion:      { bg: 'bg-pink-50',   text: 'text-pink-700',   dot: 'bg-pink-500',   border: 'border-pink-300' },
+  cuaje:          { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', border: 'border-orange-300' },
+  cierre_racimo:  { bg: 'bg-sky-50',    text: 'text-sky-700',    dot: 'bg-sky-500',    border: 'border-sky-300' },
+  envero:         { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500', border: 'border-purple-300' },
+  cosecha:        { bg: 'bg-red-50',    text: 'text-red-700',    dot: 'bg-red-500',    border: 'border-red-300' },
+  post_cosecha:   { bg: 'bg-gray-50',   text: 'text-gray-600',   dot: 'bg-gray-400',   border: 'border-gray-300' },
 }
 
 const TIMELINE_DOTS: Record<EstadoKey, string> = {
-  brotacion: 'bg-lime-500', floracion: 'bg-pink-500', cuaje: 'bg-orange-500',
-  envero: 'bg-purple-500', madurez: 'bg-green-500', cosecha: 'bg-red-500', latencia: 'bg-gray-400',
+  brotacion: 'bg-lime-500', floracion: 'bg-pink-500', cuaje: 'bg-orange-500', cierre_racimo: 'bg-sky-500',
+  envero: 'bg-purple-500', cosecha: 'bg-red-500', post_cosecha: 'bg-gray-400',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,7 +48,7 @@ function fmt(date: string | null): string {
 }
 
 function toEstadoKey(estado: string): EstadoKey {
-  return (ESTADOS as readonly string[]).includes(estado) ? (estado as EstadoKey) : 'latencia'
+  return (ESTADOS as readonly string[]).includes(estado) ? (estado as EstadoKey) : 'post_cosecha'
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────

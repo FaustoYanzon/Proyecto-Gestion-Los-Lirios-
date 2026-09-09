@@ -10,7 +10,6 @@ import {
   ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts'
 import FincaMap from '@/components/map/FincaMap'
-import Alertas from '@/components/Alertas'
 import FenologiaNotificaciones from '@/components/FenologiaNotificaciones'
 import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
 import { ClimateCard } from '@/components/ClimateWidget'
@@ -192,8 +191,15 @@ function DireccionSection() {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-// Inicio queda reducido a lo esencial: Dirección (D1), mapa compacto,
-// clima y notificaciones (alertas + fenología).
+// Inicio queda reducido a lo esencial: mapa compacto + clima/riegos,
+// notificación fenológica y Dirección (D1, solo gerencial). Las alertas
+// genéricas (riego atrasado, carencia, ARCA) viven en la campanita del
+// header (NotificacionesBell), no acá — ver dashboard/layout.tsx.
+//
+// Orden pedido por Fausto: para gerenciales, Dirección (KPIs+gráfico) va
+// primero, después la notificación de fenología, y el mapa+clima/riego al
+// final. Para el resto de los roles (que no ven Dirección) la fenología va
+// arriba de todo, antes del mapa.
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user)
@@ -226,10 +232,15 @@ export default function DashboardPage() {
         <p className="text-sm text-[#a09584] mt-0.5">{todayLabel}</p>
       </div>
 
-      {/* Dirección (gerencial only) */}
+      {/* Dirección (gerencial only) — primero de todo */}
       {isGerencial && <DireccionSection />}
 
-      {/* Grid mapa compacto + sidebar clima/alertas */}
+      {/* Fenología: arriba de todo si no hay Dirección, o justo debajo de Dirección */}
+      <div className="flex-shrink-0">
+        <FenologiaNotificaciones />
+      </div>
+
+      {/* Grid mapa compacto + sidebar clima/riegos — al final */}
       <div
         className="grid gap-4"
         style={{ gridTemplateColumns: '1fr 1fr', height: 460 }}
@@ -250,22 +261,15 @@ export default function DashboardPage() {
           </span>
         </Link>
 
-        {/* Sidebar derecho: clima + alertas + riegos en curso */}
+        {/* Sidebar derecho: clima + riegos en curso (ahora sin Alertas, que se movió a la campanita) */}
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
           <ClimateCard />
-          <Alertas />
           <RiegosEnCurso
             parcelaNombre={parcelaNombre}
             showTerminar={false}
             iniciarHref="/dashboard/produccion/riego"
-            collapsed
           />
         </div>
-      </div>
-
-      {/* Notificación fenológica — franja completa debajo del mapa */}
-      <div className="flex-shrink-0">
-        <FenologiaNotificaciones />
       </div>
     </div>
   )

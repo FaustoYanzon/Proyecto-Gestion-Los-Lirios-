@@ -1,13 +1,17 @@
 """Calendario único de Ciclo de Campaña + cumplimiento de riego.
 
-Sistema aparte de `app.core.fenologia` (que sigue intacto y sigue alimentando
-las "tareas recomendadas" de Inicio con su calendario INTA por variedad). Este
-módulo es el pedido nuevo: un único calendario, igual para todas las
-variedades, con una cantidad de riegos esperados por estado para poder medir
-cumplimiento en el mapa.
+Fuente de verdad del estado fenológico de todo el sistema (mapa, Fenología,
+Ciclo de Campaña, notificaciones) desde la unificación del 2026-09-08 — ver
+`app.core.fenologia` para las tareas recomendadas y el riesgo sanitario por
+variedad, que sí varían por variedad aunque el calendario ya no. Antes este
+módulo era un sistema aparte, más simple, pensado solo para medir
+cumplimiento de riego en el mapa; antes de eso, `fenologia.py` tenía su
+propio calendario más fino que variaba por variedad.
 
 El estado se calcula igual para todas las variedades; el override manual
-(tabla `EstadoVariedadCampana`) es por variedad entera, no por parcela.
+por variedad entera vive en `CicloCampana` (la pestaña Ciclo de Campaña,
+`EstadoFenologico` — ver app.api.produccion.fenologia_estado_actual) o, para
+cumplimiento de riego específicamente, en `EstadoVariedadCampana`.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ __all__ = [
     "calcular_proximo_estado",
     "riegos_esperados",
     "ventanas_en_rango",
+    "calendario_completo",
 ]
 
 ESTADO_CAMPANA_LABELS: dict[EstadoCampana, str] = {
@@ -53,10 +58,11 @@ class AnclaCampana:
     riegos_esperados: int
 
 
-# Calendario fijo, igual para todas las variedades (a diferencia de
-# `fenologia.CALENDARIO_FENOLOGICO`, que sí varía por variedad). Riegos
-# esperados: cantidad de riegos "estándar" (24hs, ver `MM_POR_RIEGO_ESTANDAR`
-# abajo) que deberían aplicarse durante ese estado.
+# Calendario fijo, igual para todas las variedades — único calendario del
+# sistema desde la unificación del 2026-09-08 (antes fenologia.py tenía un
+# calendario más fino que variaba por variedad). Riegos esperados: cantidad
+# de riegos "estándar" (24hs, ver `MM_POR_RIEGO_ESTANDAR` abajo) que
+# deberían aplicarse durante ese estado.
 CALENDARIO_CAMPANA: list[AnclaCampana] = [
     AnclaCampana(EstadoCampana.brotacion, 9, 20, 1),
     AnclaCampana(EstadoCampana.floracion, 10, 20, 1),
@@ -120,6 +126,22 @@ def calcular_proximo_estado(hoy: date | None = None) -> tuple[EstadoCampana, dat
 
 def riegos_esperados(estado: EstadoCampana) -> int:
     return RIEGOS_ESPERADOS[estado]
+
+
+def calendario_completo() -> list[tuple[EstadoCampana, int, int, int, int]]:
+    """Ventanas [desde, hasta] (mes/día, se repiten todos los años) de cada
+    estado, en el orden agronómico ya declarado en CALENDARIO_CAMPANA — para
+    mostrar en Documentación "de cuándo a cuándo es cada estado". Es el único
+    calendario del sistema: igual para todas las variedades.
+    """
+    ventanas: list[tuple[EstadoCampana, int, int, int, int]] = []
+    for i, ancla in enumerate(CALENDARIO_CAMPANA):
+        siguiente = CALENDARIO_CAMPANA[(i + 1) % len(CALENDARIO_CAMPANA)]
+        # Año de referencia arbitrario (no bisiesto) solo para restar un día
+        # sin reimplementar la aritmética de calendario a mano.
+        fin = date(2027, siguiente.mes, siguiente.dia) - timedelta(days=1)
+        ventanas.append((ancla.estado, ancla.mes, ancla.dia, fin.month, fin.day))
+    return ventanas
 
 
 def ventanas_en_rango(desde: date, hasta: date) -> list[tuple[EstadoCampana, date, date]]:

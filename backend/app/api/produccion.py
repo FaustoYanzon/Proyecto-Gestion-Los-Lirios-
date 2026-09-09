@@ -54,6 +54,7 @@ from app.schemas.produccion import (
     EstadoActualVariedad,
     EstadoVariedadCampanaCreate,
     EstadoVariedadCampanaResponse,
+    FaseCalendarioResponse,
     FaseVariedadResponse,
     RegistroCargaMasiva,
     RegistroCosechaCreate,
@@ -1115,17 +1116,17 @@ async def fenologia_estado_actual(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[FaseVariedadResponse]:
-    """Estado fenológico por variedad: automático por fecha, salvo override
-    manual reciente.
+    """Estado fenológico por variedad: automático por el calendario único de
+    Ciclo de Campaña (`app.core.ciclo_campana`, igual para todas las
+    variedades), salvo override manual reciente.
 
-    Agrupa los parrales activos por variedad y calcula, según la fecha de
-    hoy, en qué fase del ciclo debería estar cada una y qué tareas
-    recomienda el motor agronómico (app.core.fenologia). Si alguna parcela
-    de esa variedad tiene una confirmación manual (CicloCampana) de los
-    últimos `UMBRAL_VIGENCIA_MANUAL_DIAS` días, esa confirmación reemplaza
-    al cálculo automático para toda la variedad (fuente="manual").
-    Alimenta las notificaciones de inicio (mobile y web), el modo "Estado
-    fenológico" del mapa, y la página Ciclo de Campaña.
+    Agrupa los parrales activos por variedad. El estado "de hoy" es el mismo
+    para todas (un solo calendario), pero cada variedad puede tener su
+    propia confirmación manual (CicloCampana) que lo reemplaza mientras esté
+    vigente (últimos `UMBRAL_VIGENCIA_MANUAL_DIAS` días) — y las tareas
+    recomendadas sí varían por variedad (app.core.fenologia). Alimenta las
+    notificaciones de inicio (mobile y web), el modo "Fenología" del mapa, y
+    la página Ciclo de Campaña.
     """
     parcelas = list(
         (await db.execute(
@@ -1158,38 +1159,32 @@ async def fenologia_estado_actual(
             manual_por_variedad[variedad] = ciclo
 
     hoy = date.today()
+    estado_auto = ciclo_campana.calcular_estado_actual(hoy)
+    proxima_auto = ciclo_campana.calcular_proximo_estado(hoy)
+
     items: list[FaseVariedadResponse] = []
     for variedad, nombres in parcelas_por_variedad.items():
-        fase = fenologia.calcular_fase(variedad, hoy)
-        if fase is None:
-            continue  # variedad sin calendario definido (ej. "otro")
-        proxima = fenologia.calcular_proxima_fase(variedad, hoy)
-
         fuente = "automatico"
-        estado_fenologico = fenologia.ESTADO_POR_FASE[fase]
-        fase_label = fenologia.FASE_LABELS[fase]
-        tareas = fenologia.tareas_recomendadas(variedad, fase)
+        estado_fenologico = EstadoFenologico(estado_auto.value)
         fecha_confirmacion: date | None = None
 
         manual = manual_por_variedad.get(variedad)
         if manual is not None and (hoy - manual.fecha_estado).days <= UMBRAL_VIGENCIA_MANUAL_DIAS:
             fuente = "manual"
             estado_fenologico = manual.estado_fenologico
-            fase_label = fenologia.ESTADO_LABELS[manual.estado_fenologico]
-            tareas = fenologia.tareas_recomendadas_por_estado(variedad, manual.estado_fenologico)
             fecha_confirmacion = manual.fecha_estado
 
         items.append(FaseVariedadResponse(
             variedad=variedad.value,
             tipo_uso=fenologia.TIPO_USO_POR_VARIEDAD.get(variedad, fenologia.TipoUso.otro).value,
-            fase=fase.value,
-            fase_label=fase_label,
+            fase=estado_fenologico.value,
+            fase_label=fenologia.ESTADO_LABELS[estado_fenologico],
             estado_fenologico=estado_fenologico,
             riesgo_oidio=fenologia.RIESGO_OIDIO_POR_VARIEDAD.get(variedad, fenologia.RiesgoSanitario.medio).value,
-            tareas_recomendadas=tareas,
-            proxima_fase=proxima[0].value if proxima else None,
-            proxima_fase_label=fenologia.FASE_LABELS[proxima[0]] if proxima else None,
-            proxima_fase_fecha=proxima[1] if proxima else None,
+            tareas_recomendadas=fenologia.tareas_recomendadas(variedad, estado_fenologico),
+            proxima_fase=proxima_auto[0].value,
+            proxima_fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[proxima_auto[0]],
+            proxima_fase_fecha=proxima_auto[1],
             parcelas=sorted(nombres),
             fuente=fuente,
             fecha_confirmacion=fecha_confirmacion,
@@ -1197,6 +1192,26 @@ async def fenologia_estado_actual(
 
     items.sort(key=lambda x: x.variedad)
     return items
+
+
+@router.get("/fenologia/calendario", response_model=list[FaseCalendarioResponse])
+async def fenologia_calendario(
+    _: User = Depends(get_current_user),
+) -> list[FaseCalendarioResponse]:
+    """Calendario único de Ciclo de Campaña (de cuándo a cuándo es cada
+    estado, se repite todos los años, igual para todas las variedades) —
+    para Documentación. No depende de la fecha de hoy ni de la DB, es el
+    mismo calendario que usa `fenologia/estado-actual` para calcular el
+    estado vigente.
+    """
+    return [
+        FaseCalendarioResponse(
+            fase=estado.value,
+            fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[estado],
+            desde_mes=dm, desde_dia=dd, hasta_mes=hm, hasta_dia=hd,
+        )
+        for estado, dm, dd, hm, hd in ciclo_campana.calendario_completo()
+    ]
 
 
 @router.delete("/fenologia/overrides")

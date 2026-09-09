@@ -369,6 +369,19 @@ class FaseVariedadResponse(BaseModel):
     fecha_confirmacion: date | None
 
 
+class FaseCalendarioResponse(BaseModel):
+    """Un estado del calendario único de Ciclo de Campaña (igual para todas
+    las variedades), con su ventana de fechas (mes/día, se repite todos los
+    años) — para mostrar en Documentación "de cuándo a cuándo es cada
+    estado" sin tener que ir a mirar el código."""
+    fase: str
+    fase_label: str
+    desde_mes: int
+    desde_dia: int
+    hasta_mes: int
+    hasta_dia: int
+
+
 # ── Ciclo de Campaña (calendario único, ver app.core.ciclo_campana) ────────────
 # Sistema aparte de CicloCampana/EstadoActualResponse de arriba, que siguen
 # alimentando "tareas recomendadas" sin cambios. Este es el pedido nuevo: un

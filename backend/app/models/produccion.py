@@ -97,21 +97,32 @@ class UnidadMedida(str, enum.Enum):
 
 
 class EstadoFenologico(str, enum.Enum):
+    """Unificado 2026-09-08 con EstadoCampana (ver app.core.ciclo_campana)
+    para que Fenología, Ciclo de Campaña y el mapa usen exactamente los
+    mismos 7 nombres — antes tenía 'madurez'/'latencia' en vez de
+    'cierre_racimo'/'post_cosecha'. Esos dos valores viejos quedan acá sin
+    uso (Postgres no permite sacarlos del enum sin recrear el tipo) por si
+    alguna fila muy vieja todavía los tuviera; el motor y los formularios ya
+    no los producen ni los ofrecen — ver migraciones f3665520fad8 y
+    703724978020.
+    """
     brotacion = "brotacion"
     floracion = "floracion"
     cuaje = "cuaje"
+    cierre_racimo = "cierre_racimo"
     envero = "envero"
-    madurez = "madurez"
     cosecha = "cosecha"
-    latencia = "latencia"
+    post_cosecha = "post_cosecha"
+    madurez = "madurez"  # legacy, sin uso — ver docstring
+    latencia = "latencia"  # legacy, sin uso — ver docstring
 
 
-# Estados del calendario único de Ciclo de Campaña (app.core.ciclo_campana) —
-# sistema aparte de EstadoFenologico/CicloCampana de arriba, que sigue
-# alimentando las tareas recomendadas de Inicio sin cambios. No reutiliza
-# EstadoFenologico a propósito: los 7 valores no coinciden 1:1 (sin
-# madurez/latencia, con cierre_racimo/post_cosecha nuevos) y mezclar los dos
-# enums en la misma columna hubiera roto ESTADO_POR_FASE en fenologia.py.
+# Estados del calendario único de Ciclo de Campaña (app.core.ciclo_campana).
+# Enum Python separado de EstadoFenologico de arriba (columnas/tipos de
+# Postgres distintos, cada uno con su propia tabla — CicloCampana vs.
+# EstadoVariedadCampana), pero desde la unificación del 2026-09-08 sus 7
+# valores activos coinciden exactamente. Si se agrega un estado nuevo hay
+# que tocar los dos enums + fenologia.ESTADO_LABELS.
 class EstadoCampana(str, enum.Enum):
     brotacion = "brotacion"
     floracion = "floracion"
