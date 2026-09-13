@@ -3,12 +3,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.insumo import TipoMovimientoStock, UnidadInsumo
+from app.models.insumo import TipoInsumo, TipoMovimientoStock, UnidadInsumo
 
 
 class InsumoBase(BaseModel):
     nombre: str
     unidad: UnidadInsumo
+    tipo: TipoInsumo = TipoInsumo.fitosanitario
     categoria: str | None = None
 
 
@@ -19,6 +20,7 @@ class InsumoCreate(InsumoBase):
 class InsumoUpdate(BaseModel):
     nombre: str | None = None
     unidad: UnidadInsumo | None = None
+    tipo: TipoInsumo | None = None
     categoria: str | None = None
     is_active: bool | None = None
 

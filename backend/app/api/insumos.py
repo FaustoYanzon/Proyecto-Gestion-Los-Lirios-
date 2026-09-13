@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_encargado_up, require_gerencial_up
 from app.core.normalizacion import normalizar_nombre
-from app.models.insumo import Insumo, MovimientoStock, TipoMovimientoStock
+from app.models.insumo import Insumo, MovimientoStock, TipoInsumo, TipoMovimientoStock
 from app.models.user import User, UserRole
 from app.schemas.insumo import (
     InsumoCreate,
@@ -20,12 +20,15 @@ router = APIRouter(prefix="/insumos", tags=["Insumos"])
 @router.get("/", response_model=list[InsumoResponse])
 async def list_insumos(
     is_active: bool | None = Query(None),
+    tipo: TipoInsumo | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[Insumo]:
     stmt = select(Insumo).order_by(Insumo.nombre.asc())
     if is_active is not None:
         stmt = stmt.where(Insumo.is_active == is_active)
+    if tipo is not None:
+        stmt = stmt.where(Insumo.tipo == tipo)
     return list((await db.execute(stmt)).scalars().all())
 
 

@@ -1,12 +1,14 @@
 import api from '@/lib/api'
 
 export type UnidadInsumo = 'kg' | 'lt'
+export type TipoInsumo = 'fitosanitario' | 'vario' | 'riego'
 export type TipoMovimientoStock = 'ingreso' | 'egreso_aplicacion' | 'ajuste'
 
 export interface InsumoResponse {
   id: string
   nombre: string
   unidad: UnidadInsumo
+  tipo: TipoInsumo
   categoria: string | null
   stock_actual: number
   is_active: boolean
@@ -16,6 +18,7 @@ export interface InsumoResponse {
 export interface InsumoUpdate {
   nombre?: string
   unidad?: UnidadInsumo
+  tipo?: TipoInsumo
   categoria?: string
   is_active?: boolean
 }
@@ -32,14 +35,18 @@ export interface MovimientoStockResponse {
   created_at: string
 }
 
-export async function getInsumos(isActive?: boolean): Promise<InsumoResponse[]> {
-  const { data } = await api.get('/insumos/', { params: isActive === undefined ? {} : { is_active: isActive } })
+export async function getInsumos(isActive?: boolean, tipo?: TipoInsumo): Promise<InsumoResponse[]> {
+  const params: Record<string, boolean | string> = {}
+  if (isActive !== undefined) params.is_active = isActive
+  if (tipo !== undefined) params.tipo = tipo
+  const { data } = await api.get('/insumos/', { params })
   return data
 }
 
 export async function createInsumo(data: {
   nombre: string
   unidad: UnidadInsumo
+  tipo: TipoInsumo
   categoria?: string
   stock_actual?: number
 }): Promise<InsumoResponse> {

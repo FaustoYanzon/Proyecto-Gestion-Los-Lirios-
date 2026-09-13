@@ -111,6 +111,13 @@ class ResumenTrabajoTotal(BaseModel):
     monto_total: Decimal
 
 
+class ResumenTrabajoPorParcela(BaseModel):
+    parcela_id: str | None
+    parcela_nombre: str
+    monto_total: Decimal
+    n_registros: int
+
+
 # ── Registro Riego ────────────────────────────────────────────────────────────
 
 class RegistroRiegoBase(BaseModel):

@@ -76,6 +76,7 @@ from app.schemas.produccion import (
     RendimientoHistoricoParcela,
     ResumenTarea,
     ResumenTrabajador,
+    ResumenTrabajoPorParcela,
     ResumenTrabajoTotal,
 )
 
@@ -560,6 +561,56 @@ async def resumen_trabajo_total(
         stmt = stmt.where(RegistroTrabajo.clasificacion == clasificacion)
     total_registros, monto_total = (await db.execute(stmt)).one()
     return ResumenTrabajoTotal(total_registros=total_registros, monto_total=monto_total)
+
+
+@router.get("/trabajo/resumen/por-parcela", response_model=list[ResumenTrabajoPorParcela])
+async def resumen_trabajo_por_parcela(
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[ResumenTrabajoPorParcela]:
+    if fecha_desde is None or fecha_hasta is None:
+        today = date.today()
+        anio = today.year if today.month >= 5 else today.year - 1
+        fecha_desde = fecha_desde or date(anio, 5, 1)
+        fecha_hasta = fecha_hasta or today
+
+    stmt = select(RegistroTrabajo).where(
+        RegistroTrabajo.fecha >= fecha_desde, RegistroTrabajo.fecha <= fecha_hasta
+    )
+    records = list((await db.execute(stmt)).scalars().all())
+
+    parcela_ids = {r.parcela_id for r in records if r.parcela_id}
+    parcela_map: dict[str, str] = {}
+    for pid in parcela_ids:
+        p = await db.get(Parcela, pid)
+        if p:
+            parcela_map[pid] = p.nombre
+
+    agg: dict[str | None, dict] = defaultdict(
+        lambda: {"monto_total": Decimal("0"), "n": 0, "nombre": "Sin parcela"}
+    )
+    for r in records:
+        key = r.parcela_id
+        agg[key]["monto_total"] += r.monto_total
+        agg[key]["n"] += 1
+        if key and key in parcela_map:
+            agg[key]["nombre"] = parcela_map[key]
+
+    return sorted(
+        [
+            ResumenTrabajoPorParcela(
+                parcela_id=pid,
+                parcela_nombre=data["nombre"],
+                monto_total=data["monto_total"],
+                n_registros=data["n"],
+            )
+            for pid, data in agg.items()
+        ],
+        key=lambda x: x.monto_total,
+        reverse=True,
+    )
 
 
 @router.get("/trabajo/{registro_id}", response_model=RegistroTrabajoResponse)

@@ -40,8 +40,8 @@ export default function InsumoSelect({ value, insumoId, onChange, className, err
   const containerRef = useRef<HTMLDivElement>(null)
 
   const { data: insumosDb = [] } = useQuery({
-    queryKey: ['insumos'],
-    queryFn: () => getInsumos(true),
+    queryKey: ['insumos', 'fitosanitario'],
+    queryFn: () => getInsumos(true, 'fitosanitario'),
     staleTime: 60_000,
   })
 
@@ -86,7 +86,7 @@ export default function InsumoSelect({ value, insumoId, onChange, className, err
     setCreating(true)
     setAddError(null)
     try {
-      const creado = await createInsumo({ nombre, unidad: addUnidad })
+      const creado = await createInsumo({ nombre, unidad: addUnidad, tipo: 'fitosanitario' })
       queryClient.invalidateQueries({ queryKey: ['insumos'] })
       onChange(creado.nombre, creado.id, creado)
       setAddMode(false)

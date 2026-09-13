@@ -15,7 +15,7 @@ import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 import LayerControl, { type LayerVisibility } from './LayerControl'
 
-type ColorMode = 'type' | 'variedad' | 'cosecha' | 'cumplimiento' | 'fenologia'
+type ColorMode = 'type' | 'variedad' | 'cosecha' | 'costo' | 'cumplimiento' | 'fenologia'
 
 // Objetivo agronómico: 6.000.000 L/ha/año (suelo de Media Agua)
 const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
@@ -48,6 +48,17 @@ function cosechaColor(kg: number, maxKg: number): string {
   const r = Math.round(220 - ratio * (220 - 21))
   const g = Math.round(252 - ratio * (252 - 128))
   const b = Math.round(231 - ratio * (231 - 61))
+  return `rgb(${r},${g},${b})`
+}
+
+// Escala clara → oscura (amarillo pálido → bordó de marca): a más costo, más
+// oscuro. Mismo criterio que cosechaColor, otra paleta para no confundir modos.
+function costoColor(monto: number, maxMonto: number): string {
+  if (monto <= 0 || maxMonto <= 0) return '#f3f4f6'
+  const ratio = Math.min(monto / maxMonto, 1)
+  const r = Math.round(254 - ratio * (254 - 122))
+  const g = Math.round(243 - ratio * (243 - 31))
+  const b = Math.round(199 - ratio * (199 - 44))
   return `rgb(${r},${g},${b})`
 }
 
@@ -90,12 +101,24 @@ function getPolyStyle(
   fenologiaByVariedad?: Record<string, FenologiaMapaInfo>,
   cumplimientoByParcelaId?: Record<string, number | null>,
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>,
+  costoByParcelaId?: Record<string, number>,
+  maxCosto?: number,
 ): L.PathOptions {
   if (mode === 'cosecha') {
     const kg = (p?.id != null && cosechaByParcelaId?.[p.id]) ? cosechaByParcelaId[p.id] : 0
     const fill = cosechaColor(kg, maxKg ?? 0)
     return {
       color: '#166534',
+      weight: selected ? 3 : 1.5,
+      fillColor: fill,
+      fillOpacity: selected ? 0.75 : 0.6,
+    }
+  }
+  if (mode === 'costo') {
+    const monto = (p?.id != null && costoByParcelaId?.[p.id]) ? costoByParcelaId[p.id] : 0
+    const fill = costoColor(monto, maxCosto ?? 0)
+    return {
+      color: '#5a1320',
       weight: selected ? 3 : 1.5,
       fillColor: fill,
       fillOpacity: selected ? 0.75 : 0.6,
@@ -518,6 +541,7 @@ interface Props {
   fenologiaByVariedad?: Record<string, FenologiaMapaInfo>
   cumplimientoByParcelaId?: Record<string, number | null>
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>
+  costoByParcelaId?: Record<string, number>
   parcelasEnRiego?: Set<string>
   valvulasEnRiego?: Set<string>
 }
@@ -578,7 +602,7 @@ const INFRA_LEGEND = [
 
 export default function FincaMapInner({
   compact = false, height = '100%', cosechaByParcelaId, fenologiaByVariedad,
-  cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego, valvulasEnRiego,
+  cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, parcelasEnRiego, valvulasEnRiego,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -673,21 +697,27 @@ export default function FincaMapInner({
     return vals.length > 0 ? Math.max(...vals) : 0
   }, [cosechaByParcelaId])
 
+  const maxCostoLegend = useMemo(() => {
+    const vals = Object.values(costoByParcelaId ?? {})
+    return vals.length > 0 ? Math.max(...vals) : 0
+  }, [costoByParcelaId])
+
   // ── Style updates ────────────────────────────────────────────────────────────
   useEffect(() => {
     const maxKg = maxKgLegend
+    const maxCosto = maxCostoLegend
     polyRef.current.forEach((poly, name) => {
       const f = features.find(feat => feat.name === name)
       const p = parcelas.find(parc => parc.nombre === name)
       if (!f) return
-      const style = getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad)
+      const style = getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCosto)
       // Riego en curso: se compone encima del modo de color elegido (no lo
       // reemplaza) — borde celeste punteado, mismo criterio en las dos
       // plataformas. Ver docs/sistema, sesión de mejoras al mapa.
       const enRiego = p?.id != null && parcelasEnRiego?.has(p.id)
       poly.setStyle(enRiego ? { ...style, color: '#0ea5e9', weight: 3, dashArray: '6,4' } : style)
     })
-  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, parcelasEnRiego])
+  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCostoLegend, parcelasEnRiego])
 
   // ── Load GeoJSON layer data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -827,6 +857,7 @@ export default function FincaMapInner({
             { mode: 'type',    label: 'Tipo'     },
             { mode: 'variedad', label: 'Variedad' },
             { mode: 'cosecha',  label: 'Cosecha'  },
+            { mode: 'costo',    label: 'Costo'    },
             { mode: 'cumplimiento', label: 'Cumpl. riego' },
             { mode: 'fenologia', label: 'Fenología' },
           ] as { mode: ColorMode; label: string }[]).map(({ mode, label }) => (
@@ -858,6 +889,7 @@ export default function FincaMapInner({
             {colorMode === 'type' ? 'Tipo'
               : colorMode === 'variedad' ? 'Variedad'
               : colorMode === 'cosecha' ? 'Cosecha'
+              : colorMode === 'costo' ? 'Costo laboral (campaña actual)'
               : colorMode === 'fenologia' ? 'Ciclo de Campaña (estado actual)'
               : 'Cumpl. riego (estado actual)'}
           </p>
@@ -867,6 +899,14 @@ export default function FincaMapInner({
               <div className="flex justify-between text-xs text-gray-500">
                 <span>0</span>
                 <span>{maxKgLegend > 0 ? `${(maxKgLegend / 1000).toFixed(1)}t` : '—'}</span>
+              </div>
+            </div>
+          ) : colorMode === 'costo' ? (
+            <div>
+              <div className="w-28 h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #fef3c7, #7a1f2c)' }} />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>$0</span>
+                <span>{maxCostoLegend > 0 ? formatARS(maxCostoLegend) : '—'}</span>
               </div>
             </div>
           ) : colorMode === 'fenologia' ? (

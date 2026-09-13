@@ -185,6 +185,13 @@ export interface ResumenTareaItem {
   monto_total: number
 }
 
+export interface ResumenTrabajoPorParcelaItem {
+  parcela_id: string | null
+  parcela_nombre: string
+  monto_total: number
+  n_registros: number
+}
+
 export async function getCiclosCampana(params?: { parcela_id?: string; anio?: number }): Promise<CicloCampanaItem[]> {
   const { data } = await api.get('/produccion/campana/', { params })
   return data
@@ -273,6 +280,11 @@ export async function getResumenPorTrabajador(params?: { fecha_desde?: string; f
 
 export async function getResumenPorTarea(params?: { fecha_desde?: string; fecha_hasta?: string }): Promise<ResumenTareaItem[]> {
   const { data } = await api.get('/produccion/trabajo/resumen/por-tarea', { params })
+  return data
+}
+
+export async function getResumenTrabajoPorParcela(params?: { fecha_desde?: string; fecha_hasta?: string }): Promise<ResumenTrabajoPorParcelaItem[]> {
+  const { data } = await api.get('/produccion/trabajo/resumen/por-parcela', { params })
   return data
 }
 

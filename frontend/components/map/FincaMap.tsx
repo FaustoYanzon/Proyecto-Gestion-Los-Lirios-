@@ -7,6 +7,7 @@ import { getCosechaResumenPorParcela } from '@/lib/api/cosecha'
 import {
   getFenologiaEstadoActual,
   getCumplimientoRiego, getEstadoCampanaActual,
+  getResumenTrabajoPorParcela,
 } from '@/lib/api/produccion'
 import { getRiegosEnCurso } from '@/lib/api/riego'
 import type { FenologiaMapaInfo, EstadoCampanaMapaInfo } from './FincaMapInner'
@@ -22,6 +23,8 @@ const Inner = dynamic(() => import('./FincaMapInner'), {
 
 const nowMap = new Date()
 const CURRENT_TEMPORADA = nowMap.getMonth() >= 4 ? nowMap.getFullYear() : nowMap.getFullYear() - 1
+const CAMPANA_FECHA_DESDE = `${CURRENT_TEMPORADA}-05-01`
+const CAMPANA_FECHA_HASTA = nowMap.toISOString().split('T')[0]
 
 export default function FincaMap({ compact, height }: { compact?: boolean; height?: string }) {
   const { data: cosechaData = [] } = useQuery({
@@ -37,6 +40,20 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     }
     return map
   }, [cosechaData])
+
+  const { data: costoData = [] } = useQuery({
+    queryKey: ['costo-mapa', CAMPANA_FECHA_DESDE, CAMPANA_FECHA_HASTA],
+    queryFn: () => getResumenTrabajoPorParcela({ fecha_desde: CAMPANA_FECHA_DESDE, fecha_hasta: CAMPANA_FECHA_HASTA }),
+    staleTime: 300_000,
+  })
+
+  const costoByParcelaId = useMemo((): Record<string, number> => {
+    const map: Record<string, number> = {}
+    for (const item of costoData) {
+      if (item.parcela_id) map[item.parcela_id] = item.monto_total
+    }
+    return map
+  }, [costoData])
 
   const { data: fenologiaData = [] } = useQuery({
     queryKey: ['fenologia-mapa'],
@@ -127,6 +144,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
       fenologiaByVariedad={fenologiaByVariedad}
       cumplimientoByParcelaId={cumplimientoByParcelaId}
       estadoCampanaByVariedad={estadoCampanaByVariedad}
+      costoByParcelaId={costoByParcelaId}
       parcelasEnRiego={parcelasEnRiego}
       valvulasEnRiego={valvulasEnRiego}
     />

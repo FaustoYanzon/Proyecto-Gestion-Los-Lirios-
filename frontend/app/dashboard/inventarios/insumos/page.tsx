@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, PackagePlus, RotateCcw, Trash2, X, Loader2 } from 'lucide-react'
+import { Plus, Pencil, PackagePlus, RotateCcw, Trash2, X, Loader2, Download, AlertTriangle } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,8 +13,43 @@ import {
   registrarMovimiento,
   type InsumoResponse,
   type UnidadInsumo,
+  type TipoInsumo,
 } from '@/lib/api/insumos'
+import { getNecesidadStock } from '@/lib/api/planFitosanitario'
 import { useAuthStore } from '@/store/authStore'
+import { useContextStore, campanaToAnio } from '@/store/contextStore'
+
+const TIPO_TABS: { value: TipoInsumo; label: string }[] = [
+  { value: 'fitosanitario', label: 'Insumos Fitosanitarios' },
+  { value: 'vario', label: 'Insumos Varios' },
+  { value: 'riego', label: 'Insumos Riego' },
+]
+const TIPO_LABELS: Record<TipoInsumo, string> = {
+  fitosanitario: 'Fitosanitario',
+  vario: 'Vario',
+  riego: 'Riego',
+}
+
+const now = new Date()
+const DEFAULT_TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
+const AVAILABLE_TEMPORADAS = [DEFAULT_TEMPORADA - 1, DEFAULT_TEMPORADA, DEFAULT_TEMPORADA + 1]
+
+function descargarCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v)
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = [headers, ...rows].map((r) => r.map(escape).join(';')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
@@ -22,10 +57,12 @@ const err   = 'mt-1 text-xs text-red-600'
 
 const UNIDAD_VALUES: UnidadInsumo[] = ['lt', 'kg']
 const UNIDAD_LABELS: Record<UnidadInsumo, string> = { lt: 'Litros (lt)', kg: 'Kilogramos (kg)' }
+const TIPO_VALUES: TipoInsumo[] = ['fitosanitario', 'vario', 'riego']
 
 const schema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres'),
   unidad: z.enum(UNIDAD_VALUES as [UnidadInsumo, ...UnidadInsumo[]]),
+  tipo: z.enum(TIPO_VALUES as [TipoInsumo, ...TipoInsumo[]]),
   categoria: z.string().optional(),
   stock_actual: z.coerce.number().min(0, 'Mínimo 0').optional(),
 })
@@ -72,10 +109,12 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 function InsumoForm({
   insumo,
+  defaultTipo,
   onSuccess,
   onCancel,
 }: {
   insumo?: InsumoResponse
+  defaultTipo: TipoInsumo
   onSuccess: () => void
   onCancel: () => void
 }) {
@@ -86,19 +125,20 @@ function InsumoForm({
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
     defaultValues: isEdit
-      ? { nombre: insumo.nombre, unidad: insumo.unidad, categoria: insumo.categoria ?? '' }
-      : { nombre: '', unidad: 'lt', categoria: '', stock_actual: 0 },
+      ? { nombre: insumo.nombre, unidad: insumo.unidad, tipo: insumo.tipo, categoria: insumo.categoria ?? '' }
+      : { nombre: '', unidad: 'lt', tipo: defaultTipo, categoria: '', stock_actual: 0 },
   })
 
   async function onSubmit(data: FormData) {
     try {
       setSubmitError(null)
       if (isEdit) {
-        await updateInsumo(insumo.id, { nombre: data.nombre, unidad: data.unidad, categoria: data.categoria || undefined })
+        await updateInsumo(insumo.id, { nombre: data.nombre, unidad: data.unidad, tipo: data.tipo, categoria: data.categoria || undefined })
       } else {
         await createInsumo({
           nombre: data.nombre,
           unidad: data.unidad,
+          tipo: data.tipo,
           categoria: data.categoria || undefined,
           stock_actual: data.stock_actual ?? 0,
         })
@@ -129,13 +169,22 @@ function InsumoForm({
             ))}
           </select>
         </div>
-        {!isEdit && (
-          <div>
-            <label className={label}>Stock inicial</label>
-            <input type="number" step="0.01" min="0" {...register('stock_actual')} className={field} placeholder="0.00" />
-          </div>
-        )}
+        <div>
+          <label className={label}>Tipo</label>
+          <select {...register('tipo')} className={field}>
+            {TIPO_VALUES.map((t) => (
+              <option key={t} value={t}>{TIPO_LABELS[t]}</option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {!isEdit && (
+        <div>
+          <label className={label}>Stock inicial</label>
+          <input type="number" step="0.01" min="0" {...register('stock_actual')} className={field} placeholder="0.00" />
+        </div>
+      )}
 
       <div>
         <label className={label}>Categoría (opcional)</label>
@@ -235,18 +284,51 @@ function ReposicionForm({ insumo, onSuccess, onCancel }: { insumo: InsumoRespons
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InsumosAdminPage() {
+  const [tab, setTab] = useState<TipoInsumo>('fitosanitario')
   const [estadoFilter, setEstadoFilter] = useState<'activos' | 'todos'>('activos')
   const [modal, setModal] = useState<'create' | { edit: InsumoResponse } | { reponer: InsumoResponse } | null>(null)
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
   const isEncargadoUp = ['super_admin', 'gerencial', 'encargado', 'regador'].includes(currentUser?.role ?? '')
 
+  const campanaGlobal = useContextStore((s) => s.campana)
+  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
+  // Ajustado durante el render (no en un useEffect) — mismo patrón que
+  // plan-fitosanitario/page.tsx y cumplimiento-fitosanitario/page.tsx.
+  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
+  if (prevCampanaGlobal !== campanaGlobal) {
+    setPrevCampanaGlobal(campanaGlobal)
+    setTemporada(campanaToAnio(campanaGlobal))
+  }
+
   const { data: insumos = [], isLoading } = useQuery({
     queryKey: ['insumos-admin'],
     queryFn: () => getInsumos(),
   })
 
-  const filtered = estadoFilter === 'activos' ? insumos.filter((i) => i.is_active) : insumos
+  const { data: necesidad = [], isLoading: loadingNecesidad } = useQuery({
+    queryKey: ['necesidad-stock-fitosanitario', temporada],
+    queryFn: () => getNecesidadStock(temporada),
+    enabled: tab === 'fitosanitario',
+  })
+
+  const delTab = insumos.filter((i) => i.tipo === tab)
+  const filtered = estadoFilter === 'activos' ? delTab.filter((i) => i.is_active) : delTab
+
+  function handleExportCsv() {
+    descargarCsv(
+      `insumos_${tab}_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Nombre', 'Tipo', 'Categoría', 'Stock actual', 'Unidad', 'Estado'],
+      filtered.map((i) => [
+        i.nombre,
+        TIPO_LABELS[i.tipo],
+        i.categoria ?? '',
+        i.stock_actual,
+        i.unidad,
+        i.is_active ? 'Activo' : 'Inactivo',
+      ]),
+    )
+  }
 
   async function handleDeactivate(i: InsumoResponse) {
     if (!window.confirm(`¿Desactivar "${i.nombre}"? Deja de aparecer como sugerencia al cargar Fitosanitarios.`)) return
@@ -269,7 +351,7 @@ export default function InsumosAdminPage() {
     }
   }
 
-  const activos = insumos.filter((i) => i.is_active).length
+  const activosTab = delTab.filter((i) => i.is_active).length
 
   return (
     <div className="space-y-6">
@@ -277,18 +359,44 @@ export default function InsumosAdminPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Insumos</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {activos} activos de {insumos.length} en total · catálogo y stock usado en Fitosanitarios
+            {activosTab} activos de {delTab.length} en total en esta pestaña
           </p>
         </div>
-        {isEncargadoUp && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setModal('create')}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+            onClick={handleExportCsv}
+            disabled={filtered.length === 0}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Plus size={16} />
-            Nuevo insumo
+            <Download size={16} />
+            Exportar CSV
           </button>
-        )}
+          {isEncargadoUp && (
+            <button
+              onClick={() => setModal('create')}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+            >
+              <Plus size={16} />
+              Nuevo insumo
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        {TIPO_TABS.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              tab === t.value
+                ? 'bg-[#7a1f2c] text-white'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-2">
@@ -403,15 +511,70 @@ export default function InsumosAdminPage() {
         )}
       </div>
 
+      {tab === 'fitosanitario' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h2 className="text-base font-semibold text-gray-800">Necesidad de insumos vs. stock</h2>
+            <select
+              value={temporada}
+              onChange={(e) => setTemporada(Number(e.target.value))}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {AVAILABLE_TEMPORADAS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Insumo</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Pendiente de aplicar</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Stock actual</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Faltante</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loadingNecesidad ? (
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
+                  ) : necesidad.length === 0 ? (
+                    <tr><td colSpan={4} className="px-4 py-10 text-center text-gray-400">Nada pendiente de comprar para esta temporada.</td></tr>
+                  ) : (
+                    necesidad.map((n) => (
+                      <tr key={n.insumo_id} className={n.faltante > 0 ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-gray-50'}>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{n.insumo_nombre}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-700">{n.cantidad_pendiente} {n.unidad}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-700">{n.stock_actual} {n.unidad}</td>
+                        <td className="px-4 py-2.5 text-right font-mono">
+                          {n.faltante > 0 ? (
+                            <span className="flex items-center justify-end gap-1.5 text-red-700 font-semibold">
+                              <AlertTriangle size={14} />
+                              {n.faltante} {n.unidad}
+                            </span>
+                          ) : (
+                            <span className="text-green-700">alcanza</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modal === 'create' && (
         <Modal title="Nuevo insumo" onClose={() => setModal(null)}>
-          <InsumoForm onSuccess={() => setModal(null)} onCancel={() => setModal(null)} />
+          <InsumoForm defaultTipo={tab} onSuccess={() => setModal(null)} onCancel={() => setModal(null)} />
         </Modal>
       )}
 
       {modal !== null && modal !== 'create' && 'edit' in modal && (
         <Modal title="Editar insumo" onClose={() => setModal(null)}>
-          <InsumoForm insumo={modal.edit} onSuccess={() => setModal(null)} onCancel={() => setModal(null)} />
+          <InsumoForm insumo={modal.edit} defaultTipo={tab} onSuccess={() => setModal(null)} onCancel={() => setModal(null)} />
         </Modal>
       )}
 

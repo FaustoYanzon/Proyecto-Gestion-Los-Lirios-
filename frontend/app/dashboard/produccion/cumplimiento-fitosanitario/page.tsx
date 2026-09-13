@@ -2,11 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, AlertTriangle } from 'lucide-react'
-import {
-  getCumplimiento,
-  getNecesidadStock,
-} from '@/lib/api/planFitosanitario'
+import { ClipboardCheck } from 'lucide-react'
+import { getCumplimiento } from '@/lib/api/planFitosanitario'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
 import { useContextStore, campanaToAnio } from '@/store/contextStore'
 
@@ -54,11 +51,6 @@ export default function CumplimientoFitosanitarioPage() {
     queryFn: () => getCumplimiento(temporada),
   })
 
-  const { data: necesidad = [], isLoading: loadingNecesidad } = useQuery({
-    queryKey: ['necesidad-stock-fitosanitario', temporada],
-    queryFn: () => getNecesidadStock(temporada),
-  })
-
   const variedadesDisponibles = useMemo(() => {
     const set = new Set<string>()
     for (const c of cumplimiento) set.add(c.variedad)
@@ -85,7 +77,7 @@ export default function CumplimientoFitosanitarioPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Cumplimiento Fitosanitario</h1>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
-            Plan vs. real por variedad, y necesidad de insumos vs. stock para terminar la temporada
+            Plan vs. real por variedad para esta temporada
           </p>
         </div>
         <select
@@ -176,51 +168,6 @@ export default function CumplimientoFitosanitarioPage() {
             </p>
           </>
         )}
-      </div>
-
-      {/* ── Necesidad de insumos vs. stock ── */}
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold text-gray-800">Necesidad de insumos vs. stock</h2>
-
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Insumo</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Pendiente de aplicar</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Stock actual</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Faltante</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loadingNecesidad ? (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
-                ) : necesidad.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-gray-400">Nada pendiente de comprar para esta temporada.</td></tr>
-                ) : (
-                  necesidad.map((n) => (
-                    <tr key={n.insumo_id} className={n.faltante > 0 ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{n.insumo_nombre}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-700">{n.cantidad_pendiente} {n.unidad}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-700">{n.stock_actual} {n.unidad}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">
-                        {n.faltante > 0 ? (
-                          <span className="flex items-center justify-end gap-1.5 text-red-700 font-semibold">
-                            <AlertTriangle size={14} />
-                            {n.faltante} {n.unidad}
-                          </span>
-                        ) : (
-                          <span className="text-green-700">alcanza</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
     </div>
   )

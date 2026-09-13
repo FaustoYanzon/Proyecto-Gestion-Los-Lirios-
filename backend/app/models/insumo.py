@@ -20,6 +20,12 @@ class UnidadInsumo(str, enum.Enum):
     lt = "lt"
 
 
+class TipoInsumo(str, enum.Enum):
+    fitosanitario = "fitosanitario"
+    vario = "vario"
+    riego = "riego"
+
+
 class TipoMovimientoStock(str, enum.Enum):
     ingreso = "ingreso"
     egreso_aplicacion = "egreso_aplicacion"
@@ -34,6 +40,9 @@ class Insumo(Base):
     )
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     unidad: Mapped[UnidadInsumo] = mapped_column(SAEnum(UnidadInsumo), nullable=False)
+    tipo: Mapped[TipoInsumo] = mapped_column(
+        SAEnum(TipoInsumo), nullable=False, server_default=TipoInsumo.fitosanitario.value
+    )
     categoria: Mapped[str | None] = mapped_column(String(50), nullable=True)
     stock_actual: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
