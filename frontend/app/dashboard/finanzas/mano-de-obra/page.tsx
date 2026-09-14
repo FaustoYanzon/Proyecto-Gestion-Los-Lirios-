@@ -254,7 +254,12 @@ export default function ManoObraDashboardPage() {
     )[0]
   }, [trabajadoresMesActual])
 
-  // Heatmap: parcela rows x campaign-month columns, intensity = monto
+  // Heatmap: parcela rows x campaign-month columns, intensity = monto.
+  // `vw_kpi_mo_parcela_mes` hace JOIN parcelas — las tareas cargadas como
+  // "General (sin parcela)" quedan afuera por diseño (no tienen parral que
+  // pintar en una fila). Se recuperan por diferencia contra el total
+  // mensual real (que sí las incluye, moMensual no filtra por parcela) y se
+  // muestran como una fila aparte, no como una parcela más.
   const heatmap = useMemo(() => {
     const porParcela = new Map<string, { nombre: string; meses: Record<number, number> }>()
     let max = 0
@@ -270,8 +275,27 @@ export default function ManoObraDashboardPage() {
         total: Object.values(p.meses).reduce((s, v) => s + v, 0),
       }))
       .sort((a, b) => b.total - a.total)
-    return { filas, max }
-  }, [parcelasMes])
+
+    const totalPorMes = new Map<number, number>()
+    for (const r of moMensual) totalPorMes.set(r.mes, (totalPorMes.get(r.mes) ?? 0) + Number(r.monto))
+    const parcelaRows = Array.from(porParcela.values())
+    const generalMeses: Record<number, number> = {}
+    for (const [mes, total] of totalPorMes) {
+      const sumaParcelas = parcelaRows.reduce((s, p) => s + (p.meses[mes] ?? 0), 0)
+      const general = total - sumaParcelas
+      if (general > 1) generalMeses[mes] = general
+      if (general > max) max = general
+    }
+    const generalTotal = Object.values(generalMeses).reduce((s, v) => s + v, 0)
+
+    return {
+      filas: generalTotal > 0
+        ? [...filas, { nombre: 'General (sin parcela)', meses: generalMeses, total: generalTotal }]
+        : filas,
+      max,
+      generalNombre: 'General (sin parcela)',
+    }
+  }, [parcelasMes, moMensual])
 
   const parcelasData = useMemo(
     () =>
@@ -500,9 +524,13 @@ export default function ManoObraDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {heatmap.filas.map((f) => (
-                  <tr key={f.nombre}>
-                    <td className="text-gray-700 font-medium pr-2 whitespace-nowrap">{f.nombre}</td>
+                {heatmap.filas.map((f) => {
+                  const esGeneral = f.nombre === heatmap.generalNombre
+                  return (
+                  <tr key={f.nombre} className={esGeneral ? 'border-t border-gray-200' : undefined}>
+                    <td className={`pr-2 whitespace-nowrap ${esGeneral ? 'text-gray-500 italic font-normal' : 'text-gray-700 font-medium'}`}>
+                      {f.nombre}
+                    </td>
                     {MESES_ORDER.map((m) => {
                       const v = f.meses[m] ?? 0
                       // Opacity scale over the brand burdeos; empty cells stay neutral
@@ -522,7 +550,8 @@ export default function ManoObraDashboardPage() {
                     })}
                     <td className="text-right font-semibold text-gray-800 pl-2 whitespace-nowrap">{fmtM(f.total)}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

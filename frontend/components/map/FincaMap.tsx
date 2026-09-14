@@ -55,6 +55,13 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     return map
   }, [costoData])
 
+  // Tareas cargadas como "General (sin parcela)" no tienen polígono que
+  // pintar — se muestran aparte en la leyenda en vez de perderse.
+  const costoGeneral = useMemo(
+    () => costoData.find((item) => !item.parcela_id)?.monto_total ?? 0,
+    [costoData],
+  )
+
   const { data: fenologiaData = [] } = useQuery({
     queryKey: ['fenologia-mapa'],
     queryFn: getFenologiaEstadoActual,
@@ -145,6 +152,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
       cumplimientoByParcelaId={cumplimientoByParcelaId}
       estadoCampanaByVariedad={estadoCampanaByVariedad}
       costoByParcelaId={costoByParcelaId}
+      costoGeneral={costoGeneral}
       parcelasEnRiego={parcelasEnRiego}
       valvulasEnRiego={valvulasEnRiego}
     />

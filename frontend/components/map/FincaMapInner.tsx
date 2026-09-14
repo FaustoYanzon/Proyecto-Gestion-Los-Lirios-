@@ -542,6 +542,7 @@ interface Props {
   cumplimientoByParcelaId?: Record<string, number | null>
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>
   costoByParcelaId?: Record<string, number>
+  costoGeneral?: number
   parcelasEnRiego?: Set<string>
   valvulasEnRiego?: Set<string>
 }
@@ -602,7 +603,7 @@ const INFRA_LEGEND = [
 
 export default function FincaMapInner({
   compact = false, height = '100%', cosechaByParcelaId, fenologiaByVariedad,
-  cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, parcelasEnRiego, valvulasEnRiego,
+  cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, costoGeneral, parcelasEnRiego, valvulasEnRiego,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -908,6 +909,11 @@ export default function FincaMapInner({
                 <span>$0</span>
                 <span>{maxCostoLegend > 0 ? formatARS(maxCostoLegend) : '—'}</span>
               </div>
+              {!!costoGeneral && costoGeneral > 0 && (
+                <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100 max-w-[9rem]">
+                  + {formatARS(costoGeneral)} en tareas generales, sin ubicación
+                </p>
+              )}
             </div>
           ) : colorMode === 'fenologia' ? (
             <div className="space-y-1.5">
