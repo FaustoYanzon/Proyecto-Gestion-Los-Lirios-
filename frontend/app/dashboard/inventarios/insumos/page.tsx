@@ -283,9 +283,11 @@ function ReposicionForm({ insumo, onSuccess, onCancel }: { insumo: InsumoRespons
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type VistaInsumos = 'activos' | 'todos' | 'necesidad'
+
 export default function InsumosAdminPage() {
   const [tab, setTab] = useState<TipoInsumo>('fitosanitario')
-  const [estadoFilter, setEstadoFilter] = useState<'activos' | 'todos'>('activos')
+  const [vista, setVista] = useState<VistaInsumos>('activos')
   const [modal, setModal] = useState<'create' | { edit: InsumoResponse } | { reponer: InsumoResponse } | null>(null)
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
@@ -309,11 +311,11 @@ export default function InsumosAdminPage() {
   const { data: necesidad = [], isLoading: loadingNecesidad } = useQuery({
     queryKey: ['necesidad-stock-fitosanitario', temporada],
     queryFn: () => getNecesidadStock(temporada),
-    enabled: tab === 'fitosanitario',
+    enabled: tab === 'fitosanitario' && vista === 'necesidad',
   })
 
   const delTab = insumos.filter((i) => i.tipo === tab)
-  const filtered = estadoFilter === 'activos' ? delTab.filter((i) => i.is_active) : delTab
+  const filtered = vista === 'activos' ? delTab.filter((i) => i.is_active) : delTab
 
   function handleExportCsv() {
     descargarCsv(
@@ -362,32 +364,37 @@ export default function InsumosAdminPage() {
             {activosTab} activos de {delTab.length} en total en esta pestaña
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportCsv}
-            disabled={filtered.length === 0}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Download size={16} />
-            Exportar CSV
-          </button>
-          {isEncargadoUp && (
+        {vista !== 'necesidad' && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setModal('create')}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+              onClick={handleExportCsv}
+              disabled={filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Plus size={16} />
-              Nuevo insumo
+              <Download size={16} />
+              Exportar CSV
             </button>
-          )}
-        </div>
+            {isEncargadoUp && (
+              <button
+                onClick={() => setModal('create')}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+              >
+                <Plus size={16} />
+                Nuevo insumo
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 flex-wrap">
         {TIPO_TABS.map((t) => (
           <button
             key={t.value}
-            onClick={() => setTab(t.value)}
+            onClick={() => {
+              setTab(t.value)
+              if (t.value !== 'fitosanitario' && vista === 'necesidad') setVista('activos')
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === t.value
                 ? 'bg-[#7a1f2c] text-white'
@@ -403,9 +410,9 @@ export default function InsumosAdminPage() {
         {(['activos', 'todos'] as const).map((opt) => (
           <button
             key={opt}
-            onClick={() => setEstadoFilter(opt)}
+            onClick={() => setVista(opt)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              estadoFilter === opt
+              vista === opt
                 ? 'bg-[#7a1f2c] text-white'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
             }`}
@@ -413,8 +420,21 @@ export default function InsumosAdminPage() {
             {opt === 'activos' ? 'Activos' : 'Todos'}
           </button>
         ))}
+        {tab === 'fitosanitario' && (
+          <button
+            onClick={() => setVista('necesidad')}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              vista === 'necesidad'
+                ? 'bg-[#7a1f2c] text-white'
+                : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Necesidad vs. stock
+          </button>
+        )}
       </div>
 
+      {vista !== 'necesidad' && (
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -443,7 +463,7 @@ export default function InsumosAdminPage() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={isEncargadoUp ? 5 : 4} className="px-4 py-10 text-center text-gray-400">
-                    {estadoFilter === 'activos' ? 'No hay insumos activos' : 'No hay insumos cargados'}
+                    {vista === 'activos' ? 'No hay insumos activos' : 'No hay insumos cargados'}
                   </td>
                 </tr>
               ) : (
@@ -510,8 +530,9 @@ export default function InsumosAdminPage() {
           </div>
         )}
       </div>
+      )}
 
-      {tab === 'fitosanitario' && (
+      {tab === 'fitosanitario' && vista === 'necesidad' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-base font-semibold text-gray-800">Necesidad de insumos vs. stock</h2>

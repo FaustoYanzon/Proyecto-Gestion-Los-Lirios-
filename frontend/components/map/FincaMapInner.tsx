@@ -903,14 +903,14 @@ export default function FincaMapInner({
               </div>
             </div>
           ) : colorMode === 'costo' ? (
-            <div>
-              <div className="w-28 h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #fef3c7, #7a1f2c)' }} />
-              <div className="flex justify-between text-xs text-gray-500">
+            <div className="w-36">
+              <div className="h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #fef3c7, #7a1f2c)' }} />
+              <div className="flex justify-between text-xs text-gray-500 gap-2">
                 <span>$0</span>
-                <span>{maxCostoLegend > 0 ? formatARS(maxCostoLegend) : '—'}</span>
+                <span className="text-right">{maxCostoLegend > 0 ? formatARS(maxCostoLegend) : '—'}</span>
               </div>
               {!!costoGeneral && costoGeneral > 0 && (
-                <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100 max-w-[9rem]">
+                <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100">
                   + {formatARS(costoGeneral)} en tareas generales, sin ubicación
                 </p>
               )}
