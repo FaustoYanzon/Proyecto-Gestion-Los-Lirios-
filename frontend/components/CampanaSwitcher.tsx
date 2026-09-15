@@ -4,16 +4,20 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Calendar, Check } from 'lucide-react'
 import { useContextStore } from '@/store/contextStore'
 
+// Primera temporada con datos cargados (migración de históricos, sesión 2026-09-15):
+// no hay campañas de finca anteriores a esta.
+const PRIMER_ANIO_CAMPANA = 2023
+
 function buildCampanas(): string[] {
   const now   = new Date()
   const year  = now.getFullYear()
   const month = now.getMonth() + 1
   const base  = month >= 5 ? year : year - 1
-  return [
-    `${base}/${base + 1}`,
-    `${base - 1}/${base}`,
-    `${base - 2}/${base - 1}`,
-  ]
+  const campanas: string[] = []
+  for (let start = base; start >= PRIMER_ANIO_CAMPANA; start--) {
+    campanas.push(`${start}/${start + 1}`)
+  }
+  return campanas
 }
 
 export default function CampanaSwitcher() {

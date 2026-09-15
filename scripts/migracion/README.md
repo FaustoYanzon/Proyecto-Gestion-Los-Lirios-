@@ -114,3 +114,120 @@ las filas de abril que no lo tengan — es seguro correrlo más de una vez.
 - `egresos` con `fuente='trabajo_diario'` en el rango: 407 (209 de la carga
   original + 198 del backfill de abril), sumas coincidentes por mes.
 - Capa "Costo" del mapa (`/dashboard/mapa`) verificada con datos reales end-to-end.
+
+---
+
+## Jornales (mano de obra) — históricos 2023-2025
+
+Generado 2026-09-14/15 desde `C:\claude-projects\JORNALES (1).xlsx` (117 hojas
+semanales, 09/06/2023 a 22/08/2025 — no vive en el repo). A diferencia de
+`migrate_jornales.py` (formato estable, un solo layout), este Excel tiene dos
+variantes de columnas, una sección de caja/tesorería por hoja que se excluye
+(igual criterio: todo lo que está después de la 2ª aparición de "SEMANA" en la
+hoja), y bastante ruido de tipeo de 3 años de carga manual.
+
+Scripts:
+- `migrate_jornales_historicos.py` — parsea el Excel y carga `RegistroTrabajo`
+  (+ `Egreso` vinculado según `TEMPORADAS`). Dry run por defecto, `--commit`
+  para insertar. Migra por temporada (`--temporada 23-24|24-25|25-aug25`).
+- `_audit_jornales_historicos.py` — auditoría de solo lectura previa (no
+  escribe nada), para revisar tareas/nombres/precios antes de mapear.
+- `cleanup_contaminacion_jornales_hist.py` — borra `registros_trabajo` +
+  `egresos` vinculados cuyo `trabajador_nombre` está en `NOMBRES_EXCLUIDOS`
+  (ver más abajo). Se usó una vez para limpiar una corrida `--commit` previa
+  hecha antes de que existiera el filtro. Dry run por defecto, `--commit` borra.
+- `jornales_historicos_2023_2025.csv` — snapshot de auditoría de las 5.845
+  filas finales (temporada/hoja/fila/parcela/trabajador/tarea/monto/detalle),
+  generado reusando `parse_sheet` + `build_registros` del propio script de
+  migración, sin tocar la base.
+
+### Cobertura
+
+**3 temporadas, 5.845 filas, $186.388.120 ARS**, verificado contra producción:
+
+| Temporada | Rango | Filas | Total ARS | ¿Genera Egreso? |
+|---|---|---|---|---|
+| `23-24` | 09/06/2023 – 26/04/2024 (47 semanas) | 2.796 | 41.660.390 | Sí |
+| `24-25` | 03/05/2024 – 30/04/2025 (53 semanas) | 2.649 | 114.718.730 | Sí |
+| `25-aug25` | 09/05/2025 – 22/08/2025 (14 semanas) | 400 | 30.009.000 | No — ya había agregados mensuales cargados a mano desde mayo-2025 |
+
+2 hojas excluidas por completo (`23-5-2025`, `30-5-2025`): datos internamente
+inconsistentes ("A PAGAR" ambiguo entre filas de continuación, fila de SEMANA
+en medio de la tabla) — confirmado con Fausto, no se migra nada de esas 2 semanas.
+
+### Mapeo (confirmado con Fausto, sesión 2026-09-14/15)
+
+- **Nombres**: variantes de escritura → catálogo existente + 18 trabajadores
+  nuevos (Cristian, Tatita, Javier, Adrian, Alejandro, Bachi, Cocheche, Kevin,
+  Leonardo, Luis, Lidia, Melisa, Milo, Hugo, Brian, Rodrigo, Ivan Molina, Ramón
+  Olmos). Casos condicionales: OSCAR→Oscar Carrizo; JESUS→Jesús Ortiz si la
+  tarea es de tractor, si no Jesús Videla; ORLANDO→50/50 Orlando Carrizo/Orlando
+  Molina. Ver `NOMBRE_MAP` y `resolver_nombre()` para el detalle fila por fila.
+- **Tareas nuevas** (fuera del catálogo fijo `CLASIFICACION_POR_TAREA`): Plantas
+  Nuevas (reparto 1/5 entre Parral 13/14/15/16/21), Hollada (clasificación por
+  estación calendario), Pasero (Secadero/Bolsones de Pasa, reparto 1/3 entre
+  Pasero 1/2/3). Red Globe/Syrah (con o sin "Viejo") → siempre Parral SYR-RG,
+  sin repartir entre Parral 6 y 9 (a diferencia de otras tareas de esa zona).
+- **Unidad pieza/día**: mismo umbral $2.000 que `migrate_jornales.py`, pero acá
+  el check de pieza SOLO aplica a Poda/Atada/Cosecha/Arreglo Parral/Sacar
+  Plantas — cualquier otra tarea es siempre "dias" (evita que una tarea barata
+  tipo Trabajo General se confunda con pieza).
+- **Egresos**: por defecto `sueldos_personal/obreros`; "Arreglo Parral" y
+  "Arreglo Riego" (p.ej. "Albañil", "Cañería") disparan
+  `EGRESO_OVERRIDE_POR_TAREA` → `repuestos_reparacion` (mismo criterio que usa
+  la app en producción, `backend/app/api/produccion.py`, no se inventó nada
+  nuevo para la migración).
+
+### `NOMBRES_EXCLUIDOS` — filas que NO son jornales, aunque estén en la tabla de jornales
+
+El Excel de 3 años de carga manual mezcla, en la misma tabla de jornales, filas
+que no son pago a un trabajador. Se excluyen de la migración por completo (no
+generan `RegistroTrabajo` ni `Egreso` — si se quiere esa plata registrada, se
+carga a mano como Egreso de Insumos/Combustible aparte):
+
+- **Insumos/gastos anotados como si fueran trabajador**: `COMBUSTIBLE`, `HILO`.
+- **Plata trasvasada a otra finca**: `CAUCETE`, `MIMBRE (GAMBA, ZAPALLO)` —
+  Caucete y Los Mimbres son dos de las tres fincas del proyecto (ver Fincas en
+  `CLAUDE.md`), no personas.
+- **Días de la semana como pseudo-nombre**: `LUNES`/`MARTES`/`MIERCOLES`/
+  `JUEVES`/`VIERNES`/`SABADO`/`DOMINGO` — filas de "viajes al secadero"
+  agrupadas por día (con reparto por "CANT DE PERSONAS") en vez de por
+  trabajador nombrado. Mismo problema que la tarea `"VIAJES"` bare, que
+  además queda sin mapear a propósito en `EXPLICIT_TAREA_RULES` (layout propio
+  que no vale la pena modelar para unas pocas filas).
+- `VINES MADERA` (material, sin impacto en plata).
+
+Casos límite que SÍ quedan migrados como texto libre (plata real, jornal real,
+pero sin persona identificada en la hoja original — no crean trabajador nuevo,
+`trabajador_id` queda `NULL`): `Tejido`, `Limpieza Cebolla`, `Sembrada Zapallo`,
+`Encintado Zapallo` (el nombre de la tarea quedó repetido en la columna de
+nombre), y `Gamba` (confirmado con Fausto: es apodo de un trabajador real).
+
+### Contaminación de una corrida `--commit` previa — limpiada
+
+La primera corrida `--commit` de `23-24` (sesión 2026-09-14, antes de que
+existiera `NOMBRES_EXCLUIDOS`) insertó 15 filas contaminadas; al revisar
+`24-25` se encontraron 3 más (esa temporada también se había corrido ya).
+`cleanup_contaminacion_jornales_hist.py --commit` borró las 18 (`registros_
+trabajo` + `egresos` vinculados, $328.500 en total) el 2026-09-15, verificado
+antes y después contra la suma en base. Las corridas posteriores de
+`migrate_jornales_historicos.py --commit` ya no las reinsertan (excluidas por
+nombre antes de generar el registro).
+
+### Diferencias calculado vs. declarado sin investigar (aceptado por Fausto)
+
+Quedan semanas sueltas con diferencia entre la suma de líneas y el total que la
+propia hoja declara al pie (probable error de tipeo original, no de parseo —
+menos del 2% de la plata semanal en todos los casos): `28-07-23` (+$5.000),
+`04-08-2023` (+$31.900), `8-03-2024` (-$24.000), `22-03-2024` (+$23.200),
+`21-06-2024` (-$100), `17-01-2025` (-$24.000), `4-7-2025` (-$20.000),
+`25-7-2025` (-$5.000), `8-8-2025` (-$20.000). Decisión: se dejan así, no se
+migró ningún ajuste manual para forzar el cuadre.
+
+### Selector de temporada (frontend)
+
+`frontend/components/CampanaSwitcher.tsx` generaba dinámicamente solo las
+últimas 3 campañas desde la fecha de hoy — no llegaba a 2023/2024. Se cambió a
+un `PRIMER_ANIO_CAMPANA = 2023` fijo, generando todas las campañas desde esa
+hasta la actual (crece solo con los años, no hace falta tocarlo de nuevo la
+próxima vez que se migre historia vieja).
