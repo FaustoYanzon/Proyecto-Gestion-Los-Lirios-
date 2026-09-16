@@ -45,10 +45,10 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
 
   const [{ data: ingresos }, { data: egresos }] = await Promise.all([
     api.get<IngresoResponse[]>('/finanzas/ingresos/', {
-      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 1000 },
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
     }),
     api.get<EgresoResponse[]>('/finanzas/egresos/', {
-      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 1000 },
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
     }),
   ])
 
@@ -172,7 +172,7 @@ export async function getFlujoDesglose(tipo: TipoEgreso, anioInicio: number): Pr
 
   // Fetch all egresos and filter client-side — avoids backend filter quirks
   const { data: allEgresos } = await api.get<EgresoResponse[]>('/finanzas/egresos/', {
-    params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 1000 },
+    params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
   })
 
   // clasificacion → descripcion → months[12]

@@ -384,15 +384,32 @@ EGRESO_OVERRIDE_POR_TAREA = {
 }
 
 
-def read_database_url() -> str:
-    import os
-    env_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL")
-    if env_url:
-        return re.sub(r"^postgresql\+\w+://", "postgresql://", env_url)
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+PROD_ENV_FILE = HERE / ".env.prod"  # opcional, gitignored (.env.*) -- ver README
+
+
+def _extract_database_url(text: str) -> str | None:
+    for line in text.splitlines():
         if line.strip().startswith("DATABASE_URL"):
             url = line.split("=", 1)[1].strip().strip('"').strip("'")
             return re.sub(r"^postgresql\+\w+://", "postgresql://", url)
+    return None
+
+
+def read_database_url() -> str:
+    import os
+    # 1) scripts/migracion/.env.prod -- override explícito para apuntar a producción
+    #    (Railway, DATABASE_URL pública) sin tocar backend/.env ni pasar el secreto
+    #    por la shell/el chat. Se crea a mano, nunca se commitea.
+    if PROD_ENV_FILE.exists():
+        url = _extract_database_url(PROD_ENV_FILE.read_text(encoding="utf-8"))
+        if url:
+            return url
+    env_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("DATABASE_URL")
+    if env_url:
+        return re.sub(r"^postgresql\+\w+://", "postgresql://", env_url)
+    url = _extract_database_url(ENV_FILE.read_text(encoding="utf-8"))
+    if url:
+        return url
     raise RuntimeError(f"DATABASE_URL not found in {ENV_FILE}")
 
 
@@ -827,6 +844,8 @@ async def main() -> None:
     nombres_libres = sorted({r.trabajador_nombre for r in registros if not r.trabajador_vinculado})
     print(f"\nNombres sin vincular a catálogo (texto libre, {len(nombres_libres)} distintos): {nombres_libres}")
 
+    fuente_db = ".env.prod (producción)" if PROD_ENV_FILE.exists() else f"{ENV_FILE} (local/staging)"
+    print(f"\nDATABASE_URL desde: {fuente_db}")
     conn = await asyncpg.connect(read_database_url())
     try:
         parcelas_db = {r["nombre"]: r["id"] for r in await conn.fetch("SELECT id, nombre FROM parcelas")}
@@ -871,6 +890,14 @@ async def main() -> None:
             return
 
         now = datetime.now(timezone.utc)
+
+        # Commits por tanda (no una única transacción gigante): sobre la conexión pública
+        # de Railway una transacción de ~2.800 filas puede cortarse a mitad de camino
+        # (ConnectionDoesNotExistError) y perder todo el progreso. En tandas chicas, un
+        # corte solo pierde la tanda en curso -- el reintento salta lo ya commiteado vía
+        # idempotency_key y avanza rápido.
+        CHUNK_SIZE = 150
+
         async with conn.transaction():
             for nombre in nuevos_a_crear:
                 tid = str(uuid.uuid4())
@@ -881,43 +908,50 @@ async def main() -> None:
                 )
                 trabajadores_db[nombre] = tid
 
-            insertados = 0
-            saltados_dup = 0
-            for r in registros:
-                key = str(uuid.uuid5(NAMESPACE, f"jornales_hist:{r.sheet}:{r.row_idx}:{r.split_idx}"))
-                if key in existentes_keys:
-                    saltados_dup += 1
-                    continue
-                reg_id = str(uuid.uuid4())
-                parcela_id = parcelas_db.get(r.parcela_nombre) if r.parcela_nombre else None
-                trabajador_id = trabajadores_db.get(r.trabajador_nombre) if r.trabajador_vinculado else None
-                await conn.execute(
-                    """INSERT INTO registros_trabajo
-                       (id, fecha, parcela_id, trabajador_nombre, trabajador_id, clasificacion,
-                        tarea, cantidad, unidad_medida, precio_unitario, monto_total, detalle,
-                        idempotency_key, created_by, created_at, updated_at)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)""",
-                    reg_id, r.fecha, parcela_id, r.trabajador_nombre, trabajador_id, r.clasificacion,
-                    r.tarea, r.cantidad, r.unidad_medida, r.precio_unitario, r.monto_total, r.detalle,
-                    key, created_by, now,
-                )
-                insertados += 1
+        insertados = 0
+        saltados_dup = 0
+        pendientes = [
+            r for r in registros
+            if str(uuid.uuid5(NAMESPACE, f"jornales_hist:{r.sheet}:{r.row_idx}:{r.split_idx}")) not in existentes_keys
+        ]
+        saltados_dup = len(registros) - len(pendientes)
 
-                if r.crea_egreso:
-                    tipo, clasif_egreso = EGRESO_OVERRIDE_POR_TAREA.get(r.tarea, ("sueldos_personal", "obreros"))
-                    parts = [r.tarea, r.trabajador_nombre]
-                    if r.parcela_nombre:
-                        parts.append(r.parcela_nombre)
+        for i in range(0, len(pendientes), CHUNK_SIZE):
+            chunk = pendientes[i:i + CHUNK_SIZE]
+            async with conn.transaction():
+                for r in chunk:
+                    key = str(uuid.uuid5(NAMESPACE, f"jornales_hist:{r.sheet}:{r.row_idx}:{r.split_idx}"))
+                    reg_id = str(uuid.uuid4())
+                    parcela_id = parcelas_db.get(r.parcela_nombre) if r.parcela_nombre else None
+                    trabajador_id = trabajadores_db.get(r.trabajador_nombre) if r.trabajador_vinculado else None
                     await conn.execute(
-                        """INSERT INTO egresos
-                           (id, fecha, tipo, clasificacion, descripcion, monto, moneda, origen,
-                            finca, forma_pago, parcela_id, fuente, referencia_id, created_by,
-                            created_at, updated_at)
-                           VALUES ($1,$2,$3,$4,$5,$6,'ars','no_oficial',
-                                   'media_agua','efectivo',$7,'trabajo_diario',$8,$9,$10,$10)""",
-                        str(uuid.uuid4()), r.fecha, tipo, clasif_egreso, " | ".join(parts)[:500], r.monto_total,
-                        parcela_id, reg_id, created_by, now,
+                        """INSERT INTO registros_trabajo
+                           (id, fecha, parcela_id, trabajador_nombre, trabajador_id, clasificacion,
+                            tarea, cantidad, unidad_medida, precio_unitario, monto_total, detalle,
+                            idempotency_key, created_by, created_at, updated_at)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)""",
+                        reg_id, r.fecha, parcela_id, r.trabajador_nombre, trabajador_id, r.clasificacion,
+                        r.tarea, r.cantidad, r.unidad_medida, r.precio_unitario, r.monto_total, r.detalle,
+                        key, created_by, now,
                     )
+                    insertados += 1
+
+                    if r.crea_egreso:
+                        tipo, clasif_egreso = EGRESO_OVERRIDE_POR_TAREA.get(r.tarea, ("sueldos_personal", "obreros"))
+                        parts = [r.tarea, r.trabajador_nombre]
+                        if r.parcela_nombre:
+                            parts.append(r.parcela_nombre)
+                        await conn.execute(
+                            """INSERT INTO egresos
+                               (id, fecha, tipo, clasificacion, descripcion, monto, moneda, origen,
+                                finca, forma_pago, parcela_id, fuente, referencia_id, created_by,
+                                created_at, updated_at)
+                               VALUES ($1,$2,$3,$4,$5,$6,'ars','no_oficial',
+                                       'media_agua','efectivo',$7,'trabajo_diario',$8,$9,$10,$10)""",
+                            str(uuid.uuid4()), r.fecha, tipo, clasif_egreso, " | ".join(parts)[:500], r.monto_total,
+                            parcela_id, reg_id, created_by, now,
+                        )
+            print(f"  ... {min(i + CHUNK_SIZE, len(pendientes))}/{len(pendientes)} insertados", flush=True)
 
         print(f"\nInsertados: {insertados} registros_trabajo, {saltados_dup} saltados (ya existían).")
 

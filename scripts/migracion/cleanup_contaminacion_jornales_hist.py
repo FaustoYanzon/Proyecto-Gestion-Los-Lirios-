@@ -30,7 +30,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 import asyncpg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from migrate_jornales_historicos import NOMBRES_EXCLUIDOS, read_database_url
+from migrate_jornales_historicos import NOMBRES_EXCLUIDOS, PROD_ENV_FILE, ENV_FILE, read_database_url
 
 
 async def main() -> None:
@@ -38,6 +38,8 @@ async def main() -> None:
     parser.add_argument("--commit", action="store_true")
     args = parser.parse_args()
 
+    fuente_db = ".env.prod (producción)" if PROD_ENV_FILE.exists() else f"{ENV_FILE} (local/staging)"
+    print(f"DATABASE_URL desde: {fuente_db}")
     conn = await asyncpg.connect(read_database_url())
     try:
         nombres = sorted(NOMBRES_EXCLUIDOS)

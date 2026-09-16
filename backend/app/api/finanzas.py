@@ -59,7 +59,7 @@ async def list_egresos(
     moneda: MonedaTipo | None = Query(None),
     fuente: str | None = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[Egreso]:
@@ -208,7 +208,7 @@ async def list_ingresos(
         False, description="Cheques cobrados (forma_pago cheque/echeque) sin uso_cheque asignado."
     ),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[Ingreso]:

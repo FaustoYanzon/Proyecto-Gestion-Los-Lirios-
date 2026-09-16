@@ -51,6 +51,28 @@ completo en `scripts/migracion/README.md`.
 llegaba a 2023/2024, así que estos datos quedaban cargados pero invisibles en la UI.
 Cambiado a un `PRIMER_ANIO_CAMPANA = 2023` fijo (crece solo con los años).
 
+## Producción real vs. base de prueba
+
+Todo lo de arriba (carga original + limpieza de contaminación) corrió contra la copia de
+staging a la que apunta `backend/.env` local, no contra producción — se detectó al
+verificar en el navegador que el Flujo Anual seguía en cero. Se armó
+`scripts/migracion/.env.prod` (gitignored, se crea a mano con la URL pública de Railway,
+nunca pasa por el chat) como override explícito de `read_database_url()`. Recorrida la
+migración completa contra producción real el mismo día, mismos totales exactos. De paso
+se cambió el commit de una transacción gigante a tandas de 150 filas — sobre la conexión
+pública, una transacción de miles de INSERTs se cortaba a mitad de camino y perdía todo
+el progreso sin commitear nada (la primera vez con la 23-24 hubo que reintentar entero).
+
+## Bug expuesto (no creado) por esta migración: `limit=1000` en Flujo Anual
+
+Verificando en el navegador que la migración se viera en `/dashboard/finanzas/flujo`,
+apareció solo la mitad de la plata y faltaban meses enteros (jun-nov 2023). Causa: el
+fetch de Flujo Anual trae todos los egresos de la campaña de una sola vez con
+`limit=1000` (frontend) contra un tope igual en el backend (`le=1000`) — nunca una
+campaña había superado 1000 egresos hasta que esta migración cargó ~2.800 en una sola.
+Subido a 10.000 en ambos lados. Ver `scripts/migracion/README.md` para el detalle
+técnico y la limitación que queda (sigue siendo agregación client-side, no server-side).
+
 ## Ver también
 
 - [[Sistema de Gestión Agrícola]]

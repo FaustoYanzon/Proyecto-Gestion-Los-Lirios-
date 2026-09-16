@@ -231,3 +231,44 @@ migró ningún ajuste manual para forzar el cuadre.
 un `PRIMER_ANIO_CAMPANA = 2023` fijo, generando todas las campañas desde esa
 hasta la actual (crece solo con los años, no hace falta tocarlo de nuevo la
 próxima vez que se migre historia vieja).
+
+### La primera corrida `--commit` fue contra una base de prueba, no producción
+
+El `backend/.env` local apunta a propósito a una copia/staging de la base (para
+poder probar sin arriesgar producción). Las corridas `--commit` del
+2026-09-14/15 (y la limpieza de contaminación) fueron contra esa copia — nunca
+tocaron producción, pero tampoco se veían en la app real. Se agregó
+`scripts/migracion/.env.prod` (gitignored por el patrón `.env.*` ya existente,
+nunca se commitea) como override explícito: si existe, `read_database_url()`
+lo usa antes que `DATABASE_URL`/`DATABASE_PUBLIC_URL` de la shell o
+`backend/.env`. La URL pública se consigue en Railway → servicio Postgres →
+"Connect" (la que NO dice `railway.internal`, esa es solo alcanzable desde
+adentro de la red de Railway). El script imprime de qué fuente sacó la URL
+(`.env.prod (producción)` o `backend/.env (local/staging)`) sin exponer el
+valor. Migración real a producción corrida el 2026-09-15, mismos totales
+verificados que contra la copia de staging.
+
+**Inserts en tandas, no una transacción gigante:** sobre la conexión pública de
+Railway, una única transacción con ~2.800-5.500 INSERTs seguidos se cortaba a
+mitad de camino (`asyncpg.exceptions.ConnectionDoesNotExistError`) y perdía
+todo el progreso sin commitear nada. Se cambió a tandas de 150 filas, cada una
+en su propia transacción — un corte solo pierde la tanda en curso, y el
+reintento salta lo ya commiteado por `idempotency_key` (rápido, no repite todo
+desde cero).
+
+### Bug encontrado (no es de esta migración, pero esta migración lo expuso): `limit=1000` en Flujo Anual
+
+`frontend/lib/api/flujo.ts` (`getFlujoAnual`/`getFlujoDesglose`) trae TODOS los
+egresos/ingresos de la campaña de una sola vez y agrega en el cliente, con
+`limit=1000` hardcodeado — y el backend (`backend/app/api/finanzas.py`,
+`list_egresos`/`list_ingresos`) tenía el mismo tope como máximo permitido
+(`le=1000`). Hasta esta migración ninguna campaña había superado 1000 egresos;
+la 23-24 sola tiene ~2.800. Como el query ordena por fecha descendente, se
+veían solo los meses más recientes (dic-abr) y faltaban jun-nov enteros —
+detectado en vivo con Claude in Chrome al confirmar la migración en el Flujo
+Anual de producción. Fix: `limit` subido a 10.000 en ambos lados (frontend y
+tope del backend). Sigue siendo un fetch-and-aggregate client-side, no
+agregación server-side — si el volumen de una sola campaña llega a superar
+10.000 movimientos algún día, hay que revisar de nuevo (o migrar a
+`getFlujoMensual`/`/finanzas/flujo-anual/`, que si agrega server-side, pero no
+tiene desglose por tipo/cliente todavía).
