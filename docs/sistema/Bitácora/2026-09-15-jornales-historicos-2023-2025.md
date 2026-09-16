@@ -73,6 +73,21 @@ campaña había superado 1000 egresos hasta que esta migración cargó ~2.800 en
 Subido a 10.000 en ambos lados. Ver `scripts/migracion/README.md` para el detalle
 técnico y la limitación que queda (sigue siendo agregación client-side, no server-side).
 
+## Segundo agujero: mayo-agosto 2025 sin Egreso (2026-09-16)
+
+Al día siguiente Fausto preguntó por qué la campaña 2025/2026 no mostraba nada en el
+Flujo Anual para mayo-agosto. Mismo problema que abril 2026 tuvo en la migración
+anterior: la temporada `25-aug25` se cargó con `crea_egreso=False` asumiendo que esos
+meses ya tenían un Egreso agregado a mano — la asunción era falsa, 0 egresos en la base
+para ese rango pese a tener los 400 `registros_trabajo`. `backfill_egresos_mayo_
+agosto_2025.py` corrigió los 400 registros faltantes ($30.009.000), verificado exacto
+en el navegador después.
+
+**Patrón que se repite:** dos migraciones seguidas asumieron "ya debe estar cargado a
+mano" sin verificar antes de decidir `crea_egreso=False`, y las dos veces la asunción
+era falsa. Para la próxima, verificar con una consulta antes de decidir, no confiar en
+la suposición.
+
 ## Ver también
 
 - [[Sistema de Gestión Agrícola]]

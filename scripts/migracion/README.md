@@ -272,3 +272,25 @@ agregación server-side — si el volumen de una sola campaña llega a superar
 10.000 movimientos algún día, hay que revisar de nuevo (o migrar a
 `getFlujoMensual`/`/finanzas/flujo-anual/`, que si agrega server-side, pero no
 tiene desglose por tipo/cliente todavía).
+
+### Backfill: mayo-agosto 2025 tampoco tenía Egreso vinculado
+
+Mismo problema que tuvo abril 2026 en la migración anterior (ver
+`backfill_egresos_abril.py`, arriba). La temporada `25-aug25` se migró con
+`crea_egreso=False` asumiendo que esos meses ya tenían un Egreso agregado
+cargado a mano — Fausto lo notó al ver el Flujo Anual de la campaña 2025/2026
+en cero para mayo-agosto pese a que los `registros_trabajo` sí estaban.
+Verificado: 0 egresos en `media_agua` para ese rango. La asunción era
+incorrecta, igual que con abril 2026.
+
+`backfill_egresos_mayo_agosto_2025.py` agrega el Egreso vinculado para las 400
+filas de esa temporada que no lo tenían (mismo criterio que el resto:
+`fuente='trabajo_diario'`, `EGRESO_OVERRIDE_POR_TAREA` para Arreglo Parral/
+Arreglo Riego, `sueldos_personal/obreros` para el resto). Corrido contra
+producción el 2026-09-16: 400 egresos insertados, $30.009.000 ARS, verificado
+exacto contra el Flujo Anual en el navegador.
+
+**Lección para la próxima migración con este patrón:** no asumir que un rango
+ya tiene Egreso agregado cargado a mano solo porque "es reciente" o "debería
+estar" — verificar con una consulta antes de decidir `crea_egreso=False`, no
+después.
