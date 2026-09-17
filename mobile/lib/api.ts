@@ -163,3 +163,36 @@ export async function postEstadoVariedadCampana(
 ): Promise<void> {
   await api.post('/produccion/estado-campana/', payload)
 }
+
+// ─── Órdenes de Aplicación ──────────────────────────────────────────────────
+
+import type { OrdenAplicacion, OrdenAplicacionParcelaItem } from './types'
+
+export async function getOrdenesPendientes(): Promise<OrdenAplicacion[]> {
+  const { data } = await api.get<OrdenAplicacion[]>('/ordenes-aplicacion/pendientes')
+  return data
+}
+
+export async function confirmarAplicacionOrden(
+  ordenId: string,
+  ordenParcelaId: string,
+  observaciones?: string,
+): Promise<OrdenAplicacionParcelaItem> {
+  const { data } = await api.post<OrdenAplicacionParcelaItem>(
+    `/ordenes-aplicacion/${ordenId}/parcelas/${ordenParcelaId}/confirmar`,
+    { observaciones: observaciones || undefined },
+  )
+  return data
+}
+
+export async function subirFotoAplicacion(ordenParcelaId: string, uri: string): Promise<void> {
+  const formData = new FormData()
+  // Ver nota de FormData con uri/name/type en perfil.tsx (upload de avatar) --
+  // mismo shape de React Native, no es un File real del DOM.
+  formData.append('file', {
+    uri, name: 'aplicacion.jpg', type: 'image/jpeg',
+  } as any)
+  await api.post(`/ordenes-aplicacion/parcelas/${ordenParcelaId}/fotos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}

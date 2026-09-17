@@ -335,6 +335,10 @@ class RegistroFitosanitario(Base):
     responsable_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("trabajadores.id"), nullable=True
     )
+    # Nota de campo del operario al confirmar una orden de aplicación (ej.
+    # "faltó producto para el último parral"). Libre, no afecta cantidad ni
+    # producto, que quedan fijos por la orden -- ver OrdenAplicacionParcela.
+    observaciones: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     # Ver nota en RegistroTrabajo.idempotency_key.
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
@@ -385,6 +389,12 @@ class RegistroFitosanitario(Base):
     movimiento_stock: Mapped[MovimientoStock | None] = relationship(
         "MovimientoStock", back_populates="registro_fitosanitario", uselist=False
     )
+    orden_parcela: Mapped[OrdenAplicacionParcela | None] = relationship(
+        "OrdenAplicacionParcela", back_populates="registro_fitosanitario", uselist=False
+    )
+    fotos: Mapped[list[FotoRegistroFitosanitario]] = relationship(
+        "FotoRegistroFitosanitario", back_populates="registro_fitosanitario"
+    )
 
 
 class PlanFitosanitario(Base):
@@ -429,6 +439,170 @@ class PlanFitosanitario(Base):
 
     insumo: Mapped[Insumo] = relationship("Insumo")
     created_by_user: Mapped[User] = relationship("User")
+
+
+class OrigenOrdenAplicacion(str, enum.Enum):
+    plan = "plan"
+    extra = "extra"
+
+
+class EstadoOrdenAplicacion(str, enum.Enum):
+    pendiente = "pendiente"
+    en_curso = "en_curso"
+    completada = "completada"
+
+
+class EstadoOrdenAplicacionParcela(str, enum.Enum):
+    pendiente = "pendiente"
+    aplicada = "aplicada"
+
+
+class OrdenAplicacion(Base):
+    """Orden de aplicación ejecutable: lo que un operario ve y confirma en
+    mobile, en vez de recibir la indicación solo de palabra. Nace de una
+    línea del PlanFitosanitario (origen=plan, con plan_fitosanitario_id) o la
+    crea el ingeniero/encargado suelta, fuera del plan (origen=extra).
+    Congela insumo/dosis/objetivo/carencia al momento de crearse -- un
+    cambio posterior en el plan no altera órdenes ya generadas."""
+
+    __tablename__ = "ordenes_aplicacion"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    temporada: Mapped[int] = mapped_column(Integer, nullable=False)
+    origen: Mapped[OrigenOrdenAplicacion] = mapped_column(
+        SAEnum(OrigenOrdenAplicacion), nullable=False
+    )
+    plan_fitosanitario_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("planes_fitosanitarios.id"), nullable=True
+    )
+    variedad: Mapped[VariedadUva] = mapped_column(SAEnum(VariedadUva), nullable=False)
+    insumo_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("insumos.id"), nullable=False
+    )
+    dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
+    objetivo: Mapped[str] = mapped_column(String(200), nullable=False)
+    dias_carencia: Mapped[int] = mapped_column(Integer, nullable=False)
+    dias_reingreso: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha_planificada: Mapped[date] = mapped_column(Date, nullable=False)
+    estado: Mapped[EstadoOrdenAplicacion] = mapped_column(
+        SAEnum(EstadoOrdenAplicacion),
+        default=EstadoOrdenAplicacion.pendiente,
+        server_default=EstadoOrdenAplicacion.pendiente.value,
+        nullable=False,
+    )
+    notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_ordenes_aplicacion_temporada_estado", "temporada", "estado"),
+    )
+
+    insumo: Mapped[Insumo] = relationship("Insumo")
+    plan: Mapped[PlanFitosanitario | None] = relationship("PlanFitosanitario")
+    created_by_user: Mapped[User] = relationship("User")
+    parcelas: Mapped[list[OrdenAplicacionParcela]] = relationship(
+        "OrdenAplicacionParcela", back_populates="orden", cascade="all, delete-orphan"
+    )
+
+
+class OrdenAplicacionParcela(Base):
+    """Una fila por cada parcela incluida en la orden. `estado` pasa a
+    `aplicada` cuando un operario confirma -- eso crea el
+    RegistroFitosanitario correspondiente (vinculado acá vía
+    registro_fitosanitario_id), reusando el descuento de stock y el cálculo
+    de fechas de carencia/reingreso que ya tiene ese modelo, en vez de
+    duplicar esa lógica."""
+
+    __tablename__ = "ordenes_aplicacion_parcelas"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    orden_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ordenes_aplicacion.id"), nullable=False
+    )
+    parcela_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("parcelas.id"), nullable=False
+    )
+    estado: Mapped[EstadoOrdenAplicacionParcela] = mapped_column(
+        SAEnum(EstadoOrdenAplicacionParcela),
+        default=EstadoOrdenAplicacionParcela.pendiente,
+        server_default=EstadoOrdenAplicacionParcela.pendiente.value,
+        nullable=False,
+    )
+    registro_fitosanitario_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("registros_fitosanitarios.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_ordenes_aplicacion_parcelas_orden", "orden_id"),
+        Index("ix_ordenes_aplicacion_parcelas_parcela", "parcela_id"),
+        Index(
+            "uq_ordenes_aplicacion_parcelas_orden_parcela",
+            "orden_id", "parcela_id",
+            unique=True,
+        ),
+        Index(
+            "uq_ordenes_aplicacion_parcelas_registro",
+            "registro_fitosanitario_id",
+            unique=True,
+            postgresql_where=text("registro_fitosanitario_id IS NOT NULL"),
+        ),
+    )
+
+    orden: Mapped[OrdenAplicacion] = relationship(
+        "OrdenAplicacion", back_populates="parcelas"
+    )
+    parcela: Mapped[Parcela] = relationship("Parcela")
+    registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
+        "RegistroFitosanitario", back_populates="orden_parcela"
+    )
+
+
+class FotoRegistroFitosanitario(Base):
+    """Álbum de fotos de una aplicación real, adjuntadas opcionalmente por el
+    operario al confirmar una orden (mismo patrón que Foto para el álbum de
+    parcela, ver app.models.trazabilidad)."""
+
+    __tablename__ = "fotos_registros_fitosanitarios"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    registro_fitosanitario_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("registros_fitosanitarios.id"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_fotos_registros_fitosanitarios_registro", "registro_fitosanitario_id"),
+    )
+
+    registro_fitosanitario: Mapped[RegistroFitosanitario] = relationship(
+        "RegistroFitosanitario", back_populates="fotos"
+    )
 
 
 class CicloCampana(Base):

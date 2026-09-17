@@ -16,6 +16,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
+from app.models.trabajador import Trabajador
 from app.models.user import User
 from app.schemas.user import (
     ChangePasswordRequest,
@@ -139,6 +140,20 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already registered",
         )
+    if user_data.trabajador_id is not None:
+        trabajador = await db.get(Trabajador, user_data.trabajador_id)
+        if trabajador is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found"
+            )
+        result = await db.execute(
+            select(User).where(User.trabajador_id == user_data.trabajador_id)
+        )
+        if result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ese trabajador ya está vinculado a otro usuario",
+            )
 
     user = User(
         email=user_data.email,
@@ -147,6 +162,7 @@ async def register(
         full_name=user_data.full_name,
         role=user_data.role,
         finca=user_data.finca,
+        trabajador_id=user_data.trabajador_id,
     )
     db.add(user)
     await db.flush()

@@ -13,6 +13,9 @@ from app.models.produccion import (
     DestinoCosecha,
     EstadoCampana,
     EstadoFenologico,
+    EstadoOrdenAplicacion,
+    EstadoOrdenAplicacionParcela,
+    OrigenOrdenAplicacion,
     TipoEnvase,
     UnidadMedida,
 )
@@ -207,6 +210,7 @@ class RegistroFitosanitarioBase(BaseModel):
     dias_reingreso: int
     responsable: str
     responsable_id: str | None = None
+    observaciones: str | None = None
 
 
 class RegistroFitosanitarioCreate(RegistroFitosanitarioBase):
@@ -223,6 +227,7 @@ class RegistroFitosanitarioUpdate(BaseModel):
     dias_reingreso: int | None = None
     responsable: str | None = None
     responsable_id: str | None = None
+    observaciones: str | None = None
 
 
 class RegistroFitosanitarioResponse(BaseModel):
@@ -239,6 +244,7 @@ class RegistroFitosanitarioResponse(BaseModel):
     dias_reingreso: int
     responsable: str
     responsable_id: str | None = None
+    observaciones: str | None = None
     fecha_habilitacion_cosecha: date
     fecha_habilitacion_reingreso: date
     created_by: str
@@ -312,6 +318,77 @@ class NecesidadInsumoItem(BaseModel):
     cantidad_pendiente: float
     stock_actual: Decimal
     faltante: float
+
+
+# ── Órdenes de Aplicación ────────────────────────────────────────────────────
+
+class OrdenAplicacionParcelaResponse(BaseModel):
+    id: str
+    parcela_id: str
+    parcela_nombre: str
+    estado: EstadoOrdenAplicacionParcela
+    registro_fitosanitario_id: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrdenAplicacionResponse(BaseModel):
+    id: str
+    temporada: int
+    origen: OrigenOrdenAplicacion
+    plan_fitosanitario_id: str | None = None
+    variedad: VariedadUva
+    insumo_id: str
+    insumo_nombre: str
+    insumo_unidad: UnidadInsumo
+    dosis_por_ha: float
+    objetivo: str
+    dias_carencia: int
+    dias_reingreso: int
+    fecha_planificada: date
+    estado: EstadoOrdenAplicacion
+    notas: str | None = None
+    created_by: str
+    created_at: datetime
+    parcelas: list[OrdenAplicacionParcelaResponse] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrdenAplicacionCreateDesdePlan(BaseModel):
+    plan_fitosanitario_id: str
+    dias_carencia: int = Field(ge=0)
+    dias_reingreso: int = Field(ge=0)
+    fecha_planificada: date
+    # None = todas las parcelas activas de la variedad del plan.
+    parcela_ids: list[str] | None = None
+    notas: str | None = None
+
+
+class OrdenAplicacionCreateExtra(BaseModel):
+    temporada: int
+    variedad: VariedadUva
+    insumo_id: str
+    dosis_por_ha: float
+    objetivo: str
+    dias_carencia: int = Field(ge=0)
+    dias_reingreso: int = Field(ge=0)
+    fecha_planificada: date
+    # None = todas las parcelas activas de la variedad.
+    parcela_ids: list[str] | None = None
+    notas: str | None = None
+
+
+class ConfirmarAplicacionRequest(BaseModel):
+    observaciones: str | None = None
+
+
+class FotoRegistroFitosanitarioResponse(BaseModel):
+    id: str
+    url: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Ciclo Campaña ─────────────────────────────────────────────────────────────

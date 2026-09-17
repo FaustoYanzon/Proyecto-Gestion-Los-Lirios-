@@ -12,6 +12,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.produccion import RegistroTrabajo
+    from app.models.user import User
 
 
 class RolTrabajador(str, enum.Enum):
@@ -46,4 +47,7 @@ class Trabajador(Base):
 
     registros_trabajo: Mapped[list[RegistroTrabajo]] = relationship(
         "RegistroTrabajo", back_populates="trabajador"
+    )
+    user: Mapped[User | None] = relationship(
+        "User", back_populates="trabajador", uselist=False
     )

@@ -120,6 +120,40 @@ export interface RegistroFitosanitario {
   created_at: string
 }
 
+// ── Órdenes de Aplicación (GET /ordenes-aplicacion/pendientes, POST confirmar) ──
+export type OrigenOrdenAplicacion = 'plan' | 'extra'
+export type EstadoOrdenAplicacion = 'pendiente' | 'en_curso' | 'completada'
+export type EstadoOrdenAplicacionParcela = 'pendiente' | 'aplicada'
+
+export interface OrdenAplicacionParcelaItem {
+  id: string
+  parcela_id: string
+  parcela_nombre: string
+  estado: EstadoOrdenAplicacionParcela
+  registro_fitosanitario_id: string | null
+}
+
+export interface OrdenAplicacion {
+  id: string
+  temporada: number
+  origen: OrigenOrdenAplicacion
+  plan_fitosanitario_id: string | null
+  variedad: VariedadUva
+  insumo_id: string
+  insumo_nombre: string
+  insumo_unidad: 'kg' | 'lt'
+  dosis_por_ha: number
+  objetivo: string
+  dias_carencia: number
+  dias_reingreso: number
+  fecha_planificada: string
+  estado: EstadoOrdenAplicacion
+  notas: string | null
+  created_by: string
+  created_at: string
+  parcelas: OrdenAplicacionParcelaItem[]
+}
+
 export interface Insumo {
   id: string
   nombre: string

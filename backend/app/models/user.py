@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         RegistroRiego,
         RegistroTrabajo,
     )
+    from app.models.trabajador import Trabajador
 
 
 class UserRole(str, enum.Enum):
@@ -58,6 +59,13 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Vincula esta cuenta de login a su ficha en el catálogo de Trabajador
+    # (dni, rol de campo) -- solo se usa para operarios/regadores que
+    # confirman sus propias órdenes de aplicación desde mobile; permite
+    # resolver `responsable_id` en RegistroFitosanitario sin pedírselo.
+    trabajador_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trabajadores.id"), unique=True, nullable=True
+    )
     # Cumpleaños en 3 columnas separadas, no un date único -- muchos
     # empleados de campo no saben el año con certeza, y la lógica de
     # notificación nunca necesita el año para decidir "hoy es su cumpleaños".
@@ -103,4 +111,7 @@ class User(Base):
     )
     registros_cosecha: Mapped[list[RegistroCosecha]] = relationship(
         "RegistroCosecha", back_populates="created_by_user"
+    )
+    trabajador: Mapped[Trabajador | None] = relationship(
+        "Trabajador", back_populates="user"
     )

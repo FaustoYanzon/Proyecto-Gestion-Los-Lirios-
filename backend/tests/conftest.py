@@ -39,6 +39,7 @@ import app.models  # noqa: E402,F401
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.finanzas import Finca  # noqa: E402
 from app.models.insumo import Insumo, UnidadInsumo  # noqa: E402
 from app.models.parcela import Parcela, TipoParcela, VariedadUva  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
@@ -104,6 +105,8 @@ async def create_user():
         role: UserRole = UserRole.super_admin,
         is_active: bool = True,
         username: str | None = None,
+        finca: Finca = Finca.media_agua,
+        trabajador_id: str | None = None,
     ) -> User:
         async with TestSessionLocal() as session:
             # Defaults to the email string itself so every existing test that
@@ -116,6 +119,8 @@ async def create_user():
                 full_name="Test User",
                 role=role,
                 is_active=is_active,
+                finca=finca,
+                trabajador_id=trabajador_id,
             )
             session.add(user)
             await session.commit()
@@ -134,9 +139,12 @@ async def create_parcela():
         tipo: TipoParcela = TipoParcela.parral,
         superficie_ha: float | None = 10.0,
         variedad: VariedadUva | None = None,
+        finca: Finca | None = None,
     ) -> Parcela:
         async with TestSessionLocal() as session:
-            parcela = Parcela(nombre=nombre, tipo=tipo, superficie_ha=superficie_ha, variedad=variedad)
+            parcela = Parcela(
+                nombre=nombre, tipo=tipo, superficie_ha=superficie_ha, variedad=variedad, finca=finca,
+            )
             session.add(parcela)
             await session.commit()
             await session.refresh(parcela)

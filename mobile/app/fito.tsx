@@ -19,6 +19,7 @@ import { enqueue } from '../lib/offlineQueue'
 import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
 import TrabajadorPicker from '../components/TrabajadorPicker'
 import InsumoPicker from '../components/InsumoPicker'
+import OrdenesPendientes from '../components/OrdenesPendientes'
 import { colors } from '../lib/theme'
 import type { Insumo, Parcela, RegistroFitosanitario, Trabajador as TrabajadorDb } from '../lib/types'
 import { useAuthStore } from '../store/authStore'
@@ -709,6 +710,13 @@ export default function FitoScreen() {
     return () => clearTimeout(t)
   }, [toast])
 
+  // La carga libre (sin orden) sigue reservada a encargado+ -- mismo gate que
+  // ya exige el backend en POST /produccion/fitosanitarios/ (require_encargado_up).
+  // Los roles de campo (obrero/regador) solo confirman órdenes ya armadas.
+  const puedeCargaLibre = user
+    ? ['super_admin', 'gerencial', 'encargado', 'regador'].includes(user.role)
+    : false
+
   function onRefresh() { setRefreshing(true); loadRegistros() }
 
   function reset() {
@@ -792,10 +800,14 @@ export default function FitoScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tierra} />
         }
       >
-        <TouchableOpacity style={styles.newBtn} onPress={() => setStep('fecha_resp')} activeOpacity={0.85}>
-          <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
-          <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
-        </TouchableOpacity>
+        <OrdenesPendientes onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }} />
+
+        {puedeCargaLibre && (
+          <TouchableOpacity style={styles.newBtn} onPress={() => setStep('fecha_resp')} activeOpacity={0.85}>
+            <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
+            <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
+          </TouchableOpacity>
+        )}
 
         <OfflineQueueBanner />
 

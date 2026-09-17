@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_super_admin
 from app.core.cloudinary_client import upload_avatar
 from app.core.security import get_password_hash
+from app.models.trabajador import Trabajador
 from app.models.user import User
 from app.schemas.user import UserResponse, UserUpdate
 
@@ -79,6 +80,20 @@ async def update_user(
             )
     if "password" in update_data:
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+    if "trabajador_id" in update_data and update_data["trabajador_id"] is not None:
+        trabajador = await db.get(Trabajador, update_data["trabajador_id"])
+        if trabajador is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador not found")
+        existing = await db.execute(
+            select(User).where(
+                User.trabajador_id == update_data["trabajador_id"], User.id != user_id
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ese trabajador ya está vinculado a otro usuario",
+            )
 
     for field, value in update_data.items():
         setattr(user, field, value)

@@ -30,6 +30,10 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole
     finca: Finca = Finca.media_agua
+    # Vincula esta cuenta a su ficha de Trabajador (catálogo de campo) --
+    # solo relevante para operarios/regadores que van a confirmar sus propias
+    # órdenes de aplicación desde mobile.
+    trabajador_id: str | None = None
 
 
 class UserCreate(UserBase):
@@ -49,6 +53,7 @@ class UserUpdate(BaseModel):
     finca: Finca | None = None
     is_active: bool | None = None
     password: Annotated[str, Field(min_length=8)] | None = None
+    trabajador_id: str | None = None
 
     @field_validator("username")
     @classmethod
