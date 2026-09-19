@@ -18,7 +18,7 @@ from app.models.finanzas import (
     OrigenPago,
     TipoEgreso,
 )
-from app.models.produccion import CultivoCosecha, RegistroCosecha
+from app.models.produccion import CultivoCosecha, OrigenCosecha, RegistroCosecha
 from app.models.user import User
 from app.schemas.finanzas import (
     CostoPorKgResponse,
@@ -472,11 +472,14 @@ async def dashboard_costo_por_kg(
         egresos_stmt = egresos_stmt.where(Egreso.finca == finca)
     costo_total: Decimal = (await db.execute(egresos_stmt)).scalar_one()
 
-    # Solo uva (vid) -- excluye chacra/alfalfa/otros cultivos secundarios que
-    # comparten la misma tabla. RegistroCosecha no tiene columna de finca
+    # Solo uva (vid) propia -- excluye chacra/alfalfa/otros cultivos secundarios
+    # que comparten la misma tabla, y excluye origen=tercero (materia prima
+    # comprada para pasa, sin costo de producción propio: mezclarla acá
+    # diluiría el costo/kg real). RegistroCosecha no tiene columna de finca
     # propia (ni Parcela), así que este total no se puede acotar por finca.
     kg_stmt = select(func.coalesce(func.sum(RegistroCosecha.kg_total), 0)).where(
         RegistroCosecha.cultivo == CultivoCosecha.vid,
+        RegistroCosecha.origen == OrigenCosecha.propio,
         RegistroCosecha.fecha >= fecha_desde,
         RegistroCosecha.fecha <= fecha_hasta,
     )

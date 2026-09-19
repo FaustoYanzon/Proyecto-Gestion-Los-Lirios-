@@ -3,6 +3,7 @@ import api from '@/lib/api'
 export type CultivoCosecha = 'vid' | 'chacra' | 'ind_pasa' | 'alfalfa' | 'otro'
 export type DestinoCosecha = 'MI' | 'BODEGA' | 'EXPO' | 'PASAS' | 'RAMA_PASA' | 'SEMILLA' | 'DESC' | 'FARDO'
 export type TipoEnvase = 'caja' | 'bin' | 'chasis' | 'ficha' | 'vin' | 'bolsa' | 'otro'
+export type OrigenCosecha = 'propio' | 'tercero'
 
 export interface RegistroCosechaResponse {
   id: string
@@ -13,6 +14,8 @@ export interface RegistroCosechaResponse {
   parcela_nombre: string | null
   cultivo: CultivoCosecha
   variedad: string | null
+  origen: OrigenCosecha
+  proveedor_tercero: string | null
   n_remito: string | null
   n_ciu: string | null
   destino: DestinoCosecha
@@ -36,6 +39,8 @@ export interface RegistroCosechaCreate {
   parcela_id?: string | null
   cultivo?: CultivoCosecha
   variedad?: string | null
+  origen?: OrigenCosecha
+  proveedor_tercero?: string | null
   n_remito?: string | null
   n_ciu?: string | null
   destino: DestinoCosecha
@@ -109,6 +114,11 @@ export const ENVASE_LABELS: Record<TipoEnvase, string> = {
   otro: 'Otro',
 }
 
+export const ORIGEN_LABELS: Record<OrigenCosecha, string> = {
+  propio: 'Propio',
+  tercero: 'Tercero (materia prima comprada)',
+}
+
 export async function getCosechas(params?: {
   fecha_desde?: string
   fecha_hasta?: string
@@ -116,6 +126,7 @@ export async function getCosechas(params?: {
   parcela_id?: string
   destino?: DestinoCosecha
   cultivo?: CultivoCosecha
+  origen?: OrigenCosecha
   skip?: number
   limit?: number
 }): Promise<RegistroCosechaResponse[]> {

@@ -29,6 +29,7 @@ from app.models.produccion import (
     EstadoCampana,
     EstadoFenologico,
     EstadoVariedadCampana,
+    OrigenCosecha,
     RegistroCosecha,
     RegistroFitosanitario,
     RegistroRiego,
@@ -1631,6 +1632,7 @@ async def list_cosecha(
     parcela_id: str | None = Query(None),
     destino: DestinoCosecha | None = Query(None),
     cultivo: CultivoCosecha | None = Query(None),
+    origen: OrigenCosecha | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
@@ -1649,6 +1651,8 @@ async def list_cosecha(
         stmt = stmt.where(RegistroCosecha.destino == destino)
     if cultivo is not None:
         stmt = stmt.where(RegistroCosecha.cultivo == cultivo)
+    if origen is not None:
+        stmt = stmt.where(RegistroCosecha.origen == origen)
     stmt = stmt.offset(skip).limit(limit)
 
     records = list((await db.execute(stmt)).scalars().all())

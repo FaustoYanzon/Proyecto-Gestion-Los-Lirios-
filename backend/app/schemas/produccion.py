@@ -15,6 +15,7 @@ from app.models.produccion import (
     EstadoFenologico,
     EstadoOrdenAplicacion,
     EstadoOrdenAplicacionParcela,
+    OrigenCosecha,
     OrigenOrdenAplicacion,
     TipoEnvase,
     UnidadMedida,
@@ -550,6 +551,8 @@ class RegistroCosechaBase(BaseModel):
     parcela_id: str | None = None
     cultivo: CultivoCosecha = CultivoCosecha.vid
     variedad: str | None = None
+    origen: OrigenCosecha = OrigenCosecha.propio
+    proveedor_tercero: str | None = None
     n_remito: str | None = None
     n_ciu: str | None = None
     destino: DestinoCosecha
@@ -576,6 +579,8 @@ class RegistroCosechaUpdate(BaseModel):
     parcela_id: str | None = None
     cultivo: CultivoCosecha | None = None
     variedad: str | None = None
+    origen: OrigenCosecha | None = None
+    proveedor_tercero: str | None = None
     n_remito: str | None = None
     n_ciu: str | None = None
     destino: DestinoCosecha | None = None

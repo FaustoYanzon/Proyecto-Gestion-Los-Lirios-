@@ -709,6 +709,15 @@ class TipoEnvase(str, enum.Enum):
     otro = "otro"
 
 
+class OrigenCosecha(str, enum.Enum):
+    """Distingue uva propia (cosechada en parcelas de Los Lirios) de materia
+    prima comprada a terceros para industria de pasa -- necesario para no
+    diluir KPIs de rendimiento/costo propio (ver dashboard_costo_por_kg en
+    finanzas.py) con kg que no salieron de un parral propio."""
+    propio = "propio"
+    tercero = "tercero"
+
+
 class RegistroCosecha(Base):
     __tablename__ = "registros_cosecha"
 
@@ -726,6 +735,15 @@ class RegistroCosecha(Base):
         SAEnum(CultivoCosecha), nullable=False, default=CultivoCosecha.vid
     )
     variedad: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    origen: Mapped[OrigenCosecha] = mapped_column(
+        SAEnum(OrigenCosecha),
+        default=OrigenCosecha.propio,
+        server_default=OrigenCosecha.propio.value,
+        nullable=False,
+    )
+    # Solo tiene sentido cuando origen=tercero -- nombre del productor/finca
+    # que vendió la materia prima (no es un parcela_id propio).
+    proveedor_tercero: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     n_remito: Mapped[str | None] = mapped_column(String(50), nullable=True)
     n_ciu: Mapped[str | None] = mapped_column(String(50), nullable=True)

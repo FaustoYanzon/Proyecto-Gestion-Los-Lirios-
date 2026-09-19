@@ -273,6 +273,97 @@ agregación server-side — si el volumen de una sola campaña llega a superar
 `getFlujoMensual`/`/finanzas/flujo-anual/`, que si agrega server-side, pero no
 tiene desglose por tipo/cliente todavía).
 
+---
+
+## Cosecha histórica 2024/2025 y 2025/2026 (reintento) — `migrate_cosecha_2024_2026.py`
+
+Generado 2026-09-19 desde `C:\claude-projects\Produccion.xlsx` (611 filas, hoja
+única). Reemplaza el intento de julio (`cosechas.csv` arriba, 591 filas) que
+Fausto borró el 2026-07-17 porque "los números no cuadraban" (ver
+`borrar_migracion_excel.py`) — sin bug de código identificado en ese momento,
+solo una decisión de datos para reanalizar y recargar después. Esta vez se
+identificaron y corrigieron dos problemas concretos del script anterior:
+
+1. **Terceros matcheados a parcelas propias por nombre de variedad.** El
+   script de julio resolvía `parcela_id` solo por el nombre en la columna
+   PARRAL/POTRERO (ej. "SULTANINA" → Parral Sult.), sin mirar el `ORIGEN`.
+   Uva **comprada a terceros** para industria de pasa (166 filas, FINCA=nombre
+   del productor tercero) quedaba mezclada con el rendimiento del parral
+   propio del mismo nombre. Ahora `RegistroCosecha` tiene columnas nuevas
+   `origen` (`propio`/`tercero`) y `proveedor_tercero` (migración de esquema
+   `a106b068b59a`) — origen=tercero **siempre** carga con `parcela_id NULL`,
+   sin excepción, y el KPI `dashboard_costo_por_kg` (`finanzas.py`) ahora
+   filtra `origen=propio` para no diluir el costo real con kilos comprados.
+   El formulario de Cosecha en la app ya tiene el campo Origen/Proveedor para
+   que esto se cargue directo ahí las próximas temporadas.
+2. **Temporada derivada de la fecha partía en dos una misma campaña.** La
+   convención mayo→abril del sistema separaba la "cola" de venta de pasa que
+   sigue hasta jul/ago (o dic) en una temporada "2026" que no es una campaña
+   real (286.960 kg mal ubicados). Ahora `temporada = TEMP del Excel - 1`,
+   que mantiene unida cada campaña tal como la registra la planilla.
+
+### Cobertura
+
+**598 de 609 filas activas** (2 ANULADO excluidas de entrada), limpio en
+2 temporadas — sin la temporada fantasma que daba el método anterior:
+
+| Temporada | Filas | Kg |
+|---|---|---|
+| 2024 (campaña 2024/2025) | 299 | 2.307.137 |
+| 2025 (campaña 2025/2026) | 299 | 2.555.211 |
+
+Por origen: 437 filas propias (313 matchean a una de las 37 parcelas
+existentes = 71%; el resto suma a kg totales, no a kg/ha, mismo criterio que
+julio) + 161 filas de terceros (proveedor_tercero=FINCA del Excel,
+parcela_id NULL siempre).
+
+**11 filas excluidas** (sin dato real que migrar):
+- 8 sin fecha y sin kg: `RETIRA BINES` / `TELA PRESTAMO R SARMIENTO` —
+  préstamo/retiro de envases, no un evento de cosecha.
+- 1 con fecha pero sin ningún dato de peso (remito 8955, Parral 14, Aspirant,
+  destino Bodega) — Fausto no cargó el peso todavía.
+- 2 con CAJA/BIN contado (550 y 512, remito 815039, Media Agua/BN/Bonarda)
+  pero KG TOTAL=0 y sin destino/comprador — cosecha contada, sin cerrar.
+
+### Correcciones puntuales (confirmadas con Fausto)
+
+- 2 filas (remito 70111845, Caucete/Superior) con fecha 23/12/2026 — futuro
+  imposible (hoy 2026-09-19), ya señalado como "posible typo" en julio y
+  nunca corregido. Corregidas a **23/12/2025** (un año antes, encaja en el
+  rango real dic-2025/ago-2026 de esa misma temporada).
+- 3 filas con kg real pero sin fecha en el Excel (2 Alfalfa semilla ~1.850 kg,
+  1 pasa Flame 2.520 kg) — cargadas con una **fecha aleatoria reproducible**
+  (semilla fija `RANDOM_SEED=20260919`) dentro del rango real de fechas de su
+  propia temporada, a pedido de Fausto ("cargalos dentro de la temporada que
+  corresponde y poneles una fecha al azar en ese rango"). Quedan marcadas en
+  `observaciones`.
+- REMITO/CIU en 0 → NULL (antes se guardaba el string "0" literal).
+
+### Mapeo de parcelas
+
+Igual que `migrate_excels.py` de julio (catálogo de 37 parcelas sin cambios):
+números → `Parral N`/`Potrero N`; SULTANINA→Parral Sult.; SY RG/SY-RG/RG-SY→
+Parral SYR-RG; BN→Parral Bond. Nuevo; BV→Parral Bond. Viejo. Sin matchear a
+propósito (quedan `parcela_id NULL`, suman a kg totales no a kg/ha): FLAME
+(9 parrales posibles), PASERO/M PASERO (3 paseros posibles), SUPERIOR (finca
+Caucete, sin parcela en la app), GALPON, y dos códigos numéricos raros
+(`45781`, `46146`) que parecen fechas de Excel mal tipeadas pero corresponden
+a variedades ya ambiguas (Alfalfa GL, Fiesta) — mismo tratamiento que si
+dijeran el nombre de la variedad directamente.
+
+### Verificación (producción, 2026-09-19)
+
+- Migración de esquema `a106b068b59a` aplicada antes de cargar datos.
+- `registros_cosecha`: 598 filas, 4.862.348 kg — exacto contra lo calculado
+  por el propio script antes de insertar.
+- 0 filas `origen=tercero` con `parcela_id` no nulo (chequeo explícito
+  post-carga).
+- Probado primero en `backend/.env` (staging) con un insert/lectura de ida y
+  vuelta antes de tocar producción; sin browser disponible en la sesión para
+  click-through visual del formulario nuevo.
+
+---
+
 ### Backfill: mayo-agosto 2025 tampoco tenía Egreso vinculado
 
 Mismo problema que tuvo abril 2026 en la migración anterior (ver

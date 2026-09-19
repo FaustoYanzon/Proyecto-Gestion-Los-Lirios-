@@ -10,9 +10,9 @@ import { Plus, Pencil, Trash2, X, Download, ChevronLeft, ChevronRight } from 'lu
 import {
   getCosechas, createCosecha, updateCosecha, deleteCosecha,
   getCosechaTotales, getCosechaResumenPorParcela, getCosechaResumenPorSemana,
-  DESTINO_LABELS, CULTIVO_LABELS, ENVASE_LABELS,
+  DESTINO_LABELS, CULTIVO_LABELS, ENVASE_LABELS, ORIGEN_LABELS,
   type RegistroCosechaResponse, type RegistroCosechaCreate,
-  type CultivoCosecha, type DestinoCosecha, type TipoEnvase,
+  type CultivoCosecha, type DestinoCosecha, type TipoEnvase, type OrigenCosecha,
 } from '@/lib/api/cosecha'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
 import { useContextStore, campanaToAnio } from '@/store/contextStore'
@@ -43,6 +43,8 @@ interface FormState {
   parcela_id: string
   cultivo: CultivoCosecha
   variedad: string
+  origen: OrigenCosecha
+  proveedor_tercero: string
   n_remito: string
   n_ciu: string
   destino: DestinoCosecha | ''
@@ -64,6 +66,8 @@ const EMPTY_FORM: FormState = {
   parcela_id: '',
   cultivo: 'vid',
   variedad: '',
+  origen: 'propio',
+  proveedor_tercero: '',
   n_remito: '',
   n_ciu: '',
   destino: '',
@@ -100,10 +104,11 @@ function KpiCard({ label, value, color }: { label: string; value: string; color:
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
 function exportCSV(data: RegistroCosechaResponse[], temporada: number) {
-  const headers = ['Fecha', 'Parral', 'Variedad', 'Destino', 'Cuadrilla', 'Envase', 'Cant. Envases', 'Kg Total', 'N° Remito', 'N° CIU', 'Comprador']
+  const headers = ['Fecha', 'Origen', 'Parral / Proveedor', 'Variedad', 'Destino', 'Cuadrilla', 'Envase', 'Cant. Envases', 'Kg Total', 'N° Remito', 'N° CIU', 'Comprador']
   const rows = data.map((r) => [
     r.fecha,
-    r.parcela_nombre ?? '',
+    ORIGEN_LABELS[r.origen] ?? r.origen,
+    r.origen === 'tercero' ? (r.proveedor_tercero ?? '') : (r.parcela_nombre ?? ''),
     r.variedad ?? '',
     DESTINO_LABELS[r.destino] ?? r.destino,
     r.cuadrilla ?? '',
@@ -228,6 +233,8 @@ export default function CosechaPage() {
       parcela_id: r.parcela_id ?? '',
       cultivo: r.cultivo,
       variedad: r.variedad ?? '',
+      origen: r.origen,
+      proveedor_tercero: r.proveedor_tercero ?? '',
       n_remito: r.n_remito ?? '',
       n_ciu: r.n_ciu ?? '',
       destino: r.destino,
@@ -261,9 +268,11 @@ export default function CosechaPage() {
     try {
       const payload: RegistroCosechaCreate = {
         fecha: form.fecha,
-        parcela_id: form.parcela_id || null,
+        parcela_id: form.origen === 'tercero' ? null : (form.parcela_id || null),
         cultivo: form.cultivo,
         variedad: form.variedad || null,
+        origen: form.origen,
+        proveedor_tercero: form.origen === 'tercero' ? (form.proveedor_tercero || null) : null,
         n_remito: form.n_remito || null,
         n_ciu: form.n_ciu || null,
         destino: form.destino,
@@ -470,7 +479,13 @@ export default function CosechaPage() {
                 {pagedCosechas.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtFecha(r.fecha)}</td>
-                    <td className="px-4 py-2.5 text-gray-600">{r.parcela_nombre ?? '–'}</td>
+                    <td className="px-4 py-2.5 text-gray-600">
+                      {r.origen === 'tercero' ? (
+                        <span title={r.proveedor_tercero ?? ''} className="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                          Tercero{r.proveedor_tercero ? `: ${r.proveedor_tercero}` : ''}
+                        </span>
+                      ) : (r.parcela_nombre ?? '–')}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-500">{r.variedad ?? '–'}</td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${destinoBadgeCls(r.destino)}`}>
@@ -588,18 +603,44 @@ export default function CosechaPage() {
                 </div>
 
                 <div>
-                  <label className={labelCls}>Parcela</label>
+                  <label className={labelCls}>Origen</label>
                   <select
-                    value={form.parcela_id}
-                    onChange={e => setForm(f => ({ ...f, parcela_id: e.target.value }))}
+                    value={form.origen}
+                    onChange={e => setForm(f => ({ ...f, origen: e.target.value as OrigenCosecha }))}
                     className={inputCls}
                   >
-                    <option value="">Sin parcela</option>
-                    {parcelas.filter(p => p.is_active).map(p => (
-                      <option key={p.id} value={p.id}>{formatParcelaLabel(p.nombre)}</option>
+                    {(Object.entries(ORIGEN_LABELS) as [OrigenCosecha, string][]).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
                 </div>
+
+                {form.origen === 'tercero' ? (
+                  <div>
+                    <label className={labelCls}>Proveedor Tercero</label>
+                    <input
+                      type="text"
+                      value={form.proveedor_tercero}
+                      onChange={e => setForm(f => ({ ...f, proveedor_tercero: e.target.value }))}
+                      placeholder="Ej: Vicente P."
+                      className={inputCls}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className={labelCls}>Parcela</label>
+                    <select
+                      value={form.parcela_id}
+                      onChange={e => setForm(f => ({ ...f, parcela_id: e.target.value }))}
+                      className={inputCls}
+                    >
+                      <option value="">Sin parcela</option>
+                      {parcelas.filter(p => p.is_active).map(p => (
+                        <option key={p.id} value={p.id}>{formatParcelaLabel(p.nombre)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className={labelCls}>Cultivo</label>
