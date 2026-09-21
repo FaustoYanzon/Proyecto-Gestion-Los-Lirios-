@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Circle } from 'lucide-react'
+import { Check, Circle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getIngresos, updateIngreso, type IngresoResponse } from '@/lib/api/ingresos'
+
+const PAGE_SIZE = 10
 
 // ─── Seguimiento de cheques ─────────────────────────────────────────────────
 // Vista filtrada de Ingresos (forma_pago = cheque/echeque). uso_cheque vacío
@@ -65,6 +67,7 @@ export default function ChequesPage() {
   const queryClient = useQueryClient()
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todos')
   const [comprador, setComprador] = useState('')
+  const [page, setPage] = useState(1)
 
   const { data: cheques = [], isLoading } = useQuery({
     queryKey: ['ingresos-cheques'],
@@ -91,6 +94,11 @@ export default function ChequesPage() {
       return true
     })
   }, [cheques, estadoFiltro, comprador])
+
+  useEffect(() => { setPage(1) }, [filtrados])
+
+  const totalPages = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE))
+  const pagedCheques = filtrados.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const disponiblesCount = cheques.filter((c) => !c.uso_cheque || c.uso_cheque.trim() === '').length
   const montoDisponibleArs = cheques
@@ -176,7 +184,7 @@ export default function ChequesPage() {
                   </td>
                 </tr>
               ) : (
-                filtrados.map((c) => {
+                pagedCheques.map((c) => {
                   const disponible = !c.uso_cheque || c.uso_cheque.trim() === ''
                   return (
                     <tr key={c.id} className="hover:bg-gray-50 transition-colors">
@@ -213,6 +221,29 @@ export default function ChequesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {!isLoading && totalPages > 1 && (
+          <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-sm">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={14} /> Anterior
+            </button>
+            <span className="text-xs text-gray-500">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtrados.length)} de {filtrados.length}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Siguiente <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
