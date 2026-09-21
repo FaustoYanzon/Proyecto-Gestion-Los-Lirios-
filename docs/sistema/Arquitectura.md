@@ -39,6 +39,9 @@ repo/
 | `clima.py` | `/clima` | Open-Meteo vía `services/clima.py`, cache 30 min en tabla `clima_cache`. **Existe desde hace meses pero nunca se registró en `main.py` hasta 2026-08-10** — el endpoint daba 404 en producción todo ese tiempo, ver [[Bugs Conocidos]]. Al registrar el router, verificar siempre que quede en `app.include_router(...)` en `main.py` y el modelo en `app/models/__init__.py` — ningún test cubre eso hoy. |
 | `alertas.py` | `/alertas` | Desde 2026-08-10. Solo `GET /descartadas` y `POST /descartar` — las alertas en sí se calculan en el frontend (`Alertas.tsx`) a partir de datos ya existentes (riego, carencia, fenología), este endpoint solo guarda qué `alerta_id` se descartó (48h, tabla `alertas_descartadas`, compartida entre usuarios). |
 | `trazabilidad.py` | `/trazabilidad` | Desde 2026-09-02. Ficha por parcela: `GET /parcela/{id}/historial` (agrega riego/fito/tareas/cosecha/ciclo de campaña/fotos/análisis + semáforo de carencia real, no solo contra "hoy") y `GET /parcela/{id}/carta-pdf` (misma data, renderizada a PDF). CRUD de `fotos`/`analisis` (tablas nuevas `fotos_parcela`/`analisis_calidad`). Ver sección dedicada abajo. |
+| `insumos.py` | `/insumos` | Desde 2026-09-08. Catálogo de productos (`Insumo`) con stock (`stock_actual`) y reposición manual (`POST /{id}/movimientos`, tabla `movimientos_stock`). El descuento automático por aplicación real vive en `produccion.py` (fitosanitarios), no acá. Ver sección dedicada abajo. |
+| `plan_fitosanitario.py` | `/plan-fitosanitario` | Desde 2026-09-08. Plan de aplicación por temporada (`PlanFitosanitario`, cargado a mano, variedad real por variedad) + `GET /cumplimiento` y `GET /necesidad-stock` (matching automático contra `RegistroFitosanitario`, sin vínculo manual). Ver sección dedicada abajo. |
+| `ordenes_aplicacion.py` | `/ordenes-aplicacion` | Desde 2026-09-17 (deploy 2026-09-19). Órdenes ejecutables (desde una fila del plan o "extra") que el operario confirma desde mobile con su propio usuario — `POST /desde-plan`, `POST /` (extra), `GET /pendientes` (scope por finca), `POST /{orden}/parcelas/{item}/confirmar`, `POST /parcelas/{item}/fotos`. Ver sección dedicada abajo. |
 
 ## Ciclo de Campaña — dos sistemas separados a propósito (desde 2026-07-22)
 
@@ -54,6 +57,24 @@ repo/
 - **Logo:** el backend no tiene acceso al filesystem del frontend en producción (Railway despliega solo `backend/`) — el logo vive copiado en `backend/app/assets/logo.png`, no referenciado desde `frontend/public/`.
 - Datos institucionales (razón social, CUIT, domicilio) hardcodeados en `backend/app/core/empresa.py` — no hay modelo de "Empresa" todavía (esa pantalla de Documentación sigue en placeholder).
 - Detalle completo de la sesión: [[2026-09-02-trazabilidad-fase-0-1-2]].
+
+## Insumos, stock y plan fitosanitario (desde 2026-09-08)
+
+- **Stock ligado a `RegistroFitosanitario`, no a un módulo aparte.** `Insumo.stock_actual` se descuenta/revierte automáticamente en el mismo `create`/`update`/`delete` de `POST /produccion/fitosanitarios/` — `cantidad_total = dosis_por_ha × superficie_ha` de la parcela, congelada en el registro (igual criterio que otros campos "frozen at write time" del proyecto). `MovimientoStock` es el ledger auditable (1:1 con el `RegistroFitosanitario` que lo generó vía `registro_fitosanitario_id` único cuando no es null).
+- **`dosis_lt_ha` renombrado a `dosis_por_ha`** en la misma migración que agregó `insumo_id`/`unidad`/`cantidad_total` — varios productos reales son en kg, no L/ha. El rename usa `alter_column`, no drop+add, para no perder la dosis de los registros históricos.
+- **`PlanFitosanitario` es una lista abierta de eventos por `(temporada, variedad)`, no un valor único** — a diferencia de `MetaProduccion` (un kg_plan por parcela+temporada, upsert-by-key), acá puede haber varios productos en la misma ronda. CRUD fila por fila, más parecido a `RegistroFitosanitario`/`Insumo` que a Metas. Creación soporta `variedades: list[VariedadUva]` (crea una fila por variedad marcada, todas independientes después) — así se carga una vez el mismo producto/dosis para varias variedades sin perder la granularidad real por variedad.
+- **Cumplimiento sin vínculo manual, por decisión explícita de Fausto** (no tocar el formulario de Fitosanitarios ya validado): `_calcular_cumplimiento()` en `plan_fitosanitario.py` cruza variedad de la parcela + insumo + fecha dentro de la ventana de campaña (mayo→abril). Cuando el mismo insumo tiene varias rondas planificadas, la N-ésima aplicación real de ese insumo en una parcela (por orden cronológico) cubre la N-ésima ronda — heurística, no infalible si las rondas se aplican fuera de orden. La misma función alimenta `GET /cumplimiento` (por fila del plan) y `GET /necesidad-stock` (agregado por insumo, para saber cuánto falta comprar).
+- Combobox de producto (`InsumoSelect.tsx` web / `InsumoPicker.tsx` mobile) reusa el mismo patrón "elegí de la lista o agregá con doble verificación" ya establecido para Trabajador — ver [[2026-09-07-normalizacion-trabajadores-combobox]].
+- Detalle completo de la sesión: [[2026-09-08-fertilizantes-stock-fitosanitarios]].
+
+## Órdenes de aplicación fitosanitaria (desde 2026-09-17, deploy 2026-09-19)
+
+- **La confirmación del operario no crea una tabla paralela** — genera un `RegistroFitosanitario` real (`OrdenAplicacionParcela.registro_fitosanitario_id`), reusando el descuento de stock y el cálculo de carencia/reingreso de la sección de arriba. Consecuencia directa, sin desarrollo extra: la ficha de trazabilidad por parcela y el cumplimiento plan-vs-real ya leen `RegistroFitosanitario` por `parcela_id`/fecha, así que las aplicaciones confirmadas por orden aparecen ahí solas.
+- **Pool abierto, sin asignación nominal** (decisión de diseño explícita): cualquier operario activo de la finca ve todas las órdenes pendientes y confirma lo que efectivamente aplicó — no hay "orden asignada a Juan". Agregar eso requeriría un campo `asignado_a` en `OrdenAplicacionParcela`.
+- **Cantidad y producto fijos al confirmar** — el operario solo agrega observaciones y fotos opcionales, nunca cambia lo que la orden ya fijó.
+- **`User.trabajador_id`** (FK nullable única a `trabajadores.id`) resuelve `responsable_id` al confirmar sin pedírselo al operario. Los operarios de campo no tenían login propio antes de esto (solo una fila en el catálogo `Trabajador`) — **dar de alta sus cuentas `User` sigue pendiente**, es un paso de datos aparte, no bloqueante para el resto del sistema.
+- Fotos van a Cloudinary (`fotos_ordenes_aplicacion/{orden_parcela_id}/...`, mismo patrón REST firmado que avatares/fotos de parcela) — en la base solo queda el `secure_url`.
+- Detalle completo de la sesión: [[2026-09-17-ordenes-aplicacion-fitosanitaria]].
 
 ## Mobile — wizards de carga
 
@@ -129,6 +150,9 @@ python -m app.api.seed_parcelas        # seed parcelas
 
 ## Ver también
 
+- [[2026-09-17-ordenes-aplicacion-fitosanitaria]]
+- [[2026-09-08-fertilizantes-stock-fitosanitarios]]
+- [[2026-09-07-normalizacion-trabajadores-combobox]]
 - [[2026-09-02-trazabilidad-fase-0-1-2]]
 - [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]]
 - [[2026-07-17-riegos-en-curso-mapa-y-limpieza-de-datos]]
