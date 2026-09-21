@@ -5,10 +5,10 @@ import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, Cell, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, AreaChart, Area,
 } from 'recharts'
-import { AlertTriangle, Leaf } from 'lucide-react'
-import { getEstadoActual, VARIEDAD_LABELS } from '@/lib/api/produccion'
+import { AlertTriangle } from 'lucide-react'
+import { VARIEDAD_LABELS } from '@/lib/api/produccion'
 import { getAlertasCarencia } from '@/lib/api/fitosanitarios'
 import {
   getCosechaTotales,
@@ -21,13 +21,11 @@ import {
   getKpiProduccionVariedades,
 } from '@/lib/api/kpis'
 import type { ProduccionParcelaKpi } from '@/lib/api/kpis'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio, useContextStore } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+const AVAILABLE_YEARS = buildCampanas().map(campanaToAnio)
 
 const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua' }
 
@@ -44,20 +42,6 @@ const VARIEDAD_COLORS: Record<string, string> = {
   otro: '#a09584',
 }
 const varColor = (v: string | null): string => VARIEDAD_COLORS[v ?? 'otro'] ?? '#a09584'
-
-const FENOLOGIA_LABELS: Record<string, string> = {
-  brotacion: 'Brotación', floracion: 'Floración', cuaje: 'Cuaje',
-  envero: 'Envero', madurez: 'Madurez', cosecha: 'Cosecha', latencia: 'Latencia',
-}
-const FENOLOGIA_STYLES: Record<string, string> = {
-  brotacion:  'bg-lime-100 text-lime-800',
-  floracion:  'bg-yellow-100 text-yellow-800',
-  cuaje:      'bg-orange-100 text-orange-800',
-  envero:     'bg-amber-100 text-amber-800',
-  madurez:    'bg-green-100 text-green-800',
-  cosecha:    'bg-red-100 text-red-800',
-  latencia:   'bg-gray-100 text-gray-600',
-}
 
 // ── Small UI pieces ───────────────────────────────────────────────────────────
 
@@ -101,18 +85,9 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProduccionDashboardPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
   const finca = useContextStore((s) => s.finca)
-  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
+  const [anio, setAnio] = useCampanaAnio()
   const [variedadFilter, setVariedadFilter] = useState<string>('todas')
-
-  // Ajustado durante el render (no en un useEffect) para no disparar
-  // cascading renders — ver react-hooks/set-state-in-effect.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setAnio(campanaToAnio(campanaGlobal))
-  }
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -144,12 +119,6 @@ export default function ProduccionDashboardPage() {
     queryKey: ['cosecha-semanas', anio - 1],
     queryFn: () => getCosechaResumenPorSemana(anio - 1),
     staleTime: 300_000,
-  })
-
-  const { data: estadoActualRaw = [] } = useQuery({
-    queryKey: ['estado-actual'],
-    queryFn: getEstadoActual,
-    staleTime: 120_000,
   })
 
   const { data: alertasCarencia = [] } = useQuery({
@@ -269,16 +238,29 @@ export default function ProduccionDashboardPage() {
     [parcelasFiltradas],
   )
 
-  const estadoActual = useMemo(() => {
-    const map = new Map<string, (typeof estadoActualRaw)[0]>()
-    for (const item of estadoActualRaw) {
-      const prev = map.get(item.parcela_id)
-      if (!prev || (item.fecha_estado ?? '') > (prev.fecha_estado ?? '')) {
-        map.set(item.parcela_id, item)
-      }
-    }
-    return Array.from(map.values())
-  }, [estadoActualRaw])
+  // Progresión semanal (movido acá desde la pestaña Cosecha) — kg por semana
+  // sin acumular, sólo de la temporada seleccionada.
+  const progresionSemanal = useMemo(
+    () => [...semanasActual].sort((a, b) => a.semana - b.semana).map((s) => ({ semana: `S${s.semana}`, kg_total: s.kg_total })),
+    [semanasActual],
+  )
+
+  // Kg por origen (propio vs. tercero) — de dónde vienen los kilos de la
+  // temporada. Viene de cosechaTotales (todos los registros), no de
+  // parcelasKpi (que sólo incluye cosechas con parcela propia).
+  const origenData = useMemo(
+    () => cosechaTotales?.resumen_por_origen ?? [],
+    [cosechaTotales],
+  )
+
+  // Kg propios = TODO lo cosechado con origen=propio, tenga o no parcela
+  // vinculada (a diferencia de kpis.kgTotal, que sólo cuenta lo que tiene
+  // parcela — ese número sigue siendo la base del kg/ha, que sí necesita
+  // superficie para calcularse).
+  const kgPropios = useMemo(
+    () => origenData.find((o) => o.origen === 'propio')?.kg_total ?? null,
+    [origenData],
+  )
 
   const fmtT = (kg: number) => `${(kg / 1000).toFixed(1)} t`
 
@@ -325,8 +307,17 @@ export default function ProduccionDashboardPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Kg totales" value={fmtT(kpis.kgTotal)} hint={`${kpis.nParcelas} parcelas`} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KpiCard
+          label="Kg totales"
+          value={cosechaTotales ? fmtT(cosechaTotales.kg_total) : '—'}
+          hint="propios + terceros · toda la finca"
+        />
+        <KpiCard
+          label="Kg propios"
+          value={kgPropios != null ? fmtT(kgPropios) : '—'}
+          hint="con y sin parcela vinculada · toda la finca"
+        />
         <KpiCard
           label="Kg/ha promedio"
           value={kpis.kgHa != null ? Math.round(kpis.kgHa).toLocaleString('es-AR') : '—'}
@@ -506,6 +497,54 @@ export default function ProduccionDashboardPage() {
         </ChartCard>
       </div>
 
+      {/* Row 4: progresión semanal (movido desde Cosecha) + origen de los kilos */}
+      <div className="flex gap-5 items-start flex-wrap">
+        <ChartCard title="Progresión Semanal" subtitle={`kg cosechados por semana · ${anio}/${anio + 1} · toda la finca (no filtra por variedad)`} flex="1 1 55%">
+          {progresionSemanal.length === 0 ? (
+            <EmptyChart msg="Sin registros de cosecha con semana cargada" />
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={progresionSemanal} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="semana" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={55} tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}t`} />
+                <Tooltip formatter={(v) => [fmtT(Number(v)), 'Cosechado']} labelFormatter={(l) => `Semana ${l}`}
+                  contentStyle={{ fontSize: 12 }} />
+                <Area type="monotone" dataKey="kg_total" stroke="#2563eb" strokeWidth={2}
+                  fill="#dbeafe" fillOpacity={0.4} dot={{ r: 3, fill: '#2563eb' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Origen de los kilos" subtitle="propio vs. comprado a terceros · toda la finca (no filtra por variedad)" flex="1 1 38%">
+          {origenData.length === 0 || !cosechaTotales || cosechaTotales.kg_total === 0 ? (
+            <EmptyChart msg="Sin cosechas registradas" />
+          ) : (
+            <div className="space-y-3 pt-2">
+              {origenData.map((o) => {
+                const pct = Math.round((o.kg_total / cosechaTotales.kg_total) * 100)
+                const color = o.origen === 'propio' ? '#3f5c3a' : '#c89a3a'
+                return (
+                  <div key={o.origen}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-medium text-gray-700">
+                        {o.origen === 'propio' ? 'Propio' : 'Tercero (comprado)'}
+                      </span>
+                      <span className="text-gray-500">{fmtT(o.kg_total)} · {pct}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3">
+                      <div className="h-3 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="text-xs text-gray-400 pt-1">{cosechaTotales.n_registros} remitos en total</p>
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
       {/* Alertas carencia (operational, kept from previous dashboard) */}
       {alertasCarencia.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -533,37 +572,6 @@ export default function ProduccionDashboardPage() {
           </div>
         </div>
       )}
-
-      {/* Estado fenológico (kept from previous dashboard) */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Leaf size={15} className="text-green-600" />
-          <h3 className="text-sm font-semibold text-gray-700">Estado Fenológico Actual</h3>
-        </div>
-        {estadoActual.length === 0 ? (
-          <p className="text-sm text-gray-400">No hay estados fenológicos registrados</p>
-        ) : (
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {estadoActual.map((e) => (
-              <div key={e.id ?? e.parcela_id} className="flex-shrink-0 bg-gray-50 rounded-lg p-3 border border-gray-200 w-44">
-                <p className="text-sm font-semibold text-gray-800 truncate">{e.parcela_nombre}</p>
-                {e.estado_fenologico ? (
-                  <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${FENOLOGIA_STYLES[e.estado_fenologico] ?? 'bg-gray-100 text-gray-700'}`}>
-                    {FENOLOGIA_LABELS[e.estado_fenologico] ?? e.estado_fenologico}
-                  </span>
-                ) : (
-                  <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
-                    Sin estado
-                  </span>
-                )}
-                <p className="text-xs text-gray-400 mt-1">
-                  {e.fecha_estado ? e.fecha_estado.split('-').reverse().join('/') : '—'}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

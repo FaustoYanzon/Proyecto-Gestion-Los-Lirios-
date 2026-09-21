@@ -1,12 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { MONTHS_SHORT, getFlujoAnual, type FlujoRow } from '@/lib/api/flujo'
 import { TIPO_EGRESO_VALUES } from '@/lib/api/egresos'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio } from '@/store/contextStore'
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -201,16 +200,7 @@ function SkeletonTable() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FlujoPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
-
-  // Ajustado durante el render (no en un useEffect) para no disparar
-  // cascading renders — ver react-hooks/set-state-in-effect.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setAnio(campanaToAnio(campanaGlobal))
-  }
+  const [anio, setAnio] = useCampanaAnio()
 
   const { data, isLoading } = useQuery({
     queryKey: ['flujo-anual', anio],

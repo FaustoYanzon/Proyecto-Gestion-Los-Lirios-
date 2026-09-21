@@ -77,12 +77,19 @@ export interface CosechaResumenPorDestino {
   n_registros: number
 }
 
+export interface CosechaResumenPorOrigen {
+  origen: OrigenCosecha
+  kg_total: number
+  n_registros: number
+}
+
 export interface CosechaTotalesResponse {
   temporada: number
   kg_total: number
   n_registros: number
   n_parcelas: number
   resumen_por_destino: CosechaResumenPorDestino[]
+  resumen_por_origen: CosechaResumenPorOrigen[]
 }
 
 export const DESTINO_LABELS: Record<DestinoCosecha, string> = {

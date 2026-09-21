@@ -12,14 +12,13 @@ import {
   getKpiProduccionParcelas, getPresupuestoVsReal,
 } from '@/lib/api/kpis'
 import { getTrabajadores } from '@/lib/api/trabajadores'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+const AVAILABLE_YEARS = buildCampanas().map(campanaToAnio)
 
 const MESES_ORDER = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4]
 const MES_LABELS: Record<number, string> = {
@@ -89,19 +88,18 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ManoObraDashboardPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
+  const [anio, setAnio] = useCampanaAnio()
   const [clasifFilter, setClasifFilter] = useState<string>('todas')
   // Month-range filter as positions in the campaign order (0 = May, 11 = Apr)
   const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
 
-  // Ajustado durante el render (no en un useEffect) para no disparar
-  // cascading renders — ver react-hooks/set-state-in-effect.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setAnio(campanaToAnio(campanaGlobal))
+  // Reinicia el rango de meses al cambiar de campaña (desde este selector o
+  // desde cualquier otro sincronizado). Ajustado durante el render (no en un
+  // useEffect) para no disparar cascading renders.
+  const [prevAnio, setPrevAnio] = useState(anio)
+  if (prevAnio !== anio) {
+    setPrevAnio(anio)
     setMesDesdeIdx(0)
     setMesHastaIdx(11)
   }

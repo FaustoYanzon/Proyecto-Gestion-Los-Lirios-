@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
 import { downloadCartaPdf, getHistorialParcela } from '@/lib/api/trazabilidad'
@@ -48,18 +48,17 @@ export default function TrazabilidadPage() {
   const puedeEditar = !!user && PUEDE_EDITAR_ROLES.includes(user.role)
   const puedeGestionarEnlaces = !!user && PUEDE_GESTIONAR_ENLACES_ROLES.includes(user.role)
 
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
+  const [anio, setAnio] = useCampanaAnio()
   const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
   const [parcelaId, setParcelaId] = useState('')
 
-  // Re-sincroniza con la campaña global elegida en el header -- mismo patrón
-  // "sync on render" (no useEffect) que finanzas/dashboard/page.tsx.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setAnio(campanaToAnio(campanaGlobal))
+  // Reinicia el rango de meses al cambiar de campaña (desde este selector o
+  // desde cualquier otro sincronizado). Ajustado durante el render (no en un
+  // useEffect) para no disparar cascading renders.
+  const [prevAnio, setPrevAnio] = useState(anio)
+  if (prevAnio !== anio) {
+    setPrevAnio(anio)
     setMesDesdeIdx(0)
     setMesHastaIdx(11)
   }

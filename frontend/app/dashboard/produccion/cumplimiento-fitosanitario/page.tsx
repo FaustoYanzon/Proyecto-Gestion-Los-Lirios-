@@ -5,16 +5,16 @@ import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { getCumplimiento } from '@/lib/api/planFitosanitario'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ]
 
-const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 1, DEFAULT_YEAR, DEFAULT_YEAR + 1]
+// aniosAdelante=1: permite ver cumplimiento de la próxima campaña ya
+// planificada, antes de que empiece.
+const AVAILABLE_YEARS = buildCampanas(1).map(campanaToAnio)
 
 const ESTADO_STYLES: Record<string, string> = {
   pendiente: 'bg-amber-50 text-amber-700 border border-amber-200',
@@ -33,17 +33,7 @@ const BAR_COLORS: Record<string, string> = {
 }
 
 export default function CumplimientoFitosanitarioPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
-
-  // Ajustado durante el render (no en un useEffect) — mismo patrón que
-  // plan-fitosanitario/page.tsx y metas/page.tsx.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setTemporada(campanaToAnio(campanaGlobal))
-  }
-
+  const [temporada, setTemporada] = useCampanaAnio()
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
 
   const { data: cumplimiento = [], isLoading: loadingCumplimiento } = useQuery({

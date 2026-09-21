@@ -1,32 +1,25 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area,
-} from 'recharts'
 import { Plus, Pencil, Trash2, X, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   getCosechas, createCosecha, updateCosecha, deleteCosecha,
-  getCosechaTotales, getCosechaResumenPorParcela, getCosechaResumenPorSemana,
+  getCosechaTotales, getCosechaResumenPorSemana,
   DESTINO_LABELS, CULTIVO_LABELS, ENVASE_LABELS, ORIGEN_LABELS,
   type RegistroCosechaResponse, type RegistroCosechaCreate,
   type CultivoCosecha, type DestinoCosecha, type TipoEnvase, type OrigenCosecha,
 } from '@/lib/api/cosecha'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+const AVAILABLE_YEARS = buildCampanas().map(campanaToAnio)
 
 const KG_FMT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
 
 function fmtKg(n: number): string { return KG_FMT.format(n) }
-function fmtTon(n: number): string { return `${(n / 1000).toFixed(1)}t` }
 function fmtFecha(iso: string): string { return iso.split('-').reverse().join('/') }
 
 function destinoBadgeCls(destino: DestinoCosecha): string {
@@ -139,8 +132,7 @@ const COSECHA_PAGE_SIZE = 10
 
 export default function CosechaPage() {
   const qc = useQueryClient()
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
+  const [temporada, setTemporada] = useCampanaAnio()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -148,25 +140,11 @@ export default function CosechaPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [cosechaPage, setCosechaPage] = useState(1)
 
-  // Ajustado durante el render (no en un useEffect) para no disparar
-  // cascading renders — ver react-hooks/set-state-in-effect.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setTemporada(campanaToAnio(campanaGlobal))
-  }
-
   // ── Queries ───────────────────────────────────────────────────────────────
 
   const { data: totales } = useQuery({
     queryKey: ['cosecha-totales', temporada],
     queryFn: () => getCosechaTotales(temporada),
-    staleTime: 60_000,
-  })
-
-  const { data: porParcela = [] } = useQuery({
-    queryKey: ['cosecha-parcelas', temporada],
-    queryFn: () => getCosechaResumenPorParcela(temporada),
     staleTime: 60_000,
   })
 
@@ -212,11 +190,6 @@ export default function CosechaPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const parcelaSorted = useMemo(
-    () => [...porParcela].sort((a, b) => b.kg_total - a.kg_total),
-    [porParcela]
-  )
-  const barHeight = Math.max(200, parcelaSorted.length * 32 + 40)
   const semanasActivas = porSemana.length
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -257,7 +230,6 @@ export default function CosechaPage() {
   function invalidateAll() {
     qc.invalidateQueries({ queryKey: ['cosecha-list'] })
     qc.invalidateQueries({ queryKey: ['cosecha-totales'] })
-    qc.invalidateQueries({ queryKey: ['cosecha-parcelas'] })
     qc.invalidateQueries({ queryKey: ['cosecha-semanas'] })
     qc.invalidateQueries({ queryKey: ['cosecha-mapa'] })
   }
@@ -367,78 +339,6 @@ export default function CosechaPage() {
           value={String(semanasActivas)}
           color="gray"
         />
-      </div>
-
-      {/* Charts */}
-      <div className="flex gap-5 items-start">
-
-        {/* Kg por parcela */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5" style={{ flex: '0 0 55%' }}>
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Kg por Parral</h3>
-          {parcelaSorted.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Sin datos para la campaña</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={barHeight}>
-              <BarChart
-                data={parcelaSorted}
-                layout="vertical"
-                margin={{ top: 0, right: 60, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 10 }}
-                  tickFormatter={fmtTon}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="parcela_nombre"
-                  tick={{ fontSize: 11, fill: '#374151' }}
-                  width={120}
-                />
-                <Tooltip
-                  formatter={(v, _n, props) => [
-                    `${fmtKg(Number(v))} kg (${props.payload?.n_registros ?? 0} remitos)`,
-                    props.payload?.parcela_nombre ?? '',
-                  ]}
-                  contentStyle={{ fontSize: 12 }}
-                />
-                <Bar dataKey="kg_total" fill="#16a34a" radius={[0, 4, 4, 0]} maxBarSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Kg por semana */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5" style={{ flex: '0 0 45%' }}>
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Progresión Semanal</h3>
-          {porSemana.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Sin datos para la campaña</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, barHeight)}>
-              <AreaChart data={porSemana} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="semana" tickFormatter={v => `S${v}`} tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={fmtTon} tick={{ fontSize: 11 }} width={55} />
-                <Tooltip
-                  formatter={(v) => [`${fmtKg(Number(v))} kg`, 'Cosechado']}
-                  labelFormatter={l => `Semana ${l}`}
-                  contentStyle={{ fontSize: 12 }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="kg_total"
-                  stroke="#2563eb"
-                  strokeWidth={2}
-                  fill="#dbeafe"
-                  fillOpacity={0.4}
-                  dot={{ r: 3, fill: '#2563eb' }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
       </div>
 
       {/* Table */}

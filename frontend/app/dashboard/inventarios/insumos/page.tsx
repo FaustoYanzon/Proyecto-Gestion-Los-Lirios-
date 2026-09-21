@@ -17,7 +17,7 @@ import {
 } from '@/lib/api/insumos'
 import { getNecesidadStock } from '@/lib/api/planFitosanitario'
 import { useAuthStore } from '@/store/authStore'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 const TIPO_TABS: { value: TipoInsumo; label: string }[] = [
   { value: 'fitosanitario', label: 'Insumos Fitosanitarios' },
@@ -30,9 +30,9 @@ const TIPO_LABELS: Record<TipoInsumo, string> = {
   riego: 'Riego',
 }
 
-const now = new Date()
-const DEFAULT_TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_TEMPORADAS = [DEFAULT_TEMPORADA - 1, DEFAULT_TEMPORADA, DEFAULT_TEMPORADA + 1]
+// aniosAdelante=1: permite ver necesidad de stock de la próxima campaña ya
+// planificada, antes de que empiece.
+const AVAILABLE_TEMPORADAS = buildCampanas(1).map(campanaToAnio)
 
 function descargarCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const escape = (v: string | number) => {
@@ -293,15 +293,7 @@ export default function InsumosAdminPage() {
   const currentUser = useAuthStore((s) => s.user)
   const isEncargadoUp = ['super_admin', 'gerencial', 'encargado', 'regador'].includes(currentUser?.role ?? '')
 
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
-  // Ajustado durante el render (no en un useEffect) — mismo patrón que
-  // plan-fitosanitario/page.tsx y cumplimiento-fitosanitario/page.tsx.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setTemporada(campanaToAnio(campanaGlobal))
-  }
+  const [temporada, setTemporada] = useCampanaAnio()
 
   const { data: insumos = [], isLoading } = useQuery({
     queryKey: ['insumos-admin'],

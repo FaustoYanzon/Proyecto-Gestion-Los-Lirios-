@@ -11,14 +11,12 @@ import { TIPO_EGRESO_LABELS, getCostoPorKg } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
 import { getPresupuestoVsReal, getKpiCompradores } from '@/lib/api/kpis'
 import { getResumenIva } from '@/lib/api/arca'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio, useContextStore } from '@/store/contextStore'
 import MesRangeQuickButtons from '@/components/finanzas/MesRangeQuickButtons'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 2, DEFAULT_YEAR - 1, DEFAULT_YEAR]
+const AVAILABLE_YEARS = buildCampanas().map(campanaToAnio)
 
 const FINCA_LABELS: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua' }
 
@@ -75,23 +73,21 @@ const EmptyChart = ({ msg }: { msg: string }) => (
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FinanceDashboardPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
   const finca = useContextStore((s) => s.finca)
-  const [anio, setAnio] = useState(() => campanaToAnio(campanaGlobal))
+  const [anio, setAnio] = useCampanaAnio()
   const [moneda, setMoneda] = useState<'ars' | 'usd'>('ars')
   // Month-range filter expressed as positions in the campaign order (0 = May, 11 = Apr)
   const [mesDesdeIdx, setMesDesdeIdx] = useState(0)
   const [mesHastaIdx, setMesHastaIdx] = useState(11)
   const [tipoFilter, setTipoFilter] = useState<string>('todos')
 
-  // Re-sincroniza con la campaña elegida en el selector global del header —
-  // reinicia al rango completo de esa campaña, el usuario puede volver a
+  // Reinicia el rango de meses al cambiar de campaña (desde este selector o
+  // desde cualquier otro selector sincronizado) — el usuario puede volver a
   // acotarlo localmente después con los controles de abajo. Ajustado durante
   // el render (no en un useEffect) para no disparar cascading renders.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setAnio(campanaToAnio(campanaGlobal))
+  const [prevAnio, setPrevAnio] = useState(anio)
+  if (prevAnio !== anio) {
+    setPrevAnio(anio)
     setMesDesdeIdx(0)
     setMesHastaIdx(11)
   }

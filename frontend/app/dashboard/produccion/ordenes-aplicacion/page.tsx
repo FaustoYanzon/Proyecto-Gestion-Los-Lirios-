@@ -17,7 +17,7 @@ import { getPlanFitosanitario, type PlanFitosanitario } from '@/lib/api/planFito
 import { getParcelas, VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
 import type { InsumoResponse } from '@/lib/api/insumos'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 
 const MESES = [
@@ -26,8 +26,9 @@ const MESES = [
 ]
 
 const now = new Date()
-const DEFAULT_YEAR = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const AVAILABLE_YEARS = [DEFAULT_YEAR - 1, DEFAULT_YEAR, DEFAULT_YEAR + 1]
+// aniosAdelante=1: permite cargar órdenes de la próxima campaña antes de
+// que empiece.
+const AVAILABLE_YEARS = buildCampanas(1).map(campanaToAnio)
 const TODAY = now.toISOString().split('T')[0]
 
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
@@ -457,14 +458,7 @@ function OrdenCard({ orden }: { orden: OrdenAplicacion }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function OrdenesAplicacionPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const [temporada, setTemporada] = useState(() => campanaToAnio(campanaGlobal))
-
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setTemporada(campanaToAnio(campanaGlobal))
-  }
+  const [temporada, setTemporada] = useCampanaAnio()
 
   const currentUser = useAuthStore((s) => s.user)
   const puedeCrear = currentUser

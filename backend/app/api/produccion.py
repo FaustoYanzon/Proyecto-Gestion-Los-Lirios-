@@ -46,6 +46,7 @@ from app.schemas.produccion import (
     CicloCampanaResponse,
     CicloCampanaUpdate,
     CosechaResumenPorDestino,
+    CosechaResumenPorOrigen,
     CosechaResumenPorParcela,
     CosechaResumenPorSemana,
     CosechaTotalesResponse,
@@ -1526,12 +1527,15 @@ async def cosecha_totales(
     records = list((await db.execute(stmt)).scalars().all())
 
     by_destino: dict[str, dict] = defaultdict(lambda: {"kg": 0.0, "n": 0})
+    by_origen: dict[str, dict] = defaultdict(lambda: {"kg": 0.0, "n": 0})
     parcelas_set: set[str | None] = set()
     total_kg = 0.0
 
     for r in records:
         by_destino[r.destino.value]["kg"] += r.kg_total
         by_destino[r.destino.value]["n"] += 1
+        by_origen[r.origen.value]["kg"] += r.kg_total
+        by_origen[r.origen.value]["n"] += 1
         parcelas_set.add(r.parcela_id)
         total_kg += r.kg_total
 
@@ -1543,6 +1547,10 @@ async def cosecha_totales(
         resumen_por_destino=[
             CosechaResumenPorDestino(destino=d, kg_total=round(v["kg"], 2), n_registros=v["n"])
             for d, v in sorted(by_destino.items(), key=lambda x: x[1]["kg"], reverse=True)
+        ],
+        resumen_por_origen=[
+            CosechaResumenPorOrigen(origen=o, kg_total=round(v["kg"], 2), n_registros=v["n"])
+            for o, v in sorted(by_origen.items(), key=lambda x: x[1]["kg"], reverse=True)
         ],
     )
 

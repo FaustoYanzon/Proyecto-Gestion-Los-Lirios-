@@ -50,6 +50,7 @@ export interface FitosanitarioFilter {
   fecha_hasta?: string
   parcela_id?: string
   producto_nombre?: string
+  limit?: number
 }
 
 export async function getFitosanitarios(params: FitosanitarioFilter): Promise<FitosanitarioResponse[]> {

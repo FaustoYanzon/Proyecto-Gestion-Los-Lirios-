@@ -15,7 +15,7 @@ import {
 } from '@/lib/api/preciosTarea'
 import { TAREAS_POR_TEMPORADA, UNIDAD_VALUES, UNIDAD_LABELS, type UnidadMedida } from '@/lib/api/produccion'
 import { listParcelasAdmin } from '@/lib/api/parcelas'
-import { useContextStore, campanaToAnio } from '@/store/contextStore'
+import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
@@ -221,20 +221,10 @@ function EditPrecioForm({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DocumentacionPreciosPage() {
-  const campanaGlobal = useContextStore((s) => s.campana)
-  const temporadaDefault = campanaToAnio(campanaGlobal)
-  const [temporada, setTemporada] = useState(temporadaDefault)
+  const [temporada, setTemporada] = useCampanaAnio()
   const [tareaFilter, setTareaFilter] = useState<string>('')
   const [modal, setModal] = useState<'create' | { edit: PrecioTareaResponse } | null>(null)
   const queryClient = useQueryClient()
-
-  // Re-sincroniza con la campaña del selector global -- ajustado durante el
-  // render, no en un useEffect, ver react-hooks/set-state-in-effect.
-  const [prevCampanaGlobal, setPrevCampanaGlobal] = useState(campanaGlobal)
-  if (prevCampanaGlobal !== campanaGlobal) {
-    setPrevCampanaGlobal(campanaGlobal)
-    setTemporada(temporadaDefault)
-  }
 
   const { data: precios = [], isLoading } = useQuery({
     queryKey: ['precios-tarea', temporada, tareaFilter],
@@ -281,7 +271,7 @@ export default function DocumentacionPreciosPage() {
           onChange={(e) => setTemporada(Number(e.target.value))}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]"
         >
-          {[temporadaDefault - 2, temporadaDefault - 1, temporadaDefault, temporadaDefault + 1].map((a) => (
+          {buildCampanas(1).map(campanaToAnio).map((a) => (
             <option key={a} value={a}>{a}/{a + 1}</option>
           ))}
         </select>

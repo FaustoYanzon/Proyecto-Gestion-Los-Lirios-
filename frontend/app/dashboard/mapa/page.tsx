@@ -1,14 +1,16 @@
 'use client'
 
 import FincaMap from '@/components/map/FincaMap'
+import { useContextStore } from '@/store/contextStore'
 
 export default function MapaPage() {
+  const campana = useContextStore((s) => s.campana)
   return (
     <div className="flex flex-col h-full gap-3">
       <div className="flex-shrink-0">
         <h1 className="text-2xl font-semibold text-[#1f1a17]">Mapa de Finca</h1>
         <p className="text-sm text-[#a09584] mt-0.5">
-          Hacé clic en una parcela para ver sus detalles.
+          Hacé clic en una parcela para ver sus detalles · Campaña {campana}
         </p>
       </div>
       <div

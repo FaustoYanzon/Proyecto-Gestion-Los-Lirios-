@@ -8,6 +8,7 @@ import { getFlujoDesglose, MONTHS_SHORT } from '@/lib/api/flujo'
 import type { FlujoDesgloseRow } from '@/lib/api/flujo'
 import { TIPO_EGRESO_LABELS, TIPO_EGRESO_VALUES } from '@/lib/api/egresos'
 import type { TipoEgreso } from '@/lib/api/egresos'
+import { useCampanaAnio } from '@/store/contextStore'
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -25,20 +26,19 @@ const AVAILABLE_YEARS = Array.from({ length: DEFAULT_YEAR - 2020 + 1 }, (_, i) =
 
 export default function DesgloseEgresoPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ tipo: string }>
-  searchParams: Promise<{ anio?: string }>
 }) {
   const { tipo } = use(params)
-  const sp = use(searchParams)
   const router = useRouter()
 
   const tipoKey = tipo as TipoEgreso
   const isValidTipo = (TIPO_EGRESO_VALUES as readonly string[]).includes(tipoKey)
   const tipoLabel = isValidTipo ? (TIPO_EGRESO_LABELS[tipoKey] ?? tipo) : tipo
 
-  const [anio, setAnio] = useState(Number(sp.anio ?? DEFAULT_YEAR))
+  // Sincronizado con el selector global — se entra acá desde Flujo Anual, que
+  // ya muestra la misma campaña elegida en el header.
+  const [anio, setAnio] = useCampanaAnio()
   const [allOpen, setAllOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({

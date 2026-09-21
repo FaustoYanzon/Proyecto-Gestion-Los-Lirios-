@@ -631,9 +631,16 @@ class CosechaResumenPorDestino(BaseModel):
     n_registros: int
 
 
+class CosechaResumenPorOrigen(BaseModel):
+    origen: OrigenCosecha
+    kg_total: float
+    n_registros: int
+
+
 class CosechaTotalesResponse(BaseModel):
     temporada: int
     kg_total: float
     n_registros: int
     n_parcelas: int
     resumen_por_destino: list[CosechaResumenPorDestino]
+    resumen_por_origen: list[CosechaResumenPorOrigen]
