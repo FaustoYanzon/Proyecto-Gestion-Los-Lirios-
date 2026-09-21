@@ -256,6 +256,93 @@ en su propia transacción — un corte solo pierde la tanda en curso, y el
 reintento salta lo ya commiteado por `idempotency_key` (rápido, no repite todo
 desde cero).
 
+## BD Cobros (ingresos) — `migrate_bd_cobros.py`
+
+Generado 2026-09-21 desde `C:\claude-projects\BD Cobros.xlsx` (tabla principal,
+300 filas). La tabla `ingresos` se había rediseñado en julio (`c1d3f7a9e2b4`)
+para calzar 1 a 1 con esta planilla (destino/comprador/forma_pago/banco/
+n_cheque/f_pago/uso_cheque) — los 259 cobros migrados en esa fecha bajo el
+esquema viejo se habían descartado a propósito, así que producción tenía
+`ingresos` vacía antes de correr este script; sin riesgo de duplicar nada
+cargado a mano.
+
+### Cobertura
+
+**299 de 300 filas** (1 duplicado exacto excluido, ver abajo), ARS
+1.460.485.561,33. Columnas N-Q de la planilla (~14 filas sueltas, JV/BRIX/
+CAVAS, EF/TRANSF/EF U$) son una tabla sin relación con cobros — confirmado
+con Fausto, no se migran.
+
+| Destino | ARS |
+|---|---|
+| Pasa | 960.418.902,92 |
+| Uva de mesa | 282.383.398,86 |
+| Bodega | 158.626.705,94 |
+| Alfalfa | 40.823.253,61 |
+| Alquiler | 10.500.000,00 |
+| Cebolla | 6.930.000,00 |
+| Sandía | 3.303.300,00 |
+
+### Decisiones tomadas (confirmadas con Fausto)
+
+- **`fecha` = fecha real de cobro** (columna FECHA del Excel), sin forzar la
+  campaña de venta del kg — aunque el kg sea de la temporada pasada, si se
+  cobró en esta temporada el registro cae acá. La temporada se deriva sola de
+  esa fecha con la convención mayo→abril del sistema (igual que en toda la
+  app); `vw_kpi_comprador` ya separa kg entregado (por temporada de cosecha)
+  de $ cobrado (por temporada de cobro) como dos ejes distintos, así que un
+  desfasaje kg-vs-cobro entre temporadas es esperado, no un bug.
+- **`origen` se espeja de `estado`**: FACT→facturado→oficial, NR→no_registrado
+  →no_oficial. El Excel no trae `origen` directo (antes de julio era el único
+  campo de este tipo y sí se cargaba desde ESTADO; ahora que `estado` tiene su
+  propia columna, se mantuvo el mismo criterio para `origen`).
+- **`finca` = `media_agua`** por defecto en las 300 filas — el Excel no la
+  registra, mismo criterio que ingresos/egresos de julio.
+- **Moneda: todo ARS.** Ninguna fila de la tabla principal está marcada en
+  USD (a diferencia de la tablita N-Q descartada, que sí tenía una fila
+  "EF U$").
+- **`UEFECTIVO` → `efectivo`** (ARS), mismo criterio que julio.
+- **1 typo de fecha corregido**: fila 183 (PASA/VIZCAINO), FECHA y F PAGO en
+  2026-12-18 encajada entre dos pagos de dic-2025 del mismo comprador —
+  corregida a 2025-12-18 (mismo patrón que el typo ya visto en la migración
+  de Cosecha).
+- **`fuente='bd_cobros_import'`** en las 299 filas, para poder identificarlas/
+  auditarlas o revertir la carga si hiciera falta.
+
+### 1 duplicado exacto excluido (confirmado con Fausto)
+
+Filas 24 y 82: CARRASCOSA, 22/02/2025, $2.500.000, TRANSF, cuenta MP CAMILO —
+idénticas en las 13 columnas (sin cheque/f_pago/detalle que las distinga).
+Fausto confirmó que es un error de carga en la planilla (una sola
+transferencia tipeada dos veces) — se cargó solo una.
+
+### Bug propio de este script, encontrado y corregido en la misma corrida
+
+La primera pasada con `--commit` usó una clave de "ya existe" demasiado
+angosta (fecha+comprador+monto+forma_pago+n_cheque) y salteó 21 filas como
+falsos duplicados — 20 de ellas eran pagos reales distintos que el chequeo no
+distinguía: cheques/echeques de un mismo comprador/monto divididos en varias
+cuotas con igual fecha pero distinto `f_pago`/`uso_cheque` (ej. MILLAN
+$2.427.294 en 6 depósitos entre jul-dic 2025; MILLAN $1.324.040 en 5 cuotas
+jun-nov 2026; CEGUPA $337.000 en 7 cuotas), y transferencias del mismo monto
+por cuentas distintas el mismo día (CARRASCOSA, CAJA vs MP CAMILO). La clave
+se amplió para incluir también `cuenta_destino`/`f_pago`/`uso_cheque` antes de
+la segunda corrida — reintentar con `--commit` es seguro (idempotente), no
+duplica lo ya insertado en la primera pasada.
+
+### Verificación (producción, 2026-09-21)
+
+- `ingresos`: 299 filas, ARS 1.460.485.561,33 — exacto contra 300 filas del
+  Excel menos el duplicado excluido ($2.500.000).
+- Pantalla de Cheques (`forma_pago` cheque/echeque, `uso_cheque` vacío): 23
+  cheques disponibles, ARS 59.818.015,42 — verificado por query directa, sin
+  browser disponible en la sesión para click-through visual.
+- Distribución por temporada derivada (mayo→abril): 2024/2025 → 112 filas/
+  ARS 173.905.725,92 · 2025/2026 → 129 filas/ARS 974.217.078,94 · 2026/2027
+  (parcial, en curso) → 58 filas/ARS 312.362.756,47.
+
+---
+
 ### Bug encontrado (no es de esta migración, pero esta migración lo expuso): `limit=1000` en Flujo Anual
 
 `frontend/lib/api/flujo.ts` (`getFlujoAnual`/`getFlujoDesglose`) trae TODOS los
