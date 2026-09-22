@@ -256,6 +256,112 @@ en su propia transacción — un corte solo pierde la tanda en curso, y el
 reintento salta lo ya commiteado por `idempotency_key` (rápido, no repite todo
 desde cero).
 
+## Jornales — hueco 29/08/2025 a 26/03/2026 — `migrate_jornales_gap_sep25_mar26.py`
+
+Generado 2026-09-22 desde `C:\claude-projects\JORNALES 2.xlsx`, que Fausto
+confirmó que es el mismo archivo que `JORNALES (1).xlsx` (116 hojas
+idénticas, ya migradas) más 30 hojas semanales nuevas que cierran el hueco
+entre esa migración (terminaba 22/08/2025) y `migrate_jornales.py` (arranca
+01/04/2026) — verificado contra producción antes de migrar: 0 filas en
+`registros_trabajo` y 0 en `egresos` clasificacion='obreros' en todo el
+rango.
+
+No duplica código: `migrate_jornales_gap_sep25_mar26.py` importa
+`migrate_jornales_historicos.py` como módulo y parchea sus globals
+(`EXCEL_PATH`, `TEMPORADAS`, `EXPLICIT_TAREA_RULES`, `NOMBRE_MAP`,
+`NUEVOS_TRABAJADORES`, `parse_sheet`) antes de llamar a su `main()` — mismo
+parser/reglas de nombre-tarea que la migración histórica (mismo autor de
+planilla, mismo formato de hoja). Los nombres de las 30 hojas nuevas no se
+solapan con las 116 viejas, así que el filtro de fecha en `main()` ya
+excluye las hojas repetidas sin pasar una lista a mano.
+
+### Cobertura
+
+**30 semanas, 1.242 filas, ARS 109.153.407,53** (29/08/2025 a 20/03/2026).
+`crea_egreso=True` para todo el rango (no había ningún Egreso agregado
+previo para jornales en este tramo). Línea de tiempo de `registros_trabajo`
+verificada continua mes a mes desde junio 2023 hasta hoy, sin ningún hueco.
+
+| Tarea | ARS | Filas |
+|---|---|---|
+| Jornal Comun | 55.941.000 | 646 |
+| Cosecha | 16.037.333 | 167 |
+| Raleo | 11.180.015 | 96 |
+| Tractor Cosecha | 10.372.034 | 75 |
+| Mover Pasa | 5.227.000 | 41 |
+| Pasero | 4.980.018 | 150 |
+| Atada | 2.983.000 | 31 |
+| Poda | 2.268.000 | 31 |
+| Control Cosecha | 165.007 | 5 |
+
+### Decisiones tomadas (confirmadas con Fausto, sesión 2026-09-22)
+
+- **6 etiquetas de tarea nuevas** (170 filas, vocabulario de la cosecha
+  feb-mar 2026, fuera del catálogo de la migración histórica): "COSECHA UVA
+  (PARA) PASA" y "COSECHA UVA (PARA) VINIFICAR" → Cosecha/verano/sin parcela
+  (mismo criterio que "COSECHA UVA FLAME"/"COSECHA UVA BONARDA" ya
+  existentes). "MOVER(PASA) Y/PARA VINES (LLENOS)" → tarea nueva propia
+  "Mover Pasa"/verano/sin parcela (no se reparte entre los 3 paseros como
+  "Pasero" -- acción distinta, mismo criterio que "Amontonar Pasa"/"Levantar
+  Pasa", ya separadas de Pasero).
+- **Hoja "12-12-2025" sin encabezado**: le faltaban las 3 filas de header
+  (SEMANA/subtítulos/tarea) que sí tiene el resto, pero los 36 registros de
+  trabajador de abajo ($2.640.000) estaban completos y con el mismo layout
+  de columnas. Se reconstruyeron las 3 filas faltantes en memoria (fecha =
+  nombre de hoja, todo bajo "Trabajo General") y se reusó `parse_sheet` sin
+  tocarlo -- no se perdió el jornal real de esa semana.
+- **Hoja "24-10-2025" con typo de fecha**: su celda SEMANA decía 31/10/2025,
+  lo que hubiera duplicado la semana del 31/10 (hoja separada, ya limpia y
+  consistente, ARS 2.725.000) y dejado la semana real del 24/10 sin ningún
+  registro. El nombre de hoja + la secuencia semanal (7 días exactos después
+  de 17-10, 7 antes de 31-10) confirman que es la semana del 24/10 -- se
+  forzó esa fecha, ignorando el valor de la celda.
+- **Nombres**: Celeste/Elias/Rubén/David/Diego Flores/Leonel Flores/Oscar
+  Flores ya estaban en el catálogo con otra ortografía (sin acento, o
+  ausentes por completo del `NOMBRE_MAP` de la migración histórica --
+  aparecían solo en las tareas de cosecha que antes estaban sin mapear).
+  "Luis F"/"Leonel F"/"Oscar F" → mismo patrón de abreviatura que "LUIS
+  FUERTE"→"Luis" de la migración histórica. **Isidro** (9 filas, 4 semanas
+  seguidas de Raleo) se creó como trabajador nuevo. **"Marcelo"** (3 filas,
+  semanas 14/21/28-nov-2025) y **"Marcelo Diaz"** (6 filas, semanas
+  24/31-oct y 7-nov-2025, nunca se superponen con "Marcelo") se fusionaron
+  en un solo trabajador nuevo "Marcelo Diaz" -- el patrón temporal (semanas
+  consecutivas, nunca ambos a la vez) confirma que es la misma persona.
+  Walter, Luciano, Axel, Ismael, "Diego C", Eduardo y "Peña Eduardo" quedan
+  sin vincular (texto libre, sin crear trabajador ni fusionar con "Antonio
+  Peña" ya existente) -- apariciones sueltas (≤9 veces), mismo criterio que
+  la migración histórica.
+- **4 semanas con diferencia > $1 vs. "TOTAL DE DINERO" declarado por la
+  propia planilla**: 12-9-2025 (-$7.000) y 17-10-2025 (-$3.000) son ruido
+  menor ya visto en la migración histórica. 24-10-2025 (-$536.500) y
+  19-2-2026 (+$2.798.000, la más grande: la fórmula de la planilla no
+  llegaba a cubrir las secciones de Cosecha/Mover Pasa agregadas más abajo
+  esa semana) se migran con el **total calculado** (suma de líneas de
+  trabajador, auditable), mismo criterio que toda la migración histórica.
+
+### Corte de conexión durante la carga — reintento sin pérdida
+
+El primer `--commit` se cortó a los 600/1.242 registros por el mismo
+problema ya documentado (conexión pública de Railway, `ConnectionReset
+Error` a mitad de una tanda de 150). La tanda en curso al momento del corte
+se revirtió sola (transacción por tanda). Un segundo `--commit` retomó
+desde ahí vía `idempotency_key` y completó las 642 filas restantes sin
+duplicar nada -- verificado antes y después contra producción.
+
+### Verificación (producción, 2026-09-22)
+
+- `registros_trabajo`: 1.242 filas, ARS 109.153.407,53 -- exacto contra el
+  dry run.
+- `egresos` con `fuente='trabajo_diario'` en el rango: 1.242, misma suma.
+- 2 trabajadores nuevos creados (Isidro, Marcelo Diaz), confirmado en el
+  catálogo.
+- 30 fechas de semana distintas en el rango, sin huecos (29/08/2025 a
+  20/03/2026).
+- Línea de tiempo mensual completa de `registros_trabajo` (jun-2023 a
+  sep-2026) verificada sin ningún mes en cero.
+
+---
+
 ## BD Cobros (ingresos) — `migrate_bd_cobros.py`
 
 Generado 2026-09-21 desde `C:\claude-projects\BD Cobros.xlsx` (tabla principal,
