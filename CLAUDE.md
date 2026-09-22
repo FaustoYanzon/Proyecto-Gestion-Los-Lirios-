@@ -86,6 +86,9 @@ Live documentation maintained in Obsidian (`C:\Boveda Los Lirios`), linked into 
 
 Read the relevant file before working on a task in that area. These files are the source of truth for decisions already made — do not contradict them without raising the conflict explicitly.
 
+## Specialized agents (`.claude/agents/`)
+Four subagents with domain-specific conventions pre-loaded — delegate to them via the Agent tool instead of re-deriving conventions from scratch each time: `db-migrations` (Excel→DB historical data loads), `backend-fastapi` (API routes, models, Alembic), `frontend-nextjs` (dashboard web), `mobile-expo` (Expo app, EAS builds). Each file explains when to use it.
+
 ## Regenerating structural docs
 Two scripts keep the structural docs honest instead of hand-maintained (both were stale/missing before 2026-09-22):
 - `scripts/generate_project_map.py` → `PROJECT_MAP.md` (models, routers, migrations, frontend/mobile routes)
