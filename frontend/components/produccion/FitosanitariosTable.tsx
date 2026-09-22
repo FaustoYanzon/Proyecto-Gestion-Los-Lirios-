@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Pencil, Trash2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FitosanitarioResponse } from '@/lib/api/fitosanitarios'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -38,12 +38,7 @@ function SkeletonRow() {
 const PAGE_SIZE = 10
 
 export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
-  const [page, setPage] = useState(1)
-
-  useEffect(() => { setPage(1) }, [registros])
-
-  const totalPages = Math.max(1, Math.ceil(registros.length / PAGE_SIZE))
-  const pagedRegistros = registros.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este registro fitosanitario?')) onDelete(id)

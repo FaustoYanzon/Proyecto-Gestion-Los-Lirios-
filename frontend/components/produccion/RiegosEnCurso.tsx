@@ -14,6 +14,46 @@ function formatTranscurrido(horas: number): string {
   return `${h}h ${m.toString().padStart(2, '0')}m`
 }
 
+interface FilaProps {
+  r: RiegoEnCurso
+  conBoton: boolean
+  parcelaNombre: (id: string) => string
+  terminandoId: string | null
+  onTerminar: (id: string, horas: number, litros: number) => void
+}
+
+// Definido a nivel de módulo (no dentro de RiegosEnCurso) -- una función
+// componente declarada dentro del render de otro componente crea una
+// identidad nueva en cada render, forzando remounts innecesarios.
+function Fila({ r, conBoton, parcelaNombre, terminandoId, onTerminar }: FilaProps) {
+  const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas)
+  return (
+    <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <Droplets size={18} className="text-blue-500 flex-shrink-0" />
+        <div className="text-sm min-w-0">
+          <p className="font-medium text-gray-900 truncate">
+            Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
+          </p>
+          <p className="text-blue-700 font-mono">
+            {formatTranscurrido(horas)}
+            <span className="text-gray-400 font-sans ml-2">{r.responsable}</span>
+          </p>
+        </div>
+      </div>
+      {conBoton && (
+        <button
+          onClick={() => onTerminar(r.id, horas, litros)}
+          disabled={terminandoId === r.id}
+          className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
+        >
+          Terminar
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   parcelaNombre: (id: string) => string
   showTerminar?: boolean
@@ -97,35 +137,6 @@ export default function RiegosEnCurso({
     }
   }
 
-  function Fila({ r, conBoton }: { r: RiegoEnCurso; conBoton: boolean }) {
-    const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas)
-    return (
-      <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Droplets size={18} className="text-blue-500 flex-shrink-0" />
-          <div className="text-sm min-w-0">
-            <p className="font-medium text-gray-900 truncate">
-              Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
-            </p>
-            <p className="text-blue-700 font-mono">
-              {formatTranscurrido(horas)}
-              <span className="text-gray-400 font-sans ml-2">{r.responsable}</span>
-            </p>
-          </div>
-        </div>
-        {conBoton && (
-          <button
-            onClick={() => handleTerminar(r.id, horas, litros)}
-            disabled={terminandoId === r.id}
-            className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors"
-          >
-            Terminar
-          </button>
-        )}
-      </div>
-    )
-  }
-
   if (collapsed) {
     const primero = enCurso[0]
     return (
@@ -138,7 +149,7 @@ export default function RiegosEnCurso({
             <Timer size={16} className="text-blue-600" />
             Riegos en curso ({enCurso.length})
           </h2>
-          <Fila r={primero} conBoton={false} />
+          <Fila r={primero} conBoton={false} parcelaNombre={parcelaNombre} terminandoId={terminandoId} onTerminar={handleTerminar} />
           {enCurso.length > 1 && (
             <p className="text-xs text-[#a09584] pt-2">
               +{enCurso.length - 1} más — ver todos
@@ -152,7 +163,9 @@ export default function RiegosEnCurso({
               <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md mb-2">{error}</p>
             )}
             <div className="space-y-2">
-              {enCurso.map((r) => <Fila key={r.id} r={r} conBoton={showTerminar} />)}
+              {enCurso.map((r) => (
+                <Fila key={r.id} r={r} conBoton={showTerminar} parcelaNombre={parcelaNombre} terminandoId={terminandoId} onTerminar={handleTerminar} />
+              ))}
             </div>
           </BuzonModal>
         )}
@@ -170,7 +183,9 @@ export default function RiegosEnCurso({
         <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md mb-2">{error}</p>
       )}
       <div className="space-y-2">
-        {enCurso.map((r) => <Fila key={r.id} r={r} conBoton={showTerminar} />)}
+        {enCurso.map((r) => (
+                <Fila key={r.id} r={r} conBoton={showTerminar} parcelaNombre={parcelaNombre} terminandoId={terminandoId} onTerminar={handleTerminar} />
+              ))}
       </div>
     </div>
   )

@@ -1,6 +1,5 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   TEMPORADA_LABELS,
@@ -8,6 +7,7 @@ import {
   type RegistroTrabajoResponse,
   type UnidadMedida,
 } from '@/lib/api/produccion'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -54,16 +54,12 @@ function SkeletonRow() {
 const PAGE_SIZE = 10
 
 export default function TareasTable({ registros, total, totalRegistros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
-  const [page, setPage] = useState(1)
   // `registros` viene paginado por el backend (tope 100) -- si hay más
   // registros reales que los cargados, el total real (SQL) puede no
   // coincidir con la suma de lo que se ve en pantalla.
   const hayMasRegistros = totalRegistros != null && totalRegistros > registros.length
 
-  useEffect(() => { setPage(1) }, [registros])
-
-  const totalPages = Math.max(1, Math.ceil(registros.length / PAGE_SIZE))
-  const pagedRegistros = registros.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este registro? También se eliminará el egreso vinculado.')) {

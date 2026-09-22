@@ -173,15 +173,17 @@ export default function FinanceDashboardPage() {
       }
     }
     let acum = 0
-    return base.map((r) => {
+    const result = []
+    for (const r of base) {
       acum += r.ingresoReal - r.egresoReal
-      return {
+      result.push({
         ...r,
         desvioPct: r.egresoPresup > 0 ? ((r.egresoReal - r.egresoPresup) / r.egresoPresup) * 100 : null,
         saldo: r.ingresoReal - r.egresoReal,
         saldoAcum: acum,
-      }
-    })
+      })
+    }
+    return result
   }, [pvrFiltrado, mesDesdeIdx, mesHastaIdx])
 
   const hayPresupuesto = useMemo(() => pvr.some((r) => Number(r.monto_presupuesto) > 0), [pvr])

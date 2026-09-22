@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Circle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getIngresos, updateIngreso, type IngresoResponse } from '@/lib/api/ingresos'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 
 const PAGE_SIZE = 10
 
@@ -67,7 +68,6 @@ export default function ChequesPage() {
   const queryClient = useQueryClient()
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todos')
   const [comprador, setComprador] = useState('')
-  const [page, setPage] = useState(1)
 
   const { data: cheques = [], isLoading } = useQuery({
     queryKey: ['ingresos-cheques'],
@@ -95,10 +95,7 @@ export default function ChequesPage() {
     })
   }, [cheques, estadoFiltro, comprador])
 
-  useEffect(() => { setPage(1) }, [filtrados])
-
-  const totalPages = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE))
-  const pagedCheques = filtrados.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { page, setPage, totalPages, paged: pagedCheques } = usePaginatedList(filtrados, PAGE_SIZE)
 
   const disponiblesCount = cheques.filter((c) => !c.uso_cheque || c.uso_cheque.trim() === '').length
   const montoDisponibleArs = cheques

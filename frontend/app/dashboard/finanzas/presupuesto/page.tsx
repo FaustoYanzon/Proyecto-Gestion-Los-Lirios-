@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
+import { useChangedList } from '@/lib/useChanged'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { NotebookPen, Plus, Save, Loader2, Trash2 } from 'lucide-react'
 import { TIPO_EGRESO_LABELS } from '@/lib/api/egresos'
@@ -53,8 +54,9 @@ export default function PresupuestoPage() {
     staleTime: 60_000,
   })
 
-  // Rebuild drafts + client rows from saved data when season changes
-  useEffect(() => {
+  // Rebuild drafts + client rows from saved data when season changes -- reset
+  // during render (useChangedList), no un efecto con setState síncrono.
+  if (useChangedList(presupuestos)) {
     const next: Drafts = {}
     const cli = new Set<string>()
     for (const p of presupuestos) {
@@ -64,7 +66,7 @@ export default function PresupuestoPage() {
     }
     setDrafts(next)
     setClientes(Array.from(cli).sort())
-  }, [presupuestos])
+  }
 
   // Saved lines indexed for diffing on save
   const savedByCell = useMemo(() => {

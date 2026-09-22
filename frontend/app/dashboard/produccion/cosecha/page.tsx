@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useChanged } from '@/lib/useChanged'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
@@ -138,7 +140,6 @@ export default function CosechaPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
-  const [cosechaPage, setCosechaPage] = useState(1)
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -168,25 +169,30 @@ export default function CosechaPage() {
 
   // ── Auto-compute kg_total ─────────────────────────────────────────────────
 
-  useEffect(() => {
+  // Auto-completar kg_total al tipear envases/peso unitario -- reset de
+  // estado derivado durante el render, no en un efecto (evita el patrón que
+  // React Compiler marca como "setState síncrono dentro de un efecto").
+  const envasesChanged = useChanged(form.cantidad_envases)
+  const pesoUnitChanged = useChanged(form.peso_unitario_kg)
+  if (envasesChanged || pesoUnitChanged) {
     if (form.cantidad_envases != null && form.peso_unitario_kg != null &&
         form.cantidad_envases > 0 && form.peso_unitario_kg > 0) {
       const computed = Math.round(form.cantidad_envases * form.peso_unitario_kg * 100) / 100
       setForm(f => ({ ...f, kg_total: computed }))
     }
-  }, [form.cantidad_envases, form.peso_unitario_kg])
+  }
 
-  useEffect(() => {
+  const brutoChanged = useChanged(form.bruto_kg)
+  const taraChanged = useChanged(form.tara_kg)
+  if (brutoChanged || taraChanged) {
     if (form.bruto_kg != null && form.tara_kg != null && form.bruto_kg > form.tara_kg) {
       const computed = Math.round((form.bruto_kg - form.tara_kg) * 100) / 100
       setForm(f => ({ ...f, kg_total: computed }))
     }
-  }, [form.bruto_kg, form.tara_kg])
+  }
 
-  useEffect(() => { setCosechaPage(1) }, [cosechas])
-
-  const totalCosechaPages = Math.max(1, Math.ceil(cosechas.length / COSECHA_PAGE_SIZE))
-  const pagedCosechas = cosechas.slice((cosechaPage - 1) * COSECHA_PAGE_SIZE, cosechaPage * COSECHA_PAGE_SIZE)
+  const { page: cosechaPage, setPage: setCosechaPage, totalPages: totalCosechaPages, paged: pagedCosechas } =
+    usePaginatedList(cosechas, COSECHA_PAGE_SIZE)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 

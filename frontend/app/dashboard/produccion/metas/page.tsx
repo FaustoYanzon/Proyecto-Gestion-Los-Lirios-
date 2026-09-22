@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
+import { useChangedList } from '@/lib/useChanged'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Target, Trash2, Check, Loader2 } from 'lucide-react'
 import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
@@ -47,12 +48,13 @@ export default function MetasProduccionPage() {
     return map
   }, [metas])
 
-  // Reset drafts when season or saved data changes
-  useEffect(() => {
+  // Reset drafts when season or saved data changes -- durante el render
+  // (useChangedList), no un efecto con setState síncrono.
+  if (useChangedList(metas)) {
     const next: Record<string, string> = {}
     for (const m of metas) next[m.parcela_id] = String(Number(m.kg_plan))
     setDrafts(next)
-  }, [metas])
+  }
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['metas', anio] })

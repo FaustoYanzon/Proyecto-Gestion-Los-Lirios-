@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatHoraLocal, type RiegoResponse } from '@/lib/api/riego'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -44,12 +44,7 @@ function SkeletonRow() {
 const PAGE_SIZE = 10
 
 export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
-  const [page, setPage] = useState(1)
-
-  useEffect(() => { setPage(1) }, [riegos])
-
-  const totalPages = Math.max(1, Math.ceil(riegos.length / PAGE_SIZE))
-  const pagedRiegos = riegos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { page, setPage, totalPages, paged: pagedRiegos } = usePaginatedList(riegos, PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este registro de riego?')) onDelete(id)

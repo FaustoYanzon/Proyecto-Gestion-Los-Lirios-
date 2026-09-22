@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, Cell, LineChart, Line, ScatterChart, Scatter,
@@ -217,11 +217,13 @@ export default function ProduccionDashboardPage() {
     // Carry last cumulative value forward so lines don't drop to gaps
     let lastA: number | null = null
     let lastB: number | null = null
-    return semanas.map((s) => {
+    const result = []
+    for (const s of semanas) {
       lastA = actual.get(s) ?? lastA
       lastB = anterior.get(s) ?? lastB
-      return { semana: `S${s}`, actual: lastA, anterior: lastB }
-    })
+      result.push({ semana: `S${s}`, actual: lastA, anterior: lastB })
+    }
+    return result
   }, [semanasActual, semanasAnterior])
 
   const scatterData = useMemo(
@@ -263,6 +265,21 @@ export default function ProduccionDashboardPage() {
   )
 
   const fmtT = (kg: number) => `${(kg / 1000).toFixed(1)} t`
+
+  // Date.now() no es puro para llamarlo directo en render (rechazado por
+  // react-hooks/static-components/impure-render), y useEffect es el lugar
+  // correcto para leer el reloj del sistema -- pero un efecto que solo hace
+  // setState también choca con react-hooks/set-state-in-effect. Ninguna de
+  // las dos reglas tiene un patrón limpio para "refrescar la hora actual
+  // cuando cambian los datos"; se desactiva puntualmente.
+  // Depende de .length (primitivo), no del array -- `data: alertasCarencia
+  // = []` crea un array nuevo en cada render mientras la query está
+  // cargando, lo que reactivaría este efecto sin parar (y con Date.now()
+  // de por medio, cada disparo generaría un valor distinto, así que nunca
+  // se estabilizaría).
+  const [alertasNow, setAlertasNow] = useState(() => Date.now())
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setAlertasNow(Date.now()) }, [alertasCarencia.length])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -557,7 +574,7 @@ export default function ProduccionDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {alertasCarencia.map((f) => {
               const diasRestantes = Math.ceil(
-                (new Date(f.fecha_habilitacion_cosecha).getTime() - Date.now()) / 86400000,
+                (new Date(f.fecha_habilitacion_cosecha).getTime() - alertasNow) / 86400000,
               )
               const textCls = diasRestantes <= 7 ? 'text-red-700' : diasRestantes <= 15 ? 'text-amber-700' : 'text-green-700'
               return (

@@ -72,6 +72,9 @@ export function ClimateCard() {
       style={{ backgroundColor: '#faf6ec', boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}
     >
       <div className="flex items-center gap-2 mb-3">
+        {/* eslint-disable-next-line react-hooks/static-components -- wmoIcon()
+            only selects among fixed, statically-imported lucide-react icons
+            (never constructs a new component); false positive for this rule. */}
         <Icon size={16} strokeWidth={1.75} color="#3d6b86" />
         <span className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c]">
           Clima — {FINCA_LABELS[finca] ?? finca}
@@ -146,6 +149,9 @@ export function ClimateMini() {
 
   return (
     <span className="flex items-center gap-1.5 text-sm text-[#5a544c]" aria-label="Clima">
+      {/* eslint-disable-next-line react-hooks/static-components -- wmoIcon()
+          only selects among fixed, statically-imported lucide-react icons
+          (never constructs a new component); false positive for this rule. */}
       <Icon size={16} strokeWidth={1.75} color="#3d6b86" />
       {temp}°
     </span>

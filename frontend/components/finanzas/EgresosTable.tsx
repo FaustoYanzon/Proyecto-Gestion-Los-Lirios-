@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   TIPO_EGRESO_LABELS,
   CLASIFICACION_LABELS,
   type EgresoResponse,
 } from '@/lib/api/egresos'
+import { usePaginatedList } from '@/lib/usePaginatedList'
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-')
@@ -65,12 +65,7 @@ function SkeletonRow() {
 const PAGE_SIZE = 10
 
 export default function EgresosTable({ egresos, totalARS, totalUSD, isLoading, onEdit, onDelete }: Props) {
-  const [page, setPage] = useState(1)
-
-  useEffect(() => { setPage(1) }, [egresos])
-
-  const totalPages = Math.max(1, Math.ceil(egresos.length / PAGE_SIZE))
-  const pagedEgresos = egresos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { page, setPage, totalPages, paged: pagedEgresos } = usePaginatedList(egresos, PAGE_SIZE)
 
   function handleDelete(id: string) {
     if (window.confirm('¿Eliminar este egreso? Esta acción no se puede deshacer.')) {

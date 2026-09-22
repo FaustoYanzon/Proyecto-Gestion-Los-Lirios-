@@ -103,10 +103,12 @@ function DireccionSection() {
       }
     }
     let aIR = 0, aIP = 0, aER = 0, aEP = 0
-    return base.map((r) => {
+    const result = []
+    for (const r of base) {
       aIR += r.ingReal; aIP += r.ingPresup; aER += r.egrReal; aEP += r.egrPresup
-      return { label: r.label, 'Ingresos real': aIR, 'Ingresos presup.': aIP, 'Egresos real': aER, 'Egresos presup.': aEP }
-    })
+      result.push({ label: r.label, 'Ingresos real': aIR, 'Ingresos presup.': aIP, 'Egresos real': aER, 'Egresos presup.': aEP })
+    }
+    return result
   }, [pvr])
 
   const hayDatos = pvr.length > 0 || parcelasKpi.length > 0
