@@ -69,12 +69,26 @@ Full structural reference → `PROJECT_MAP.md` in this directory.
 Read it at the start of every session before exploring files.
 
 ## Knowledge base (Obsidian)
-Live documentation maintained in Obsidian, linked into this repo via symlinks at `docs/`:
-- `docs/sistema/Arquitectura.md` — full stack reference, API routes, models, conventions
-- `docs/sistema/Bugs Conocidos.md` — known bugs with impact and fix descriptions
-- `docs/sistema/Stack Técnico.md` — dependency versions and migration history
-- `docs/sistema/Decisiones/` — architectural decision records
-- `docs/proyectos/Dashboards.md` — dashboard status, available API functions, codebase patterns
-- `docs/proyectos/Sistema de Gestión Agrícola.md` — module status and roadmap
+Live documentation maintained in Obsidian (`C:\Boveda Los Lirios`), linked into this repo via symlinks at `docs/`. **Note:** `core.symlinks=false` in this repo (Windows) — git snapshots the vault content as regular tracked files on each commit rather than tracking true symlinks; keep vault edits going through this repo's git history, not edited only in Obsidian, so they don't silently diverge.
+
+- `docs/sistema/` → `01 - Sistema`:
+  - `Arquitectura.md` — full stack reference, API routes, models, conventions
+  - `Modelo de Datos.md` — **auto-generado** (`scripts/generate_modelo_datos.py`), diagramas ER + diccionario de datos desde el esquema real de Postgres. Correr el script de nuevo tras cualquier migración, no editar a mano.
+  - `Bugs Conocidos.md` — known bugs with impact and fix descriptions
+  - `Stack Técnico.md` — dependency versions and migration history
+  - `Decisiones/` — architectural decision records
+  - `Bitácora/` — session-by-session log
+- `docs/finanzas/` → `02 - Finanzas`: Cuentas por Pagar, Flujo de Caja, Presupuesto Anual
+- `docs/produccion/` → `03 - Producción`: Parcelas y Fincas, Tareas Clasificadas, Campañas
+- `docs/proyectos/` → `05 - Proyectos`:
+  - `Dashboards.md` — dashboard status, available API functions, codebase patterns
+  - `Sistema de Gestión Agrícola.md` — module status and roadmap
 
 Read the relevant file before working on a task in that area. These files are the source of truth for decisions already made — do not contradict them without raising the conflict explicitly.
+
+## Regenerating structural docs
+Two scripts keep the structural docs honest instead of hand-maintained (both were stale/missing before 2026-09-22):
+- `scripts/generate_project_map.py` → `PROJECT_MAP.md` (models, routers, migrations, frontend/mobile routes)
+- `scripts/generate_modelo_datos.py` → `docs/sistema/Modelo de Datos.md` (DB schema, ER diagrams, enums)
+
+Run both after adding a model, router, migration, or screen — don't hand-edit either output.

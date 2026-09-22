@@ -1,6 +1,8 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
-> Auto-generated snapshot. Run `generate_map.ps1` to update.
-> Last updated: 2026-06-01
+> Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
+> Última generación: 2026-09-22
+
+Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
 ---
 
@@ -9,192 +11,184 @@
 ```
 repo/
 ├── backend/        FastAPI + PostgreSQL (Python 3.12)
-├── frontend/       Next.js 16 + React 19 (TypeScript)
-└── mobile/         Expo 54 + React Native 0.81 (TypeScript)
+├── frontend/       Next.js + React (TypeScript) — dashboard web
+├── mobile/         Expo + React Native (TypeScript) — app de campo
+├── scripts/        Scripts de mantenimiento, migración de datos, generadores de docs
+└── docs/           Symlinks a la bóveda de Obsidian (C:\Boveda Los Lirios)
 ```
 
-**Communication:** Frontend/Mobile → REST API (FastAPI) → PostgreSQL  
-**Auth:** JWT (python-jose) + bcrypt. Roles: `super_admin > gerencial > encargado > regador > obrero`  
-**Campaign year:** May → April (NOT calendar year)  
+**Comunicación:** Frontend/Mobile → REST API (FastAPI) → PostgreSQL
+**Auth:** JWT (python-jose) + bcrypt. Roles: `super_admin > gerencial > encargado > regador > obrero`
+**Campaña:** mayo → abril (NO año calendario)
 **Fincas:** `los_mimbres`, `media_agua`, `caucete`
 
 ---
 
 ## Backend (`backend/`)
 
-**Stack:** FastAPI · SQLAlchemy 2 (async) · PostgreSQL · Alembic · Pydantic v2 · JWT
+**Modelos:** 16 archivos, 33 clases ORM
 
-### Entry point
-```
-backend/app/main.py          # FastAPI app, router registration, CORS
-backend/app/core/config.py   # Settings (reads .env)
-backend/app/core/database.py # Async engine + get_db session
-backend/app/core/security.py # JWT encode/decode, password hashing
-backend/app/core/seed.py     # Creates super_admin user
-```
+| Archivo | Clases |
+|---|---|
+| `alerta_descartada.py` | AlertaDescartada |
+| `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
+| `clima_cache.py` | ClimaCache |
+| `finanzas.py` | Egreso, Ingreso |
+| `insumo.py` | Insumo, MovimientoStock |
+| `parcela.py` | Parcela |
+| `precio_tarea.py` | PrecioTarea |
+| `presupuesto.py` | Presupuesto, MetaProduccion |
+| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionParcela, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
+| `push_token.py` | PushToken |
+| `termografo.py` | LoteImportacionTermografo, LecturaTermografo |
+| `trabajador.py` | Trabajador |
+| `trazabilidad.py` | Foto, AnalisisCalidad, EnlacePublico |
+| `user.py` | User |
+| `valvula.py` | Valvula |
+| `whatsapp.py` | TelefonoUsuarioWhatsapp, MensajeWhatsappPendiente |
 
-### API Routes (`backend/app/api/`)
-| File | Prefix | Description |
-|------|--------|-------------|
-| `auth.py` | `/auth` | Login, token refresh |
-| `users.py` | `/users` | CRUD usuarios, roles |
-| `parcelas.py` | `/parcelas` | CRUD parcelas + stats |
-| `finanzas.py` | `/finanzas` | Ingresos, egresos, flujo de caja |
-| `produccion.py` | `/produccion` | Tareas, riego, fitosanitarios, campaña |
-| `deps.py` | — | `get_db`, `get_current_user`, `require_*` guards |
-| `seed_parcelas.py` | `/seed` | One-time parcela seed |
+**Routers:** 21
 
-**Rule:** Static sub-routes BEFORE parameterized (`/resumen/por-tipo` before `/{id}`)
+| Archivo | Prefix | Tags |
+|---|---|---|
+| `alertas.py` | `/alertas` | "alertas" |
+| `arca.py` | `/finanzas/arca` | "Finanzas - ARCA" |
+| `auth.py` | `/auth` | "Authentication" |
+| `clima.py` | `/clima` | "clima" |
+| `finanzas.py` | `/finanzas` | "Finanzas" |
+| `insumos.py` | `/insumos` | "Insumos" |
+| `kpis.py` | `/kpis` | "KPIs" |
+| `notificaciones.py` | `/notificaciones` | "notificaciones" |
+| `ordenes_aplicacion.py` | `/ordenes-aplicacion` | "Ordenes Aplicacion" |
+| `parcelas.py` | `/parcelas` | "Parcelas" |
+| `plan_fitosanitario.py` | `/plan-fitosanitario` | "Plan Fitosanitario" |
+| `precios_tarea.py` | `/precios-tarea` | "Precios Tarea" |
+| `presupuestos.py` | `/presupuestos` | "Presupuestos" |
+| `produccion.py` | `/produccion` | "Produccion" |
+| `telefonos_whatsapp.py` | `/admin/telefonos-whatsapp` | "Admin - Teléfonos WhatsApp" |
+| `termografo.py` | `/produccion/termografo` | "Producción - Termógrafo" |
+| `trabajadores.py` | `/trabajadores` | "Trabajadores" |
+| `trazabilidad.py` | `/trazabilidad` | "Trazabilidad" |
+| `users.py` | `/users` | "Users" |
+| `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
+| `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-### Models (`backend/app/models/`)
-| File | Key Tables/Enums |
-|------|-----------------|
-| `user.py` | `User` (id UUID, email, role, finca) |
-| `parcela.py` | `Parcela` (id, nombre, tipo, finca, variedad_uva, superficie) |
-| `finanzas.py` | `Ingreso`, `Egreso` · Enums: `Finca`, `MonedaTipo(ars/usd)`, `TipoEgreso`, `ClasificacionEgreso`, `ProductoIngreso(uva_fresca/pasa/mosto/otro)`, `FormaPago`, `OrigenPago` |
-| `produccion.py` | `Tarea`, `Riego`, `Fitosanitario`, `EstadoCampana` · Dict: `CLASIFICACION_POR_TAREA` |
+**Migraciones de Alembic:** 42 (head: `a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
 
-**Parcela tipos:** `parral` (vineyard), `potrero` (field), `pasero` (drying), `cabezal` (irrigation head)
-
-**Tarea clasificaciones** (auto-derived from dict):
-- `verano`: Cosecha, Tractor Cosecha, Pasero, Levantar Pasa, Control Cosecha, Amontonar Pasa
-- `invierno`: Poda, Atada, Tejido
-- `primavera`: Verde, Brote, Raleo, Polainas, Descole
-- `otono`: Murones
-- `general`: Jornal Comun, Tractor Comun, Riego, Mochila, Limpieza Acequia, etc.
-
-### Schemas (`backend/app/schemas/`)
-Pydantic v2 — mirrors models: `user.py`, `parcela.py`, `finanzas.py`, `produccion.py`
-
-### Coding conventions (critical)
-- All IDs: `UUID` strings (`String(36)`), never int
-- After writes: `await db.flush()` + `await db.refresh(obj)` — never commit inside routers
-- PATCH updates: `model_dump(exclude_unset=True)`
-- Money/quantities: `Decimal`, never `float`
-- No bare `except`. Type hints everywhere.
-
-### Migrations (`backend/app/core/migrations/versions/`)
-| File | Description |
-|------|-------------|
-| `dd81fff4c510_initial_schema.py` | Schema inicial |
-| `1b529f62d678_auth_5roles.py` | Auth + 5 roles |
-| `1cac1b6d2e3d_add_referencia_id_to_egresos.py` | referencia_id en egresos |
-
-**Never hand-edit committed migration files.**
-
-### Dev commands
-```bash
-cd backend
-uvicorn app.main:app --reload          # dev server :8000
-alembic upgrade head                   # run migrations
-python -m app.core.seed                # create super_admin
-python -m app.api.seed_parcelas        # seed parcelas
-```
+**Reglas críticas:**
+- Todos los IDs son UUID strings (`String(36)`), nunca int
+- `await db.flush()` + `await db.refresh(obj)` tras escrituras — nunca commit en routers
+- PATCH: `model_dump(exclude_unset=True)`
+- Plata/cantidades: `Decimal`, nunca `float`
+- Sub-rutas estáticas ANTES que parametrizadas (`/resumen/por-tipo` antes de `/{id}`)
 
 ---
 
 ## Frontend (`frontend/`)
 
-**Stack:** Next.js 16.2.6 · React 19 · TypeScript · TanStack Query v5 · Zustand v5 · Axios · Zod v4 · React Hook Form v7 · Recharts v3 · Leaflet · Lucide React
+**Rutas (39):**
 
-**Important:** This Next.js version may have breaking changes. Read `node_modules/next/dist/docs/` before writing code.
+- `/dashboard/admin/notificaciones`
+- `/dashboard/admin/usuarios`
+- `/dashboard/admin/whatsapp`
+- `/dashboard/documentacion/empresa`
+- `/dashboard/documentacion/fenologia`
+- `/dashboard/documentacion/melgas`
+- `/dashboard/documentacion/parcelas`
+- `/dashboard/documentacion/precios`
+- `/dashboard/documentacion/riego`
+- `/dashboard/documentacion/trabajadores`
+- `/dashboard/finanzas/a-pagar`
+- `/dashboard/finanzas/cheques`
+- `/dashboard/finanzas/dashboard`
+- `/dashboard/finanzas/egresos`
+- `/dashboard/finanzas/flujo/desglose/[tipo]`
+- `/dashboard/finanzas/flujo`
+- `/dashboard/finanzas/ingresos`
+- `/dashboard/finanzas/mano-de-obra`
+- `/dashboard/finanzas/presupuesto`
+- `/dashboard/inventarios/insumos`
+- `/dashboard/inventarios/producto-terminado`
+- `/dashboard/mapa`
+- `/dashboard`
+- `/dashboard/produccion/campana`
+- `/dashboard/produccion/clima`
+- `/dashboard/produccion/cosecha`
+- `/dashboard/produccion/cumplimiento-fitosanitario`
+- `/dashboard/produccion/dashboard`
+- `/dashboard/produccion/fitosanitarios`
+- `/dashboard/produccion/metas`
+- `/dashboard/produccion/ordenes-aplicacion`
+- `/dashboard/produccion/plan-fitosanitario`
+- `/dashboard/produccion/riego`
+- `/dashboard/produccion/tareas`
+- `/dashboard/trazabilidad`
+- `/login`
+- `/`
+- `/privacy`
+- `/trazabilidad/publica/[token]`
 
-### App Router structure (`frontend/app/`)
-```
-app/
-├── page.tsx                           # Root redirect
-├── layout.tsx                         # Root layout
-├── login/page.tsx                     # Login
-└── dashboard/
-    ├── layout.tsx                     # Dashboard shell (sidebar, nav)
-    ├── page.tsx                       # Dashboard home
-    ├── mapa/page.tsx                  # Finca map (Leaflet + KML)
-    ├── finanzas/
-    │   ├── dashboard/page.tsx         # Finanzas overview + charts
-    │   ├── ingresos/page.tsx          # Ingresos table + form
-    │   ├── egresos/page.tsx           # Egresos table + form
-    │   └── flujo/page.tsx             # Flujo de caja
-    ├── produccion/
-    │   ├── dashboard/page.tsx         # Producción overview
-    │   ├── tareas/page.tsx            # Registro de tareas
-    │   ├── riego/page.tsx             # Registro de riego
-    │   ├── fitosanitarios/page.tsx    # Fitosanitarios
-    │   └── mano-de-obra/page.tsx      # Mano de obra
-    └── admin/
-        ├── parcelas/page.tsx          # CRUD parcelas
-        └── usuarios/page.tsx          # CRUD usuarios
-```
+**Módulos de API client** (`frontend/lib/api/`, 25): `alertas.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
 
-### Key files
-| File | Purpose |
-|------|---------|
-| `lib/api.ts` | Axios instance, interceptors, base config |
-| `lib/auth.ts` | Auth helpers, token management |
-| `lib/kml.ts` | KML parser for finca map |
-| `store/authStore.ts` | Zustand auth store |
-| `components/providers.tsx` | TanStack Query + auth provider |
+**Componentes por carpeta:**
 
-### API client modules (`frontend/lib/api/`)
-`egresos.ts` · `ingresos.ts` · `flujo.ts` · `parcelas.ts` · `produccion.ts` · `fitosanitarios.ts` · `riego.ts` · `usuarios.ts`
-
-### Components (`frontend/components/`)
-```
-finanzas/   EgresoForm, EgresosTable, IngresoForm, IngresosTable
-produccion/ FitosanitarioForm, FitosanitariosTable, RiegoForm, RiegoTable, TareaForm, TareasTable
-map/        FincaMap, FincaMapInner
-```
-
-### Assets
-- `public/los-lirios.kml` — KML file with parcela polygons for the map
+- `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
+- `landing/`: Reveal.tsx · VarietyMap.tsx
+- `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
+- `produccion/`: FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TrabajadorSelect.tsx
+- `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
+- `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 
 ---
 
 ## Mobile (`mobile/`)
 
-**Stack:** Expo 54.0.33 · React Native 0.81.5 · TypeScript · Expo Router
+**Pantallas (11):**
 
-**Important:** Read exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing code.
+- `(auth)/login.tsx`
+- `(tabs)/campana.tsx`
+- `(tabs)/cosecha.tsx`
+- `(tabs)/fitosanitario.tsx`
+- `(tabs)/index.tsx`
+- `(tabs)/mapa.tsx`
+- `(tabs)/perfil.tsx`
+- `(tabs)/riego.tsx`
+- `(tabs)/tareas.tsx`
+- `estado-campana.tsx`
+- `fito.tsx`
 
-### Structure
-```
-mobile/
-├── App.tsx
-├── app/
-│   ├── _layout.tsx              # Root layout (auth guard)
-│   ├── (auth)/
-│   │   └── login.tsx            # Login screen
-│   ├── (tabs)/
-│   │   ├── _layout.tsx          # Tab bar
-│   │   ├── index.tsx            # Home / resumen
-│   │   ├── mapa.tsx             # Mapa de parcelas
-│   │   ├── riego.tsx            # Riego
-│   │   ├── tareas.tsx           # Tareas
-│   │   └── perfil.tsx           # Perfil usuario
-│   └── estado-campana.tsx       # Estado de campaña
-├── lib/
-│   ├── api.ts                   # Axios client
-│   ├── auth.ts                  # Auth helpers
-│   ├── kmlData.ts               # KML data for map
-│   └── types.ts                 # Shared TypeScript types
-└── store/authStore.ts           # Auth state
-```
+---
+
+## Scripts de migración de datos (`scripts/migracion/`)
+
+Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (cobertura, decisiones, verificación). Scripts actuales:
+
+- `_alembic_prod.py`
+- `_audit_jornales_historicos.py`
+- `backfill_egresos_abril.py`
+- `backfill_egresos_mayo_agosto_2025.py`
+- `cleanup_contaminacion_jornales_hist.py`
+- `migrate_bd_cobros.py`
+- `migrate_cosecha_2024_2026.py`
+- `migrate_excels.py`
+- `migrate_jornales.py`
+- `migrate_jornales_gap_sep25_mar26.py`
+- `migrate_jornales_historicos.py`
+
+---
+
+## Conocimiento del proyecto (bóveda de Obsidian)
+
+Symlinkeada en `docs/` — leer el archivo relevante antes de trabajar en esa área:
+
+- `docs/sistema/` → `01 - Sistema`: Arquitectura, Modelo de Datos, Bugs Conocidos, Stack Técnico, Bitácora, Decisiones
+- `docs/finanzas/` → `02 - Finanzas`: Cuentas por Pagar, Flujo de Caja, Presupuesto Anual
+- `docs/produccion/` → `03 - Producción`: Parcelas y Fincas, Tareas Clasificadas, Campañas
+- `docs/proyectos/` → `05 - Proyectos`: Dashboards, Sistema de Gestión Agrícola, otros proyectos
 
 ---
 
 ## DO NOT TOUCH
-- `backend/.env`
-- `mobile/.env`
-- `backend/app/core/migrations/versions/` (unless creating new migration)
-- Alembic migration files already committed
-
----
-
-## Files Outside repo/ (Claude workspace)
-| File | Purpose |
-|------|---------|
-| `CLAUDE.md` | Working memory + instructions for Claude |
-| `memory/` | Domain context files (about, los-lirios-context, rules, voice) |
-| `plan-dashboards-claude-code.md` | Plan for dashboard feature |
-| `plan-dashboards-v2.md` | Updated dashboard plan |
-| `prompt-cosecha-claude-code.md` | Prompt template for cosecha workflow |
-| `generate_map.ps1` | Script to regenerate this file |
+- `backend/.env`, `mobile/.env`
+- `backend/app/core/migrations/versions/` (salvo para crear una migración nueva)
+- Migraciones de Alembic ya commiteadas
