@@ -23,10 +23,15 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: pytest -q
-        # No PostgreSQL service needed here: the suite runs against an
-        # in-memory SQLite database (see backend/tests/conftest.py) and
-        # never touches a real database.
+      - run: python -m pytest -q
+        # `-m pytest` (not the bare `pytest` script) so the backend/ dir
+        # (cwd) is prepended to sys.path and `import app...` resolves --
+        # otherwise pytest's default rootdir insertion only adds tests/
+        # itself, giving "ModuleNotFoundError: No module named 'app'"
+        # (reproduced and confirmed via `docker run python:3.12-slim`
+        # before this fix). No PostgreSQL service needed: the suite runs
+        # against an in-memory SQLite database (backend/tests/conftest.py)
+        # and never touches a real database.
 
   frontend-build:
     name: Frontend build (Next.js, type-checks on build)
