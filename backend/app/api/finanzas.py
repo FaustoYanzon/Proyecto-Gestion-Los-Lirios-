@@ -58,16 +58,25 @@ async def list_egresos(
     finca: Finca | None = Query(None),
     moneda: MonedaTipo | None = Query(None),
     fuente: str | None = Query(None),
+    forma_pago: FormaPago | None = Query(None),
+    por_imputacion: bool = Query(
+        False,
+        description="fecha_desde/fecha_hasta filtran por fecha_imputacion (Fecha de Pago "
+        "del cheque) en vez de por fecha del gasto.",
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[Egreso]:
     stmt = select(Egreso).order_by(Egreso.fecha.desc())
+    fecha_filtro = Egreso.fecha_imputacion if por_imputacion else Egreso.fecha
     if fecha_desde is not None:
-        stmt = stmt.where(Egreso.fecha >= fecha_desde)
+        stmt = stmt.where(fecha_filtro >= fecha_desde)
     if fecha_hasta is not None:
-        stmt = stmt.where(Egreso.fecha <= fecha_hasta)
+        stmt = stmt.where(fecha_filtro <= fecha_hasta)
+    if forma_pago is not None:
+        stmt = stmt.where(Egreso.forma_pago == forma_pago)
     if tipo is not None:
         stmt = stmt.where(Egreso.tipo == tipo)
     if clasificacion is not None:
@@ -170,7 +179,11 @@ async def update_egreso(
     egreso = result.scalar_one_or_none()
     if egreso is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Egreso not found")
-    for field, value in egreso_data.model_dump(exclude_unset=True).items():
+    cambios = egreso_data.model_dump(exclude_unset=True)
+    if "f_pago" in cambios and cambios["f_pago"] != egreso.f_pago:
+        # Nueva Fecha de Pago -> que el aviso de cheque vuelva a salir.
+        egreso.aviso_pago_enviado_at = None
+    for field, value in cambios.items():
         setattr(egreso, field, value)
     await db.flush()
     await db.refresh(egreso)
@@ -305,7 +318,11 @@ async def update_ingreso(
     ingreso = result.scalar_one_or_none()
     if ingreso is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingreso not found")
-    for field, value in ingreso_data.model_dump(exclude_unset=True).items():
+    cambios = ingreso_data.model_dump(exclude_unset=True)
+    if "f_pago" in cambios and cambios["f_pago"] != ingreso.f_pago:
+        # Nueva Fecha de Pago -> que el aviso de cheque vuelva a salir.
+        ingreso.aviso_pago_enviado_at = None
+    for field, value in cambios.items():
         setattr(ingreso, field, value)
     await db.flush()
     await db.refresh(ingreso)
@@ -350,7 +367,9 @@ async def dashboard_resumen_anual(
         .scalars().all()
     )
     egresos = list(
-        (await db.execute(select(Egreso).where(Egreso.fecha >= start, Egreso.fecha <= end)))
+        (await db.execute(select(Egreso).where(
+            Egreso.fecha_imputacion >= start, Egreso.fecha_imputacion <= end
+        )))
         .scalars().all()
     )
 
@@ -410,7 +429,11 @@ async def dashboard_egresos_por_mes(
 
     egresos = list(
         (await db.execute(
-            select(Egreso).where(Egreso.fecha >= start, Egreso.fecha <= end, Egreso.moneda == moneda)
+            select(Egreso).where(
+                Egreso.fecha_imputacion >= start,
+                Egreso.fecha_imputacion <= end,
+                Egreso.moneda == moneda,
+            )
         )).scalars().all()
     )
 
@@ -426,7 +449,7 @@ async def dashboard_egresos_por_mes(
     agg: dict[tuple[int, int, str], Decimal] = {}
     for e in egresos:
         tipo_str = e.tipo.value if hasattr(e.tipo, "value") else str(e.tipo)
-        key = (e.fecha.year, e.fecha.month, tipo_str)
+        key = (e.fecha_imputacion.year, e.fecha_imputacion.month, tipo_str)
         agg[key] = agg.get(key, Decimal("0")) + e.monto
 
     tipos_presentes = sorted({k[2] for k in agg})
@@ -526,7 +549,9 @@ async def flujo_anual(
     end = date(anio_fin, 4, 30)
 
     egresos = list(
-        (await db.execute(select(Egreso).where(Egreso.fecha >= start, Egreso.fecha <= end)))
+        (await db.execute(select(Egreso).where(
+            Egreso.fecha_imputacion >= start, Egreso.fecha_imputacion <= end
+        )))
         .scalars()
         .all()
     )
@@ -558,7 +583,7 @@ async def flujo_anual(
     }
 
     for e in egresos:
-        key = (e.fecha.year, e.fecha.month)
+        key = (e.fecha_imputacion.year, e.fecha_imputacion.month)
         if key in monthly:
             if e.moneda == MonedaTipo.ars:
                 monthly[key]["egresos_ars"] += e.monto

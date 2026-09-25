@@ -26,14 +26,13 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 33 clases ORM
+**Modelos:** 15 archivos, 31 clases ORM
 
 | Archivo | Clases |
 |---|---|
 | `alerta_descartada.py` | AlertaDescartada |
 | `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
 | `clima_cache.py` | ClimaCache |
-| `finanzas.py` | Egreso, Ingreso |
 | `insumo.py` | Insumo, MovimientoStock |
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
@@ -73,7 +72,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 42 (head: `a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
+**Migraciones de Alembic:** 43 (head: `bbb383698209_cheques_emitidos_y_aviso_de_fecha_de_.py, a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int

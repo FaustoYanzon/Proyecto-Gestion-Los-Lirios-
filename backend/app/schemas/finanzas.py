@@ -30,6 +30,10 @@ class EgresoBase(BaseModel):
     forma_pago: FormaPago
     parcela_id: str | None = None
     fuente: str = "manual"
+    # Solo para cheques/echeques emitidos.
+    banco: str | None = None
+    n_cheque: str | None = None
+    f_pago: date | None = None
 
 
 class EgresoCreate(EgresoBase):
@@ -49,10 +53,16 @@ class EgresoUpdate(BaseModel):
     forma_pago: FormaPago | None = None
     parcela_id: str | None = None
     fuente: str | None = None
+    banco: str | None = None
+    n_cheque: str | None = None
+    f_pago: date | None = None
 
 
 class EgresoResponse(EgresoBase):
     id: str
+    # Fecha de Pago (f_pago) para cheques/echeques, fecha para el resto -- es
+    # la fecha con la que el gasto entra al flujo.
+    fecha_imputacion: date
     created_by: str
     created_at: datetime
 

@@ -121,7 +121,48 @@ class ClasificacionEgreso(str, enum.Enum):
     materia_prima_otros = "materia_prima_otros"
 
 
-class Egreso(Base):
+class ChequeMixin:
+    """Campos de cheque/echeque compartidos por Egreso (cheques emitidos) e
+    Ingreso (cheques recibidos). Solo se completan cuando forma_pago es
+    cheque o echeque."""
+
+    banco: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    n_cheque: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Fecha de Pago del cheque (columna "F PAGO" de BD Cobros): desde ese día
+    # se puede cobrar/se debita, y es cuando impacta el ingreso o el gasto --
+    # ver fecha_imputacion.
+    f_pago: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Cuándo se mandó el aviso push de "ya se puede cobrar / se debita hoy"
+    # (app/core/cheques_aviso.py). NULL = todavía no se avisó.
+    aviso_pago_enviado_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @hybrid_property
+    def fecha_imputacion(self) -> date:
+        """Fecha en que el movimiento impacta en flujo/dashboard/KPIs: la
+        Fecha de Pago (f_pago) para cheques y echeques, `fecha` para el resto.
+        `fecha` sigue siendo cuándo se recibió/emitió."""
+        if self.forma_pago in (FormaPago.cheque, FormaPago.echeque) and self.f_pago is not None:
+            return self.f_pago
+        return self.fecha
+
+    @fecha_imputacion.inplace.expression
+    @classmethod
+    def _fecha_imputacion_expression(cls) -> ColumnElement[date]:
+        return case(
+            (
+                and_(
+                    cls.forma_pago.in_([FormaPago.cheque, FormaPago.echeque]),
+                    cls.f_pago.is_not(None),
+                ),
+                cls.f_pago,
+            ),
+            else_=cls.fecha,
+        )
+
+
+class Egreso(ChequeMixin, Base):
     __tablename__ = "egresos"
 
     id: Mapped[str] = mapped_column(
@@ -167,7 +208,7 @@ class Egreso(Base):
     created_by_user: Mapped[User] = relationship("User", back_populates="egresos")
 
 
-class Ingreso(Base):
+class Ingreso(ChequeMixin, Base):
     """A cobro (collection) — one row per payment received, mirroring the
     farm's "BD COBROS" ledger. Not a per-kg uva sale record: destino is the
     income category (uva de mesa, bodega, pasa, ...), comprador is free text.
@@ -188,12 +229,7 @@ class Ingreso(Base):
     # would reject values Fausto hasn't used yet. The frontend offers known
     # values plus previously-typed ones via GET /finanzas/ingresos/cuentas-destino.
     cuenta_destino: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    # Cheque-only fields — populated when forma_pago is cheque/echeque.
-    banco: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    n_cheque: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    # Fecha de vencimiento del cheque (columna "F PAGO" de BD Cobros). Para
-    # cheques/echeques es cuando el ingreso se devenga -- ver fecha_imputacion.
-    f_pago: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # banco / n_cheque / f_pago vienen de ChequeMixin.
     # What the cheque was used for once spent. NULL/empty = still available.
     # Drives the cheque tracking screen (/dashboard/finanzas/cheques).
     uso_cheque: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -216,29 +252,6 @@ class Ingreso(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
-
-    @hybrid_property
-    def fecha_imputacion(self) -> date:
-        """Fecha en que el ingreso impacta en flujo/dashboard/KPIs: el
-        vencimiento (f_pago) para cheques y echeques, `fecha` para el resto.
-        `fecha` sigue siendo cuándo se recibió el cobro."""
-        if self.forma_pago in (FormaPago.cheque, FormaPago.echeque) and self.f_pago is not None:
-            return self.f_pago
-        return self.fecha
-
-    @fecha_imputacion.inplace.expression
-    @classmethod
-    def _fecha_imputacion_expression(cls) -> ColumnElement[date]:
-        return case(
-            (
-                and_(
-                    cls.forma_pago.in_([FormaPago.cheque, FormaPago.echeque]),
-                    cls.f_pago.is_not(None),
-                ),
-                cls.f_pago,
-            ),
-            else_=cls.fecha,
-        )
 
     __table_args__ = (
         Index("ix_ingresos_fecha", "fecha"),

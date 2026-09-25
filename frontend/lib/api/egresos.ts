@@ -37,13 +37,20 @@ export interface EgresoCreate {
   tipo_cambio?: number
   origen: 'oficial' | 'no_oficial'
   finca: 'los_mimbres' | 'media_agua' | 'caucete'
-  forma_pago: 'efectivo' | 'transferencia' | 'cheque' | 'credito'
+  forma_pago: 'efectivo' | 'transferencia' | 'cheque' | 'echeque' | 'credito'
   parcela_id?: string
   fuente?: string
+  // Solo cheques/echeques emitidos.
+  banco?: string
+  n_cheque?: string
+  f_pago?: string
 }
 
 export interface EgresoResponse extends EgresoCreate {
   id: string
+  // Fecha de Pago (f_pago) para cheques/echeques, fecha para el resto: la
+  // fecha con la que el gasto entra al flujo.
+  fecha_imputacion: string
   created_by: string
   created_at: string
 }
@@ -51,6 +58,8 @@ export interface EgresoResponse extends EgresoCreate {
 export interface EgresosFilter {
   fecha_desde?: string
   fecha_hasta?: string
+  forma_pago?: string
+  por_imputacion?: boolean
   tipo?: string
   clasificacion?: string
   origen?: string

@@ -30,8 +30,15 @@ const schema = z
     ),
     origen: z.enum(['oficial', 'no_oficial'] as const),
     finca: z.enum(['los_mimbres', 'media_agua', 'caucete'] as const, { error: 'Requerido' }),
-    forma_pago: z.enum(['efectivo', 'transferencia', 'cheque', 'credito'] as const, { error: 'Requerido' }),
+    forma_pago: z.enum(['efectivo', 'transferencia', 'cheque', 'echeque', 'credito'] as const, { error: 'Requerido' }),
     descripcion: z.string().optional(),
+    banco: z.string().optional(),
+    n_cheque: z.string().optional(),
+    f_pago: z.string().optional(),
+  })
+  .refine((d) => !['cheque', 'echeque'].includes(d.forma_pago) || !!d.f_pago, {
+    message: 'Requerida para cheques: es cuando impacta el gasto',
+    path: ['f_pago'],
   })
   .refine((d) => d.moneda !== 'usd' || (d.tipo_cambio != null && d.tipo_cambio > 0), {
     message: 'Requerido para USD',
@@ -78,6 +85,9 @@ export default function EgresoForm({ egreso, onSuccess, onCancel }: Props) {
           finca: egreso.finca,
           forma_pago: egreso.forma_pago,
           descripcion: egreso.descripcion ?? '',
+          banco: egreso.banco ?? '',
+          n_cheque: egreso.n_cheque ?? '',
+          f_pago: egreso.f_pago ?? '',
         }
       : {
           fecha: today,
@@ -89,6 +99,7 @@ export default function EgresoForm({ egreso, onSuccess, onCancel }: Props) {
 
   const moneda = watch('moneda')
   const tipo = watch('tipo')
+  const esCheque = ['cheque', 'echeque'].includes(watch('forma_pago') ?? '')
 
   // Reset clasificacion on tipo change, but skip initial render to preserve edit defaults
   useEffect(() => {
@@ -109,6 +120,9 @@ export default function EgresoForm({ egreso, onSuccess, onCancel }: Props) {
         clasificacion: data.clasificacion as ClasificacionEgreso,
         tipo_cambio: data.moneda === 'usd' ? data.tipo_cambio : undefined,
         fuente: 'manual' as const,
+        banco: esCheque ? data.banco || undefined : undefined,
+        n_cheque: esCheque ? data.n_cheque || undefined : undefined,
+        f_pago: esCheque ? data.f_pago || undefined : undefined,
       }
 
       if (isEdit) {
@@ -232,10 +246,30 @@ export default function EgresoForm({ egreso, onSuccess, onCancel }: Props) {
             <option value="efectivo">Efectivo</option>
             <option value="transferencia">Transferencia</option>
             <option value="cheque">Cheque</option>
+            <option value="echeque">eCheque</option>
             <option value="credito">Crédito</option>
           </select>
           {errors.forma_pago && <p className={err}>{errors.forma_pago.message}</p>}
         </div>
+
+        {esCheque && (
+          <>
+            <div>
+              <label className={label}>Fecha de Pago</label>
+              <input type="date" {...register('f_pago')} className={field} />
+              <p className="mt-1 text-xs text-gray-400">Cuándo se debita: ahí impacta el gasto.</p>
+              {errors.f_pago && <p className={err}>{errors.f_pago.message}</p>}
+            </div>
+            <div>
+              <label className={label}>Banco</label>
+              <input type="text" {...register('banco')} className={field} />
+            </div>
+            <div>
+              <label className={label}>N° Cheque</label>
+              <input type="text" {...register('n_cheque')} className={field} />
+            </div>
+          </>
+        )}
 
       </div>
 

@@ -35,6 +35,7 @@ const FORMA_PAGO_LABELS: Record<string, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
   cheque: 'Cheque',
+  echeque: 'eCheque',
   credito: 'Crédito',
 }
 

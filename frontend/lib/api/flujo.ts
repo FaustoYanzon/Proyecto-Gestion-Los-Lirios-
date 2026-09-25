@@ -48,7 +48,7 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
       params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, por_imputacion: true, limit: 10000 },
     }),
     api.get<EgresoResponse[]>('/finanzas/egresos/', {
-      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, por_imputacion: true, limit: 10000 },
     }),
   ])
 
@@ -72,7 +72,7 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
   for (const eg of egresos) {
     if (eg.moneda !== 'ars') continue
     if (!tipoMap.has(eg.tipo)) tipoMap.set(eg.tipo, Array(12).fill(0))
-    const idx = campaignIdx(eg.fecha, anioInicio)
+    const idx = campaignIdx(eg.fecha_imputacion, anioInicio)
     if (idx >= 0) tipoMap.get(eg.tipo)![idx] += Number(eg.monto)
   }
 
@@ -172,7 +172,7 @@ export async function getFlujoDesglose(tipo: TipoEgreso, anioInicio: number): Pr
 
   // Fetch all egresos and filter client-side — avoids backend filter quirks
   const { data: allEgresos } = await api.get<EgresoResponse[]>('/finanzas/egresos/', {
-    params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
+    params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, por_imputacion: true, limit: 10000 },
   })
 
   // clasificacion → descripcion → months[12]
@@ -187,7 +187,7 @@ export async function getFlujoDesglose(tipo: TipoEgreso, anioInicio: number): Pr
     if (!clasMap.has(clas)) clasMap.set(clas, new Map())
     const descMap = clasMap.get(clas)!
     if (!descMap.has(desc)) descMap.set(desc, Array(12).fill(0))
-    const idx = campaignIdx(eg.fecha, anioInicio)
+    const idx = campaignIdx(eg.fecha_imputacion, anioInicio)
     if (idx >= 0) descMap.get(desc)![idx] += Number(eg.monto)
   }
 

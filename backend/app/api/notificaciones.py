@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_gerencial_up
 from app.core.birthdays import check_and_notify_birthdays
+from app.core.cheques_aviso import check_and_notify_cheques
 from app.core.database import get_db
 from app.core.push import send_expo_push
 from app.models.push_token import PushToken
@@ -80,3 +81,13 @@ async def ejecutar_chequeo_cumpleanos(
     """
     n = await check_and_notify_birthdays(db)
     return {"notificados": n}
+
+
+@router.post("/cheques/ejecutar")
+async def ejecutar_aviso_cheques(
+    _: User = Depends(require_gerencial_up),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Dispara manualmente el aviso de cheques cuya Fecha de Pago ya llegó.
+    El scheduler (app/core/scheduler.py) lo corre solo todos los días 8:05."""
+    return await check_and_notify_cheques(db)
