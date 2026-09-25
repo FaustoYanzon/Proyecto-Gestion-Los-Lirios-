@@ -250,3 +250,101 @@ async def test_responsable_se_resuelve_desde_trabajador_vinculado(
 
     registro = await client.get(f"/produccion/fitosanitarios/{registro_id}", headers=headers_ger)
     assert registro.json()["responsable_id"] == trabajador_id
+
+
+async def test_editar_orden_extra_cambia_campos_y_parcelas(client, create_user, create_insumo, create_parcela):
+    headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo(nombre="Cobre")
+    otro = await create_insumo(nombre="Azufre")
+    p1 = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua)
+    p2 = await create_parcela(nombre="Parral B", variedad="syrah", finca=Finca.media_agua)
+    orden = await _crear_orden_extra(client, headers, insumo.id, p1.id)
+
+    resp = await client.put(
+        f"/ordenes-aplicacion/{orden['id']}",
+        json={
+            "variedad": "syrah", "insumo_id": otro.id, "dosis_por_ha": 3.5,
+            "objetivo": "Oidio", "dias_carencia": 10, "dias_reingreso": 3,
+            "fecha_planificada": "2026-11-20", "parcela_ids": [p2.id], "notas": "Cambio",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["insumo_nombre"] == "Azufre"
+    assert body["dosis_por_ha"] == 3.5
+    assert body["fecha_planificada"] == "2026-11-20"
+    assert [p["parcela_id"] for p in body["parcelas"]] == [p2.id]
+
+
+async def test_eliminar_orden_extra(client, create_user, create_insumo, create_parcela):
+    headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo()
+    parcela = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua)
+    orden = await _crear_orden_extra(client, headers, insumo.id, parcela.id)
+
+    resp = await client.delete(f"/ordenes-aplicacion/{orden['id']}", headers=headers)
+    assert resp.status_code == 204
+    assert (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).status_code == 404
+
+
+async def test_orden_con_aplicaciones_no_se_edita_ni_elimina(client, create_user, create_insumo, create_parcela):
+    headers_ger, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo()
+    parcela = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua)
+    orden = await _crear_orden_extra(client, headers_ger, insumo.id, parcela.id)
+    item_id = orden["parcelas"][0]["id"]
+    await client.post(
+        f"/ordenes-aplicacion/{orden['id']}/parcelas/{item_id}/confirmar", json={}, headers=headers_ger,
+    )
+
+    resp = await client.delete(f"/ordenes-aplicacion/{orden['id']}", headers=headers_ger)
+    assert resp.status_code == 409
+
+
+async def test_orden_del_plan_no_se_elimina(client, create_user, create_insumo, create_parcela):
+    headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo()
+    await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
+    plan = await client.post(
+        "/plan-fitosanitario/",
+        json={
+            "temporada": 2026, "variedades": ["flame"], "numero_aplicacion": 1,
+            "mes": 10, "insumo_id": insumo.id, "objetivo": "Oidio", "dosis_por_ha": 1.5,
+        },
+        headers=headers,
+    )
+    orden = await client.post(
+        "/ordenes-aplicacion/desde-plan",
+        json={
+            "plan_fitosanitario_id": plan.json()[0]["id"], "dias_carencia": 7,
+            "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
+        },
+        headers=headers,
+    )
+    resp = await client.delete(f"/ordenes-aplicacion/{orden.json()['id']}", headers=headers)
+    assert resp.status_code == 409
+
+
+async def test_borrar_registro_de_orden_vuelve_la_parcela_a_pendiente(
+    client, create_user, create_insumo, create_parcela,
+):
+    headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo(stock_actual=50.0)
+    parcela = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua, superficie_ha=1.0)
+    orden = await _crear_orden_extra(client, headers, insumo.id, parcela.id)
+    item_id = orden["parcelas"][0]["id"]
+    conf = await client.post(
+        f"/ordenes-aplicacion/{orden['id']}/parcelas/{item_id}/confirmar", json={}, headers=headers,
+    )
+    registro_id = conf.json()["registro_fitosanitario_id"]
+
+    resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
+    assert resp.status_code == 204, resp.text
+
+    detalle = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert detalle["estado"] == "pendiente"
+    assert detalle["parcelas"][0]["estado"] == "pendiente"
+    assert detalle["parcelas"][0]["registro_fitosanitario_id"] is None
+    insumo_actual = await client.get(f"/insumos/{insumo.id}", headers=headers)
+    assert float(insumo_actual.json()["stock_actual"]) == 50.0

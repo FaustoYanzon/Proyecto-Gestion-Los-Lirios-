@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check } from 'lucide-react'
+import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2 } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,6 +10,8 @@ import {
   getOrdenesAplicacion,
   crearOrdenDesdePlan,
   crearOrdenExtra,
+  actualizarOrdenExtra,
+  eliminarOrdenExtra,
   type OrdenAplicacion,
   type EstadoOrdenAplicacion,
 } from '@/lib/api/ordenesAplicacion'
@@ -115,6 +117,102 @@ function ParcelaPicker({
   )
 }
 
+// ── Combobox de línea del plan (se puede escribir para filtrar) ──────────────
+
+const DIACRITICS_RE = new RegExp(
+  `[${String.fromCharCode(0x0300)}-${String.fromCharCode(0x036f)}]`, 'g'
+)
+function normalizar(t: string): string {
+  return t.normalize('NFD').replace(DIACRITICS_RE, '').trim().toLowerCase()
+}
+
+function planLabel(p: PlanFitosanitario): string {
+  return `${VARIEDAD_LABELS[p.variedad] ?? p.variedad} · Nº${p.numero_aplicacion} · ${MESES[p.mes - 1]} · ${p.insumo_nombre} (${p.dosis_por_ha} ${p.insumo_unidad}/ha)`
+}
+
+function PlanLineaCombobox({
+  planes, value, onChange, error,
+}: {
+  planes: PlanFitosanitario[]
+  value: string
+  onChange: (planId: string) => void
+  error?: string
+}) {
+  const elegido = planes.find((p) => p.id === value)
+  const [texto, setTexto] = useState(elegido ? planLabel(elegido) : '')
+  const [open, setOpen] = useState(false)
+  const [activo, setActivo] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Cada palabra tipeada tiene que aparecer en la etiqueta, en cualquier
+  // orden: "syrah oidio", "azufre nov", "flame 3".
+  const palabras = normalizar(texto).split(/\s+/).filter(Boolean)
+  const filtrados = elegido && texto === planLabel(elegido)
+    ? planes
+    : planes.filter((p) => {
+        const l = normalizar(`${planLabel(p)} ${p.objetivo}`)
+        return palabras.every((w) => l.includes(w))
+      })
+
+  function elegir(p: PlanFitosanitario) {
+    setTexto(planLabel(p))
+    onChange(p.id)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={texto}
+        placeholder="Escribí variedad, producto, mes o Nº…"
+        onChange={(e) => { setTexto(e.target.value); setOpen(true); setActivo(0); if (value) onChange('') }}
+        onFocus={(e) => { setOpen(true); e.target.select() }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActivo((i) => Math.min(i + 1, filtrados.length - 1)) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActivo((i) => Math.max(i - 1, 0)) }
+          else if (e.key === 'Enter' && open && filtrados[activo]) { e.preventDefault(); elegir(filtrados[activo]) }
+          else if (e.key === 'Escape') setOpen(false)
+        }}
+        className={field}
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+      />
+      {open && (
+        <ul className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
+          {filtrados.length === 0 && (
+            <li className="px-3 py-2 text-sm text-gray-400">Ninguna línea del plan coincide.</li>
+          )}
+          {filtrados.map((p, i) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => elegir(p)}
+                onMouseEnter={() => setActivo(i)}
+                className={`w-full text-left px-3 py-2 text-sm ${i === activo ? 'bg-[#fbfaf6] text-[#7a1f2c]' : 'text-gray-700'}`}
+              >
+                <span className="block">{planLabel(p)}</span>
+                <span className="block text-xs text-gray-400">{p.objetivo}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className={err}>{error}</p>}
+    </div>
+  )
+}
+
 // ── Form: generar orden desde una línea del plan ────────────────────────────
 
 const schemaDesdePlan = z.object({
@@ -141,7 +239,7 @@ function FormOrdenDesdePlan({
   const [seleccionadas, setSeleccionadas] = useState<string[]>([])
 
   const {
-    register, handleSubmit, watch, formState: { errors, isSubmitting },
+    register, handleSubmit, watch, setValue, formState: { errors, isSubmitting },
   } = useForm<FormDesdePlan>({
     resolver: zodResolver(schemaDesdePlan) as Resolver<FormDesdePlan>,
     defaultValues: { dias_carencia: 7, dias_reingreso: 2, fecha_planificada: TODAY, notas: '' },
@@ -178,15 +276,12 @@ function FormOrdenDesdePlan({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
         <label className={label}>Línea del plan</label>
-        <select {...register('plan_fitosanitario_id')} className={field}>
-          <option value="">Elegí una línea…</option>
-          {planes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {VARIEDAD_LABELS[p.variedad] ?? p.variedad} · Nº{p.numero_aplicacion} · {MESES[p.mes - 1]} · {p.insumo_nombre} ({p.dosis_por_ha} {p.insumo_unidad}/ha)
-            </option>
-          ))}
-        </select>
-        {errors.plan_fitosanitario_id && <p className={err}>{errors.plan_fitosanitario_id.message}</p>}
+        <PlanLineaCombobox
+          planes={planes}
+          value={planIdW ?? ''}
+          onChange={(id) => { setValue('plan_fitosanitario_id', id, { shouldValidate: !!id }); setSeleccionadas([]) }}
+          error={errors.plan_fitosanitario_id?.message}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -251,30 +346,47 @@ const schemaExtra = z.object({
 type FormExtra = z.infer<typeof schemaExtra>
 
 function FormOrdenExtra({
-  parcelas, variedadesDisponibles, temporada, onSuccess, onCancel,
+  parcelas, variedadesDisponibles, temporada, orden, onSuccess, onCancel,
 }: {
   parcelas: ParcelaItem[]
   variedadesDisponibles: string[]
   temporada: number
+  // Si viene, el form edita esa orden en vez de crear una nueva.
+  orden?: OrdenAplicacion
   onSuccess: () => void
   onCancel: () => void
 }) {
   const queryClient = useQueryClient()
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [insumoNombre, setInsumoNombre] = useState('')
+  const [insumoNombre, setInsumoNombre] = useState(orden?.insumo_nombre ?? '')
   const [insumoInfo, setInsumoInfo] = useState<InsumoResponse | null>(null)
-  const [restringir, setRestringir] = useState(false)
-  const [seleccionadas, setSeleccionadas] = useState<string[]>([])
+  // Una orden editada "restringe" si no cubre todas las parcelas activas de
+  // su variedad -- así el picker muestra exactamente lo que tiene hoy.
+  const [restringir, setRestringir] = useState(() => {
+    if (!orden) return false
+    const total = parcelas.filter((p) => p.is_active && p.variedad === orden.variedad).length
+    return orden.parcelas.length !== total
+  })
+  const [seleccionadas, setSeleccionadas] = useState<string[]>(
+    () => orden?.parcelas.map((p) => p.parcela_id) ?? [],
+  )
 
   const {
     register, handleSubmit, watch, setValue, formState: { errors, isSubmitting },
   } = useForm<FormExtra>({
     resolver: zodResolver(schemaExtra) as Resolver<FormExtra>,
-    defaultValues: {
-      variedad: variedadesDisponibles[0] ?? '',
-      insumo_id: '', objetivo: '', dias_carencia: 7, dias_reingreso: 2,
-      fecha_planificada: TODAY, notas: '',
-    },
+    defaultValues: orden
+      ? {
+          variedad: orden.variedad, insumo_id: orden.insumo_id, dosis_por_ha: orden.dosis_por_ha,
+          objetivo: orden.objetivo, dias_carencia: orden.dias_carencia,
+          dias_reingreso: orden.dias_reingreso, fecha_planificada: orden.fecha_planificada,
+          notas: orden.notas ?? '',
+        }
+      : {
+          variedad: variedadesDisponibles[0] ?? '',
+          insumo_id: '', objetivo: '', dias_carencia: 7, dias_reingreso: 2,
+          fecha_planificada: TODAY, notas: '',
+        },
   })
 
   const variedadW = watch('variedad')
@@ -291,17 +403,18 @@ function FormOrdenExtra({
         setSubmitError('Elegí al menos una parcela, o desmarcá la restricción.')
         return
       }
-      await crearOrdenExtra({
+      const payload = {
         ...data,
-        temporada,
         notas: data.notas || undefined,
         parcela_ids: restringir ? seleccionadas : undefined,
-      })
+      }
+      if (orden) await actualizarOrdenExtra(orden.id, payload)
+      else await crearOrdenExtra({ ...payload, temporada })
       queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
       onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setSubmitError(typeof detail === 'string' ? detail : 'Error al crear la orden.')
+      setSubmitError(typeof detail === 'string' ? detail : orden ? 'Error al guardar la orden.' : 'Error al crear la orden.')
     }
   }
 
@@ -309,7 +422,10 @@ function FormOrdenExtra({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
         <label className={label}>Variedad</label>
-        <select {...register('variedad')} className={field}>
+        <select
+          {...register('variedad', { onChange: () => setSeleccionadas([]) })}
+          className={field}
+        >
           {variedadesDisponibles.map((v) => (
             <option key={v} value={v}>{VARIEDAD_LABELS[v] ?? v}</option>
           ))}
@@ -382,7 +498,7 @@ function FormOrdenExtra({
         </button>
         <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-          Crear orden
+          {orden ? 'Guardar cambios' : 'Crear orden'}
         </button>
       </div>
     </form>
@@ -391,11 +507,21 @@ function FormOrdenExtra({
 
 // ── Tarjeta de orden ─────────────────────────────────────────────────────────
 
-function OrdenCard({ orden }: { orden: OrdenAplicacion }) {
+function OrdenCard({
+  orden, puedeGestionar, onEditar, onEliminar,
+}: {
+  orden: OrdenAplicacion
+  puedeGestionar: boolean
+  onEditar: (orden: OrdenAplicacion) => void
+  onEliminar: (orden: OrdenAplicacion) => void
+}) {
   const [abierta, setAbierta] = useState(false)
   const total = orden.parcelas.length
   const aplicadas = orden.parcelas.filter((p) => p.estado === 'aplicada').length
   const pct = total ? Math.round((100 * aplicadas) / total) : 0
+  // Mismo criterio que el backend (_get_orden_extra_editable): solo las
+  // extra, y mientras nadie haya confirmado ninguna parcela.
+  const editable = puedeGestionar && orden.origen === 'extra' && aplicadas === 0
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -449,6 +575,24 @@ function OrdenCard({ orden }: { orden: OrdenAplicacion }) {
             ))}
           </div>
           {orden.notas && <p className="text-xs text-gray-500 mt-3">Notas: {orden.notas}</p>}
+          {editable && (
+            <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
+              <button
+                onClick={() => onEditar(orden)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                <Pencil size={13} />
+                Editar
+              </button>
+              <button
+                onClick={() => onEliminar(orden)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={13} />
+                Eliminar
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -467,6 +611,27 @@ export default function OrdenesAplicacionPage() {
 
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoOrdenAplicacion | 'todas'>('todas')
   const [modal, setModal] = useState<'desde-plan' | 'extra' | null>(null)
+  const [ordenEditar, setOrdenEditar] = useState<OrdenAplicacion | null>(null)
+  const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [eliminarError, setEliminarError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  async function confirmarEliminar() {
+    if (!ordenEliminar) return
+    setEliminando(true)
+    setEliminarError(null)
+    try {
+      await eliminarOrdenExtra(ordenEliminar.id)
+      queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
+      setOrdenEliminar(null)
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setEliminarError(typeof detail === 'string' ? detail : 'No se pudo eliminar la orden.')
+    } finally {
+      setEliminando(false)
+    }
+  }
 
   const { data: ordenes = [], isLoading } = useQuery({
     queryKey: ['ordenes-aplicacion', temporada],
@@ -573,7 +738,15 @@ export default function OrdenesAplicacionPage() {
             Sin órdenes {estadoFiltro !== 'todas' ? ESTADO_LABELS[estadoFiltro].toLowerCase() : ''} para esta temporada.
           </div>
         ) : (
-          ordenesFiltradas.map((o) => <OrdenCard key={o.id} orden={o} />)
+          ordenesFiltradas.map((o) => (
+            <OrdenCard
+              key={o.id}
+              orden={o}
+              puedeGestionar={puedeCrear}
+              onEditar={setOrdenEditar}
+              onEliminar={(orden) => { setEliminarError(null); setOrdenEliminar(orden) }}
+            />
+          ))
         )}
       </div>
 
@@ -586,6 +759,43 @@ export default function OrdenesAplicacionPage() {
             onSuccess={() => setModal(null)}
             onCancel={() => setModal(null)}
           />
+        </Modal>
+      )}
+
+      {ordenEditar && (
+        <Modal title="Editar orden fuera de plan" onClose={() => setOrdenEditar(null)}>
+          <FormOrdenExtra
+            parcelas={parcelas}
+            variedadesDisponibles={variedadesDisponibles}
+            temporada={temporada}
+            orden={ordenEditar}
+            onSuccess={() => setOrdenEditar(null)}
+            onCancel={() => setOrdenEditar(null)}
+          />
+        </Modal>
+      )}
+
+      {ordenEliminar && (
+        <Modal title="Eliminar orden" onClose={() => setOrdenEliminar(null)}>
+          <p className="text-sm text-gray-700">
+            ¿Eliminar la orden de <strong>{ordenEliminar.insumo_nombre}</strong> para{' '}
+            {VARIEDAD_LABELS[ordenEliminar.variedad] ?? ordenEliminar.variedad} ({ordenEliminar.parcelas.length}{' '}
+            {ordenEliminar.parcelas.length === 1 ? 'parcela' : 'parcelas'})? También desaparece de la app de los operarios.
+          </p>
+          {eliminarError && <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{eliminarError}</p>}
+          <div className="flex items-center justify-end gap-3 mt-5 pt-3 border-t border-gray-100">
+            <button onClick={() => setOrdenEliminar(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button
+              onClick={confirmarEliminar}
+              disabled={eliminando}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-60 transition-colors"
+            >
+              {eliminando && <Loader2 size={14} className="animate-spin" />}
+              Eliminar
+            </button>
+          </div>
         </Modal>
       )}
 

@@ -1,622 +1,49 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+// Pestaña Fito: ya no se cargan aplicaciones libres desde el celular -- cada
+// aplicación nace de una orden armada en la web (Producción → Órdenes de
+// Aplicación) que el operario confirma acá. Abajo queda el historial reciente
+// de lo aplicado, de solo lectura (las correcciones se hacen en la web).
+import { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   ActivityIndicator,
-  TextInput,
-  Modal,
   RefreshControl,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import api from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
-import { newIdempotencyKey } from '../lib/idempotency'
-import { enqueue } from '../lib/offlineQueue'
 import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
-import TrabajadorPicker from '../components/TrabajadorPicker'
-import InsumoPicker from '../components/InsumoPicker'
 import OrdenesPendientes from '../components/OrdenesPendientes'
 import { colors } from '../lib/theme'
-import type { Insumo, Parcela, RegistroFitosanitario, Trabajador as TrabajadorDb } from '../lib/types'
-import { useAuthStore } from '../store/authStore'
-
-function isoToday() { return new Date().toISOString().split('T')[0] }
+import type { Parcela, RegistroFitosanitario } from '../lib/types'
 
 function formatDateDisplay(iso: string) {
   const [y, mo, d] = iso.split('-')
   return `${d}/${mo}/${y}`
 }
 
-// ─── Step indicator ───────────────────────────────────────────────────────────
-
-const STEP_LABELS = ['Fecha / Resp.', 'Detalle', 'Confirmar']
-
-function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2; onCancel: () => void }) {
-  return (
-    <View style={si.row}>
-      {STEP_LABELS.map((label, idx) => {
-        const done = idx < current
-        const active = idx === current
-        return (
-          <View key={label} style={si.item}>
-            <View style={[si.dot, done && si.dotDone, active && si.dotActive]}>
-              {done ? (
-                <ICONS.check size={11} color={colors.blanco} strokeWidth={ICON_STROKE} />
-              ) : (
-                <Text style={[si.dotText, active && { color: colors.blanco }]}>{idx + 1}</Text>
-              )}
-            </View>
-            <Text style={[si.label, active && si.labelActive, done && si.labelDone]}>{label}</Text>
-            {idx < STEP_LABELS.length - 1 && (
-              <View style={[si.line, done && si.lineDone]} />
-            )}
-          </View>
-        )
-      })}
-      <TouchableOpacity
-        style={si.cancelBtn}
-        onPress={onCancel}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-      </TouchableOpacity>
-    </View>
-  )
-}
-
-const si = StyleSheet.create({
-  row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: colors.blanco,
-    borderBottomWidth: 1, borderBottomColor: colors.hueso,
-  },
-  item: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  dot: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center',
-  },
-  dotActive: { backgroundColor: colors.tierra },
-  dotDone:   { backgroundColor: colors.tierra },
-  dotText:   { fontSize: 11, fontWeight: '700', color: colors.niebla },
-  label:     { fontSize: 11, color: colors.niebla, marginLeft: 6, fontWeight: '500', flex: 1 },
-  labelActive: { color: colors.ink, fontWeight: '700' },
-  labelDone:   { color: colors.tierra, fontWeight: '600' },
-  line:     { flex: 1, height: 1, backgroundColor: colors.hueso, marginHorizontal: 4 },
-  lineDone: { backgroundColor: colors.tierra },
-  cancelBtn: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.hueso,
-    justifyContent: 'center', alignItems: 'center', marginLeft: 8, flexShrink: 0,
-  },
-})
-
-// ─── DatePickerModal ──────────────────────────────────────────────────────────
-
-const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const DAY_NAMES = ['Lu','Ma','Mi','Ju','Vi','Sa','Do']
-
-function buildCalendarDays(year: number, month: number): (string | null)[] {
-  const firstDay = new Date(year, month, 1).getDay()
-  const offset = firstDay === 0 ? 6 : firstDay - 1
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const cells: (string | null)[] = Array(offset).fill(null)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const mm = String(month + 1).padStart(2, '0')
-    const dd = String(d).padStart(2, '0')
-    cells.push(`${year}-${mm}-${dd}`)
-  }
-  return cells
-}
-
-function DatePickerModal({
-  visible, value, onConfirm, onClose,
-}: {
-  visible: boolean; value: string
-  onConfirm: (d: string) => void; onClose: () => void
-}) {
-  const todayISO = isoToday()
-  const [selDate, setSelDate] = useState(value)
-  const [calYear, setCalYear] = useState(() => parseInt(value.split('-')[0]))
-  const [calMonth, setCalMonth] = useState(() => parseInt(value.split('-')[1]) - 1)
-
-  useEffect(() => {
-    if (visible) {
-      setSelDate(value)
-      setCalYear(parseInt(value.split('-')[0]))
-      setCalMonth(parseInt(value.split('-')[1]) - 1)
-    }
-  }, [visible, value])
-
-  const calDays = buildCalendarDays(calYear, calMonth)
-
-  function prevMonth() {
-    if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(calMonth - 1)
-  }
-  function nextMonth() {
-    if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(calMonth + 1)
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={{ flex: 1, backgroundColor: colors.hueso }}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Seleccionar fecha</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
-          </TouchableOpacity>
-        </View>
-        <View style={{ padding: 16 }}>
-          <View style={dp.navRow}>
-            <TouchableOpacity onPress={prevMonth} style={dp.navBtn}>
-              <ICONS.atras size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
-            </TouchableOpacity>
-            <Text style={dp.monthLabel}>{MONTH_NAMES[calMonth]} {calYear}</Text>
-            <TouchableOpacity onPress={nextMonth} style={dp.navBtn}>
-              <ICONS.avance size={18} color={colors.ink} strokeWidth={ICON_STROKE} />
-            </TouchableOpacity>
-          </View>
-          <View style={dp.dayNamesRow}>
-            {DAY_NAMES.map((d) => <Text key={d} style={dp.dayName}>{d}</Text>)}
-          </View>
-          <View style={dp.grid}>
-            {calDays.map((isoDate, idx) => {
-              if (!isoDate) return <View key={`e-${idx}`} style={dp.cell} />
-              const isSel = isoDate === selDate
-              const isToday = isoDate === todayISO
-              return (
-                <TouchableOpacity
-                  key={isoDate}
-                  style={[dp.cell, isSel && dp.cellSel, !isSel && isToday && dp.cellToday]}
-                  onPress={() => setSelDate(isoDate)}
-                >
-                  <Text style={[dp.cellText, isSel && dp.cellTextSel, !isSel && isToday && dp.cellTextToday]}>
-                    {parseInt(isoDate.split('-')[2])}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
-        </View>
-        <View style={{ padding: 16 }}>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => { onConfirm(selDate); onClose() }}
-          >
-            <Text style={styles.primaryBtnText}>Confirmar</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  )
-}
-
-const dp = StyleSheet.create({
-  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  navBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center' },
-  monthLabel: { fontSize: 16, fontWeight: '700', color: colors.ink },
-  dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
-  dayName: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: colors.niebla, textTransform: 'uppercase' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', padding: 2 },
-  cellSel: { backgroundColor: colors.tierra, borderRadius: 8 },
-  cellToday: { backgroundColor: colors.crema, borderRadius: 8 },
-  cellText: { fontSize: 15, fontWeight: '500', color: colors.ink },
-  cellTextSel: { color: colors.blanco, fontWeight: '700' },
-  cellTextToday: { color: colors.tierra, fontWeight: '700' },
-})
-
-// ─── Step 1: Fecha + Responsable ──────────────────────────────────────────────
-
-function StepFechaResp({
-  initialResponsable,
-  trabajadoresDb,
-  onNext,
-  onCancelar,
-}: {
-  initialResponsable: string
-  trabajadoresDb: TrabajadorDb[]
-  onNext: (fecha: string, responsable: string, responsableId?: string) => void
-  onCancelar: () => void
-}) {
-  const [fecha, setFecha] = useState(isoToday())
-  const [responsable, setResponsable] = useState(initialResponsable)
-  const [responsableId, setResponsableId] = useState<string | undefined>(undefined)
-  const [dateVisible, setDateVisible] = useState(false)
-
-  return (
-    <View style={styles.stepContainer}>
-      <StepIndicator current={0} onCancel={onCancelar} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>Fecha y Responsable</Text>
-
-        <Text style={styles.fieldLabel}>FECHA</Text>
-        <DatePickerModal
-          visible={dateVisible}
-          value={fecha}
-          onConfirm={(d) => setFecha(d)}
-          onClose={() => setDateVisible(false)}
-        />
-        <TouchableOpacity style={styles.dateBtn} onPress={() => setDateVisible(true)}>
-          <ICONS.fecha size={16} color={colors.ink60} strokeWidth={ICON_STROKE} />
-          <Text style={styles.dateBtnText}>{formatDateDisplay(fecha)}</Text>
-          <ICONS.desplegar size={14} color={colors.niebla} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
-
-        <Text style={[styles.fieldLabel, { marginTop: 8 }]}>RESPONSABLE</Text>
-        <TrabajadorPicker
-          value={responsable}
-          trabajadorId={responsableId}
-          trabajadoresDb={trabajadoresDb}
-          onChange={(nombre, trabajadorId) => { setResponsable(nombre); setResponsableId(trabajadorId) }}
-          placeholder="Nombre del responsable"
-        />
-
-        <TouchableOpacity
-          style={[styles.primaryBtn, { marginTop: 24 }]}
-          onPress={() => {
-            if (!responsable.trim() || !responsableId) {
-              Alert.alert('Error', 'Elegí el responsable de la lista (o agregalo como nuevo).')
-              return
-            }
-            onNext(fecha, responsable.trim(), responsableId)
-          }}
-        >
-          <Text style={styles.primaryBtnText}>Continuar</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  )
-}
-
-// ─── Step 2: Detalle ──────────────────────────────────────────────────────────
-
-type DetalleData = {
-  parcela: Parcela | null
-  producto: string
-  insumoId?: string
-  unidad?: 'kg' | 'lt'
-  dosis: string
-  motivo: string
-  diasCarencia: number
-  diasReingreso: number
-}
-
-function StepDetalle({
-  fecha, responsable, parcelas, insumosDb, onInsumoCreado,
-  onNext, onBack, onCancelar,
-}: {
-  fecha: string
-  responsable: string
-  parcelas: Parcela[]
-  insumosDb: Insumo[]
-  onInsumoCreado: (nuevo: Insumo) => void
-  onNext: (data: DetalleData) => void
-  onBack: () => void
-  onCancelar: () => void
-}) {
-  const [search, setSearch] = useState('')
-  const [parcela, setParcela] = useState<Parcela | null>(null)
-  const [producto, setProducto] = useState('')
-  const [insumoId, setInsumoId] = useState<string | undefined>(undefined)
-  const [unidad, setUnidad] = useState<'kg' | 'lt' | undefined>(undefined)
-  const [dosis, setDosis] = useState('')
-  const [motivo, setMotivo] = useState('')
-  const [diasCarencia, setDiasCarencia] = useState(14)
-  const [diasReingreso, setDiasReingreso] = useState(12)
-
-  const filtered = parcelas
-    .filter((p) => p.tipo === 'parral')
-    .filter((p) => p.nombre.toLowerCase().includes(search.toLowerCase()))
-
-  function addDays(iso: string, days: number): string {
-    const d = new Date(iso)
-    d.setDate(d.getDate() + days)
-    return d.toISOString().split('T')[0]
-  }
-
-  function handleNext() {
-    const prod = producto.trim()
-    if (!prod || !insumoId) { Alert.alert('Error', 'Elegí un insumo de la lista (o agregalo como nuevo).'); return }
-    if (!parcela) { Alert.alert('Error', 'Seleccioná una parcela.'); return }
-    if (!motivo.trim()) { Alert.alert('Error', 'Ingresá el motivo de la aplicación.'); return }
-    const dosisNum = parseFloat(dosis.replace(',', '.'))
-    if (isNaN(dosisNum) || dosisNum <= 0) { Alert.alert('Error', 'Ingresá una dosis válida.'); return }
-    onNext({ parcela, producto: prod, insumoId, unidad, dosis, motivo: motivo.trim(), diasCarencia, diasReingreso })
-  }
-
-  return (
-    <View style={styles.stepContainer}>
-      <StepIndicator current={1} onCancel={onCancelar} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>Detalle</Text>
-
-        {/* Mini resumen */}
-        <View style={styles.summaryMini}>
-          <ICONS.fecha size={14} color={colors.ink60} strokeWidth={ICON_STROKE} />
-          <Text style={styles.summaryMiniText}>{formatDateDisplay(fecha)} · {responsable}</Text>
-        </View>
-
-        {/* Ubicación */}
-        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>UBICACIÓN (parcela)</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar parcela..."
-          placeholderTextColor={colors.niebla}
-          value={search}
-          onChangeText={setSearch}
-        />
-        <View style={styles.parcelaList}>
-          {filtered.slice(0, 6).map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.parcelaItem, parcela?.id === p.id && styles.parcelaItemActive]}
-              onPress={() => setParcela(parcela?.id === p.id ? null : p)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.parcelaItemText, parcela?.id === p.id && { color: colors.blanco }]}>
-                  {p.nombre}
-                </Text>
-                {p.superficie_ha != null && (
-                  <Text style={[styles.parcelaItemSub, parcela?.id === p.id && { color: 'rgba(255,255,255,0.7)' }]}>
-                    {p.superficie_ha.toFixed(2)} ha
-                  </Text>
-                )}
-              </View>
-              {parcela?.id === p.id && <ICONS.check size={16} color={colors.blanco} strokeWidth={ICON_STROKE} />}
-            </TouchableOpacity>
-          ))}
-          {filtered.length === 0 && <Text style={styles.emptyText}>Sin resultados</Text>}
-        </View>
-
-        {/* Producto */}
-        <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PRODUCTO</Text>
-        <InsumoPicker
-          value={producto}
-          insumoId={insumoId}
-          insumosDb={insumosDb}
-          onChange={(nombre, id, u) => { setProducto(nombre); setInsumoId(id); setUnidad(u) }}
-          onCreated={onInsumoCreado}
-          placeholder="Buscar insumo..."
-        />
-
-        {/* Dosis */}
-        <Text style={[styles.fieldLabel, { marginTop: 14 }]}>DOSIS ({unidad ?? '?'}/ha)</Text>
-        <TextInput
-          style={styles.input}
-          value={dosis}
-          onChangeText={setDosis}
-          placeholder="ej. 1.5"
-          placeholderTextColor={colors.niebla}
-          keyboardType="decimal-pad"
-        />
-
-        {/* Motivo */}
-        <Text style={styles.fieldLabel}>MOTIVO</Text>
-        <TextInput
-          style={styles.input}
-          value={motivo}
-          onChangeText={setMotivo}
-          placeholder="ej. Preventivo, Oídio, Botrytis..."
-          placeholderTextColor={colors.niebla}
-          autoCapitalize="sentences"
-        />
-
-        {/* Días */}
-        <View style={styles.daysRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>DÍAS CARENCIA</Text>
-            <View style={styles.daysStepperRow}>
-              <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasCarencia((v) => Math.max(0, v - 1))}>
-                <ICONS.quitar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
-              </TouchableOpacity>
-              <Text style={styles.daysValue}>{diasCarencia}</Text>
-              <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasCarencia((v) => v + 1)}>
-                <ICONS.agregar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.daysHint}>
-              Cosecha desde {formatDateDisplay(addDays(fecha, diasCarencia))}
-            </Text>
-          </View>
-          <View style={{ width: 12 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>DÍAS REINGRESO</Text>
-            <View style={styles.daysStepperRow}>
-              <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasReingreso((v) => Math.max(0, v - 1))}>
-                <ICONS.quitar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
-              </TouchableOpacity>
-              <Text style={styles.daysValue}>{diasReingreso}</Text>
-              <TouchableOpacity style={styles.dayStepperBtn} onPress={() => setDiasReingreso((v) => v + 1)}>
-                <ICONS.agregar size={16} color={colors.ink} strokeWidth={ICON_STROKE} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.daysHint}>
-              Reingreso desde {formatDateDisplay(addDays(fecha, diasReingreso))}
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.actionRow, { marginTop: 24 }]}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
-            <Text style={styles.secondaryBtnText}>Atrás</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { flex: 2 }]}
-            onPress={handleNext}
-          >
-            <Text style={styles.primaryBtnText}>Continuar</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
-  )
-}
-
-// ─── Step 3: Confirmar ────────────────────────────────────────────────────────
-
-function StepConfirmar({
-  fecha, responsable, responsableId, parcela, producto, insumoId, unidad, dosis, motivo, diasCarencia, diasReingreso,
-  onSuccess, onBack, onCancelar,
-}: {
-  fecha: string
-  responsable: string
-  responsableId?: string
-  parcela: Parcela | null
-  producto: string
-  insumoId?: string
-  unidad?: 'kg' | 'lt'
-  dosis: string
-  motivo: string
-  diasCarencia: number
-  diasReingreso: number
-  onSuccess: () => void
-  onBack: () => void
-  onCancelar: () => void
-}) {
-  const [loading, setLoading] = useState(false)
-  const submittingRef = useRef(false)
-  const idempotencyKeyRef = useRef(newIdempotencyKey())
-
-  function addDays(iso: string, days: number): string {
-    const d = new Date(iso)
-    d.setDate(d.getDate() + days)
-    return d.toISOString().split('T')[0]
-  }
-
-  async function handleSubmit() {
-    if (submittingRef.current) return
-    submittingRef.current = true
-    const dosisNum = parseFloat(dosis.replace(',', '.'))
-    const payload = {
-      fecha,
-      parcela_id: parcela?.id,
-      insumo_id: insumoId,
-      dosis_por_ha: dosisNum,
-      motivo,
-      dias_carencia: diasCarencia,
-      dias_reingreso: diasReingreso,
-      responsable,
-      responsable_id: responsableId,
-      idempotency_key: idempotencyKeyRef.current,
-    }
-    try {
-      setLoading(true)
-      await api.post('/produccion/fitosanitarios/', payload)
-      onSuccess()
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      if (!err.response) {
-        await enqueue('/produccion/fitosanitarios/', payload)
-        Alert.alert(
-          'Guardado localmente',
-          'No hay conexión ahora. La aplicación se va a sincronizar sola apenas vuelva la señal.'
-        )
-        onSuccess()
-      } else {
-        const detail = err.response?.data?.detail
-        Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo guardar la aplicación.')
-      }
-    } finally {
-      submittingRef.current = false
-      setLoading(false)
-    }
-  }
-
-  const rows = [
-    { label: 'Fecha',        value: formatDateDisplay(fecha) },
-    { label: 'Responsable',  value: responsable },
-    { label: 'Parcela',      value: parcela?.nombre ?? 'Sin parcela' },
-    { label: 'Producto',     value: producto },
-    { label: 'Dosis',        value: `${dosis} ${unidad ?? ''}/ha` },
-    { label: 'Motivo',       value: motivo },
-    { label: 'Días carencia',  value: `${diasCarencia} días` },
-    { label: 'Días reingreso', value: `${diasReingreso} días` },
-    { label: 'Hab. cosecha',   value: formatDateDisplay(addDays(fecha, diasCarencia)) },
-    { label: 'Hab. reingreso', value: formatDateDisplay(addDays(fecha, diasReingreso)) },
-  ]
-
-  return (
-    <View style={styles.stepContainer}>
-      <StepIndicator current={2} onCancel={onCancelar} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>Confirmar</Text>
-
-        <View style={styles.summaryCard}>
-          {rows.map(({ label, value }, idx) => (
-            <View key={label} style={[styles.summaryRow, idx < rows.length - 1 && styles.summaryRowBorder]}>
-              <Text style={styles.summaryLabel}>{label}</Text>
-              <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right' }]}>{value}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={[styles.actionRow, { marginTop: 24 }]}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
-            <Text style={styles.secondaryBtnText}>Atrás</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { flex: 2 }, loading && { opacity: 0.6 }]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.blanco} size="small" />
-            ) : (
-              <>
-                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
-                <Text style={styles.primaryBtnText}>Confirmar</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
-  )
-}
-
 // ─── Recent registros ─────────────────────────────────────────────────────────
 
 function RecentList({
-  registros, parcelas, onRefresh,
+  registros, parcelas,
 }: {
   registros: RegistroFitosanitario[]
   parcelas: Parcela[]
-  onRefresh: () => void
 }) {
-  async function handleDelete(id: string, producto: string) {
-    Alert.alert('Confirmar', `¿Eliminar la aplicación de ${producto}?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/produccion/fitosanitarios/${id}`)
-            onRefresh()
-          } catch {
-            Alert.alert('Error', 'No se pudo eliminar el registro.')
-          }
-        },
-      },
-    ])
-  }
-
   if (registros.length === 0) {
     return (
       <View style={styles.emptyState}>
         <ICONS.fitosanitario size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
-        <Text style={styles.emptyStateTitle}>Sin registros recientes</Text>
+        <Text style={styles.emptyStateTitle}>Sin aplicaciones recientes</Text>
       </View>
     )
   }
 
   return (
     <View>
-      <Text style={styles.sectionLabel}>REGISTROS RECIENTES</Text>
+      <Text style={styles.sectionLabel}>APLICACIONES RECIENTES</Text>
       {registros.map((r) => {
         const parcela = parcelas.find((p) => p.id === r.parcela_id)
         return (
@@ -628,9 +55,6 @@ function RecentList({
               </Text>
               <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_por_ha} {r.unidad ?? ''}/ha</Text>
             </View>
-            <TouchableOpacity onPress={() => handleDelete(r.id, r.producto_nombre)} style={styles.deleteBtn}>
-              <ICONS.eliminar size={17} color="#ef4444" strokeWidth={ICON_STROKE} />
-            </TouchableOpacity>
           </View>
         )
       })}
@@ -640,45 +64,14 @@ function RecentList({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'fecha_resp' | 'detalle' | 'confirmar'
-
 export default function FitoScreen() {
-  const user = useAuthStore((s) => s.user)
-  const [step, setStep] = useState<Step>('list')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [registros, setRegistros] = useState<RegistroFitosanitario[]>([])
   const [loadingRegistros, setLoadingRegistros] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-
-  const [selFecha, setSelFecha] = useState(isoToday())
-  const [selResponsable, setSelResponsable] = useState('')
-  const [selResponsableId, setSelResponsableId] = useState<string | undefined>(undefined)
-  const [selDetalle, setSelDetalle] = useState<DetalleData | null>(null)
-  const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
-  const [insumosDb, setInsumosDb] = useState<Insumo[]>([])
-
-  const initialResponsable = user?.full_name?.split(' ')[0] ?? ''
-
-  const loadTrabajadoresDb = useCallback(async () => {
-    const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
-    if (cached) setTrabajadoresDb(cached)
-    try {
-      const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
-      setTrabajadoresDb(data)
-      await setCache('trabajadores', data)
-    } catch { /* offline */ }
-  }, [])
-
-  const loadInsumosDb = useCallback(async () => {
-    const cached = await getCache<Insumo[]>('insumos', CACHE_TTL.insumos)
-    if (cached) setInsumosDb(cached)
-    try {
-      const { data } = await api.get<Insumo[]>('/insumos/', { params: { is_active: true } })
-      setInsumosDb(data)
-      await setCache('insumos', data)
-    } catch { /* offline */ }
-  }, [])
+  // Cambia en cada pull-to-refresh para que OrdenesPendientes recargue también.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const loadParcelas = useCallback(async () => {
     const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
@@ -701,8 +94,8 @@ export default function FitoScreen() {
   }, [])
 
   useEffect(() => {
-    loadParcelas(); loadRegistros(); loadTrabajadoresDb(); loadInsumosDb()
-  }, [loadParcelas, loadRegistros, loadTrabajadoresDb, loadInsumosDb])
+    loadParcelas(); loadRegistros()
+  }, [loadParcelas, loadRegistros])
 
   useEffect(() => {
     if (!toast) return
@@ -710,80 +103,7 @@ export default function FitoScreen() {
     return () => clearTimeout(t)
   }, [toast])
 
-  // La carga libre (sin orden) sigue reservada a encargado+ -- mismo gate que
-  // ya exige el backend en POST /produccion/fitosanitarios/ (require_encargado_up).
-  // Los roles de campo (obrero/regador) solo confirman órdenes ya armadas.
-  const puedeCargaLibre = user
-    ? ['super_admin', 'gerencial', 'encargado', 'regador'].includes(user.role)
-    : false
-
-  function onRefresh() { setRefreshing(true); loadRegistros() }
-
-  function reset() {
-    setSelFecha(isoToday())
-    setSelResponsable('')
-    setSelResponsableId(undefined)
-    setSelDetalle(null)
-    setStep('list')
-  }
-
-  function handleCancelar() {
-    Alert.alert(
-      'Cancelar carga',
-      'Se van a perder los datos ingresados. ¿Querés salir?',
-      [
-        { text: 'Seguir cargando', style: 'cancel' },
-        { text: 'Salir', style: 'destructive', onPress: reset },
-      ],
-    )
-  }
-
-  if (step === 'detalle') {
-    return (
-      <StepDetalle
-        fecha={selFecha}
-        responsable={selResponsable}
-        parcelas={parcelas}
-        insumosDb={insumosDb}
-        onInsumoCreado={(nuevo) => setInsumosDb((prev) => [...prev, nuevo])}
-        onNext={(data) => { setSelDetalle(data); setStep('confirmar') }}
-        onBack={() => setStep('fecha_resp')}
-        onCancelar={handleCancelar}
-      />
-    )
-  }
-
-  if (step === 'confirmar' && selDetalle) {
-    return (
-      <StepConfirmar
-        fecha={selFecha}
-        responsable={selResponsable}
-        responsableId={selResponsableId}
-        parcela={selDetalle.parcela}
-        producto={selDetalle.producto}
-        insumoId={selDetalle.insumoId}
-        unidad={selDetalle.unidad}
-        dosis={selDetalle.dosis}
-        motivo={selDetalle.motivo}
-        diasCarencia={selDetalle.diasCarencia}
-        diasReingreso={selDetalle.diasReingreso}
-        onSuccess={() => { reset(); loadParcelas(); loadRegistros(); setToast('Aplicación cargada ✓') }}
-        onBack={() => setStep('detalle')}
-        onCancelar={handleCancelar}
-      />
-    )
-  }
-
-  if (step === 'fecha_resp') {
-    return (
-      <StepFechaResp
-        initialResponsable={initialResponsable}
-        trabajadoresDb={trabajadoresDb}
-        onNext={(f, r, rid) => { setSelFecha(f); setSelResponsable(r); setSelResponsableId(rid); setStep('detalle') }}
-        onCancelar={handleCancelar}
-      />
-    )
-  }
+  function onRefresh() { setRefreshing(true); setRefreshKey((k) => k + 1); loadRegistros() }
 
   return (
     <View style={{ flex: 1 }}>
@@ -800,21 +120,17 @@ export default function FitoScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tierra} />
         }
       >
-        <OrdenesPendientes onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }} />
-
-        {puedeCargaLibre && (
-          <TouchableOpacity style={styles.newBtn} onPress={() => setStep('fecha_resp')} activeOpacity={0.85}>
-            <ICONS.agregar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
-            <Text style={styles.newBtnText}>Nueva aplicación fitosanitaria</Text>
-          </TouchableOpacity>
-        )}
+        <OrdenesPendientes
+          key={refreshKey}
+          onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }}
+        />
 
         <OfflineQueueBanner />
 
         {loadingRegistros ? (
           <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />
         ) : (
-          <RecentList registros={registros} parcelas={parcelas} onRefresh={onRefresh} />
+          <RecentList registros={registros} parcelas={parcelas} />
         )}
       </ScrollView>
     </View>
@@ -823,33 +139,10 @@ export default function FitoScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.hueso },
-  stepContainer: { flex: 1, backgroundColor: colors.hueso },
-  stepTitle: { fontSize: 20, fontWeight: '800', color: colors.ink, marginBottom: 20 },
-  fieldLabel: {
-    fontSize: 11, fontWeight: '700', color: colors.ink60,
-    letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
-  },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
   },
-  suggestBox: {
-    backgroundColor: colors.blanco, borderRadius: 10, borderWidth: 1, borderColor: colors.hueso,
-    marginTop: -8, marginBottom: 14, overflow: 'hidden',
-  },
-  suggestItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: colors.hueso },
-  suggestItemText: { fontSize: 14, color: colors.ink, fontWeight: '500' },
-
-  // new btn
-  newBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.tierra, borderRadius: 14,
-    paddingVertical: 16, paddingHorizontal: 20,
-    marginBottom: 22, justifyContent: 'center',
-    shadowColor: colors.tierra,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
-  },
-  newBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
 
   // recent
   registroCard: {
@@ -861,91 +154,8 @@ const styles = StyleSheet.create({
   registroNombre: { fontSize: 15, fontWeight: '700', color: colors.ink },
   registroSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
   registroDetalle: { fontSize: 12, color: colors.tierra, fontWeight: '600', marginTop: 5 },
-  deleteBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyStateTitle: { fontSize: 15, fontWeight: '600', color: colors.ink60, marginTop: 12 },
-
-  // summary mini
-  summaryMini: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.blanco, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1, borderColor: colors.hueso,
-  },
-  summaryMiniText: { fontSize: 14, fontWeight: '600', color: colors.ink },
-
-  // input
-  input: {
-    height: 48, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.borde,
-    paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 14,
-  },
-  searchInput: {
-    height: 46, backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.borde,
-    paddingHorizontal: 14, fontSize: 15, color: colors.ink, marginBottom: 8,
-  },
-
-  // parcela list
-  parcelaList: {
-    backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso, overflow: 'hidden', marginBottom: 4,
-  },
-  parcelaItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 14,
-    borderBottomWidth: 1, borderBottomColor: colors.hueso,
-  },
-  parcelaItemActive: { backgroundColor: colors.tierra },
-  parcelaItemText: { fontSize: 14, fontWeight: '600', color: colors.ink },
-  parcelaItemSub: { fontSize: 12, color: colors.ink60, marginTop: 1 },
-  emptyText: { color: colors.niebla, textAlign: 'center', paddingVertical: 16, fontSize: 13 },
-
-  // date btn
-  dateBtn: {
-    height: 48, flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: colors.blanco, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.hueso, paddingHorizontal: 14, marginBottom: 14,
-  },
-  dateBtnText: { flex: 1, fontSize: 15, color: colors.ink, fontWeight: '500' },
-
-  // días
-  daysRow: { flexDirection: 'row', marginBottom: 8 },
-  daysStepperRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  dayStepperBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.blanco, borderWidth: 1.5, borderColor: colors.hueso,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  daysValue: { fontSize: 22, fontWeight: '800', color: colors.ink, minWidth: 36, textAlign: 'center' },
-  daysHint: { fontSize: 10, color: colors.niebla, fontWeight: '500' },
-
-  // summary card (step 3)
-  summaryCard: {
-    backgroundColor: colors.blanco, borderRadius: 16,
-    borderWidth: 1, borderColor: colors.hueso, overflow: 'hidden',
-  },
-  summaryRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13,
-  },
-  summaryRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.hueso },
-  summaryLabel: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
-  summaryValue: { fontSize: 13, color: colors.ink, fontWeight: '700' },
-
-  // actions
-  actionRow: { flexDirection: 'row', gap: 10 },
-  primaryBtn: {
-    height: 52, backgroundColor: colors.tierra, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center', flexDirection: 'row',
-  },
-  primaryBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700' },
-  secondaryBtn: {
-    flex: 1, height: 52, borderRadius: 12,
-    borderWidth: 1.5, borderColor: colors.hueso,
-    backgroundColor: colors.blanco, justifyContent: 'center', alignItems: 'center',
-  },
-  secondaryBtnText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
 
   // toast
   toast: {
@@ -957,16 +167,4 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
   toastText: { color: colors.blanco, fontSize: 14, fontWeight: '700' },
-
-  // modal
-  modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 20, backgroundColor: colors.blanco,
-    borderBottomWidth: 1, borderBottomColor: colors.hueso,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.ink },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.hueso, justifyContent: 'center', alignItems: 'center',
-  },
 })

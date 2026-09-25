@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { logout } from '@/lib/auth'
 import type { Role } from '@/lib/theme'
@@ -185,14 +185,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Sub-nav tabs — módulos con sub-secciones */}
         {subNav && (
           <div
-            className="flex items-end gap-1 px-4 border-b flex-shrink-0"
+            className="flex items-end gap-1 px-4 border-b flex-shrink-0 overflow-x-auto"
             style={{ borderColor: '#e2dbcc', backgroundColor: '#ffffff' }}
           >
-            {subNav.items.map((tab) => {
+            {subNav.items.map((tab, i) => {
               const active = pathname.startsWith(tab.href)
+              const nuevoGrupo = tab.group && tab.group !== subNav.items[i - 1]?.group
               return (
+                <Fragment key={tab.href}>
+                {nuevoGrupo && (
+                  <span
+                    className={`flex items-center h-10 text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
+                      i > 0 ? 'ml-3 pl-4 border-l' : 'pl-1'
+                    }`}
+                    style={{ color: '#a09584', borderColor: '#e2dbcc' }}
+                  >
+                    {tab.group}
+                  </span>
+                )}
                 <Link
-                  key={tab.href}
                   href={tab.href}
                   className={`flex items-center h-10 px-3 text-sm font-medium border-b-2
                               transition-colors duration-150 whitespace-nowrap ${
@@ -203,6 +214,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 >
                   {tab.label}
                 </Link>
+                </Fragment>
               )
             })}
           </div>

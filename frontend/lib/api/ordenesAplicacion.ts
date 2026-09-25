@@ -80,3 +80,19 @@ export async function crearOrdenExtra(payload: OrdenAplicacionCreateExtra): Prom
   const { data } = await api.post('/ordenes-aplicacion/', payload)
   return data
 }
+
+// Solo órdenes extra (fuera de plan) y sin aplicaciones confirmadas -- el
+// backend responde 409 en cualquier otro caso.
+export type OrdenAplicacionUpdateExtra = Omit<OrdenAplicacionCreateExtra, 'temporada'>
+
+export async function actualizarOrdenExtra(
+  id: string,
+  payload: OrdenAplicacionUpdateExtra,
+): Promise<OrdenAplicacion> {
+  const { data } = await api.put(`/ordenes-aplicacion/${id}`, payload)
+  return data
+}
+
+export async function eliminarOrdenExtra(id: string): Promise<void> {
+  await api.delete(`/ordenes-aplicacion/${id}`)
+}

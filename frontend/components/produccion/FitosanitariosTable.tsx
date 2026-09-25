@@ -21,8 +21,9 @@ interface Props {
   registros: FitosanitarioResponse[]
   isLoading: boolean
   parcelaNombre: (id: string) => string
-  onEdit: (r: FitosanitarioResponse) => void
-  onDelete: (id: string) => void
+  // Sin handlers la tabla queda de solo lectura (roles sin permiso de corrección).
+  onEdit?: (r: FitosanitarioResponse) => void
+  onDelete?: (id: string) => void
 }
 
 function SkeletonRow() {
@@ -41,7 +42,7 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
   const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
   function handleDelete(id: string) {
-    if (window.confirm('¿Eliminar este registro fitosanitario?')) onDelete(id)
+    if (onDelete && window.confirm('¿Eliminar este registro? Si vino de una orden de aplicación, esa parcela vuelve a quedar pendiente y se devuelve el stock.')) onDelete(id)
   }
 
   return (
@@ -107,12 +108,16 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                     <td className="px-3 py-3 whitespace-nowrap text-gray-700">{r.responsable}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => onEdit(r)} title="Editar" className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors">
-                          <Pencil size={15} />
-                        </button>
-                        <button onClick={() => handleDelete(r.id)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                          <Trash2 size={15} />
-                        </button>
+                        {onEdit && (
+                          <button onClick={() => onEdit(r)} title="Corregir" className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors">
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button onClick={() => handleDelete(r.id)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

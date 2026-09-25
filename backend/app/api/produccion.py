@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
 from app.core import ciclo_campana, fenologia
@@ -28,7 +29,11 @@ from app.models.produccion import (
     DestinoCosecha,
     EstadoCampana,
     EstadoFenologico,
+    EstadoOrdenAplicacion,
+    EstadoOrdenAplicacionParcela,
     EstadoVariedadCampana,
+    OrdenAplicacion,
+    OrdenAplicacionParcela,
     OrigenCosecha,
     RegistroCosecha,
     RegistroFitosanitario,
@@ -1078,12 +1083,38 @@ async def delete_fitosanitario(
     _: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(
-        select(RegistroFitosanitario).where(RegistroFitosanitario.id == fitosanitario_id)
+        select(RegistroFitosanitario)
+        .options(
+            selectinload(RegistroFitosanitario.orden_parcela)
+            .selectinload(OrdenAplicacionParcela.orden)
+            .selectinload(OrdenAplicacion.parcelas),
+            selectinload(RegistroFitosanitario.fotos),
+        )
+        .where(RegistroFitosanitario.id == fitosanitario_id)
     )
     fito = result.scalar_one_or_none()
     if fito is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
     await _revertir_movimiento_stock(db, fito)
+
+    # Si vino de confirmar una orden (el operario marcó mal la parcela, por
+    # ejemplo), esa parcela vuelve a quedar pendiente en la orden en vez de
+    # romper la FK.
+    item = fito.orden_parcela
+    if item is not None:
+        item.estado = EstadoOrdenAplicacionParcela.pendiente
+        item.registro_fitosanitario_id = None
+        orden = item.orden
+        estados = {p.estado for p in orden.parcelas}
+        orden.estado = (
+            EstadoOrdenAplicacion.en_curso
+            if EstadoOrdenAplicacionParcela.aplicada in estados
+            else EstadoOrdenAplicacion.pendiente
+        )
+        await db.flush()
+
+    for foto in fito.fotos:
+        await db.delete(foto)
     await db.delete(fito)
     await db.flush()
 

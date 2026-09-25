@@ -711,7 +711,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
         {([
           { key: 'riego', label: '+ Riego', route: '/(tabs)/riego'  },
           { key: 'tarea', label: '+ Tarea', route: '/(tabs)/tareas' },
-          { key: 'fito',  label: '+ Fito',  route: '/fito'          },
+          { key: 'fito',  label: 'Fito',    route: '/(tabs)/fitosanitario' },
         ] as const).map(({ key, label, route }) => (
           <TouchableOpacity
             key={key}

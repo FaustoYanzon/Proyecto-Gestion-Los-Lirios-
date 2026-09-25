@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, AlertTriangle, Download } from 'lucide-react'
+import Link from 'next/link'
+import { X, AlertTriangle, Download } from 'lucide-react'
 import {
   getFitosanitarios, deleteFitosanitario, getAlertasCarencia,
   type FitosanitarioFilter, type FitosanitarioResponse,
@@ -10,6 +11,7 @@ import {
 import { getParcelas } from '@/lib/api/produccion'
 import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
+import { useAuthStore } from '@/store/authStore'
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
@@ -71,8 +73,14 @@ function Sheet({ open, onClose, title, children }: {
 const EMPTY_FILTERS: FitosanitarioFilter = {}
 const today = new Date().toISOString().split('T')[0]
 
+// Historial de aplicaciones realizadas. Ya no se cargan a mano: cada fila
+// nace cuando un operario confirma una orden de aplicación en mobile
+// (/dashboard/produccion/ordenes-aplicacion). Gerencial+ puede corregir o
+// borrar una fila (mismo permiso que exige el backend).
 export default function FitosanitariosPage() {
   const queryClient = useQueryClient()
+  const role = useAuthStore((s) => s.user?.role)
+  const puedeCorregir = role === 'super_admin' || role === 'gerencial'
   const [filtros, setFiltros] = useState<FitosanitarioFilter>(EMPTY_FILTERS)
   const [modalOpen, setModalOpen] = useState(false)
   const [registroEditar, setRegistroEditar] = useState<FitosanitarioResponse | null>(null)
@@ -99,7 +107,6 @@ export default function FitosanitariosPage() {
     return parcelas.find((p) => p.id === id)?.nombre ?? id
   }
 
-  function openCreate() { setRegistroEditar(null); setModalOpen(true) }
   function openEdit(r: FitosanitarioResponse) { setRegistroEditar(r); setModalOpen(true) }
   function closeModal() { setModalOpen(false); setRegistroEditar(null) }
 
@@ -119,7 +126,13 @@ export default function FitosanitariosPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-gray-900">Fitosanitarios</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Aplicaciones realizadas</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Historial de lo que se aplicó en cada parcela. Para indicar una aplicación nueva, creá una{' '}
+            <Link href="/dashboard/produccion/ordenes-aplicacion" className="text-[#7a1f2c] underline">orden de aplicación</Link>.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           {registros.length > 0 && (
             <button
@@ -131,10 +144,6 @@ export default function FitosanitariosPage() {
               CSV
             </button>
           )}
-          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors">
-            <Plus size={16} />
-            Nueva Aplicación
-          </button>
         </div>
       </div>
 
@@ -189,11 +198,11 @@ export default function FitosanitariosPage() {
         registros={registros}
         isLoading={isLoading}
         parcelaNombre={parcelaNombre}
-        onEdit={openEdit}
-        onDelete={handleDelete}
+        onEdit={puedeCorregir ? openEdit : undefined}
+        onDelete={puedeCorregir ? handleDelete : undefined}
       />
 
-      <Sheet open={modalOpen} onClose={closeModal} title={registroEditar ? 'Editar Aplicación' : 'Nueva Aplicación Fitosanitaria'}>
+      <Sheet open={modalOpen} onClose={closeModal} title="Corregir aplicación">
         <FitosanitarioForm
           registro={registroEditar ?? undefined}
           parcelas={parcelas}

@@ -380,6 +380,21 @@ class OrdenAplicacionCreateExtra(BaseModel):
     notas: str | None = None
 
 
+class OrdenAplicacionUpdateExtra(BaseModel):
+    """Reemplazo completo de una orden extra (fuera de plan). La temporada no
+    se edita -- la orden queda en la campaña en que se creó."""
+    variedad: VariedadUva
+    insumo_id: str
+    dosis_por_ha: float = Field(gt=0)
+    objetivo: str
+    dias_carencia: int = Field(ge=0)
+    dias_reingreso: int = Field(ge=0)
+    fecha_planificada: date
+    # None = todas las parcelas activas de la variedad.
+    parcela_ids: list[str] | None = None
+    notas: str | None = None
+
+
 class ConfirmarAplicacionRequest(BaseModel):
     observaciones: str | None = None
 

@@ -85,23 +85,29 @@ export const ALL_NAV: NavItem[] = [
   },
 ]
 
-export type SubNav = { prefix: string; items: { href: string; label: string }[] }
+// `group` agrupa visualmente las pestañas de un módulo (se dibuja un
+// separador con el nombre del grupo cuando cambia).
+export type SubNavItem = { href: string; label: string; group?: string }
+export type SubNav = { prefix: string; items: SubNavItem[] }
 
 export const SUB_NAVS: SubNav[] = [
   {
     prefix: '/dashboard/produccion',
     items: [
-      { href: '/dashboard/produccion/tareas',         label: 'Tareas'         },
-      { href: '/dashboard/produccion/riego',          label: 'Riego'          },
-      { href: '/dashboard/produccion/fitosanitarios', label: 'Fitosanitarios' },
-      { href: '/dashboard/produccion/campana',        label: 'Campaña'        },
-      { href: '/dashboard/produccion/cosecha',        label: 'Cosecha'        },
-      { href: '/dashboard/produccion/metas',          label: 'Metas'          },
-      { href: '/dashboard/produccion/plan-fitosanitario', label: 'Plan Fitosanitario' },
-      { href: '/dashboard/produccion/ordenes-aplicacion', label: 'Órdenes de Aplicación' },
-      { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento' },
-      { href: '/dashboard/produccion/clima',          label: 'Clima'          },
-      { href: '/dashboard/produccion/dashboard',      label: 'Dashboard Producción' },
+      // Registro: lo que se carga día a día.
+      { href: '/dashboard/produccion/tareas',             label: 'Tareas',                group: 'Registro' },
+      { href: '/dashboard/produccion/riego',              label: 'Riego',                 group: 'Registro' },
+      { href: '/dashboard/produccion/ordenes-aplicacion', label: 'Órdenes de Aplicación', group: 'Registro' },
+      { href: '/dashboard/produccion/cosecha',            label: 'Cosecha',               group: 'Registro' },
+      // Planificación: lo que se define antes o durante la campaña.
+      { href: '/dashboard/produccion/metas',              label: 'Metas',                 group: 'Planificación' },
+      { href: '/dashboard/produccion/plan-fitosanitario', label: 'Plan Fitosanitario',    group: 'Planificación' },
+      { href: '/dashboard/produccion/campana',            label: 'Campaña',               group: 'Planificación' },
+      // Seguimiento: tableros y lectura, no se carga nada.
+      { href: '/dashboard/produccion/dashboard',          label: 'Dashboard',             group: 'Seguimiento' },
+      { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento',  group: 'Seguimiento' },
+      { href: '/dashboard/produccion/fitosanitarios',     label: 'Aplicaciones realizadas', group: 'Seguimiento' },
+      { href: '/dashboard/produccion/clima',              label: 'Clima',                 group: 'Seguimiento' },
     ],
   },
   {

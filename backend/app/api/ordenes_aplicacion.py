@@ -32,6 +32,7 @@ from app.schemas.produccion import (
     OrdenAplicacionCreateExtra,
     OrdenAplicacionParcelaResponse,
     OrdenAplicacionResponse,
+    OrdenAplicacionUpdateExtra,
 )
 
 router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
@@ -260,6 +261,75 @@ async def get_orden(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
     return _to_response(orden)
+
+
+async def _get_orden_extra_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacion:
+    """Solo las órdenes extra (fuera de plan) se editan/eliminan -- las del
+    plan se regeneran desde el plan. Y solo mientras ningún operario haya
+    confirmado nada: una vez que hay RegistroFitosanitario real (con stock ya
+    descontado) la orden deja de ser un borrador."""
+    orden = await db.get(OrdenAplicacion, orden_id, options=list(_ORDEN_LOAD_OPTS))
+    if orden is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
+    if orden.origen != OrigenOrdenAplicacion.extra:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Las órdenes del plan no se editan ni eliminan desde acá.",
+        )
+    if any(p.estado == EstadoOrdenAplicacionParcela.aplicada for p in orden.parcelas):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La orden ya tiene aplicaciones confirmadas, no se puede modificar.",
+        )
+    return orden
+
+
+@router.put("/{orden_id}", response_model=OrdenAplicacionResponse)
+async def actualizar_orden_extra(
+    orden_id: str,
+    data: OrdenAplicacionUpdateExtra,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> OrdenAplicacionResponse:
+    orden = await _get_orden_extra_editable(db, orden_id)
+    insumo = await _resolve_insumo(db, data.insumo_id)
+    parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
+
+    orden.variedad = data.variedad
+    orden.insumo_id = data.insumo_id
+    orden.insumo = insumo
+    orden.dosis_por_ha = data.dosis_por_ha
+    orden.objetivo = data.objetivo
+    orden.dias_carencia = data.dias_carencia
+    orden.dias_reingreso = data.dias_reingreso
+    orden.fecha_planificada = data.fecha_planificada
+    orden.notas = data.notas
+
+    # Todas las filas siguen pendientes (lo garantiza _get_orden_extra_editable):
+    # se conservan las parcelas que siguen, se agregan las nuevas y se
+    # quitan las que salieron (delete-orphan).
+    nuevas_ids = {p.id for p in parcelas}
+    orden.parcelas = [item for item in orden.parcelas if item.parcela_id in nuevas_ids]
+    existentes = {item.parcela_id for item in orden.parcelas}
+    for parcela in parcelas:
+        if parcela.id not in existentes:
+            item = OrdenAplicacionParcela(parcela_id=parcela.id)
+            item.parcela = parcela
+            orden.parcelas.append(item)
+
+    await db.flush()
+    return _to_response(orden)
+
+
+@router.delete("/{orden_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_orden_extra(
+    orden_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> None:
+    orden = await _get_orden_extra_editable(db, orden_id)
+    await db.delete(orden)
+    await db.flush()
 
 
 @router.post(
