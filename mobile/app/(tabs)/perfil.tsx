@@ -12,7 +12,7 @@ import {
   Switch,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
-import * as ImagePicker from 'expo-image-picker'
+import { elegirImagenDeGaleria } from '../../lib/imagePicker'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
@@ -86,28 +86,17 @@ export default function PerfilScreen() {
   }
 
   async function pickAvatar() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Se necesita acceso a la galería para cambiar la foto.')
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    })
-    if (result.canceled || !result.assets[0]) return
+    const uri = await elegirImagenDeGaleria({ aspect: [1, 1] })
+    if (!uri) return
 
     setAvatarError(null)
     setUploadingAvatar(true)
     try {
-      const asset = result.assets[0]
       const formData = new FormData()
       // React Native's FormData acepta este shape con uri/name/type -- no es
       // un File real del DOM, por eso el `as any`.
       formData.append('file', {
-        uri: asset.uri,
+        uri,
         name: 'avatar.jpg',
         type: 'image/jpeg',
       } as any)

@@ -8,11 +8,11 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator,
   TextInput, Modal, Image,
 } from 'react-native'
-import * as ImagePicker from 'expo-image-picker'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import {
   getOrdenesPendientes, confirmarAplicacionOrden, subirFotoAplicacion,
 } from '../lib/api'
+import { elegirImagenDeGaleria } from '../lib/imagePicker'
 import { colors } from '../lib/theme'
 import type { OrdenAplicacion, OrdenAplicacionParcelaItem } from '../lib/types'
 import { VARIEDAD_LABELS } from '../lib/types'
@@ -45,16 +45,8 @@ function ConfirmarModal({
   }, [visible])
 
   async function handleElegirFoto() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Se necesita acceso a la galería para adjuntar una foto.')
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsEditing: true, quality: 0.7,
-    })
-    if (result.canceled || !result.assets[0]) return
-    setFotoUri(result.assets[0].uri)
+    const uri = await elegirImagenDeGaleria()
+    if (uri) setFotoUri(uri)
   }
 
   async function handleConfirmar() {
