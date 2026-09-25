@@ -119,9 +119,17 @@ export default function IngresosPage() {
     setFiltros((f) => ({ ...f, finca: fincaGlobal }))
   }
 
+  // Por defecto las fechas filtran por fecha de impacto (Fecha de Pago para
+  // cheques/echeques), igual que el dashboard y el flujo; se puede cambiar a
+  // fecha de cobro/recepción.
+  const [porImputacion, setPorImputacion] = useState(true)
+
+  // limit alto a propósito: la tabla pagina del lado del cliente y suma el
+  // total sobre todo lo que devuelve -- con el límite por defecto del backend
+  // (100 filas) el total quedaba corto (mismo bug que tuvo Egresos el 08-18).
   const { data: ingresos = [], isLoading } = useQuery({
-    queryKey: ['ingresos', filtros],
-    queryFn: () => getIngresos(filtros),
+    queryKey: ['ingresos', filtros, porImputacion],
+    queryFn: () => getIngresos({ ...filtros, por_imputacion: porImputacion, limit: 10000 }),
     staleTime: 30_000,
   })
 
@@ -190,6 +198,19 @@ export default function IngresosPage() {
       {/* Filter bar */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
         <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Fechas por</label>
+            <select
+              value={porImputacion ? 'impacto' : 'cobro'}
+              onChange={(e) => setPorImputacion(e.target.value === 'impacto')}
+              className={inputCls}
+              title="Impacto: los cheques cuentan en su Fecha de Pago (igual que el dashboard). Recepción: en la fecha en que se recibieron."
+            >
+              <option value="impacto">Impacto (como el dashboard)</option>
+              <option value="cobro">Recepción</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
             <input

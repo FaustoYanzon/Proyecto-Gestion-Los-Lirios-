@@ -69,6 +69,7 @@ export interface IngresosFilter {
   finca?: string
   moneda?: string
   solo_cheques_disponibles?: boolean
+  por_imputacion?: boolean
   skip?: number
   limit?: number
 }
