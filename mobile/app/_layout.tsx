@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Alert } from 'react-native'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useFonts } from 'expo-font'
@@ -17,6 +18,20 @@ import { colors } from '../lib/theme'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 SplashScreen.preventAutoHideAsync()
+
+// Diagnóstico (2026-09-24): un error JS fatal fuera del render (no lo atrapa
+// el ErrorBoundary) cerraba la app al entrar a Fito, y el crash report de
+// iOS no trae el mensaje. En vez de cerrar, mostramos el error en pantalla
+// para poder leerlo. Los no fatales siguen por el handler normal.
+const handlerOriginal = ErrorUtils.getGlobalHandler()
+ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+  if (!isFatal) {
+    handlerOriginal(error, isFatal)
+    return
+  }
+  const detalle = `${error?.name ?? 'Error'}: ${error?.message ?? String(error)}\n\n${(error?.stack ?? '').slice(0, 900)}`
+  Alert.alert('Error (mandale captura a Fausto)', detalle)
+})
 
 function AuthGuard() {
   const user = useAuthStore((s) => s.user)
