@@ -61,6 +61,9 @@ export interface IngresoCreate {
 
 export interface IngresoResponse extends IngresoCreate {
   id: string
+  // Vencimiento (f_pago) para cheques/echeques, fecha para el resto: la fecha
+  // con la que el ingreso entra al flujo y a los KPIs.
+  fecha_imputacion: string
   created_by: string
   created_at: string
 }

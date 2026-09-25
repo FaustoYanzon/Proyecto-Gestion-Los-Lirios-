@@ -207,16 +207,22 @@ async def list_ingresos(
     solo_cheques_disponibles: bool = Query(
         False, description="Cheques cobrados (forma_pago cheque/echeque) sin uso_cheque asignado."
     ),
+    por_imputacion: bool = Query(
+        False,
+        description="fecha_desde/fecha_hasta filtran por fecha_imputacion (vencimiento del "
+        "cheque) en vez de por fecha de cobro.",
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_gerencial_up),
 ) -> list[Ingreso]:
     stmt = select(Ingreso).order_by(Ingreso.fecha.desc())
+    fecha_filtro = Ingreso.fecha_imputacion if por_imputacion else Ingreso.fecha
     if fecha_desde is not None:
-        stmt = stmt.where(Ingreso.fecha >= fecha_desde)
+        stmt = stmt.where(fecha_filtro >= fecha_desde)
     if fecha_hasta is not None:
-        stmt = stmt.where(Ingreso.fecha <= fecha_hasta)
+        stmt = stmt.where(fecha_filtro <= fecha_hasta)
     if comprador is not None:
         stmt = stmt.where(Ingreso.comprador.ilike(f"%{comprador}%"))
     if destino is not None:
@@ -338,7 +344,9 @@ async def dashboard_resumen_anual(
     end = date(anio_fin, 4, 30)
 
     ingresos = list(
-        (await db.execute(select(Ingreso).where(Ingreso.fecha >= start, Ingreso.fecha <= end)))
+        (await db.execute(select(Ingreso).where(
+            Ingreso.fecha_imputacion >= start, Ingreso.fecha_imputacion <= end
+        )))
         .scalars().all()
     )
     egresos = list(
@@ -523,7 +531,9 @@ async def flujo_anual(
         .all()
     )
     ingresos = list(
-        (await db.execute(select(Ingreso).where(Ingreso.fecha >= start, Ingreso.fecha <= end)))
+        (await db.execute(select(Ingreso).where(
+            Ingreso.fecha_imputacion >= start, Ingreso.fecha_imputacion <= end
+        )))
         .scalars()
         .all()
     )
@@ -556,7 +566,7 @@ async def flujo_anual(
                 monthly[key]["egresos_usd"] += e.monto
 
     for i in ingresos:
-        key = (i.fecha.year, i.fecha.month)
+        key = (i.fecha_imputacion.year, i.fecha_imputacion.month)
         if key in monthly:
             if i.moneda == MonedaTipo.ars:
                 monthly[key]["ingresos_ars"] += i.monto

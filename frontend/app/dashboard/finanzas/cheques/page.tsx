@@ -154,7 +154,7 @@ export default function ChequesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">F. Pago</th>
+                <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Vencimiento</th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">N° Cheque</th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Banco</th>
                 <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Comprador</th>

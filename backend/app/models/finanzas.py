@@ -6,7 +6,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Index, Numeric, String
+from sqlalchemy import (
+    ColumnElement, Date, DateTime, Enum as SAEnum, ForeignKey, Index, Numeric, String, and_, case,
+)
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -188,6 +191,8 @@ class Ingreso(Base):
     # Cheque-only fields — populated when forma_pago is cheque/echeque.
     banco: Mapped[str | None] = mapped_column(String(100), nullable=True)
     n_cheque: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Fecha de vencimiento del cheque (columna "F PAGO" de BD Cobros). Para
+    # cheques/echeques es cuando el ingreso se devenga -- ver fecha_imputacion.
     f_pago: Mapped[date | None] = mapped_column(Date, nullable=True)
     # What the cheque was used for once spent. NULL/empty = still available.
     # Drives the cheque tracking screen (/dashboard/finanzas/cheques).
@@ -211,6 +216,29 @@ class Ingreso(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    @hybrid_property
+    def fecha_imputacion(self) -> date:
+        """Fecha en que el ingreso impacta en flujo/dashboard/KPIs: el
+        vencimiento (f_pago) para cheques y echeques, `fecha` para el resto.
+        `fecha` sigue siendo cuándo se recibió el cobro."""
+        if self.forma_pago in (FormaPago.cheque, FormaPago.echeque) and self.f_pago is not None:
+            return self.f_pago
+        return self.fecha
+
+    @fecha_imputacion.inplace.expression
+    @classmethod
+    def _fecha_imputacion_expression(cls) -> ColumnElement[date]:
+        return case(
+            (
+                and_(
+                    cls.forma_pago.in_([FormaPago.cheque, FormaPago.echeque]),
+                    cls.f_pago.is_not(None),
+                ),
+                cls.f_pago,
+            ),
+            else_=cls.fecha,
+        )
 
     __table_args__ = (
         Index("ix_ingresos_fecha", "fecha"),

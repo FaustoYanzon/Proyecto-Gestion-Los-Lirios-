@@ -45,7 +45,7 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
 
   const [{ data: ingresos }, { data: egresos }] = await Promise.all([
     api.get<IngresoResponse[]>('/finanzas/ingresos/', {
-      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, por_imputacion: true, limit: 10000 },
     }),
     api.get<EgresoResponse[]>('/finanzas/egresos/', {
       params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 10000 },
@@ -58,7 +58,7 @@ export async function getFlujoAnual(anioInicio: number): Promise<FlujoAnualData>
     if (ing.moneda !== 'ars') continue
     const key = ing.comprador.toUpperCase()
     if (!clienteMap.has(key)) clienteMap.set(key, Array(12).fill(0))
-    const idx = campaignIdx(ing.fecha, anioInicio)
+    const idx = campaignIdx(ing.fecha_imputacion, anioInicio)
     if (idx >= 0) clienteMap.get(key)![idx] += Number(ing.monto)
   }
 

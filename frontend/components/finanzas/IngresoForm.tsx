@@ -246,7 +246,7 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
               <input type="text" {...register('n_cheque')} className={field} />
             </div>
             <div>
-              <label className={lbl}>Fecha de Pago del Cheque</label>
+              <label className={lbl}>Fecha de Vencimiento</label>
               <input type="date" {...register('f_pago')} className={field} />
             </div>
             <div>

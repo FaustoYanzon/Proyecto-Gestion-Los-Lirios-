@@ -114,6 +114,9 @@ class IngresoUpdate(BaseModel):
 
 class IngresoResponse(IngresoBase):
     id: str
+    # Vencimiento (f_pago) para cheques/echeques, fecha para el resto -- es
+    # la fecha con la que el ingreso entra al flujo y a los KPIs.
+    fecha_imputacion: date
     created_by: str
     created_at: datetime
 
