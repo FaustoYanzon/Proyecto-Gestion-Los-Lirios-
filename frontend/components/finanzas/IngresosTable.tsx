@@ -3,7 +3,6 @@
 import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DESTINO_INGRESO_LABELS,
-  ESTADO_INGRESO_LABELS,
   FORMA_PAGO_INGRESO_LABELS,
   type IngresoResponse,
 } from '@/lib/api/ingresos'
@@ -43,7 +42,7 @@ interface Props {
 function SkeletonRow() {
   return (
     <tr>
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: 9 }).map((_, i) => (
         <td key={i} className="px-3 py-3">
           <div className="h-4 bg-gray-200 rounded animate-pulse" />
         </td>
@@ -78,7 +77,6 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Fecha</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Comprador</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Destino</th>
-              <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Estado</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Forma de Pago</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Monto</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">Moneda</th>
@@ -92,7 +90,7 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
               Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
             ) : ingresos.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-gray-400">
+                <td colSpan={9} className="px-3 py-12 text-center text-gray-400">
                   No hay ingresos registrados
                 </td>
               </tr>
@@ -103,9 +101,6 @@ export default function IngresosTable({ ingresos, isLoading, onEdit, onDelete }:
                   <td className="px-3 py-3 whitespace-nowrap font-medium text-gray-800">{ing.comprador}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">
                     {DESTINO_INGRESO_LABELS[ing.destino] ?? ing.destino}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-gray-500">
-                    {ing.estado ? ESTADO_INGRESO_LABELS[ing.estado] : '—'}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">
                     {FORMA_PAGO_INGRESO_LABELS[ing.forma_pago] ?? ing.forma_pago}

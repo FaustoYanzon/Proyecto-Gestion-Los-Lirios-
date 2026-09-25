@@ -54,11 +54,6 @@ class DestinoIngreso(str, enum.Enum):
     otro = "otro"
 
 
-class EstadoIngreso(str, enum.Enum):
-    no_registrado = "no_registrado"
-    facturado = "facturado"
-
-
 class TipoEgreso(str, enum.Enum):
     sueldos_personal = "sueldos_personal"
     produccion = "produccion"
@@ -223,7 +218,6 @@ class Ingreso(ChequeMixin, Base):
     destino: Mapped[DestinoIngreso] = mapped_column(SAEnum(DestinoIngreso), nullable=False)
     comprador: Mapped[str] = mapped_column(String(200), nullable=False)
     forma_pago: Mapped[FormaPago] = mapped_column(SAEnum(FormaPago), nullable=False)
-    estado: Mapped[EstadoIngreso | None] = mapped_column(SAEnum(EstadoIngreso), nullable=True)
     # Free text on purpose: "cuenta_destino" (caja, BSJ, or a person's name)
     # comes from an open-ended source spreadsheet — locking it to an enum
     # would reject values Fausto hasn't used yet. The frontend offers known

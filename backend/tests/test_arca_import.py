@@ -230,7 +230,7 @@ async def test_clasificar_ingreso_marks_facturado_and_prefills_comprador(client,
     )
     assert resp.status_code == 201
     ingreso = resp.json()
-    assert ingreso["estado"] == "facturado"
+    assert ingreso["origen"] == "oficial"
     assert ingreso["comprador"] == "OVAR S. A."
     assert ingreso["fuente"] == "arca_csv"
     # Neto sin IVA débito: Imp. Total 40409098.60 - Total IVA 3839778.60.

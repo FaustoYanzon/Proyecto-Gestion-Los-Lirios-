@@ -8,7 +8,6 @@ import {
   deleteIngreso,
   DESTINO_INGRESO_VALUES,
   DESTINO_INGRESO_LABELS,
-  ESTADO_INGRESO_LABELS,
   FORMA_PAGO_INGRESO_VALUES,
   FORMA_PAGO_INGRESO_LABELS,
   type IngresosFilter,
@@ -72,12 +71,11 @@ function Sheet({ open, onClose, title, children }: SheetProps) {
 const FINCA_LABELS_I: Record<string, string> = { los_mimbres: 'Los Mimbres', media_agua: 'Media Agua', caucete: 'Caucete' }
 
 function exportCSV(data: IngresoResponse[]) {
-  const headers = ['Fecha', 'Comprador', 'Destino', 'Estado', 'Forma de Pago', 'Banco', 'N° Cheque', 'Monto', 'Moneda', 'Finca', 'Origen']
+  const headers = ['Fecha', 'Comprador', 'Destino', 'Forma de Pago', 'Banco', 'N° Cheque', 'Monto', 'Moneda', 'Finca', 'Origen']
   const rows = data.map((i) => [
     i.fecha,
     i.comprador,
     DESTINO_INGRESO_LABELS[i.destino] ?? i.destino,
-    i.estado ? ESTADO_INGRESO_LABELS[i.estado] : '',
     FORMA_PAGO_INGRESO_LABELS[i.forma_pago] ?? i.forma_pago,
     i.banco ?? '',
     i.n_cheque ?? '',

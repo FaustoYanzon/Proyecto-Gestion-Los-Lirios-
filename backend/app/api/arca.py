@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_gerencial_up
 from app.core.arca_import import decode_csv_bytes, parse_arca_csv
 from app.models.arca import ComprobanteArcaImportado, EstadoComprobanteArca, LoteImportacionArca, TipoArchivoArca
-from app.models.finanzas import Egreso, EstadoIngreso, Ingreso, MonedaTipo, OrigenPago
+from app.models.finanzas import Egreso, Ingreso, MonedaTipo, OrigenPago
 from app.models.user import User
 from app.schemas.arca import (
     ClasificarEgresoRequest,
@@ -271,7 +271,6 @@ async def clasificar_comprobante_ingreso(
         destino=data.destino,
         comprador=data.comprador or comprobante.denominacion_contraparte,
         forma_pago=data.forma_pago,
-        estado=EstadoIngreso.facturado,
         cuenta_destino=data.cuenta_destino,
         monto=neto * signo,
         moneda=MonedaTipo(comprobante.moneda),

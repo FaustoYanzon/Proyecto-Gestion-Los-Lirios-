@@ -766,6 +766,7 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
         varchar(50) fuente
+        timestamptz aviso_pago_enviado_at
     }
     egresos {
         varchar(36) id PK
@@ -785,6 +786,10 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
         varchar(36) referencia_id
+        varchar(100) banco
+        varchar(50) n_cheque
+        date f_pago
+        timestamptz aviso_pago_enviado_at
     }
     presupuestos {
         varchar(36) id PK
@@ -867,6 +872,7 @@ erDiagram
 | `created_at` | timestamptz | NOT NULL |  |
 | `updated_at` | timestamptz | NOT NULL |  |
 | `fuente` | varchar(50) | NOT NULL |  |
+| `aviso_pago_enviado_at` | timestamptz |  |  |
 
 ### `egresos`
 
@@ -889,6 +895,10 @@ erDiagram
 | `created_at` | timestamptz | NOT NULL |  |
 | `updated_at` | timestamptz | NOT NULL |  |
 | `referencia_id` | varchar(36) |  |  |
+| `banco` | varchar(100) |  |  |
+| `n_cheque` | varchar(50) |  |  |
+| `f_pago` | date |  |  |
+| `aviso_pago_enviado_at` | timestamptz |  |  |
 
 ### `presupuestos`
 

@@ -12,8 +12,6 @@ import {
   getCuentasDestino,
   DESTINO_INGRESO_VALUES,
   DESTINO_INGRESO_LABELS,
-  ESTADO_INGRESO_VALUES,
-  ESTADO_INGRESO_LABELS,
   FORMA_PAGO_INGRESO_VALUES,
   FORMA_PAGO_INGRESO_LABELS,
   FORMAS_PAGO_CHEQUE,
@@ -29,7 +27,6 @@ const schema = z
     destino: z.enum(DESTINO_INGRESO_VALUES, { error: 'Requerido' }),
     comprador: z.string().min(1, 'Requerido'),
     forma_pago: z.enum(FORMA_PAGO_INGRESO_VALUES, { error: 'Requerido' }),
-    estado: z.enum(ESTADO_INGRESO_VALUES).optional().or(z.literal('')),
     cuenta_destino: z.string().optional(),
     banco: z.string().optional(),
     n_cheque: z.string().optional(),
@@ -88,7 +85,6 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
           destino: ingreso.destino,
           comprador: ingreso.comprador,
           forma_pago: ingreso.forma_pago,
-          estado: ingreso.estado ?? '',
           cuenta_destino: ingreso.cuenta_destino ?? '',
           banco: ingreso.banco ?? '',
           n_cheque: ingreso.n_cheque ?? '',
@@ -105,7 +101,6 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
           fecha: today,
           moneda: 'ars',
           origen: 'oficial',
-          estado: '',
           cuenta_destino: '',
           banco: '',
           n_cheque: '',
@@ -131,7 +126,6 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
       setSubmitError(null)
       const payload = {
         ...data,
-        estado: data.estado || undefined,
         cuenta_destino: (isCustomCuenta ? customCuenta.trim() : data.cuenta_destino) || undefined,
         tipo_cambio: data.moneda === 'usd' ? data.tipo_cambio : undefined,
         // Cheque-only fields: clear them if the payment method changed away from cheque,
@@ -187,17 +181,6 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
             ))}
           </select>
           {errors.destino && <p className={err}>{errors.destino.message}</p>}
-        </div>
-
-        {/* Estado */}
-        <div>
-          <label className={lbl}>Estado <span className="text-gray-400 font-normal">(opcional)</span></label>
-          <select {...register('estado')} className={field}>
-            <option value="">Sin definir</option>
-            {ESTADO_INGRESO_VALUES.map((e) => (
-              <option key={e} value={e}>{ESTADO_INGRESO_LABELS[e]}</option>
-            ))}
-          </select>
         </div>
 
         {/* Forma de pago */}
@@ -306,8 +289,8 @@ export default function IngresoForm({ ingreso, onSuccess, onCancel }: Props) {
         <div>
           <label className={lbl}>Origen</label>
           <select {...register('origen')} className={field}>
-            <option value="oficial">Oficial</option>
-            <option value="no_oficial">No oficial</option>
+            <option value="oficial">Oficial (facturado)</option>
+            <option value="no_oficial">No oficial (no registrado)</option>
           </select>
         </div>
 

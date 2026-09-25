@@ -11,7 +11,8 @@ Decisiones confirmadas con Fausto (sesión 2026-09-21):
   convención mayo->abril de todo el sistema (igual que vw_kpi_comprador, que
   ya separa kg entregado por temporada de cosecha vs $ cobrado por temporada
   de cobro como dos ejes distintos).
-- `origen` (oficial/no_oficial) no está en el Excel -> se espeja de `estado`
+- `origen` (oficial/no_oficial) no está en el Excel -> se deriva de ESTADO
+  (desde 2026-09-25 la columna `estado` ya no existe: era lo mismo que origen)
   (FACT->oficial, NR->no_oficial), mismo criterio que se usó en julio cuando
   origen era el único campo de este tipo.
 - `finca` no está en el Excel -> 'media_agua' por defecto en las 300 filas
@@ -247,15 +248,15 @@ async def main() -> None:
                         continue
                     await conn.execute(
                         """INSERT INTO ingresos
-                           (id, fecha, destino, comprador, forma_pago, estado,
+                           (id, fecha, destino, comprador, forma_pago,
                             cuenta_destino, banco, n_cheque, f_pago, uso_cheque,
                             monto, moneda, tipo_cambio, origen, finca, descripcion,
                             fuente, created_by, created_at, updated_at)
                            VALUES ($1,$2,$3::destinoingreso,$4,$5::formapago,
-                                   $6::estadoingreso,$7,$8,$9,$10,$11,$12,'ars',
-                                   NULL,$13::origenpago,'media_agua',$14,$15,$16,$17,$17)""",
+                                   $6,$7,$8,$9,$10,$11,'ars',
+                                   NULL,$12::origenpago,'media_agua',$13,$14,$15,$16,$16)""",
                         str(uuid.uuid4()), r["fecha"], r["destino"], r["comprador"],
-                        r["forma_pago"], r["estado"], r["cuenta_destino"], r["banco"],
+                        r["forma_pago"], r["cuenta_destino"], r["banco"],
                         r["n_cheque"], r["f_pago"], r["uso_cheque"], r["monto"],
                         r["origen"], r["descripcion"], FUENTE, created_by, now,
                     )

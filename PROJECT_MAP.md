@@ -72,7 +72,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 43 (head: `bbb383698209_cheques_emitidos_y_aviso_de_fecha_de_.py, a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
+**Migraciones de Alembic:** 44 (head: `bda9cc7d181b_eliminar_estado_de_ingresos.py, a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
