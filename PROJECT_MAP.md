@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-09-24
+> Última generación: 2026-09-25
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -86,11 +86,12 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (39):**
+**Rutas (40):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
 - `/dashboard/admin/whatsapp`
+- `/dashboard/documentacion/campana`
 - `/dashboard/documentacion/empresa`
 - `/dashboard/documentacion/fenologia`
 - `/dashboard/documentacion/melgas`
@@ -135,7 +136,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `produccion/`: FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TrabajadorSelect.tsx
+- `produccion/`: AplicacionesRealizadas.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 

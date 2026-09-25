@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2 } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
@@ -18,6 +19,7 @@ import {
 import { getPlanFitosanitario, type PlanFitosanitario } from '@/lib/api/planFitosanitario'
 import { getParcelas, VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
+import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
 import type { InsumoResponse } from '@/lib/api/insumos'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
@@ -601,7 +603,16 @@ function OrdenCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// useSearchParams exige un Suspense arriba para el prerender estático.
 export default function OrdenesAplicacionPage() {
+  return (
+    <Suspense>
+      <OrdenesAplicacion />
+    </Suspense>
+  )
+}
+
+function OrdenesAplicacion() {
   const [temporada, setTemporada] = useCampanaAnio()
 
   const currentUser = useAuthStore((s) => s.user)
@@ -609,7 +620,13 @@ export default function OrdenesAplicacionPage() {
     ? ['super_admin', 'gerencial', 'encargado', 'regador'].includes(currentUser.role)
     : false
 
-  const [estadoFiltro, setEstadoFiltro] = useState<EstadoOrdenAplicacion | 'todas'>('todas')
+  // Pendientes = órdenes con alguna parcela sin confirmar (pendiente o en
+  // curso). Aplicadas = historial de lo efectivamente aplicado, parcela por
+  // parcela, con filtros de fecha (ex página "Fitosanitarios").
+  const searchParams = useSearchParams()
+  const [vista, setVista] = useState<'pendientes' | 'aplicadas'>(
+    searchParams.get('vista') === 'aplicadas' ? 'aplicadas' : 'pendientes',
+  )
   const [modal, setModal] = useState<'desde-plan' | 'extra' | null>(null)
   const [ordenEditar, setOrdenEditar] = useState<OrdenAplicacion | null>(null)
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
@@ -655,17 +672,16 @@ export default function OrdenesAplicacionPage() {
     return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
   }, [parcelas])
 
-  const ordenesFiltradas = useMemo(
-    () => (estadoFiltro === 'todas' ? ordenes : ordenes.filter((o) => o.estado === estadoFiltro))
-      .sort((a, b) => b.fecha_planificada.localeCompare(a.fecha_planificada)),
-    [ordenes, estadoFiltro],
+  const ordenesPendientes = useMemo(
+    () => ordenes
+      .filter((o) => o.estado !== 'completada')
+      .sort((a, b) => a.fecha_planificada.localeCompare(b.fecha_planificada)),
+    [ordenes],
   )
 
-  const TABS: { value: EstadoOrdenAplicacion | 'todas'; label: string }[] = [
-    { value: 'todas', label: 'Todas' },
-    { value: 'pendiente', label: 'Pendientes' },
-    { value: 'en_curso', label: 'En curso' },
-    { value: 'completada', label: 'Completadas' },
+  const TABS: { value: 'pendientes' | 'aplicadas'; label: string }[] = [
+    { value: 'pendientes', label: `Pendientes${ordenesPendientes.length ? ` (${ordenesPendientes.length})` : ''}` },
+    { value: 'aplicadas', label: 'Aplicadas' },
   ]
 
   return (
@@ -716,9 +732,9 @@ export default function OrdenesAplicacionPage() {
         {TABS.map((t) => (
           <button
             key={t.value}
-            onClick={() => setEstadoFiltro(t.value)}
+            onClick={() => setVista(t.value)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              estadoFiltro === t.value
+              vista === t.value
                 ? 'bg-[#7a1f2c] text-white'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
             }`}
@@ -728,17 +744,20 @@ export default function OrdenesAplicacionPage() {
         ))}
       </div>
 
+      {vista === 'aplicadas' ? (
+        <AplicacionesRealizadas />
+      ) : (
       <div className="space-y-2">
         {isLoading ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
             Cargando…
           </div>
-        ) : ordenesFiltradas.length === 0 ? (
+        ) : ordenesPendientes.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
-            Sin órdenes {estadoFiltro !== 'todas' ? ESTADO_LABELS[estadoFiltro].toLowerCase() : ''} para esta temporada.
+            Sin órdenes pendientes para esta temporada.
           </div>
         ) : (
-          ordenesFiltradas.map((o) => (
+          ordenesPendientes.map((o) => (
             <OrdenCard
               key={o.id}
               orden={o}
@@ -749,6 +768,7 @@ export default function OrdenesAplicacionPage() {
           ))
         )}
       </div>
+      )}
 
       {modal === 'desde-plan' && (
         <Modal title="Generar orden desde el plan" onClose={() => setModal(null)}>

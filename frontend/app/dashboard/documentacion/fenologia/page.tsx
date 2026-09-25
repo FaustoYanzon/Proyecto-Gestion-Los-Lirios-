@@ -40,7 +40,7 @@ export default function DocumentacionFenologiaPage() {
           </p>
         </div>
         <Link
-          href="/dashboard/produccion/campana"
+          href="/dashboard/documentacion/campana"
           className="flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg
                      border border-gray-200 text-gray-700 hover:border-[#7a1f2c] hover:text-[#7a1f2c] transition-colors whitespace-nowrap"
         >

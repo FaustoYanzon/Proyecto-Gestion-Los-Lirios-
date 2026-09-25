@@ -102,11 +102,9 @@ export const SUB_NAVS: SubNav[] = [
       // Planificación: lo que se define antes o durante la campaña.
       { href: '/dashboard/produccion/metas',              label: 'Metas',                 group: 'Planificación' },
       { href: '/dashboard/produccion/plan-fitosanitario', label: 'Plan Fitosanitario',    group: 'Planificación' },
-      { href: '/dashboard/produccion/campana',            label: 'Campaña',               group: 'Planificación' },
       // Seguimiento: tableros y lectura, no se carga nada.
       { href: '/dashboard/produccion/dashboard',          label: 'Dashboard',             group: 'Seguimiento' },
       { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento',  group: 'Seguimiento' },
-      { href: '/dashboard/produccion/fitosanitarios',     label: 'Aplicaciones realizadas', group: 'Seguimiento' },
       { href: '/dashboard/produccion/clima',              label: 'Clima',                 group: 'Seguimiento' },
     ],
   },
@@ -145,6 +143,7 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/documentacion/trabajadores', label: 'Trabajadores' },
       { href: '/dashboard/documentacion/riego',        label: 'Riego'        },
       { href: '/dashboard/documentacion/fenologia',    label: 'Fenología'    },
+      { href: '/dashboard/documentacion/campana',      label: 'Ciclo de Campaña' },
       { href: '/dashboard/documentacion/precios',      label: 'Precios'      },
       { href: '/dashboard/documentacion/melgas',       label: 'Melgas'       },
       { href: '/dashboard/documentacion/empresa',      label: 'Empresa'      },
