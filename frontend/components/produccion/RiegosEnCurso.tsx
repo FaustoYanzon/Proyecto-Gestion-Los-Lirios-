@@ -26,7 +26,7 @@ interface FilaProps {
 // componente declarada dentro del render de otro componente crea una
 // identidad nueva en cada render, forzando remounts innecesarios.
 function Fila({ r, conBoton, parcelaNombre, terminandoId, onTerminar }: FilaProps) {
-  const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas)
+  const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas, r.tipo)
   return (
     <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -34,6 +34,7 @@ function Fila({ r, conBoton, parcelaNombre, terminandoId, onTerminar }: FilaProp
         <div className="text-sm min-w-0">
           <p className="font-medium text-gray-900 truncate">
             Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
+            {r.tipo === 'manto' && <span className="ml-2 text-xs font-semibold text-amber-700">Manto</span>}
           </p>
           <p className="text-blue-700 font-mono">
             {formatTranscurrido(horas)}

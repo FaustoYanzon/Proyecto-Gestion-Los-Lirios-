@@ -21,7 +21,7 @@ import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
 import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb, ValvulaReal } from '../../lib/types'
-import { calcRiegoTotales } from '../../lib/types'
+import { calcRiegoTotales, FACTOR_MANTO, type TipoRiego } from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
 // al usuario se ancla explícitamente a America/Argentina/San_Juan: no hay que
@@ -355,19 +355,21 @@ const tp = StyleSheet.create({
 // ─── Step 1: cabezal + parral + válvulas ──────────────────────────────────────
 
 function StepUbicacion({
-  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, onNext, onCancelar,
+  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, initialTipo, onNext, onCancelar,
 }: {
   parcelas: Parcela[]
   valvulasReales: ValvulaReal[]
   initialCabezal: string | null
   initialParcelaId: string | null
   initialValvulas: string[]
-  onNext: (cabezal: string, parcela: Parcela, valvulas: string[]) => void
+  initialTipo: TipoRiego
+  onNext: (cabezal: string, parcela: Parcela, valvulas: string[], tipo: TipoRiego) => void
   onCancelar: () => void
 }) {
   const [cabezal, setCabezal] = useState<string | null>(initialCabezal)
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
   const [valvulas, setValvulas] = useState<Set<string>>(new Set(initialValvulas))
+  const [tipo, setTipo] = useState<TipoRiego>(initialTipo)
 
   // Cabezales reales derivados del catálogo — no hardcodeados (hoy son 4,
   // pero se ajusta solo si cambia la infraestructura de riego).
@@ -397,6 +399,8 @@ function StepUbicacion({
   function selectParcela(p: Parcela) {
     setParcelaId(p.id)
     setValvulas(new Set())
+    // Arranca con el tipo de la parcela, pero se puede cambiar por riego.
+    setTipo(p.tipo_riego === 'manto' ? 'manto' : 'goteo')
   }
 
   function toggleValvula(v: string) {
@@ -416,7 +420,7 @@ function StepUbicacion({
     const valvulasOrdenadas = Array.from(valvulas).sort(
       (a, b) => (ordenPorNombre.get(a) ?? 0) - (ordenPorNombre.get(b) ?? 0)
     )
-    onNext(cabezal, parcelaSel, valvulasOrdenadas)
+    onNext(cabezal, parcelaSel, valvulasOrdenadas, tipo)
   }
 
   return (
@@ -466,7 +470,25 @@ function StepUbicacion({
 
         {parcelaSel && (
           <>
-            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>3. VÁLVULAS ABIERTAS</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>3. TIPO DE RIEGO</Text>
+            <View style={styles.chipGridWrap}>
+              {(['goteo', 'manto'] as const).map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.cabezalChip, tipo === t && styles.cabezalChipActive]}
+                  onPress={() => setTipo(t)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.cabezalChipText, tipo === t && styles.cabezalChipTextActive]}>
+                    {t === 'goteo' ? 'Goteo' : 'Manto'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>
+              {tipo === 'manto' ? '4. HASTA QUÉ VÁLVULA LLEGA EL AGUA' : '4. VÁLVULAS ABIERTAS'}
+            </Text>
             <View style={styles.chipGridWrap}>
               {valvulasDisponibles.map((v) => (
                 <TouchableOpacity
@@ -486,6 +508,7 @@ function StepUbicacion({
             {valvulas.size > 0 && (
               <Text style={styles.hintText}>
                 {valvulas.size} válvula{valvulas.size > 1 ? 's' : ''} × 1 ha c/u ≈ {valvulas.size} ha regadas
+                {tipo === 'manto' ? ` · litros al ${FACTOR_MANTO * 100}% del caudal` : ''}
               </Text>
             )}
           </>
@@ -746,6 +769,7 @@ interface RiegoDraft {
   cabezal: string
   parcela: Parcela
   valvulas: string[]
+  tipo: TipoRiego
   fechaInicio: string
   horaInicio: string
   fechaFin: string
@@ -771,7 +795,7 @@ function StepConfirmar({
 
   const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00-03:00`
   const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
-  const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length)
+  const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length, draft.tipo)
 
   async function handleSubmit() {
     if (submittingRef.current) return
@@ -782,6 +806,7 @@ function StepConfirmar({
       parcela_id: draft.parcela.id,
       cabezal: draft.cabezal,
       valvula: draft.valvulas.join(','),
+      tipo: draft.tipo,
       inicio: inicioISO,
       fin: finISO,
       responsable: draft.responsable,
@@ -817,6 +842,7 @@ function StepConfirmar({
     { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
     { label: 'Parral', value: draft.parcela.nombre },
     { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
+    { label: 'Tipo de riego', value: draft.tipo === 'manto' ? `Manto (${FACTOR_MANTO * 100}% del caudal)` : 'Goteo' },
     { label: 'Inicio', value: formatDatetime(inicioISO) },
     { label: 'Fin', value: formatDatetime(finISO) },
     { label: 'Duración', value: totales ? `${totales.horas} h` : '—' },
@@ -885,6 +911,7 @@ interface IniciarDraft {
   cabezal: string
   parcela: Parcela
   valvulas: string[]
+  tipo: TipoRiego
   conFertirriego: boolean
   producto: string
   dosis: string
@@ -913,6 +940,7 @@ function StepIniciarConfirmar({
         parcela_id: draft.parcela.id,
         cabezal: draft.cabezal,
         valvula: draft.valvulas.join(','),
+        tipo: draft.tipo,
         responsable: draft.responsable,
         responsable_id: draft.responsable_id,
         fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
@@ -933,6 +961,7 @@ function StepIniciarConfirmar({
     { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
     { label: 'Parral', value: draft.parcela.nombre },
     { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
+    { label: 'Tipo de riego', value: draft.tipo === 'manto' ? `Manto (${FACTOR_MANTO * 100}% del caudal)` : 'Goteo' },
     {
       label: 'Fertiriego',
       value: draft.conFertirriego && draft.producto ? `${draft.producto} (${draft.dosis || '0'} L/ha)` : 'Sin fertiriego',
@@ -1033,12 +1062,13 @@ function RecentRiegos({
         <>
           <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
           {riegosEnCurso.map((r) => {
-            const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas) ?? { horas: 0, litros: 0 }
+            const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
             return (
               <View key={r.id} style={styles.enCursoCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.riegoNombre}>
                     Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
+                    {r.tipo === 'manto' ? ' · Manto' : ''}
                   </Text>
                   <Text style={styles.enCursoStats}>
                     {formatTranscurrido(totales.horas)}
@@ -1086,6 +1116,11 @@ function RecentRiegos({
                     {r.litros_aplicados.toLocaleString('es-AR')} L
                   </Text>
                 </View>
+                {r.tipo === 'manto' && (
+                  <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={[styles.badgeText, { color: '#92400e' }]}>Manto</Text>
+                  </View>
+                )}
                 {r.fertilizante_nombre && (
                   <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
                     <Text style={[styles.badgeText, { color: '#92400e' }]}>Fertiriego</Text>
@@ -1107,7 +1142,7 @@ type Step = 'list' | 'ubicacion' | 'modo' | 'horario' | 'detalle' | 'confirmar' 
 type Modo = 'retroactivo' | 'iniciar'
 
 const emptyDraft: RiegoDraft = {
-  cabezal: '', parcela: null as unknown as Parcela, valvulas: [],
+  cabezal: '', parcela: null as unknown as Parcela, valvulas: [], tipo: 'goteo',
   fechaInicio: isoToday(), horaInicio: '', fechaFin: isoToday(), horaFin: '',
   conFertirriego: false, producto: '', dosis: '', responsable: '',
 }
@@ -1275,8 +1310,9 @@ export default function RiegoScreen() {
         initialCabezal={draft.cabezal || null}
         initialParcelaId={draft.parcela?.id ?? null}
         initialValvulas={draft.valvulas}
-        onNext={(cabezal, parcela, valvulas) => {
-          setDraft((d) => ({ ...d, cabezal, parcela, valvulas }))
+        initialTipo={draft.tipo}
+        onNext={(cabezal, parcela, valvulas, tipo) => {
+          setDraft((d) => ({ ...d, cabezal, parcela, valvulas, tipo }))
           setStep('modo')
         }}
         onCancelar={handleCancelar}

@@ -66,12 +66,13 @@ function RiegosEnCursoInicio({
     <View style={{ marginBottom: 24 }}>
       <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
       {riegos.map((r) => {
-        const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas) ?? { horas: 0, litros: 0 }
+        const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
         return (
           <View key={r.id} style={styles.enCursoCard}>
             <View style={{ flex: 1 }}>
               <Text style={styles.enCursoTitle}>
                 Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
+                {r.tipo === 'manto' ? ' · Manto' : ''}
               </Text>
               <Text style={styles.enCursoStats}>
                 {formatTranscurrido(totales.horas)}

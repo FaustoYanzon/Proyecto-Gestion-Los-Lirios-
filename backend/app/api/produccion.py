@@ -300,7 +300,7 @@ async def dashboard_eficiencia_hidrica(
     # (campo `valvula` como CSV, ej "1,2,3"), algo que no se puede sumar con
     # func.sum directo en SQL. Se trae duracion+valvula y se calcula en Python.
     litros_rows = (await db.execute(
-        select(RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula)
+        select(RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula, RegistroRiego.tipo)
         .where(
             RegistroRiego.parcela_id.in_(parcela_ids),
             RegistroRiego.fecha >= start,
@@ -312,7 +312,8 @@ async def dashboard_eficiencia_hidrica(
     for row in litros_rows:
         n_valvulas = len([v for v in (row.valvula or "").split(",") if v.strip()]) or 1
         litros_por_parcela[row.parcela_id] += (
-            row.duracion_horas * RegistroRiego.LITROS_POR_HORA_VALVULA * n_valvulas
+            row.duracion_horas * RegistroRiego.LITROS_POR_HORA_VALVULA
+            * RegistroRiego.factor_caudal(row.tipo) * n_valvulas
         )
 
     ciclos = list(
@@ -887,7 +888,8 @@ async def update_riego(
         setattr(riego, field, value)
     if "inicio" in update_data or "fin" in update_data:
         riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
-        riego.mm_aplicados = round(riego.duracion_horas * 1.6, 2)
+    if ({"inicio", "fin", "tipo"} & update_data.keys()) and riego.duracion_horas is not None:
+        riego.recalcular_mm()
 
     await db.flush()
     await db.refresh(riego)
@@ -923,7 +925,7 @@ async def terminar_riego(
 
     riego.fin = body.fin or datetime.now(timezone.utc)
     riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
-    riego.mm_aplicados = round(riego.duracion_horas * RegistroRiego.MM_POR_HORA, 2)
+    riego.recalcular_mm()
 
     await db.flush()
     await db.refresh(riego)

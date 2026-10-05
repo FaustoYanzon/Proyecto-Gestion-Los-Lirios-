@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.insumo import UnidadInsumo
-from app.models.parcela import VariedadUva
+from app.models.parcela import TipoRiego, VariedadUva
 
 if TYPE_CHECKING:
     from app.models.insumo import Insumo, MovimientoStock
@@ -220,6 +220,11 @@ class RegistroRiego(Base):
     )
     cabezal: Mapped[str] = mapped_column(String(20), nullable=False)
     valvula: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Goteo o manto. En manto las valvulas marcan hasta que parte del parral
+    # llega el agua, y el caudal se estima en FACTOR_MANTO del de goteo.
+    tipo: Mapped[TipoRiego] = mapped_column(
+        SAEnum(TipoRiego), default=TipoRiego.goteo, server_default=TipoRiego.goteo.value, nullable=False
+    )
     inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # NULL mientras el riego está "en curso" (arrancó pero todavía no se cerró
     # con /riego/{id}/terminar) — se completa recién al terminar.
@@ -264,6 +269,12 @@ class RegistroRiego(Base):
     LITROS_POR_HORA_VALVULA: float = 16_000.0
     # Referencia agronomica para el suelo de Media Agua: 6,000,000 L/ha/anio.
     LITROS_OBJETIVO_ANUAL_POR_HA: float = 6_000_000.0
+    # Riego a manto: se estima el 40% del caudal de la valvula (litros y mm).
+    FACTOR_MANTO: float = 0.4
+
+    @classmethod
+    def factor_caudal(cls, tipo: TipoRiego | str | None) -> float:
+        return cls.FACTOR_MANTO if tipo in (TipoRiego.manto, TipoRiego.manto.value) else 1.0
 
     def __init__(self, **kwargs: Any) -> None:
         inicio = kwargs.get("inicio")
@@ -271,8 +282,14 @@ class RegistroRiego(Base):
         if "duracion_horas" not in kwargs and inicio is not None and fin is not None:
             kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
         if kwargs.get("mm_aplicados") is None and kwargs.get("duracion_horas") is not None:
-            kwargs["mm_aplicados"] = round(kwargs["duracion_horas"] * 1.6, 2)
+            kwargs["mm_aplicados"] = round(
+                kwargs["duracion_horas"] * self.MM_POR_HORA * self.factor_caudal(kwargs.get("tipo")), 2
+            )
         super().__init__(**kwargs)
+
+    def recalcular_mm(self) -> None:
+        """Recalcula mm_aplicados desde duracion_horas y el tipo de riego."""
+        self.mm_aplicados = round(self.duracion_horas * self.MM_POR_HORA * self.factor_caudal(self.tipo), 2)
 
     @property
     def n_valvulas(self) -> int:
@@ -292,14 +309,17 @@ class RegistroRiego(Base):
 
         Cada valvula cubre 1 ha y entrega LITROS_POR_HORA_VALVULA L/h, por lo
         que el total es horas * litros/h/valvula * cantidad de valvulas
-        abiertas (no solo la duracion, como se calculaba antes).
+        abiertas (no solo la duracion, como se calculaba antes). En manto se
+        aplica FACTOR_MANTO sobre ese caudal.
 
         0.0 mientras el riego está en curso (duracion_horas todavía None) —
         se completa recién al terminar.
         """
         if self.duracion_horas is None:
             return 0.0
-        return round(self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.n_valvulas, 2)
+        return round(
+            self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.factor_caudal(self.tipo) * self.n_valvulas, 2
+        )
 
     parcela: Mapped[Parcela] = relationship(
         "Parcela", back_populates="registros_riego"

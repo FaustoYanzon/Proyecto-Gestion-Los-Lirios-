@@ -6,11 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getValvulasReales, iniciarRiego } from '@/lib/api/riego'
+import { getValvulasReales, iniciarRiego, type TipoRiego } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import TrabajadorSelect from './TrabajadorSelect'
+import TipoRiegoSelector from './TipoRiegoSelector'
 
 const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
@@ -45,6 +46,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
   const [conFertilizante, setConFertilizante] = useState(false)
   const [selectedValvulas, setSelectedValvulas] = useState<Set<string>>(new Set())
   const [valvulasError, setValvulasError] = useState<string | null>(null)
+  const [tipo, setTipo] = useState<TipoRiego>('goteo')
 
   const {
     register,
@@ -84,6 +86,12 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     setValue('cabezal', cabezalDerivado != null ? String(cabezalDerivado) : '')
   }, [cabezalDerivado, setValue])
 
+  // El tipo arranca con el de la parcela, pero se puede cambiar por riego.
+  function onParcelaChange(id: string) {
+    const p = parcelas.find((x) => x.id === id)
+    setTipo(p?.tipo_riego === 'manto' ? 'manto' : 'goteo')
+  }
+
   // Solo parcelas con al menos una válvula cargada en el catálogo real.
   const parcelaIdsConValvulas = useMemo(() => new Set(valvulasReales.map((v) => v.parcela_id)), [valvulasReales])
   const parralesConRiego = parcelas
@@ -121,6 +129,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         parcela_id: data.parcela_id,
         cabezal: data.cabezal,
         valvula: valvulaOrdenada,
+        tipo,
         responsable: data.responsable,
         responsable_id: data.responsable_id,
         fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
@@ -144,7 +153,10 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
 
       <div>
         <label className={label}>Parcela</label>
-        <select {...register('parcela_id')} className={field}>
+        <select
+          {...register('parcela_id', { onChange: (e) => onParcelaChange(e.target.value) })}
+          className={field}
+        >
           <option value="">Seleccionar parcela...</option>
           {parralesConRiego.map((p) => (
             <option key={p.id} value={p.id}>
@@ -154,6 +166,8 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         </select>
         {errors.parcela_id && <p className={err}>{errors.parcela_id.message}</p>}
       </div>
+
+      <TipoRiegoSelector value={tipo} onChange={setTipo} />
 
       <input type="hidden" {...register('cabezal')} />
       {cabezalDerivado != null && !cabezalMixto && (

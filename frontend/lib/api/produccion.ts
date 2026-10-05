@@ -1,3 +1,4 @@
+import type { TipoRiego } from '@/lib/api/riego'
 import api from '@/lib/api'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -142,6 +143,7 @@ export interface ParcelaItem {
   variedad: string | null
   finca: string | null
   cabezal_riego: string | null
+  tipo_riego?: TipoRiego | null
   superficie_ha: number | null
   is_active: boolean
 }

@@ -52,6 +52,7 @@ export interface Parcela {
   variedad: VariedadUva | null
   superficie_ha: number | null
   cabezal_riego: string | null
+  tipo_riego?: TipoRiego | null
   coordenadas: [number, number][] | null
   is_active: boolean
 }
@@ -169,6 +170,7 @@ export interface RegistroRiego {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo: TipoRiego
   inicio: string
   fin: string
   duracion_horas: number
@@ -187,6 +189,7 @@ export interface RiegoPayload {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo?: TipoRiego
   inicio: string
   fin: string
   mm_aplicados?: number
@@ -201,6 +204,7 @@ export interface RiegoIniciarPayload {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo?: TipoRiego
   responsable: string
   responsable_id?: string
   fertilizante_nombre?: string
@@ -214,6 +218,7 @@ export interface RiegoEnCurso {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo: TipoRiego
   inicio: string
   n_valvulas: number
   responsable: string
@@ -420,6 +425,16 @@ export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 // de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
 export const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
+// Riego a manto: las válvulas marcan hasta qué parte del parral llega el
+// agua, y el caudal se estima en el 40% del de goteo (litros y mm). Mismo
+// factor que RegistroRiego.FACTOR_MANTO en el backend.
+export type TipoRiego = 'goteo' | 'manto'
+export const FACTOR_MANTO = 0.4
+
+export function factorCaudal(tipo: TipoRiego | null | undefined): number {
+  return tipo === 'manto' ? FACTOR_MANTO : 1
+}
+
 export function calcMmRiego(inicioISO: string, finISO: string): number | null {
   const start = new Date(inicioISO)
   const end = new Date(finISO)
@@ -429,17 +444,18 @@ export function calcMmRiego(inicioISO: string, finISO: string): number | null {
 }
 
 export function calcRiegoTotales(
-  inicioISO: string, finISO: string, nValvulas: number,
+  inicioISO: string, finISO: string, nValvulas: number, tipo: TipoRiego = 'goteo',
 ): { horas: number; mm: number; litros: number } | null {
   const start = new Date(inicioISO)
   const end = new Date(finISO)
   const horas = (end.getTime() - start.getTime()) / 3600000
   if (horas <= 0) return null
   const n = nValvulas > 0 ? nValvulas : 1
+  const f = factorCaudal(tipo)
   return {
     horas: Math.round(horas * 100) / 100,
-    mm: Math.round(horas * MM_POR_HORA * 100) / 100,
-    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * n),
+    mm: Math.round(horas * MM_POR_HORA * f * 100) / 100,
+    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * f * n),
   }
 }
 

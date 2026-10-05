@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.finanzas import Finca
 from app.models.insumo import UnidadInsumo
-from app.models.parcela import VariedadUva
+from app.models.parcela import TipoRiego, VariedadUva
 from app.models.produccion import (
     ClasificacionTarea,
     CultivoCosecha,
@@ -129,6 +129,7 @@ class RegistroRiegoBase(BaseModel):
     parcela_id: str
     cabezal: str
     valvula: str
+    tipo: TipoRiego = TipoRiego.goteo
     inicio: datetime
     fin: datetime
     mm_aplicados: float | None = None
@@ -147,6 +148,7 @@ class RegistroRiegoUpdate(BaseModel):
     parcela_id: str | None = None
     cabezal: str | None = None
     valvula: str | None = None
+    tipo: TipoRiego | None = None
     inicio: datetime | None = None
     fin: datetime | None = None
     mm_aplicados: float | None = None
@@ -173,6 +175,7 @@ class RegistroRiegoIniciar(BaseModel):
     parcela_id: str
     cabezal: str
     valvula: str
+    tipo: TipoRiego = TipoRiego.goteo
     responsable: str
     responsable_id: str | None = None
     fertilizante_nombre: str | None = None
@@ -186,6 +189,7 @@ class RegistroRiegoEnCursoResponse(BaseModel):
     parcela_id: str
     cabezal: str
     valvula: str
+    tipo: TipoRiego
     inicio: datetime
     n_valvulas: int
     responsable: str

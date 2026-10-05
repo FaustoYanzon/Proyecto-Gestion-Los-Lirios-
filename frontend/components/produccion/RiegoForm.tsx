@@ -14,12 +14,16 @@ import {
   formatFechaLocal,
   formatHoraLocal,
   hoyArgentina,
+  LITROS_POR_HORA_VALVULA,
+  factorCaudal,
   type RiegoResponse,
+  type TipoRiego,
 } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import TrabajadorSelect from './TrabajadorSelect'
+import TipoRiegoSelector from './TipoRiegoSelector'
 
 const schema = z.object({
   fecha_inicio: z.string().min(1, 'Requerido'),
@@ -80,6 +84,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       : new Set()
   )
   const [valvulasError, setValvulasError] = useState<string | null>(null)
+  const [tipo, setTipo] = useState<TipoRiego>(riego?.tipo ?? 'goteo')
 
   const {
     register,
@@ -145,7 +150,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   const cabezalDerivado = cabezalesSeleccionados.size === 1 ? [...cabezalesSeleccionados][0] : null
   const preview = calcMm(
     fechaInicioW, horaInicioW, fechaFinW, horaFinW,
-    selectedValvulas.size || 1,
+    selectedValvulas.size || 1, tipo,
   )
 
   // Auto-populate cabezal from the selected válvulas (edit mode keeps the
@@ -153,6 +158,12 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   useEffect(() => {
     if (cabezalDerivado != null) setValue('cabezal', String(cabezalDerivado))
   }, [cabezalDerivado, setValue])
+
+  // El tipo arranca con el de la parcela, pero se puede cambiar por riego.
+  function onParcelaChange(id: string) {
+    const p = parcelas.find((x) => x.id === id)
+    setTipo(p?.tipo_riego === 'manto' ? 'manto' : 'goteo')
+  }
 
   // Solo parcelas con al menos una válvula cargada en el catálogo real.
   const parcelaIdsConValvulas = useMemo(() => new Set(valvulasReales.map((v) => v.parcela_id)), [valvulasReales])
@@ -183,7 +194,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
 
     const inicio = `${data.fecha_inicio}T${data.hora_inicio}:00-03:00`
     const fin = `${data.fecha_fin}T${data.hora_fin}:00-03:00`
-    const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin)?.mm
+    const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin, 1, tipo)?.mm
     // Nombres reales en orden oeste->este (mismo orden que valvulasDisponibles).
     const valvula = valvulasDisponibles
       .filter((v) => selectedValvulas.has(v.nombre))
@@ -195,6 +206,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       parcela_id: data.parcela_id,
       cabezal: data.cabezal,
       valvula,
+      tipo,
       inicio,
       fin,
       mm_aplicados: mm,
@@ -293,7 +305,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
               {preview.litros.toLocaleString('es-AR')} L totales
             </span>
             <span className="text-blue-400 text-xs ml-2">
-              ({selectedValvulas.size || 1} válvula{(selectedValvulas.size || 1) > 1 ? 's' : ''} × 16.000 L/ha/h)
+              ({selectedValvulas.size || 1} válvula{(selectedValvulas.size || 1) > 1 ? 's' : ''} × {(LITROS_POR_HORA_VALVULA * factorCaudal(tipo)).toLocaleString('es-AR')} L/ha/h)
             </span>
           </div>
         </div>
@@ -304,7 +316,10 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       {/* Parcela */}
       <div>
         <label className={label}>Parcela</label>
-        <select {...register('parcela_id')} className={field}>
+        <select
+          {...register('parcela_id', { onChange: (e) => onParcelaChange(e.target.value) })}
+          className={field}
+        >
           <option value="">Seleccionar parcela...</option>
           {parralesConRiego.map((p) => (
             <option key={p.id} value={p.id}>
@@ -314,6 +329,8 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         </select>
         {errors.parcela_id && <p className={err}>{errors.parcela_id.message}</p>}
       </div>
+
+      <TipoRiegoSelector value={tipo} onChange={setTipo} />
 
       {/* Cabezal — read-only, derivado de las válvulas elegidas */}
       <input type="hidden" {...register('cabezal')} />

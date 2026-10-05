@@ -33,6 +33,17 @@ export const LITROS_POR_HORA_VALVULA = 16_000
 // Referencia agronómica para el suelo de Media Agua: 6.000.000 L/ha/año.
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
+// Riego a manto: las válvulas marcan hasta qué parte del parral llega el
+// agua, y el caudal se estima en el 40% del de goteo (litros y mm). Mismo
+// factor que RegistroRiego.FACTOR_MANTO en el backend.
+export type TipoRiego = 'goteo' | 'manto'
+export const FACTOR_MANTO = 0.4
+export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = { goteo: 'Goteo', manto: 'Manto' }
+
+export function factorCaudal(tipo: TipoRiego | null | undefined): number {
+  return tipo === 'manto' ? FACTOR_MANTO : 1
+}
+
 // Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1"),
 // poblado en el backend desde Valvulas.geojson vía scripts/seed_valvulas.py.
 // El cabezal es un atributo de la válvula, no de la parcela — una misma
@@ -57,6 +68,7 @@ export function calcMm(
   fechaInicio: string, horaInicio: string,
   fechaFin: string, horaFin: string,
   nValvulas: number = 1,
+  tipo: TipoRiego = 'goteo',
 ): { horas: number; mm: number; litros: number } | null {
   if (!fechaInicio || !horaInicio || !fechaFin || !horaFin) return null
   const start = new Date(`${fechaInicio}T${horaInicio}:00`)
@@ -64,12 +76,13 @@ export function calcMm(
   const horas = (end.getTime() - start.getTime()) / 3600000
   if (horas <= 0) return null
   const n = nValvulas > 0 ? nValvulas : 1
+  const f = factorCaudal(tipo)
   return {
     horas: Math.round(horas * 100) / 100,
     // mm es la lámina aplicada por válvula (uniforme, no escala con la cantidad de válvulas)
-    mm: Math.round(horas * MM_POR_HORA * 100) / 100,
+    mm: Math.round(horas * MM_POR_HORA * f * 100) / 100,
     // litros totales sí escalan: cada válvula riega su propia hectárea
-    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * n),
+    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * f * n),
   }
 }
 
@@ -77,14 +90,15 @@ export function calcMm(
 // todavía) — mismo cálculo que calcMm pero contra el reloj, se llama en cada
 // tick del cronómetro en pantalla, no contra el servidor.
 export function calcEnCurso(
-  inicioISO: string, nValvulas: number,
+  inicioISO: string, nValvulas: number, tipo: TipoRiego = 'goteo',
 ): { horas: number; mm: number; litros: number } {
   const horas = Math.max(0, (Date.now() - new Date(inicioISO).getTime()) / 3600000)
   const n = nValvulas > 0 ? nValvulas : 1
+  const f = factorCaudal(tipo)
   return {
     horas: Math.round(horas * 100) / 100,
-    mm: Math.round(horas * MM_POR_HORA * 100) / 100,
-    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * n),
+    mm: Math.round(horas * MM_POR_HORA * f * 100) / 100,
+    litros: Math.round(horas * LITROS_POR_HORA_VALVULA * f * n),
   }
 }
 
@@ -95,6 +109,7 @@ export interface RiegoCreate {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo?: TipoRiego
   inicio: string
   fin: string
   mm_aplicados?: number
@@ -110,6 +125,7 @@ export interface RiegoUpdate {
   parcela_id?: string
   cabezal?: string
   valvula?: string
+  tipo?: TipoRiego
   inicio?: string
   fin?: string
   mm_aplicados?: number
@@ -125,6 +141,7 @@ export interface RiegoResponse {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo: TipoRiego
   inicio: string
   fin: string
   duracion_horas: number
@@ -154,6 +171,7 @@ export interface RiegoIniciarInput {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo?: TipoRiego
   responsable: string
   responsable_id?: string
   fertilizante_nombre?: string
@@ -167,6 +185,7 @@ export interface RiegoEnCurso {
   parcela_id: string
   cabezal: string
   valvula: string
+  tipo: TipoRiego
   inicio: string
   n_valvulas: number
   responsable: string

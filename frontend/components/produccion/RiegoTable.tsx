@@ -86,6 +86,11 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                       C{r.cabezal} · V{r.valvula.split(',').join('+')}
                     </span>
+                    {r.tipo === 'manto' && (
+                      <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                        Manto
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap font-mono text-gray-600 text-xs">
                     {formatTime(r.inicio)} → {formatTime(r.fin)}
