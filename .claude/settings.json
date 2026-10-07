@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(npx expo *)",
+      "Bash(npx eas *)",
+      "Bash(npx vercel *)",
+      "Bash(npx @railway/cli status*)",
+      "Bash(npx @railway/cli logs *)",
+      "Bash(./venv/Scripts/python.exe -m pytest*)",
+      "Bash(./venv/Scripts/python.exe -m alembic heads*)",
+      "Bash(./venv/Scripts/python.exe -m alembic history*)",
+      "Bash(./venv/Scripts/python.exe -m alembic current*)",
+      "Bash(venv/Scripts/alembic.exe heads*)",
+      "Bash(venv/Scripts/alembic.exe current*)",
+      "Skill(run)",
+      "Read(//c/Boveda Los Lirios/**)",
+      "Read(//c/claude-projects/los-lirios/docs/**)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.production)",
+      "Edit(**/.env)",
+      "Write(**/.env)",
+      "Read(**/pg_backups/**)"
+    ]
+  }
+}

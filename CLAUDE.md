@@ -1,97 +1,80 @@
-# Los Lirios — Agricultural Management System
+# Los Lirios — Sistema de Gestión Agrícola
 
-## Project overview
-FastAPI backend for managing a vineyard/farm operation (finca).
-Handles parcelas, produccion (trabajo/riego/fitosanitarios/campana), finanzas (ingresos/egresos) and user auth.
-Campaign year runs May → April (not January → December).
+Finca vitivinícola (Mendoza, AR). **En producción, piloto en curso.** Backend FastAPI, web Next.js, app Expo (Android + iOS).
+Campaña = mayo → abril (NO año calendario). Fincas: `los_mimbres`, `media_agua`, `caucete`.
+Mapa estructural completo → `PROJECT_MAP.md` (auto-generado). Leelo antes de explorar archivos.
 
 ## Stack
-- Python 3.12 / FastAPI / SQLAlchemy 2 (async) / PostgreSQL
-- Alembic for migrations (async engine)
-- Pydantic v2 schemas
-- JWT auth (python-jose) + bcrypt passwords
-- Frontend: React/Vite on localhost:5173 (not yet in repo)
+- `backend/` — Python 3.12, FastAPI, SQLAlchemy 2 async, PostgreSQL, Alembic, Pydantic v2, JWT (python-jose) + bcrypt
+- `frontend/` — Next.js (App Router, TS). **Ver `frontend/AGENTS.md`: no es el Next que conocés, leer docs en `node_modules/next/dist/docs/`**
+- `mobile/` — Expo SDK 54 + React Native. **Ver `mobile/AGENTS.md`** (reglas de `eas update`)
+- `scripts/` — mantenimiento, migraciones de datos, generadores de docs · `docs/` — vault Obsidian (ver abajo)
 
-## Project structure
-```
-backend/
-  app/
-    api/          # Route handlers: auth, users, parcelas, finanzas, produccion
-    core/         # config, database, security, migrations/, seed.py
-    models/       # SQLAlchemy ORM: user, parcela, finanzas, produccion
-    schemas/      # Pydantic schemas: user, parcela, finanzas, produccion
-  alembic.ini
-  .env            # DO NOT READ OR MODIFY
-```
+## Dominio
+- Parcelas: parral, potrero, pasero, cabezal · Roles: `super_admin > gerencial > encargado > regador > obrero`
+- Monedas `ars`/`usd`: siempre separadas, nunca convertir automático
+- Login por **`username`**, no email
+- Módulos: producción (tareas/riego/fito/órdenes de aplicación/cosecha), finanzas (ingresos/egresos/cheques/flujo/ARCA CSV), inventarios (insumos/stock), trazabilidad (ficha + PDF + link público), clima, alertas/push, **WhatsApp bot** (egresos)
 
-## Key domain concepts
-- **Parcela types**: parral (vineyard), potrero (field), pasero (drying), cabezal (irrigation head)
-- **Fincas**: los_mimbres, media_agua, caucete
-- **Roles** (descending): super_admin → gerencial → encargado → regador → obrero
-- **Monedas**: ars (ARS), usd (USD) — always track separately, never auto-convert
-- **Tareas clasificacion**: verano, invierno, primavera, otono, general — auto-derived from CLASIFICACION_POR_TAREA dict in produccion.py
+## Convenciones de código (backend)
+- IDs UUID `String(36)`, nunca int
+- `await db.flush()` + `await db.refresh(obj)` tras escribir; **nunca commit en routers** (commitea `get_db`)
+- Rutas estáticas ANTES que parametrizadas (`/resumen/por-tipo` antes de `/{id}`)
+- PATCH: `model_dump(exclude_unset=True)`
+- Plata/cantidades `Decimal`, nunca `float` (la API los serializa como string → `Number()` en front/mobile)
+- PEP 8, type hints, sin `except` pelado
 
-## Coding conventions
-- All IDs are UUID strings (String(36)), never integers
-- Use `await db.flush()` + `await db.refresh(obj)` after writes — never commit inside routers (session commits in get_db context manager)
-- Static sub-routes must be defined BEFORE parameterized routes (e.g. `/resumen/por-tipo` before `/{id}`)
-- Dependency injection: get_db, get_current_user, require_* from app.api.deps
-- Always use `model_dump(exclude_unset=True)` for PATCH-style updates
-- Decimal for all monetary/quantity fields — never float for money
-- PEP 8, type hints everywhere, no bare `except`
-
-## Running the project
+## Comandos
 ```bash
-cd backend
-uvicorn app.main:app --reload          # dev server
-alembic upgrade head                   # run migrations
-python -m app.core.seed                # create super admin
-python -m app.api.seed_parcelas        # seed parcela data
+# backend (cd backend)
+./venv/Scripts/python.exe -m uvicorn app.main:app --reload
+./venv/Scripts/python.exe -m pytest                 # SQLite en memoria, no toca DB real
+./venv/Scripts/python.exe -m alembic upgrade head
+# frontend (cd frontend):  npm run lint && npm run build   (build type-checkea)
+# mobile (cd mobile):      npx tsc --noEmit
 ```
+CI (`.github/workflows/ci.yml`): pytest + lint + build en cada push/PR a `main`. Debe quedar verde.
 
-## Do NOT touch
-- backend/.env
-- backend/app/core/migrations/versions/  (unless explicitly asked to create a migration)
-- Alembic migration files already committed
+## Migraciones de BD
+1. Editar modelo en `app/models/` → `alembic revision --autogenerate -m "desc"`
+2. **Revisar** el archivo generado en `app/core/migrations/versions/` → `alembic upgrade head`
+3. Correr los dos generadores de docs (abajo)
+- Migraciones ya commiteadas/aplicadas: **no editarlas**; el cambio va en una migración nueva.
+- Producción: `scripts/migracion/_alembic_prod.py` (confirmar con Fausto antes de tocar prod).
 
-## When making DB changes
-1. Edit the model in app/models/
-2. Run: `alembic revision --autogenerate -m "description"`
-3. Review generated file in migrations/versions/
-4. Run: `alembic upgrade head`
-Never hand-edit committed migration files.
+## Deploy (cada pieza distinta)
+- **Backend → Railway**: auto-deploy al push a `main`. Logs: `npx @railway/cli logs`.
+- **Web → Vercel**: **NO auto-despliega.** Deploy manual (`npx vercel --prod`) tras verificar.
+- **Mobile → EAS**: OTA con `eas update ... --environment <env>` (runtime `1.0.0`, política fingerprint). **`eas.json` entra en el fingerprint**: tocarlo invalida el OTA y exige build nuevo. Builds nativos van a Play (Prueba cerrada/interna) y TestFlight.
+- Ante "se cierra la app" en Android: mirar Play Console → Android vitals primero.
+- **Antes de deployar: probar en local** (uvicorn + npm local, click real con Claude in Chrome), recién después commit/push/deploy.
 
-## Compact instructions
-When compacting: preserve current task goal, any decisions made about architecture or DB schema, and filenames modified. Drop verbose tool output and intermediate reasoning.
+## No tocar
+- `backend/.env`, `mobile/.env` (secretos; bloqueados por `deny` en `.claude/settings.json`)
+- `pg_backups/` (datos reales, gitignored)
+- Nunca escribir contraseñas/tokens en comandos Bash ni en `settings*.json`; leerlos del entorno.
 
-## Project map
-Full structural reference → `PROJECT_MAP.md` in this directory.
-Read it at the start of every session before exploring files.
+## Conocimiento (vault Obsidian `C:\Boveda Los Lirios`, vía `docs/`)
+`core.symlinks=false`: git guarda el contenido como archivos normales; editar siempre por este repo.
+- `docs/sistema/` → Arquitectura, **Modelo de Datos** (auto-generado), Bugs Conocidos, Stack Técnico, Decisiones/, Bitácora/
+- `docs/finanzas/`, `docs/produccion/`, `docs/proyectos/` (Dashboards, Sistema de Gestión Agrícola)
+Son fuente de verdad de decisiones ya tomadas: leer la relevante antes de trabajar y no contradecirla sin avisar.
 
-## Knowledge base (Obsidian)
-Live documentation maintained in Obsidian (`C:\Boveda Los Lirios`), linked into this repo via symlinks at `docs/`. **Note:** `core.symlinks=false` in this repo (Windows) — git snapshots the vault content as regular tracked files on each commit rather than tracking true symlinks; keep vault edits going through this repo's git history, not edited only in Obsidian, so they don't silently diverge.
+## Regenerar docs estructurales (no editar a mano)
+Tras agregar modelo, router, migración o pantalla:
+- `python scripts/generate_project_map.py` → `PROJECT_MAP.md`
+- `python scripts/generate_modelo_datos.py` → `docs/sistema/Modelo de Datos.md`
 
-- `docs/sistema/` → `01 - Sistema`:
-  - `Arquitectura.md` — full stack reference, API routes, models, conventions
-  - `Modelo de Datos.md` — **auto-generado** (`scripts/generate_modelo_datos.py`), diagramas ER + diccionario de datos desde el esquema real de Postgres. Correr el script de nuevo tras cualquier migración, no editar a mano.
-  - `Bugs Conocidos.md` — known bugs with impact and fix descriptions
-  - `Stack Técnico.md` — dependency versions and migration history
-  - `Decisiones/` — architectural decision records
-  - `Bitácora/` — session-by-session log
-- `docs/finanzas/` → `02 - Finanzas`: Cuentas por Pagar, Flujo de Caja, Presupuesto Anual
-- `docs/produccion/` → `03 - Producción`: Parcelas y Fincas, Tareas Clasificadas, Campañas
-- `docs/proyectos/` → `05 - Proyectos`:
-  - `Dashboards.md` — dashboard status, available API functions, codebase patterns
-  - `Sistema de Gestión Agrícola.md` — module status and roadmap
+## Agentes (`.claude/agents/`) — delegar en vez de re-derivar convenciones
+- `backend-fastapi` — rutas, modelos, schemas, lógica de negocio
+- `db-migrations` — cargas históricas Excel/CSV → Postgres (leer `scripts/migracion/README.md`)
+- `frontend-nextjs` — dashboard web
+- `mobile-expo` — app Expo y builds EAS
+- `finanzas-arca-whatsapp` — finanzas, import ARCA CSV, bot de WhatsApp
+- `code-reviewer` — revisa el diff contra estas convenciones (solo lectura)
+- `qa-tester` — corre pytest/lint/build/tsc y reporta (no edita)
+- `release-manager` — deploy Railway/Vercel/EAS + verificación (confirma antes de publicar)
+- `docs-sync` — regenera PROJECT_MAP/Modelo de Datos y escribe la bitácora
 
-Read the relevant file before working on a task in that area. These files are the source of truth for decisions already made — do not contradict them without raising the conflict explicitly.
-
-## Specialized agents (`.claude/agents/`)
-Four subagents with domain-specific conventions pre-loaded — delegate to them via the Agent tool instead of re-deriving conventions from scratch each time: `db-migrations` (Excel→DB historical data loads), `backend-fastapi` (API routes, models, Alembic), `frontend-nextjs` (dashboard web), `mobile-expo` (Expo app, EAS builds). Each file explains when to use it.
-
-## Regenerating structural docs
-Two scripts keep the structural docs honest instead of hand-maintained (both were stale/missing before 2026-09-22):
-- `scripts/generate_project_map.py` → `PROJECT_MAP.md` (models, routers, migrations, frontend/mobile routes)
-- `scripts/generate_modelo_datos.py` → `docs/sistema/Modelo de Datos.md` (DB schema, ER diagrams, enums)
-
-Run both after adding a model, router, migration, or screen — don't hand-edit either output.
+## Compactación
+Conservar: objetivo actual, decisiones de arquitectura/esquema, archivos modificados. Descartar salida verbosa de herramientas.
