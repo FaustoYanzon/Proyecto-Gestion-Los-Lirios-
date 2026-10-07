@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
 from app.core import ciclo_campana, fenologia
+from app.models.alta_produccion import Productor
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -1713,6 +1714,11 @@ async def get_cosecha(
     return await _enrich_cosecha(registro, db)
 
 
+async def _validar_productor(db: AsyncSession, productor_id: str | None) -> None:
+    if productor_id is not None and await db.get(Productor, productor_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Productor not found")
+
+
 @router.post("/cosecha/", response_model=RegistroCosechaResponse, status_code=status.HTTP_201_CREATED)
 async def create_cosecha(
     cosecha_data: RegistroCosechaCreate,
@@ -1727,6 +1733,7 @@ async def create_cosecha(
         if existing_row:
             return await _enrich_cosecha(existing_row, db)
 
+    await _validar_productor(db, cosecha_data.productor_id)
     data = cosecha_data.model_dump()
     data["created_by"] = current_user.id
     f = cosecha_data.fecha
@@ -1751,6 +1758,7 @@ async def update_cosecha(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
 
     update_data = cosecha_data.model_dump(exclude_unset=True)
+    await _validar_productor(db, update_data.get("productor_id"))
     for field, value in update_data.items():
         setattr(registro, field, value)
 

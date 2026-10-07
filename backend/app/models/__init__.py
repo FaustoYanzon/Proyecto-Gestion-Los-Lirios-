@@ -64,6 +64,22 @@ from app.models.produccion import (
     TipoEnvase,
     UnidadMedida,
 )
+from app.models.alta_produccion import (
+    Bin,
+    Comprador,
+    ComprobanteBodega,
+    Deposito,
+    EstadoLote,
+    IngresoPasero,
+    Lote,
+    ParametroProduccion,
+    Productor,
+    Remito,
+    RemitoLinea,
+    TipoProductor,
+    TipoRemito,
+    UbicacionPasero,
+)
 
 __all__ = [
     "PushToken",
@@ -128,4 +144,18 @@ __all__ = [
     "EnlacePublico",
     "OrigenAnalisis",
     "EstadoSanitarioAnalisis",
+    "Bin",
+    "Comprador",
+    "ComprobanteBodega",
+    "Deposito",
+    "EstadoLote",
+    "IngresoPasero",
+    "Lote",
+    "ParametroProduccion",
+    "Productor",
+    "Remito",
+    "RemitoLinea",
+    "TipoProductor",
+    "TipoRemito",
+    "UbicacionPasero",
 ]

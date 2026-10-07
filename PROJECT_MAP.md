@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-09-25
+> Última generación: 2026-10-07
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,11 +26,12 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 15 archivos, 31 clases ORM
+**Modelos:** 16 archivos, 42 clases ORM
 
 | Archivo | Clases |
 |---|---|
 | `alerta_descartada.py` | AlertaDescartada |
+| `alta_produccion.py` | Productor, Comprador, Deposito, ParametroProduccion, UbicacionPasero, IngresoPasero, Lote, Bin, Remito, RemitoLinea, ComprobanteBodega |
 | `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
 | `clima_cache.py` | ClimaCache |
 | `insumo.py` | Insumo, MovimientoStock |
@@ -46,7 +47,7 @@ repo/
 | `valvula.py` | Valvula |
 | `whatsapp.py` | TelefonoUsuarioWhatsapp, MensajeWhatsappPendiente |
 
-**Routers:** 21
+**Routers:** 25
 
 | Archivo | Prefix | Tags |
 |---|---|---|
@@ -57,13 +58,17 @@ repo/
 | `finanzas.py` | `/finanzas` | "Finanzas" |
 | `insumos.py` | `/insumos` | "Insumos" |
 | `kpis.py` | `/kpis` | "KPIs" |
+| `lotes_pasa.py` | `/lotes-pasa` | "Lotes de pasa" |
+| `maestros_produccion.py` | `/alta-produccion` | "Alta de Producción — maestros" |
 | `notificaciones.py` | `/notificaciones` | "notificaciones" |
 | `ordenes_aplicacion.py` | `/ordenes-aplicacion` | "Ordenes Aplicacion" |
 | `parcelas.py` | `/parcelas` | "Parcelas" |
+| `pasero.py` | `/pasero` | "Pasero" |
 | `plan_fitosanitario.py` | `/plan-fitosanitario` | "Plan Fitosanitario" |
 | `precios_tarea.py` | `/precios-tarea` | "Precios Tarea" |
 | `presupuestos.py` | `/presupuestos` | "Presupuestos" |
 | `produccion.py` | `/produccion` | "Produccion" |
+| `remitos.py` | `/remitos` | "Remitos" |
 | `telefonos_whatsapp.py` | `/admin/telefonos-whatsapp` | "Admin - Teléfonos WhatsApp" |
 | `termografo.py` | `/produccion/termografo` | "Producción - Termógrafo" |
 | `trabajadores.py` | `/trabajadores` | "Trabajadores" |
@@ -72,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 44 (head: `bda9cc7d181b_eliminar_estado_de_ingresos.py, a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
+**Migraciones de Alembic:** 46 (head: `a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py, a7c3e91d5b20_alta_produccion.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -135,7 +140,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `produccion/`: AplicacionesRealizadas.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TrabajadorSelect.tsx
+- `produccion/`: AplicacionesRealizadas.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 

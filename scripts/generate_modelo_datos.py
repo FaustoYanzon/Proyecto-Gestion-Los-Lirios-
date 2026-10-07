@@ -41,6 +41,11 @@ DOMINIOS: dict[str, list[str]] = {
         "precios_tarea", "metas_produccion", "ciclos_campana",
         "estados_variedad_campana", "analisis_calidad",
     ],
+    "Alta de producción (pasero, lotes de pasa, remitos)": [
+        "productores", "compradores", "depositos", "parametros_produccion",
+        "ubicaciones_pasero", "ingresos_pasero", "lotes_pasa", "bines_pasa",
+        "remitos", "remito_lineas", "comprobantes_bodega",
+    ],
     "Fitosanitarios, insumos y órdenes de aplicación": [
         "insumos", "registros_fitosanitarios", "planes_fitosanitarios",
         "ordenes_aplicacion", "ordenes_aplicacion_parcelas",

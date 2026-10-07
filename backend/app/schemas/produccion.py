@@ -572,6 +572,7 @@ class RegistroCosechaBase(BaseModel):
     variedad: str | None = None
     origen: OrigenCosecha = OrigenCosecha.propio
     proveedor_tercero: str | None = None
+    productor_id: str | None = None
     n_remito: str | None = None
     n_ciu: str | None = None
     destino: DestinoCosecha
@@ -600,6 +601,7 @@ class RegistroCosechaUpdate(BaseModel):
     variedad: str | None = None
     origen: OrigenCosecha | None = None
     proveedor_tercero: str | None = None
+    productor_id: str | None = None
     n_remito: str | None = None
     n_ciu: str | None = None
     destino: DestinoCosecha | None = None

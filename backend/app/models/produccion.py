@@ -764,6 +764,11 @@ class RegistroCosecha(Base):
     # Solo tiene sentido cuando origen=tercero -- nombre del productor/finca
     # que vendió la materia prima (no es un parcela_id propio).
     proveedor_tercero: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Productor normalizado (módulo Alta de Producción). `proveedor_tercero`
+    # queda como respaldo del texto original de los registros históricos.
+    productor_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("productores.id"), nullable=True, index=True
+    )
 
     n_remito: Mapped[str | None] = mapped_column(String(50), nullable=True)
     n_ciu: Mapped[str | None] = mapped_column(String(50), nullable=True)
