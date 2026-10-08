@@ -10,6 +10,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import api from '../lib/api'
@@ -72,6 +73,7 @@ export default function FitoScreen() {
   const [toast, setToast] = useState<string | null>(null)
   // Cambia en cada pull-to-refresh para que OrdenesPendientes recargue también.
   const [refreshKey, setRefreshKey] = useState(0)
+  const [tab, setTab] = useState<'pendientes' | 'realizadas'>('pendientes')
 
   const loadParcelas = useCallback(async () => {
     const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
@@ -120,14 +122,27 @@ export default function FitoScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tierra} />
         }
       >
-        <OrdenesPendientes
-          key={refreshKey}
-          onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }}
-        />
+        <View style={styles.segment}>
+          {([['pendientes', 'Pendientes'], ['realizadas', 'Realizadas']] as const).map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.segmentBtn, tab === key && styles.segmentBtnActive]}
+              onPress={() => setTab(key)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.segmentText, tab === key && styles.segmentTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <OfflineQueueBanner />
 
-        {loadingRegistros ? (
+        {tab === 'pendientes' ? (
+          <OrdenesPendientes
+            key={refreshKey}
+            onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }}
+          />
+        ) : loadingRegistros ? (
           <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />
         ) : (
           <RecentList registros={registros} parcelas={parcelas} />
@@ -143,6 +158,16 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
   },
+
+  // segmented tabs
+  segment: {
+    flexDirection: 'row', backgroundColor: colors.blanco, borderRadius: 12,
+    padding: 4, marginBottom: 16, borderWidth: 1, borderColor: colors.borde,
+  },
+  segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
+  segmentBtnActive: { backgroundColor: colors.tierra },
+  segmentText: { fontSize: 14, fontWeight: '700', color: colors.ink60 },
+  segmentTextActive: { color: colors.blanco },
 
   // recent
   registroCard: {

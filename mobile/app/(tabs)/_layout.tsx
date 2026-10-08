@@ -7,12 +7,15 @@ import { ICONS, ICON_SIZE, ICON_STROKE } from '../../lib/icons'
 import { AppHeader } from '../../components/AppHeader'
 import { type UserBadgeHandle } from '../../components/UserBadge'
 import { SyncBar } from '../../components/SyncBar'
+import { useAuthStore } from '../../store/authStore'
 
 export default function TabsLayout() {
   const headerRef = useRef<UserBadgeHandle>(null)
   // Alto real del header ya renderizado (fijo + el safe-area inset de arriba,
   // que varía por dispositivo — notch, isla dinámica). SyncBar se ancla ahí.
   const [headerHeight, setHeaderHeight] = useState(41)
+  const role = useAuthStore((s) => s.user?.role)
+  const puedeVerTareas = role !== 'regador' && role !== 'obrero'
 
   return (
     <View style={{ flex: 1 }}>
@@ -56,6 +59,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tareas"
         options={{
+          // Solo encargado y arriba cargan tareas; regador/obrero no la ven.
+          href: puedeVerTareas ? undefined : null,
           title: 'Tareas',
           tabBarIcon: ({ color }) => (
             <ICONS.tarea size={ICON_SIZE.tab} color={color} strokeWidth={ICON_STROKE} />

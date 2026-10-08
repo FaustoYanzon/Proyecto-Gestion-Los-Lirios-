@@ -14,6 +14,7 @@ import api, { getCumplimientoRiego, getEstadoCampanaActual, getRiegosEnCurso } f
 import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad, RiegoEnCurso } from '../../lib/types'
 import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
+import { useAuthStore } from '../../store/authStore'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
 // finca) — extraído una vez del KML real (frontend/public/Los Lirios 2026.kml,
@@ -550,6 +551,8 @@ setTimeout(function() { map.invalidateSize(); }, 200);
 
 function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () => void }) {
   const router = useRouter()
+  const role = useAuthStore((s) => s.user?.role)
+  const puedeVerTareas = role !== 'regador' && role !== 'obrero'
   const p = panel.parcela
   // Ciclo de Campaña (calendario único, nuevo) — separado del motor de
   // fenología automática (panel.fenologia, viejo, alimenta "tareas
@@ -712,7 +715,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           { key: 'riego', label: '+ Riego', route: '/(tabs)/riego'  },
           { key: 'tarea', label: '+ Tarea', route: '/(tabs)/tareas' },
           { key: 'fito',  label: 'Fito',    route: '/(tabs)/fitosanitario' },
-        ] as const).map(({ key, label, route }) => (
+        ] as const).filter(({ key }) => key !== 'tarea' || puedeVerTareas).map(({ key, label, route }) => (
           <TouchableOpacity
             key={key}
             style={panelStyles.actionBtn}

@@ -234,11 +234,18 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
   if (loading) {
     return <ActivityIndicator color={colors.tierra} style={{ marginBottom: 16 }} />
   }
-  if (ordenes.length === 0) return null
+  if (ordenes.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <ICONS.fitosanitario size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
+        <Text style={styles.emptyStateTitle}>No hay órdenes pendientes ni en curso</Text>
+      </View>
+    )
+  }
 
   return (
     <View style={{ marginBottom: 22 }}>
-      <Text style={styles.sectionLabel}>ÓRDENES PENDIENTES</Text>
+      <Text style={styles.sectionLabel}>PENDIENTES Y EN CURSO</Text>
       {ordenes.map((orden) => (
         <OrdenCard key={orden.id} orden={orden} onSelectItem={(item) => handleSelectItem(orden, item)} />
       ))}
@@ -258,6 +265,8 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700', color: colors.niebla,
     letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
   },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyStateTitle: { fontSize: 15, fontWeight: '600', color: colors.ink60, marginTop: 12 },
   ordenCard: {
     backgroundColor: colors.blanco, borderRadius: 14, padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: colors.hueso,
