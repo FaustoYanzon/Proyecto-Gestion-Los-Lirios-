@@ -245,6 +245,10 @@ class RemitoLineaResponse(BaseModel):
     lote_id: str | None
     cosecha_id: str | None
     kg: Decimal
+    # "2026 · sultanina · 1 · N°3" (solo líneas con lote).
+    lote_label: str | None = None
+    # "2026-02-05 · flame · Parral 1" (solo líneas con cosecha).
+    cosecha_label: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

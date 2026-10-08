@@ -34,6 +34,7 @@ from app.models.produccion import OrigenCosecha
 
 if TYPE_CHECKING:
     from app.models.parcela import Parcela
+    from app.models.produccion import RegistroCosecha
 
 
 def _uuid() -> str:
@@ -246,6 +247,8 @@ class RemitoLinea(Base):
     kg: Mapped[Decimal] = mapped_column(KG, nullable=False)
 
     remito: Mapped["Remito"] = relationship("Remito", back_populates="lineas")
+    lote: Mapped["Lote | None"] = relationship("Lote")
+    cosecha: Mapped["RegistroCosecha | None"] = relationship("RegistroCosecha")
 
 
 class ComprobanteBodega(Base):

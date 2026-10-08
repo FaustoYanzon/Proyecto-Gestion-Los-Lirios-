@@ -2,6 +2,7 @@
 configurables y saldos (uva en pasero, saldo de cosecha, numeración)."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -97,13 +98,28 @@ async def uva_disponible(db: AsyncSession, pasero_id: str, variedad: VariedadUva
     )
 
 
+async def saldos_cosecha(db: AsyncSession, cosechas: Sequence[RegistroCosecha]) -> dict[str, Decimal]:
+    """Saldo (kg sin despachar en remitos) de varias cosechas con UNA query
+    agregada. Única fuente de verdad: la usan el 409 de remitos y `saldo_kg`."""
+    if not cosechas:
+        return {}
+    ids = [c.id for c in cosechas]
+    filas = await db.execute(
+        select(RemitoLinea.cosecha_id, func.coalesce(func.sum(RemitoLinea.kg), 0))
+        .where(RemitoLinea.cosecha_id.in_(ids))
+        .group_by(RemitoLinea.cosecha_id)
+    )
+    despachado = {cid: Decimal(kg) for cid, kg in filas.all()}
+    # kg_total del histórico es Float: pasa por str para no arrastrar ruido binario.
+    return {
+        c.id: (Decimal(str(c.kg_total)) - despachado.get(c.id, Decimal("0"))).quantize(Decimal("0.01"))
+        for c in cosechas
+    }
+
+
 async def saldo_cosecha(db: AsyncSession, cosecha: RegistroCosecha) -> Decimal:
     """Kg de un registro de cosecha que todavía no salieron en un remito."""
-    despachado = await db.scalar(
-        select(func.coalesce(func.sum(RemitoLinea.kg), 0)).where(RemitoLinea.cosecha_id == cosecha.id)
-    )
-    # kg_total del histórico es Float: pasa por str para no arrastrar ruido binario.
-    return Decimal(str(cosecha.kg_total)) - Decimal(despachado)
+    return (await saldos_cosecha(db, [cosecha]))[cosecha.id]
 
 
 async def siguiente_numero_lote(

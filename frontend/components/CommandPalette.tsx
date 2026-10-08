@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import {
-  LayoutDashboard, Sprout, DollarSign, Settings, BookOpen, Search,
+  LayoutDashboard, Sprout, DollarSign, Settings, BookOpen, Search, Boxes,
 } from 'lucide-react'
 import { ALL_NAV, SUB_NAVS, type LucideIcon } from '@/lib/navigation'
 
@@ -15,6 +15,7 @@ type CmdItem = { label: string; href: string; icon: LucideIcon; group: string }
 // este archivo, así este buscador no se vuelve a desincronizar de la nav real.
 const GROUP_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard/produccion':    { label: 'Producción',    icon: Sprout },
+  '/dashboard/alta-produccion': { label: 'Alta de producción', icon: Boxes },
   '/dashboard/finanzas':      { label: 'Finanzas',      icon: DollarSign },
   '/dashboard/admin':         { label: 'Admin',         icon: Settings },
   '/dashboard/documentacion': { label: 'Documentación', icon: BookOpen },
@@ -31,7 +32,7 @@ const SUB_NAV_ITEMS: CmdItem[] = SUB_NAVS.flatMap((sn) => {
 
 const CMD_ITEMS: CmdItem[] = [...TOP_LEVEL_ITEMS, ...SUB_NAV_ITEMS]
 
-const GROUPS = ['Navegación', 'Producción', 'Finanzas', 'Admin', 'Documentación']
+const GROUPS = ['Navegación', 'Producción', 'Alta de producción', 'Finanzas', 'Admin', 'Documentación']
 
 interface Props {
   open: boolean

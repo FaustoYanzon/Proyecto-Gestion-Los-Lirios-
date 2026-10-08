@@ -16,6 +16,7 @@ export interface RegistroCosechaResponse {
   variedad: string | null
   origen: OrigenCosecha
   proveedor_tercero: string | null
+  productor_id: string | null
   n_remito: string | null
   n_ciu: string | null
   destino: DestinoCosecha
@@ -29,6 +30,8 @@ export interface RegistroCosechaResponse {
   bruto_kg: number | null
   tara_kg: number | null
   kg_total: number
+  /** Kg sin despachar (remitos); null si no aplica. Llega como string Decimal. */
+  saldo_kg: number | null
   imagen_remito_url: string | null
   observaciones: string | null
   created_at: string
@@ -41,6 +44,7 @@ export interface RegistroCosechaCreate {
   variedad?: string | null
   origen?: OrigenCosecha
   proveedor_tercero?: string | null
+  productor_id?: string | null
   n_remito?: string | null
   n_ciu?: string | null
   destino: DestinoCosecha
@@ -126,6 +130,12 @@ export const ORIGEN_LABELS: Record<OrigenCosecha, string> = {
   tercero: 'Tercero (materia prima comprada)',
 }
 
+// saldo_kg llega como string Decimal (o null): se convierte acá.
+function parseCosecha(d: RegistroCosechaResponse): RegistroCosechaResponse {
+  const raw = (d as unknown as { saldo_kg?: string | number | null }).saldo_kg
+  return { ...d, saldo_kg: raw == null ? null : Number(raw) }
+}
+
 export async function getCosechas(params?: {
   fecha_desde?: string
   fecha_hasta?: string
@@ -138,17 +148,17 @@ export async function getCosechas(params?: {
   limit?: number
 }): Promise<RegistroCosechaResponse[]> {
   const { data } = await api.get<RegistroCosechaResponse[]>('/produccion/cosecha/', { params })
-  return data
+  return data.map(parseCosecha)
 }
 
 export async function createCosecha(payload: RegistroCosechaCreate): Promise<RegistroCosechaResponse> {
   const { data } = await api.post<RegistroCosechaResponse>('/produccion/cosecha/', payload)
-  return data
+  return parseCosecha(data)
 }
 
 export async function updateCosecha(id: string, payload: Partial<RegistroCosechaCreate>): Promise<RegistroCosechaResponse> {
   const { data } = await api.put<RegistroCosechaResponse>(`/produccion/cosecha/${id}`, payload)
-  return data
+  return parseCosecha(data)
 }
 
 export async function deleteCosecha(id: string): Promise<void> {

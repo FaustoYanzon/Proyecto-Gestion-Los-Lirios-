@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
 from app.core import ciclo_campana, fenologia
 from app.models.alta_produccion import Productor
+from app.services.alta_produccion import saldo_cosecha, saldos_cosecha
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -1537,8 +1538,11 @@ async def crear_estado_variedad_campana(
 
 # ── Cosecha ────────────────────────────────────────────────────────────────────
 
-async def _enrich_cosecha(registro: RegistroCosecha, db: AsyncSession) -> RegistroCosechaResponse:
+async def _enrich_cosecha(
+    registro: RegistroCosecha, db: AsyncSession, saldo_kg: Decimal | None = None
+) -> RegistroCosechaResponse:
     resp = RegistroCosechaResponse.model_validate(registro)
+    resp.saldo_kg = saldo_kg if saldo_kg is not None else await saldo_cosecha(db, registro)
     if registro.parcela_id:
         p = await db.get(Parcela, registro.parcela_id)
         resp.parcela_nombre = p.nombre if p else None
@@ -1698,7 +1702,8 @@ async def list_cosecha(
     stmt = stmt.offset(skip).limit(limit)
 
     records = list((await db.execute(stmt)).scalars().all())
-    return [await _enrich_cosecha(r, db) for r in records]
+    saldos = await saldos_cosecha(db, records)
+    return [await _enrich_cosecha(r, db, saldos[r.id]) for r in records]
 
 
 @router.get("/cosecha/{cosecha_id}", response_model=RegistroCosechaResponse)

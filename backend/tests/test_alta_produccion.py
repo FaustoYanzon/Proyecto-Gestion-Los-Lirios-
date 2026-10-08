@@ -501,3 +501,53 @@ async def test_ubicacion_duplicada_devuelve_409(client, create_user, create_parc
     body = {"pasero_id": pasero.id, "hilera": 1, "parte": 2}
     assert (await client.post("/pasero/ubicaciones", json=body, headers=headers)).status_code == 201
     assert (await client.post("/pasero/ubicaciones", json=body, headers=headers)).status_code == 409
+
+
+# ── saldo_kg en cosecha y labels en líneas de remito ────────────────────────
+
+async def test_cosecha_expone_saldo_kg_antes_y_despues_de_una_salida(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
+    cosecha_id = await _cosecha(client, headers, parral.id, "MI", kg=10000)
+    comprador = await _comprador(client, headers, "Mercado Central")
+
+    antes = (await client.get(f"/produccion/cosecha/{cosecha_id}", headers=headers)).json()
+    assert Decimal(antes["saldo_kg"]) == Decimal("10000")
+
+    salida = {"tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
+              "lineas": [{"cosecha_id": cosecha_id, "kg": "6000"}]}
+    assert (await client.post("/remitos/", json=salida, headers=headers)).status_code == 201
+
+    detalle = (await client.get(f"/produccion/cosecha/{cosecha_id}", headers=headers)).json()
+    assert Decimal(detalle["saldo_kg"]) == Decimal("4000")
+    listado = (await client.get("/produccion/cosecha/", headers=headers)).json()
+    assert Decimal(next(c for c in listado if c["id"] == cosecha_id)["saldo_kg"]) == Decimal("4000")
+
+
+async def test_lineas_de_remito_traen_lote_label_y_cosecha_label(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
+    lote = await _lote_cerrado(client, headers, pasero.id, kg="1000")
+    cosecha_id = await _cosecha(client, headers, parral.id, "MI", kg=5000)
+    comprador = await _comprador(client, headers)
+
+    pasa = await client.post("/remitos/", json={
+        "tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
+        "lineas": [{"lote_id": lote["id"], "kg": "100"}]}, headers=headers)
+    assert pasa.status_code == 201, pasa.text
+    linea = pasa.json()["lineas"][0]
+    assert linea["lote_label"] == f"{lote['temporada']} · sultanina · 1 · N°{lote['numero']}"
+    assert linea["cosecha_label"] is None
+
+    fresco = await client.post("/remitos/", json={
+        "tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
+        "lineas": [{"cosecha_id": cosecha_id, "kg": "100"}]}, headers=headers)
+    assert fresco.status_code == 201, fresco.text
+    linea = fresco.json()["lineas"][0]
+    assert linea["cosecha_label"] == "2026-02-05 · flame · Parral 1"
+    assert linea["lote_label"] is None
+
+    listado = (await client.get("/remitos/", headers=headers)).json()
+    labels = {(l["lote_label"], l["cosecha_label"]) for r in listado for l in r["lineas"]}
+    assert len(labels) == 2

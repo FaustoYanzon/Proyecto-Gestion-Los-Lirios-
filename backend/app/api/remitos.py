@@ -21,10 +21,12 @@ from app.models.alta_produccion import (
     ComprobanteBodega,
     EstadoLote,
     Lote,
+    Productor,
     Remito,
     RemitoLinea,
     TipoRemito,
 )
+from app.models.parcela import Parcela
 from app.models.produccion import DestinoCosecha, RegistroCosecha
 from app.models.user import User
 from app.schemas.alta_produccion import (
@@ -44,6 +46,13 @@ DESTINOS_POR_TIPO: dict[TipoRemito, set[DestinoCosecha]] = {
 }
 
 
+_LOAD_OPTS = (
+    selectinload(Remito.lineas).selectinload(RemitoLinea.lote),
+    selectinload(Remito.lineas).selectinload(RemitoLinea.cosecha),
+    selectinload(Remito.comprobante_bodega),
+)
+
+
 def _comprobante_response(comprobante: ComprobanteBodega, remito: Remito) -> ComprobanteBodegaResponse:
     return ComprobanteBodegaResponse(
         id=comprobante.id,
@@ -57,7 +66,55 @@ def _comprobante_response(comprobante: ComprobanteBodega, remito: Remito) -> Com
     )
 
 
-def _remito_response(remito: Remito) -> RemitoResponse:
+def _lote_label(lote: Lote) -> str:
+    return f"{lote.temporada} · {lote.variedad.value} · {lote.calidad} · N°{lote.numero}"
+
+
+def _linea_response(linea: RemitoLinea, origenes: dict[str, str]) -> RemitoLineaResponse:
+    resp = RemitoLineaResponse.model_validate(linea)
+    if linea.lote is not None:
+        resp.lote_label = _lote_label(linea.lote)
+    if linea.cosecha is not None:
+        partes = [linea.cosecha.fecha.isoformat()]
+        if linea.cosecha.variedad:
+            partes.append(linea.cosecha.variedad)
+        origen = origenes.get(linea.cosecha.id) or linea.cosecha.proveedor_tercero
+        if origen:
+            partes.append(origen)
+        resp.cosecha_label = " · ".join(partes)
+    return resp
+
+
+async def _origenes_cosecha(db: AsyncSession, remitos: list[Remito]) -> dict[str, str]:
+    """Nombre de parcela (o productor) por cosecha, con 2 queries para todos los remitos."""
+    cosechas = {
+        linea.cosecha.id: linea.cosecha
+        for r in remitos
+        for linea in r.lineas
+        if linea.cosecha is not None
+    }
+    parcela_ids = {c.parcela_id for c in cosechas.values() if c.parcela_id}
+    productor_ids = {c.productor_id for c in cosechas.values() if c.productor_id}
+    parcelas: dict[str, str] = {}
+    productores: dict[str, str] = {}
+    if parcela_ids:
+        parcelas = dict((await db.execute(
+            select(Parcela.id, Parcela.nombre).where(Parcela.id.in_(parcela_ids))
+        )).all())
+    if productor_ids:
+        productores = dict((await db.execute(
+            select(Productor.id, Productor.nombre).where(Productor.id.in_(productor_ids))
+        )).all())
+    origenes: dict[str, str] = {}
+    for cid, c in cosechas.items():
+        nombre = parcelas.get(c.parcela_id) if c.parcela_id else None
+        nombre = nombre or (productores.get(c.productor_id) if c.productor_id else None)
+        if nombre:
+            origenes[cid] = nombre
+    return origenes
+
+
+def _remito_response(remito: Remito, origenes: dict[str, str]) -> RemitoResponse:
     comprobante = remito.comprobante_bodega
     return RemitoResponse(
         id=remito.id,
@@ -69,7 +126,7 @@ def _remito_response(remito: Remito) -> RemitoResponse:
         vehiculo_patente=remito.vehiculo_patente,
         observaciones=remito.observaciones,
         created_at=remito.created_at,
-        lineas=[RemitoLineaResponse.model_validate(linea) for linea in remito.lineas],
+        lineas=[_linea_response(linea, origenes) for linea in remito.lineas],
         comprobante_bodega=_comprobante_response(comprobante, remito) if comprobante else None,
     )
 
@@ -78,8 +135,9 @@ async def _get_remito(db: AsyncSession, remito_id: str) -> Remito:
     remito = (
         await db.execute(
             select(Remito)
-            .options(selectinload(Remito.lineas), selectinload(Remito.comprobante_bodega))
+            .options(*_LOAD_OPTS)
             .where(Remito.id == remito_id)
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
     if remito is None:
@@ -98,7 +156,7 @@ async def list_remitos(
 ) -> list[RemitoResponse]:
     stmt = (
         select(Remito)
-        .options(selectinload(Remito.lineas), selectinload(Remito.comprobante_bodega))
+        .options(*_LOAD_OPTS)
         .order_by(Remito.fecha.desc(), Remito.created_at.desc())
     )
     if tipo:
@@ -109,7 +167,9 @@ async def list_remitos(
         stmt = stmt.where(Remito.fecha >= desde)
     if hasta:
         stmt = stmt.where(Remito.fecha <= hasta)
-    return [_remito_response(r) for r in (await db.execute(stmt)).scalars().all()]
+    remitos = list((await db.execute(stmt)).scalars().all())
+    origenes = await _origenes_cosecha(db, remitos)
+    return [_remito_response(r, origenes) for r in remitos]
 
 
 @router.post("/", response_model=RemitoResponse, status_code=status.HTTP_201_CREATED)
@@ -213,7 +273,8 @@ async def create_remito(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe el remito {numero} de tipo {data.tipo.value}"
         ) from exc
-    return _remito_response(await _get_remito(db, remito.id))
+    creado = await _get_remito(db, remito.id)
+    return _remito_response(creado, await _origenes_cosecha(db, [creado]))
 
 
 @router.get("/{remito_id}", response_model=RemitoResponse)
@@ -222,7 +283,8 @@ async def get_remito(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> RemitoResponse:
-    return _remito_response(await _get_remito(db, remito_id))
+    remito = await _get_remito(db, remito_id)
+    return _remito_response(remito, await _origenes_cosecha(db, [remito]))
 
 
 @router.post(

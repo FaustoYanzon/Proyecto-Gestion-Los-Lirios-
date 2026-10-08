@@ -13,6 +13,8 @@ import {
   type CultivoCosecha, type DestinoCosecha, type TipoEnvase, type OrigenCosecha,
 } from '@/lib/api/cosecha'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
+import { getProductores } from '@/lib/api/altaProduccion'
+import { useAuthStore } from '@/store/authStore'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ interface FormState {
   variedad: string
   origen: OrigenCosecha
   proveedor_tercero: string
+  productor_id: string
   n_remito: string
   n_ciu: string
   destino: DestinoCosecha | ''
@@ -63,6 +66,7 @@ const EMPTY_FORM: FormState = {
   variedad: '',
   origen: 'propio',
   proveedor_tercero: '',
+  productor_id: '',
   n_remito: '',
   n_ciu: '',
   destino: '',
@@ -167,6 +171,16 @@ export default function CosechaPage() {
     staleTime: 300_000,
   })
 
+  // Maestro de productores (el endpoint exige encargado o superior).
+  const rol = useAuthStore((s) => s.user?.role)
+  const puedeVerProductores = rol === 'super_admin' || rol === 'gerencial' || rol === 'encargado'
+  const { data: productores = [] } = useQuery({
+    queryKey: ['ap-productores'],
+    queryFn: () => getProductores(),
+    staleTime: 60_000,
+    enabled: puedeVerProductores,
+  })
+
   // ── Auto-compute kg_total ─────────────────────────────────────────────────
 
   // Auto-completar kg_total al tipear envases/peso unitario -- reset de
@@ -214,6 +228,7 @@ export default function CosechaPage() {
       variedad: r.variedad ?? '',
       origen: r.origen,
       proveedor_tercero: r.proveedor_tercero ?? '',
+      productor_id: r.productor_id ?? '',
       n_remito: r.n_remito ?? '',
       n_ciu: r.n_ciu ?? '',
       destino: r.destino,
@@ -250,7 +265,12 @@ export default function CosechaPage() {
         cultivo: form.cultivo,
         variedad: form.variedad || null,
         origen: form.origen,
-        proveedor_tercero: form.origen === 'tercero' ? (form.proveedor_tercero || null) : null,
+        // El texto sigue siendo respaldo histórico; si hay productor y no se
+        // escribió proveedor, se copia el nombre del productor.
+        proveedor_tercero: form.origen === 'tercero'
+          ? (form.proveedor_tercero || productores.find(p => p.id === form.productor_id)?.nombre || null)
+          : null,
+        productor_id: form.productor_id || null,
         n_remito: form.n_remito || null,
         n_ciu: form.n_ciu || null,
         destino: form.destino,
@@ -544,6 +564,24 @@ export default function CosechaPage() {
                       {parcelas.filter(p => p.is_active).map(p => (
                         <option key={p.id} value={p.id}>{formatParcelaLabel(p.nombre)}</option>
                       ))}
+                    </select>
+                  </div>
+                )}
+
+                {puedeVerProductores && (
+                  <div>
+                    <label className={labelCls}>Productor</label>
+                    <select
+                      value={form.productor_id}
+                      onChange={e => setForm(f => ({ ...f, productor_id: e.target.value }))}
+                      className={inputCls}
+                    >
+                      <option value="">Sin productor</option>
+                      {productores
+                        .filter(p => p.is_active || p.id === form.productor_id)
+                        .map(p => (
+                          <option key={p.id} value={p.id}>{p.nombre}{p.is_active ? '' : ' (inactivo)'}</option>
+                        ))}
                     </select>
                   </div>
                 )}

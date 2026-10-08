@@ -626,6 +626,9 @@ class RegistroCosechaResponse(RegistroCosechaBase):
     created_by: str
     created_at: datetime
     parcela_nombre: str | None = None
+    # kg_total menos lo despachado en remitos de salida. None si no se calculó
+    # (p. ej. cosechas embebidas en la ficha de trazabilidad).
+    saldo_kg: Decimal | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

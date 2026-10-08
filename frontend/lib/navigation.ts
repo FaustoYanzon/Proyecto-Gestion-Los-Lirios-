@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History, Warehouse,
+  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History, Warehouse, Boxes,
 } from 'lucide-react'
 import type { Role } from '@/lib/theme'
 
@@ -43,6 +43,14 @@ export const ALL_NAV: NavItem[] = [
     matchFn: (p) =>
       p.startsWith('/dashboard/produccion') &&
       !p.startsWith('/dashboard/produccion/dashboard'),
+  },
+  {
+    href: '/dashboard/alta-produccion/pasero',
+    label: 'Alta de producción',
+    short: 'Alta',
+    icon: Boxes,
+    matchFn: (p) => p.startsWith('/dashboard/alta-produccion'),
+    allowedRoles: ['super_admin', 'gerencial', 'encargado'],
   },
   {
     href: '/dashboard/finanzas/egresos',
@@ -106,6 +114,20 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/produccion/dashboard',          label: 'Dashboard',             group: 'Seguimiento' },
       { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento',  group: 'Seguimiento' },
       { href: '/dashboard/produccion/clima',              label: 'Clima',                 group: 'Seguimiento' },
+    ],
+  },
+  {
+    prefix: '/dashboard/alta-produccion',
+    items: [
+      { href: '/dashboard/alta-produccion/pasero',       label: 'Ingreso al pasero', group: 'Pasero' },
+      { href: '/dashboard/alta-produccion/ubicaciones',  label: 'Ubicaciones',       group: 'Pasero' },
+      { href: '/dashboard/alta-produccion/lotes',       label: 'Lotes de pasa',    group: 'Pasa' },
+      { href: '/dashboard/alta-produccion/remitos',      label: 'Remitos',          group: 'Pasa' },
+      { href: '/dashboard/alta-produccion/stock',        label: 'Stock',            group: 'Pasa' },
+      { href: '/dashboard/alta-produccion/productores',  label: 'Productores',       group: 'Maestros' },
+      { href: '/dashboard/alta-produccion/compradores',  label: 'Compradores',       group: 'Maestros' },
+      { href: '/dashboard/alta-produccion/depositos',    label: 'Depósitos',         group: 'Maestros' },
+      { href: '/dashboard/alta-produccion/parametros',   label: 'Parámetros',        group: 'Configuración' },
     ],
   },
   {
