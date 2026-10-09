@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-07
+> Última generación: 2026-10-09
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 46 (head: `a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py, a7c3e91d5b20_alta_produccion.py`)
+**Migraciones de Alembic:** 46 (head: `a7c3e91d5b20_alta_produccion.py, a106b068b59a_agregar_origen_y_proveedor_tercero_a_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -90,11 +90,20 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (40):**
+**Rutas (49):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
 - `/dashboard/admin/whatsapp`
+- `/dashboard/alta-produccion/compradores`
+- `/dashboard/alta-produccion/depositos`
+- `/dashboard/alta-produccion/lotes`
+- `/dashboard/alta-produccion/parametros`
+- `/dashboard/alta-produccion/pasero`
+- `/dashboard/alta-produccion/productores`
+- `/dashboard/alta-produccion/remitos`
+- `/dashboard/alta-produccion/stock`
+- `/dashboard/alta-produccion/ubicaciones`
 - `/dashboard/documentacion/campana`
 - `/dashboard/documentacion/empresa`
 - `/dashboard/documentacion/fenologia`
@@ -133,10 +142,11 @@ repo/
 - `/privacy`
 - `/trazabilidad/publica/[token]`
 
-**Módulos de API client** (`frontend/lib/api/`, 25): `alertas.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
+**Módulos de API client** (`frontend/lib/api/`, 26): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
 
 **Componentes por carpeta:**
 
+- `alta-produccion/`: MaestroCrud.tsx
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
