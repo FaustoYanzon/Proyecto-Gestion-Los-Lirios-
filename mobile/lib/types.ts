@@ -495,6 +495,7 @@ export interface RegistroCosechaCreate {
   parcela_id?: string | null
   cultivo?: CultivoCosecha
   variedad?: string | null
+  productor_id?: string | null
   n_remito?: string | null
   n_ciu?: string | null
   destino: DestinoCosecha

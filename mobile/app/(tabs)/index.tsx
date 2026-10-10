@@ -17,6 +17,7 @@ import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
 import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
 import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
+import { puedeAltaProduccion } from '../../lib/altaProduccion'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
 const NOTIF_ROTATION_INTERVAL_MS = 15 * 60 * 1000
@@ -383,6 +384,23 @@ export default function InicioScreen() {
           bg={colors.burdeos[600]}
           onPress={() => router.push('/(tabs)/campana')}
         />
+        {/* Alta de Producción: solo encargado o superior (el backend también lo exige) */}
+        {puedeAltaProduccion(user?.role) && (
+          <>
+            <ActionButton
+              label="Ingreso al pasero"
+              icon="cosecha"
+              bg={colors.tierra}
+              onPress={() => router.push('/alta-produccion/pasero')}
+            />
+            <ActionButton
+              label="Lotes de pasa"
+              icon="capas"
+              bg={colors.verdeCampo}
+              onPress={() => router.push('/alta-produccion/lotes')}
+            />
+          </>
+        )}
       </View>
 
       {/* ── Riegos en curso ── */}

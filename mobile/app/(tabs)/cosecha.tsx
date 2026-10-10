@@ -15,6 +15,8 @@ import {
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { getCosechas, createCosecha, deleteCosecha } from '../../lib/api'
 import { newIdempotencyKey } from '../../lib/idempotency'
+import { useAuthStore } from '../../store/authStore'
+import { getProductores, puedeAltaProduccion, type Productor } from '../../lib/altaProduccion'
 import type { RegistroCosecha, RegistroCosechaCreate, DestinoCosecha, CultivoCosecha, TipoEnvase } from '../../lib/types'
 import { DESTINO_LABELS, CULTIVO_LABELS, DESTINO_COLORS } from '../../lib/types'
 
@@ -61,6 +63,10 @@ export default function CosechaScreen() {
   // nuevo); se reutiliza si el usuario reintenta el mismo envío.
   const idempotencyKeyRef = useRef(newIdempotencyKey())
   const [form, setForm] = useState<RegistroCosechaCreate>(emptyForm())
+  // Maestro de productores: el endpoint exige encargado o superior.
+  const role = useAuthStore((s) => s.user?.role)
+  const puedeVerProductores = puedeAltaProduccion(role)
+  const [productores, setProductores] = useState<Productor[]>([])
 
   // ── Data ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +83,13 @@ export default function CosechaScreen() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    if (!puedeVerProductores) return
+    getProductores()
+      .then((ps) => setProductores(ps.filter((p) => p.is_active)))
+      .catch(() => { /* opcional: sin lista el alta funciona igual, sin productor */ })
+  }, [puedeVerProductores])
 
   function onRefresh() {
     setRefreshing(true)
@@ -438,6 +451,32 @@ export default function CosechaScreen() {
               placeholder="Ej: Flame, Red Globe"
               placeholderTextColor="#9ca3af"
             />
+
+            {puedeVerProductores && productores.length > 0 && (
+              <>
+                <Text style={styles.fieldLabel}>PRODUCTOR (OPCIONAL)</Text>
+                <View style={styles.chipGroup}>
+                  <TouchableOpacity
+                    style={[styles.chip, !form.productor_id && styles.chipActiveGreen]}
+                    onPress={() => handleFormChange('productor_id', null)}
+                  >
+                    <Text style={[styles.chipText, !form.productor_id && styles.chipTextActive]}>Sin productor</Text>
+                  </TouchableOpacity>
+                  {productores.map((p) => {
+                    const active = form.productor_id === p.id
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        style={[styles.chip, active && styles.chipActiveGreen]}
+                        onPress={() => handleFormChange('productor_id', p.id)}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.nombre}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </>
+            )}
 
             <Text style={styles.fieldLabel}>OBSERVACIONES</Text>
             <TextInput

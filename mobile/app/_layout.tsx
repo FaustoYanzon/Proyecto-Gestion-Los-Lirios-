@@ -105,6 +105,26 @@ export default function RootLayout() {
               headerTitleStyle: { fontWeight: 'bold' },
             }}
           />
+          <Stack.Screen
+            name="alta-produccion/pasero"
+            options={{
+              headerShown: true,
+              title: 'Ingreso al pasero',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
+            name="alta-produccion/lotes"
+            options={{
+              headerShown: true,
+              title: 'Lotes de pasa',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
         </Stack>
       </ErrorBoundary>
     </GestureHandlerRootView>
