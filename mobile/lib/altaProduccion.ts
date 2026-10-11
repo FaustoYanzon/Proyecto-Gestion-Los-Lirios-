@@ -6,6 +6,7 @@
 // Estas escrituras NO soportan idempotency_key ni la cola offline (el backend
 // no deduplica y la validación depende del saldo de uva al momento): requieren
 // conexión y muestran el error del backend.
+import { Linking } from 'react-native'
 import api from './api'
 import type { DestinoCosecha, Parcela, UserRole, VariedadUva } from './types'
 
@@ -87,9 +88,121 @@ export async function getParametros(): Promise<ParametrosProduccion> {
   }
 }
 
-export async function getPaseros(): Promise<Parcela[]> {
+// "Pasero 2" antes que "Pasero 10": orden natural ascendente por nombre.
+const porNombre = (a: Parcela, b: Parcela): number =>
+  a.nombre.localeCompare(b.nombre, 'es', { numeric: true })
+
+async function getParcelasActivas(tipo: Parcela['tipo']): Promise<Parcela[]> {
   const { data } = await api.get<Parcela[]>('/parcelas/mapa')
-  return data.filter((p) => p.tipo === 'pasero' && p.is_active)
+  return data.filter((p) => p.tipo === tipo && p.is_active).sort(porNombre)
+}
+
+export const getPaseros = (): Promise<Parcela[]> => getParcelasActivas('pasero')
+export const getParrales = (): Promise<Parcela[]> => getParcelasActivas('parral')
+
+export interface Comprador {
+  id: string
+  nombre: string
+  cuit: string | null
+  is_active: boolean
+}
+
+export async function getCompradores(): Promise<Comprador[]> {
+  const { data } = await api.get<Comprador[]>('/alta-produccion/compradores')
+  return data
+}
+
+export interface UbicacionPasero {
+  id: string
+  pasero_id: string
+  hilera: number
+  parte: number
+}
+
+export async function getUbicacionesPasero(pasero_id: string): Promise<UbicacionPasero[]> {
+  const { data } = await api.get<UbicacionPasero[]>('/pasero/ubicaciones', { params: { pasero_id } })
+  return data
+}
+
+// ── Despacho de cosecha ("De -> Para") ────────────────────────────────────────
+// POST /produccion/cosecha/despacho: crea cosecha + remito (+ ingreso al pasero)
+// en una transacción. Requiere conexión; la idempotency_key evita duplicados al
+// reintentar el mismo envío. Espejo de frontend/lib/api/cosecha.ts.
+
+export type ParaDespacho = 'bodega' | 'comprador' | 'pasero'
+export type TipoEnvaseDespacho = 'caja' | 'bin' | 'chasis' | 'ficha' | 'vin' | 'bolsa' | 'otro'
+
+export const PARA_LABELS: Record<ParaDespacho, string> = {
+  bodega: 'Bodega',
+  comprador: 'Comprador',
+  pasero: 'Pasero',
+}
+
+export const ENVASE_LABELS: Record<TipoEnvaseDespacho, string> = {
+  caja: 'Caja', bin: 'Bin', chasis: 'Chasis', ficha: 'Ficha', vin: 'Vin Grande', bolsa: 'Bolsa', otro: 'Otro',
+}
+
+export const PREFIJO_REMITO: Record<ParaDespacho, string> = { bodega: 'BOD', comprador: 'FRE', pasero: 'TRA' }
+
+export interface DespachoCosechaCreate {
+  fecha: string
+  para: ParaDespacho
+  origen: OrigenIngreso
+  parcela_id?: string | null
+  productor_id?: string | null
+  variedad?: VariedadUva | null
+  comprador_id?: string | null
+  pasero_id?: string | null
+  ubicacion_id?: string | null
+  carros?: number
+  carro_incompleto?: boolean
+  kg_total?: number | null
+  tipo_envase?: TipoEnvaseDespacho
+  cantidad_envases?: number | null
+  peso_unitario_kg?: number | null
+  bruto_kg?: number | null
+  tara_kg?: number | null
+  vehiculo_patente?: string | null
+  cuadrilla?: string | null
+  acarreo?: string | null
+  n_ciu?: string | null
+  n_remito?: string | null
+  observaciones?: string | null
+  idempotency_key: string
+}
+
+export interface RemitoDespacho {
+  id: string
+  numero: string
+  kg_total: number
+  comprador_nombre: string | null
+  pasero_nombre: string | null
+}
+
+export interface DespachoCosechaResultado {
+  remito: RemitoDespacho
+  ingresoPasero: boolean
+}
+
+export async function createDespachoCosecha(payload: DespachoCosechaCreate): Promise<DespachoCosechaResultado> {
+  const { data } = await api.post<Record<string, unknown>>('/produccion/cosecha/despacho', payload)
+  const r = data.remito as Record<string, unknown>
+  return {
+    remito: {
+      id: String(r.id),
+      numero: String(r.numero),
+      kg_total: num(r.kg_total),
+      comprador_nombre: (r.comprador_nombre as string | null) ?? null,
+      pasero_nombre: (r.pasero_nombre as string | null) ?? null,
+    },
+    ingresoPasero: data.ingreso_pasero != null,
+  }
+}
+
+/** Pide un link firmado (5 min) del PDF del remito y lo abre en el navegador/visor del teléfono. */
+export async function abrirRemitoPdf(remitoId: string): Promise<void> {
+  const { data } = await api.post<{ url: string }>(`/remitos/${remitoId}/pdf-link`)
+  await Linking.openURL(data.url)
 }
 
 // ── Cosechas con destino a pasa (para vincular el ingreso) ────────────────────
@@ -100,6 +213,7 @@ export interface CosechaPasa {
   variedad: string | null
   origen: 'propio' | 'tercero'
   proveedor_tercero: string | null
+  parcela_id: string | null
   parcela_nombre: string | null
   productor_id: string | null
   destino: DestinoCosecha
@@ -141,6 +255,7 @@ export interface IngresoPasero {
   variedad: VariedadUva
   origen: OrigenIngreso
   productor_id: string | null
+  parcela_origen_id?: string | null
   carros: number
   fichas: number
   kg_teorico: number
@@ -158,6 +273,8 @@ export interface IngresoPaseroCreate {
   fichas?: number | null
   origen: OrigenIngreso
   productor_id?: string | null
+  /** Parral de origen (solo origen propio). */
+  parcela_origen_id?: string | null
   cosecha_id?: string | null
   observaciones?: string | null
 }

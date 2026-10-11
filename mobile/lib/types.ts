@@ -488,6 +488,9 @@ export interface RegistroCosecha {
   kg_total: number
   observaciones: string | null
   created_at: string
+  /** Remito (BOD/FRE/TRA) generado por el despacho; null/ausente en histórico. */
+  remito_id?: string | null
+  remito_numero?: string | null
 }
 
 export interface RegistroCosechaCreate {

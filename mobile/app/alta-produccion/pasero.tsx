@@ -21,7 +21,7 @@ import type { Parcela, VariedadUva } from '../../lib/types'
 import {
   VARIEDADES, puedeAltaProduccion, fmtKg, fmtFecha, hoyISO, kgValido, kgToString, errorDetail,
   getIngresosPasero, createIngresoPasero, getStockPasero, getProductores, getParametros,
-  getPaseros, getCosechasPasa, cosechaLabel,
+  getPaseros, getParrales, getCosechasPasa, cosechaLabel,
   type IngresoPasero, type StockPaseroItem, type Productor, type ParametrosProduccion,
   type CosechaPasa, type OrigenIngreso,
 } from '../../lib/altaProduccion'
@@ -33,20 +33,22 @@ const RECIENTES = 20
 interface FormState {
   fecha: string
   pasero_id: string
-  variedad: VariedadUva
-  origen: OrigenIngreso
-  productor_id: string
+  // El origen se elige primero: de él depende qué se pide después.
+  origen: OrigenIngreso | ''
+  parcela_origen_id: string // parral (solo origen propio); define la variedad
+  productor_id: string // solo origen tercero
+  variedad: VariedadUva | ''
   cosecha_id: string
   carros: string
-  fichas: string
+  carro_incompleto: boolean
   kg_real: string
   observaciones: string
 }
 
 function emptyForm(): FormState {
   return {
-    fecha: hoyISO(), pasero_id: '', variedad: 'flame', origen: 'propio', productor_id: '',
-    cosecha_id: '', carros: '1', fichas: '', kg_real: '', observaciones: '',
+    fecha: hoyISO(), pasero_id: '', origen: '', parcela_origen_id: '', productor_id: '',
+    variedad: '', cosecha_id: '', carros: '1', carro_incompleto: false, kg_real: '', observaciones: '',
   }
 }
 
@@ -56,6 +58,7 @@ export default function PaseroScreen() {
   const [ingresos, setIngresos] = useState<IngresoPasero[]>([])
   const [stock, setStock] = useState<StockPaseroItem[]>([])
   const [paseros, setPaseros] = useState<Parcela[]>([])
+  const [parrales, setParrales] = useState<Parcela[]>([])
   const [productores, setProductores] = useState<Productor[]>([])
   const [parametros, setParametros] = useState<ParametrosProduccion | null>(null)
   const [cosechas, setCosechas] = useState<CosechaPasa[]>([])
@@ -76,12 +79,13 @@ export default function PaseroScreen() {
   const fetchData = useCallback(async () => {
     setLoadError(null)
     try {
-      const [ing, stk, pas, prod, par] = await Promise.all([
-        getIngresosPasero(), getStockPasero(), getPaseros(), getProductores(), getParametros(),
+      const [ing, stk, pas, parr, prod, par] = await Promise.all([
+        getIngresosPasero(), getStockPasero(), getPaseros(), getParrales(), getProductores(), getParametros(),
       ])
       setIngresos(ing)
       setStock(stk)
       setPaseros(pas)
+      setParrales(parr)
       setProductores(prod)
       setParametros(par)
     } catch (e) {
@@ -115,45 +119,62 @@ export default function PaseroScreen() {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  // Al elegir una cosecha se hereda variedad (si es una conocida) y productor.
-  function elegirCosecha(c: CosechaPasa | null) {
-    setForm((prev) => {
-      if (!c || prev.cosecha_id === c.id) return { ...prev, cosecha_id: '' }
-      const variedad = VARIEDADES.includes(c.variedad as VariedadUva) ? (c.variedad as VariedadUva) : prev.variedad
-      return {
-        ...prev,
-        cosecha_id: c.id,
-        variedad,
-        origen: c.origen,
-        productor_id: c.productor_id ?? prev.productor_id,
-      }
+  // Cambiar el origen reinicia lo que depende de él.
+  function elegirOrigen(origen: OrigenIngreso) {
+    setForm((prev) => prev.origen === origen ? prev : {
+      ...prev, origen, parcela_origen_id: '', productor_id: '', variedad: '', cosecha_id: '',
     })
   }
 
-  // Vista previa: fichas = fichas informadas o carros x fichas por carro.
+  // En origen propio la variedad la define el parral; si no la tiene cargada
+  // (o no es una de la lista) se pide aparte.
+  function elegirParral(p: Parcela) {
+    const variedad = p.variedad && VARIEDADES.includes(p.variedad) ? p.variedad : ''
+    setForm((prev) => ({ ...prev, parcela_origen_id: p.id, variedad, cosecha_id: '' }))
+  }
+
+  function elegirProductor(id: string) {
+    setForm((prev) => ({ ...prev, productor_id: id, cosecha_id: '' }))
+  }
+
+  const parralElegido = parrales.find((p) => p.id === form.parcela_origen_id) ?? null
+  const variedadDelParral = !!parralElegido?.variedad && VARIEDADES.includes(parralElegido.variedad)
+  // Cosechas candidatas a vincular: solo las del parral / productor elegido.
+  const cosechasDelOrigen = cosechas.filter((c) =>
+    form.origen === 'propio'
+      ? !!form.parcela_origen_id && c.parcela_id === form.parcela_origen_id
+      : !!form.productor_id && c.productor_id === form.productor_id,
+  )
+
+  // Vista previa: carro completo -> carros x fichas por carro. Carro incompleto:
+  // no se sabe cuántas fichas son, se estiman por el peso (kg báscula / kg por ficha).
   const carrosNum = parseInt(form.carros, 10)
-  const fichasNum = form.fichas.trim() === '' ? null : parseInt(form.fichas, 10)
   const kgRealNum = Number(form.kg_real.trim().replace(',', '.')) || 0
-  const fichasCalc = fichasNum ?? (parametros && carrosNum > 0 ? carrosNum * parametros.fichas_por_carro : null)
+  const fichasEstimadas = form.carro_incompleto && parametros && kgRealNum > 0
+    ? Math.max(1, Math.round(kgRealNum / parametros.kg_por_ficha))
+    : null
+  const fichasCalc = form.carro_incompleto
+    ? fichasEstimadas
+    : (parametros && carrosNum > 0 ? carrosNum * parametros.fichas_por_carro : null)
   const kgTeorico = fichasCalc != null && parametros ? fichasCalc * parametros.kg_por_ficha : null
-  const merma = kgTeorico != null && kgRealNum > 0 ? kgTeorico - kgRealNum : null
+  const merma = !form.carro_incompleto && kgTeorico != null && kgRealNum > 0 ? kgTeorico - kgRealNum : null
 
   function validar(): string | null {
     if (!form.fecha.match(/^\d{4}-\d{2}-\d{2}$/)) return 'La fecha debe tener formato AAAA-MM-DD'
-    if (!form.pasero_id) return 'Elegí un pasero'
+    if (!form.pasero_id) return 'Elegí a qué pasero ingresa'
+    if (!form.origen) return 'Elegí de dónde viene la uva'
+    if (form.origen === 'propio' && !form.parcela_origen_id) return 'Elegí el parral de origen'
+    if (form.origen === 'tercero' && !form.productor_id) return 'Elegí el productor'
+    if (!form.variedad) return 'Elegí la variedad'
     if (!(carrosNum >= 1) || String(carrosNum) !== form.carros.trim()) return 'Carros: entero, mínimo 1'
-    if (fichasNum != null && !(fichasNum > 0 && String(fichasNum) === form.fichas.trim())) {
-      return 'Fichas: entero mayor a 0'
-    }
     if (!kgValido(form.kg_real)) return 'Kg báscula: número positivo con hasta 2 decimales'
-    if (form.origen === 'tercero' && !form.productor_id) return 'Un ingreso de origen tercero requiere productor'
     return null
   }
 
   async function handleSave() {
     if (submittingRef.current) return
     const err = validar()
-    if (err) { setFormError(err); return }
+    if (err || !form.origen || !form.variedad) { setFormError(err ?? 'Completá el formulario'); return }
     submittingRef.current = true
     setSaving(true)
     setFormError(null)
@@ -164,9 +185,11 @@ export default function PaseroScreen() {
         variedad: form.variedad,
         kg_real: kgToString(form.kg_real),
         carros: carrosNum,
-        fichas: fichasNum,
+        // Carro incompleto: fichas estimadas por peso. Si no, las calcula el backend.
+        fichas: form.carro_incompleto ? fichasEstimadas : null,
         origen: form.origen,
-        productor_id: form.productor_id || null,
+        productor_id: form.origen === 'tercero' ? form.productor_id : null,
+        parcela_origen_id: form.origen === 'propio' ? form.parcela_origen_id : null,
         cosecha_id: form.cosecha_id || null,
         observaciones: form.observaciones.trim() || null,
       })
@@ -232,6 +255,7 @@ export default function PaseroScreen() {
                   </View>
                   <Text style={styles.cardTitle}>
                     {nombrePasero(i.pasero_id)} · {VARIEDAD_LABELS[i.variedad] ?? i.variedad}
+                    {i.parcela_origen_id ? ` · ${parrales.find((p) => p.id === i.parcela_origen_id)?.nombre ?? 'parral'}` : ''}
                   </Text>
                   <View style={styles.cardFooter}>
                     <Text style={styles.kgText}>{fmtKg(i.kg_real)} kg</Text>
@@ -270,7 +294,7 @@ export default function PaseroScreen() {
               keyboardType="numeric"
             />
 
-            <Text style={styles.fieldLabel}>PASERO *</Text>
+            <Text style={styles.fieldLabel}>INGRESA A (PASERO) *</Text>
             <View style={styles.chipGroup}>
               {paseros.map((p) => (
                 <Chip key={p.id} label={p.nombre} active={form.pasero_id === p.id} onPress={() => setField('pasero_id', p.id)} />
@@ -278,26 +302,64 @@ export default function PaseroScreen() {
               {paseros.length === 0 && <Text style={styles.muted}>No hay paseros activos</Text>}
             </View>
 
-            <Text style={styles.fieldLabel}>VARIEDAD *</Text>
+            <Text style={styles.fieldLabel}>DE (ORIGEN DE LA UVA) *</Text>
             <View style={styles.chipGroup}>
-              {VARIEDADES.map((v) => (
-                <Chip key={v} label={VARIEDAD_LABELS[v]} active={form.variedad === v} onPress={() => setField('variedad', v)} />
-              ))}
+              <Chip label="Propio" active={form.origen === 'propio'} onPress={() => elegirOrigen('propio')} />
+              <Chip label="Tercero" active={form.origen === 'tercero'} onPress={() => elegirOrigen('tercero')} />
             </View>
 
-            <Text style={styles.fieldLabel}>ORIGEN</Text>
-            <View style={styles.chipGroup}>
-              <Chip label="Propio" active={form.origen === 'propio'} onPress={() => setField('origen', 'propio')} />
-              <Chip label="Tercero" active={form.origen === 'tercero'} onPress={() => setField('origen', 'tercero')} />
-            </View>
+            {form.origen === 'propio' && (
+              <>
+                <Text style={styles.fieldLabel}>PARRAL *</Text>
+                <View style={styles.chipGroup}>
+                  {parrales.map((p) => (
+                    <Chip key={p.id} label={p.nombre} active={form.parcela_origen_id === p.id} onPress={() => elegirParral(p)} />
+                  ))}
+                  {parrales.length === 0 && <Text style={styles.muted}>No hay parrales activos</Text>}
+                </View>
+                {parralElegido && variedadDelParral && form.variedad !== '' && (
+                  <View style={styles.previewBox}>
+                    <Text style={styles.previewText}>
+                      Variedad: <Text style={styles.previewValue}>{VARIEDAD_LABELS[form.variedad]}</Text> (según el parral)
+                    </Text>
+                  </View>
+                )}
+                {parralElegido && !variedadDelParral && (
+                  <>
+                    <Text style={styles.fieldLabel}>VARIEDAD * (el parral no la tiene cargada)</Text>
+                    <View style={styles.chipGroup}>
+                      {VARIEDADES.map((v) => (
+                        <Chip key={v} label={VARIEDAD_LABELS[v]} active={form.variedad === v} onPress={() => setField('variedad', v)} />
+                      ))}
+                    </View>
+                  </>
+                )}
+              </>
+            )}
 
-            <Text style={styles.fieldLabel}>PRODUCTOR {form.origen === 'tercero' ? '*' : '(OPCIONAL)'}</Text>
-            <View style={styles.chipGroup}>
-              <Chip label="Sin productor" active={form.productor_id === ''} onPress={() => setField('productor_id', '')} />
-              {productores.filter((p) => p.is_active).map((p) => (
-                <Chip key={p.id} label={p.nombre} active={form.productor_id === p.id} onPress={() => setField('productor_id', p.id)} />
-              ))}
-            </View>
+            {form.origen === 'tercero' && (
+              <>
+                <Text style={styles.fieldLabel}>PRODUCTOR *</Text>
+                <View style={styles.chipGroup}>
+                  {productores.filter((p) => p.is_active).map((p) => (
+                    <Chip key={p.id} label={p.nombre} active={form.productor_id === p.id} onPress={() => elegirProductor(p.id)} />
+                  ))}
+                  {productores.filter((p) => p.is_active).length === 0 && (
+                    <Text style={styles.muted}>No hay productores cargados (se dan de alta desde la web)</Text>
+                  )}
+                </View>
+                {form.productor_id !== '' && (
+                  <>
+                    <Text style={styles.fieldLabel}>VARIEDAD *</Text>
+                    <View style={styles.chipGroup}>
+                      {VARIEDADES.map((v) => (
+                        <Chip key={v} label={VARIEDAD_LABELS[v]} active={form.variedad === v} onPress={() => setField('variedad', v)} />
+                      ))}
+                    </View>
+                  </>
+                )}
+              </>
+            )}
 
             <Text style={styles.fieldLabel}>CARROS *</Text>
             <TextInput
@@ -309,15 +371,16 @@ export default function PaseroScreen() {
               keyboardType="number-pad"
             />
 
-            <Text style={styles.fieldLabel}>FICHAS (SOLO SI EL CARRO NO ESTÁ COMPLETO)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.fichas}
-              onChangeText={(t) => setField('fichas', t)}
-              placeholder={parametros && carrosNum > 0 ? `Por defecto ${carrosNum * parametros.fichas_por_carro}` : ''}
-              placeholderTextColor={colors.niebla}
-              keyboardType="number-pad"
-            />
+            <TouchableOpacity
+              style={styles.checkRow}
+              onPress={() => setField('carro_incompleto', !form.carro_incompleto)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkBox, form.carro_incompleto && styles.checkBoxActive]}>
+                {form.carro_incompleto && <Text style={styles.checkMark}>✓</Text>}
+              </View>
+              <Text style={styles.checkLabel}>El carro no está completo</Text>
+            </TouchableOpacity>
 
             <Text style={styles.fieldLabel}>KG BÁSCULA *</Text>
             <TextInput
@@ -330,37 +393,57 @@ export default function PaseroScreen() {
             />
 
             <View style={styles.previewBox}>
-              <Text style={styles.previewText}>
-                Kg teórico: <Text style={styles.previewValue}>{kgTeorico != null ? fmtKg(kgTeorico) : '–'}</Text>
-                {fichasCalc != null && parametros ? ` (${fichasCalc} fichas × ${fmtKg(parametros.kg_por_ficha)} kg)` : ''}
-              </Text>
-              <Text style={styles.previewText}>
-                Merma: <Text style={[styles.previewValue, merma != null && merma < 0 && { color: colors.oro }]}>
-                  {merma != null ? `${fmtKg(merma)} kg` : '–'}
-                </Text>
-              </Text>
+              {form.carro_incompleto ? (
+                <>
+                  <Text style={styles.previewText}>
+                    Fichas estimadas por el peso:{' '}
+                    <Text style={styles.previewValue}>{fichasEstimadas != null ? `≈ ${fichasEstimadas}` : '–'}</Text>
+                    {parametros ? ` (kg báscula ÷ ${fmtKg(parametros.kg_por_ficha)} kg por ficha)` : ''}
+                  </Text>
+                  <Text style={styles.previewText}>Con carro incompleto no se calcula merma.</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.previewText}>
+                    Kg teórico: <Text style={styles.previewValue}>{kgTeorico != null ? fmtKg(kgTeorico) : '–'}</Text>
+                    {fichasCalc != null && parametros ? ` (${fichasCalc} fichas × ${fmtKg(parametros.kg_por_ficha)} kg)` : ''}
+                  </Text>
+                  <Text style={styles.previewText}>
+                    Merma: <Text style={[styles.previewValue, merma != null && merma < 0 && { color: colors.oro }]}>
+                      {merma != null ? `${fmtKg(merma)} kg` : '–'}
+                    </Text>
+                  </Text>
+                </>
+              )}
             </View>
 
-            <Text style={styles.fieldLabel}>COSECHA DE ORIGEN (OPCIONAL, PASAS O RAMA PASA)</Text>
-            <TouchableOpacity
-              style={[styles.optionRow, form.cosecha_id === '' && styles.optionRowActive]}
-              onPress={() => elegirCosecha(null)}
-            >
-              <Text style={styles.optionTitle}>Sin vincular</Text>
-            </TouchableOpacity>
-            {cosechas.map((c) => (
-              <TouchableOpacity
-                key={c.id}
-                style={[styles.optionRow, form.cosecha_id === c.id && styles.optionRowActive]}
-                onPress={() => elegirCosecha(c)}
-              >
-                <Text style={styles.optionTitle}>{cosechaLabel(c)}</Text>
-                <Text style={styles.optionSub}>
-                  {fmtKg(c.kg_total)} kg cosechados · saldo {c.saldo_kg != null ? fmtKg(c.saldo_kg) : '–'} kg
+            {cosechasDelOrigen.length > 0 && (
+              <>
+                <Text style={styles.fieldLabel}>VINCULAR A UNA COSECHA (OPCIONAL)</Text>
+                <Text style={[styles.muted, { marginBottom: 8 }]}>
+                  Si esta uva corresponde a una cosecha ya cargada, elegila para llevar su saldo. Si no, el ingreso se guarda igual.
                 </Text>
-              </TouchableOpacity>
-            ))}
-            <Text style={[styles.muted, { marginBottom: 14 }]}>Cosechas de la campaña {TEMPORADA}/{TEMPORADA + 1}.</Text>
+                <TouchableOpacity
+                  style={[styles.optionRow, form.cosecha_id === '' && styles.optionRowActive]}
+                  onPress={() => setField('cosecha_id', '')}
+                >
+                  <Text style={styles.optionTitle}>No vincular a ninguna</Text>
+                </TouchableOpacity>
+                {cosechasDelOrigen.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.optionRow, form.cosecha_id === c.id && styles.optionRowActive]}
+                    onPress={() => setField('cosecha_id', c.id)}
+                  >
+                    <Text style={styles.optionTitle}>{cosechaLabel(c)}</Text>
+                    <Text style={styles.optionSub}>
+                      {fmtKg(c.kg_total)} kg cosechados · saldo {c.saldo_kg != null ? fmtKg(c.saldo_kg) : '–'} kg
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <Text style={[styles.muted, { marginBottom: 14 }]}>Cosechas de la campaña {TEMPORADA}/{TEMPORADA + 1}.</Text>
+              </>
+            )}
 
             <Text style={styles.fieldLabel}>OBSERVACIONES</Text>
             <TextInput
@@ -496,6 +579,15 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.burdeos[600], borderColor: colors.burdeos[600] },
   chipText: { fontSize: 13, fontWeight: '600', color: colors.ink },
   chipTextActive: { color: colors.blanco },
+
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  checkBox: {
+    width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: colors.borde,
+    backgroundColor: colors.blanco, justifyContent: 'center', alignItems: 'center',
+  },
+  checkBoxActive: { backgroundColor: colors.burdeos[600], borderColor: colors.burdeos[600] },
+  checkMark: { color: colors.blanco, fontSize: 15, fontWeight: '800' },
+  checkLabel: { fontSize: 14, fontWeight: '600', color: colors.ink },
 
   optionRow: {
     backgroundColor: colors.blanco, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borde,

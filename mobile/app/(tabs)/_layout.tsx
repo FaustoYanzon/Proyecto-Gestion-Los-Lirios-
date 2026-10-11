@@ -88,6 +88,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="cosecha"
         options={{
+          // Despacho y remitos: solo encargado y arriba (backend da 403 a regador/obrero).
+          href: puedeVerTareas ? undefined : null,
           title: 'Cosecha',
           tabBarIcon: ({ color }) => (
             <ICONS.cosecha size={ICON_SIZE.tab} color={color} strokeWidth={ICON_STROKE} />
