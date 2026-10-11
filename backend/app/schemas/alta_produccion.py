@@ -93,6 +93,7 @@ class ParametrosResponse(BaseModel):
     fichas_por_carro: int
     ratio_uva_pasa: Decimal
     kg_nominal_bin: Decimal
+    tara_carro: Decimal
     tope_bines_lote: int | None
 
 
@@ -103,6 +104,7 @@ class ParametrosUpdate(BaseModel):
     fichas_por_carro: int | None = Field(default=None, gt=0)
     ratio_uva_pasa: ParametroDecimal | None = None
     kg_nominal_bin: ParametroDecimal | None = None
+    tara_carro: ParametroDecimal | None = None
     tope_bines_lote: int | None = Field(default=None, gt=0)
 
 
@@ -346,9 +348,16 @@ class DespachoCosechaCreate(BaseModel):
     @model_validator(mode="after")
     def _hay_peso(self) -> "DespachoCosechaCreate":
         por_envases = self.cantidad_envases is not None and self.peso_unitario_kg is not None
-        por_balanza = self.bruto_kg is not None and self.tara_kg is not None
+        # Propio -> pasero: la tara la pone el servidor (tara_carro x carros), alcanza
+        # con el peso medido en la báscula (bruto_kg).
+        tara_automatica = self.origen == OrigenCosecha.propio and self.para == ParaDespacho.pasero
+        por_balanza = self.bruto_kg is not None and (self.tara_kg is not None or tara_automatica)
         if self.kg_total is None and not por_envases and not por_balanza:
             raise ValueError("Indicá el peso: kg_total, envases (cantidad x peso unitario) o bruto y tara")
+        if self.tipo_envase == TipoEnvase.chasis and (
+            self.cantidad_envases is not None or self.peso_unitario_kg is not None
+        ):
+            raise ValueError("El chasis se pesa con bruto y tara: no lleva cantidad ni peso unitario")
         return self
 
 

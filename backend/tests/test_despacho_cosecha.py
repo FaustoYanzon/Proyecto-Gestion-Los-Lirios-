@@ -32,9 +32,18 @@ async def _comprador(client, headers, nombre="Bodega Andina"):
     return resp.json()["id"]
 
 
+TARA_CARRO = Decimal("400")  # default del parámetro tara_carro
+
+
 def _body(**extra):
     base = {"fecha": "2026-02-10", "kg_total": "1500.50"}
     base.update(extra)
+    # Propio -> pasero se pesa en la báscula: el servidor resta tara_carro x carros.
+    # El helper sigue hablando en kg netos y arma el peso bruto de báscula.
+    if base.get("para") == "pasero" and base.get("origen", "propio") == "propio":
+        neto = Decimal(str(base.pop("kg_total")))
+        if "bruto_kg" not in base:
+            base["bruto_kg"] = str(neto + TARA_CARRO * base.get("carros", 1))
     return base
 
 
@@ -347,6 +356,38 @@ async def test_despacho_requiere_rol(client, create_user, create_parcela):
     assert (await client.post(URL, json=body)).status_code == 401
     h = await _auth(client, create_user, role=UserRole.obrero, email="obrero@test.com")
     assert (await client.post(URL, json=body, headers=h)).status_code == 403
+
+
+async def test_propio_a_pasero_resta_tara_carro_y_rechaza_kg_total(client, create_user, create_parcela):
+    h = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 9", variedad=VariedadUva.sultanina)
+    pasero = await create_parcela(nombre="Pasero 9", tipo=TipoParcela.pasero)
+    base = {"fecha": "2026-02-10", "para": "pasero", "parcela_id": parral.id, "pasero_id": pasero.id}
+    # 3 carros, 1.500 kg en báscula, tara 400 x 3 = 1.200 -> 300 kg netos.
+    ok = await client.post(URL, json=dict(base, carros=3, bruto_kg="1500"), headers=h)
+    assert ok.status_code == 201, ok.text
+    assert Decimal(ok.json()["cosecha"]["kg_total"]) == Decimal("300")
+    assert Decimal(ok.json()["cosecha"]["tara_kg"]) == Decimal("1200")
+    assert Decimal(ok.json()["ingreso_pasero"]["kg_real"]) == Decimal("300")
+    # Sin peso de báscula, o con kg_total: 422.
+    assert (await client.post(URL, json=dict(base, carros=1, kg_total="500"), headers=h)).status_code == 422
+    # Báscula menor que la tara: no hay uva.
+    assert (await client.post(URL, json=dict(base, carros=2, bruto_kg="700"), headers=h)).status_code == 422
+
+
+async def test_chasis_no_lleva_peso_unitario(client, create_user, create_parcela):
+    h = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 8", variedad=VariedadUva.flame)
+    comprador = await _comprador(client, h)
+    body = _body(para="bodega", parcela_id=parral.id, comprador_id=comprador,
+                 tipo_envase="chasis", cantidad_envases="10", peso_unitario_kg="50")
+    assert (await client.post(URL, json=body, headers=h)).status_code == 422
+    ok = dict(_body(para="bodega", parcela_id=parral.id, comprador_id=comprador, tipo_envase="chasis"),
+              bruto_kg="5000", tara_kg="1200")
+    ok.pop("kg_total")
+    resp = await client.post(URL, json=ok, headers=h)
+    assert resp.status_code == 201, resp.text
+    assert Decimal(resp.json()["cosecha"]["kg_total"]) == Decimal("3800")
 
 
 async def test_regador_no_despacha_ni_ve_remitos(client, create_user, create_parcela):
@@ -674,7 +715,7 @@ async def test_idempotencia_misma_clave_con_otros_datos_es_409(client, create_us
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
     body = _body(para="pasero", parcela_id=parral.id, pasero_id=pasero.id, idempotency_key="key-xyz")
     assert (await client.post(URL, json=body, headers=h)).status_code == 201
-    for cambio in ({"kg_total": "1"}, {"parcela_id": otro.id}, {"fecha": "2026-03-01"}):
+    for cambio in ({"bruto_kg": "900"}, {"parcela_id": otro.id}, {"fecha": "2026-03-01"}):
         resp = await client.post(URL, json=dict(body, **cambio), headers=h)
         assert resp.status_code == 409, (cambio, resp.text)
         assert resp.json()["detail"] == "Esa clave de idempotencia ya se usó con otros datos"
@@ -717,7 +758,7 @@ async def test_idempotencia_carrera_devuelve_lo_creado(
 
     # Si además el payload difiere, la carrera también termina en 409.
     llamadas.clear()
-    distinto = await client.post(URL, json=dict(body, kg_total="7"), headers=h)
+    distinto = await client.post(URL, json=dict(body, bruto_kg="907"), headers=h)
     assert distinto.status_code == 409
 
 

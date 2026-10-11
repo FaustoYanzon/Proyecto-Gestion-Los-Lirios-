@@ -201,7 +201,7 @@ export type ParaDespacho = 'bodega' | 'comprador' | 'pasero'
 
 export const PARA_LABELS: Record<ParaDespacho, string> = {
   bodega: 'Bodega',
-  comprador: 'Comprador',
+  comprador: 'Uva en fresco',
   pasero: 'Pasero',
 }
 

@@ -127,6 +127,7 @@ export interface ParametrosProduccion {
   fichas_por_carro: number
   ratio_uva_pasa: number
   kg_nominal_bin: number
+  tara_carro: number
   tope_bines_lote: number | null
 }
 
@@ -138,6 +139,7 @@ function parseParametros(d: Record<string, unknown>): ParametrosProduccion {
     fichas_por_carro: num(d.fichas_por_carro),
     ratio_uva_pasa: num(d.ratio_uva_pasa),
     kg_nominal_bin: num(d.kg_nominal_bin),
+    tara_carro: num(d.tara_carro),
     tope_bines_lote: numOrNull(d.tope_bines_lote),
   }
 }

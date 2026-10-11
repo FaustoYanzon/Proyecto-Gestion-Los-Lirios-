@@ -36,6 +36,9 @@ PARAMETROS_DEFAULT: dict[str, Decimal | None] = {
     "fichas_por_carro": Decimal("90"),
     "ratio_uva_pasa": Decimal("4"),
     "kg_nominal_bin": Decimal("350"),
+    # Peso del carro vacío (PROVISORIO, a confirmar): kg de uva = peso en báscula
+    # - tara_carro x carros.
+    "tara_carro": Decimal("400"),
     "tope_bines_lote": None,
 }
 
@@ -53,6 +56,7 @@ class Parametros:
     fichas_por_carro: int
     ratio_uva_pasa: Decimal
     kg_nominal_bin: Decimal
+    tara_carro: Decimal
     tope_bines_lote: int | None
 
 
@@ -68,6 +72,7 @@ async def get_parametros(db: AsyncSession) -> Parametros:
         fichas_por_carro=int(valores["fichas_por_carro"]),  # type: ignore[arg-type]
         ratio_uva_pasa=valores["ratio_uva_pasa"],  # type: ignore[arg-type]
         kg_nominal_bin=valores["kg_nominal_bin"],  # type: ignore[arg-type]
+        tara_carro=valores["tara_carro"],  # type: ignore[arg-type]
         tope_bines_lote=int(tope) if tope is not None else None,
     )
 

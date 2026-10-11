@@ -35,6 +35,7 @@ from app.schemas.alta_produccion import (
     ParaDespacho,
 )
 from app.services.alta_produccion import (
+    get_parametros,
     get_pasero_or_404,
     registrar_ingreso_pasero,
     siguiente_numero_remito,
@@ -70,9 +71,30 @@ def _422(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
 
 
-def calcular_kg(data: DespachoCosechaCreate) -> Decimal:
-    """Mismo criterio que `RegistroCosecha`: kg directo, o envases, o bruto - tara."""
-    if data.kg_total is not None:
+def es_propio_a_pasero(data: DespachoCosechaCreate) -> bool:
+    """Propio -> pasero entra por carros y se pesa en la báscula del pasero."""
+    return data.origen == OrigenCosecha.propio and data.para == ParaDespacho.pasero
+
+
+async def tara_del_despacho(db: AsyncSession, data: DespachoCosechaCreate) -> Decimal | None:
+    """Propio -> pasero: tara = tara_carro (parámetro) x carros. Resto: la que
+    manda el cliente (o None)."""
+    if es_propio_a_pasero(data):
+        if data.kg_total is not None:
+            raise _422("Propio al pasero se informa con el peso medido en la báscula, no con kg_total")
+        if data.bruto_kg is None:
+            raise _422("Indicá el peso medido en la báscula (carros llenos)")
+        params = await get_parametros(db)
+        return (params.tara_carro * data.carros).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+    return data.tara_kg
+
+
+def calcular_kg(data: DespachoCosechaCreate, tara_kg: Decimal | None = None) -> Decimal:
+    """Mismo criterio que `RegistroCosecha`: kg directo, o envases, o bruto - tara.
+    Propio -> pasero: siempre bruto (báscula) - tara del carro."""
+    if es_propio_a_pasero(data):
+        kg = data.bruto_kg - tara_kg  # type: ignore[operator]
+    elif data.kg_total is not None:
         kg = data.kg_total
     elif data.cantidad_envases is not None and data.peso_unitario_kg is not None:
         kg = data.cantidad_envases * data.peso_unitario_kg
@@ -80,7 +102,7 @@ def calcular_kg(data: DespachoCosechaCreate) -> Decimal:
         kg = data.bruto_kg - data.tara_kg  # type: ignore[operator]
     kg = kg.quantize(CENTAVO, rounding=ROUND_HALF_UP)
     if kg <= 0:
-        raise _422("El peso a despachar debe ser mayor a cero (revisá bruto y tara)")
+        raise _422("El peso a despachar debe ser mayor a cero (revisá el peso medido y la tara)")
     if kg > Decimal("999999999999.99"):
         raise _422("El peso es demasiado grande")
     return kg
@@ -129,7 +151,7 @@ async def _resultado_existente(
         and cosecha.productor_id == data.productor_id
         and cosecha.comprador_id == data.comprador_id
         and remito.pasero_id == (data.pasero_id if data.para == ParaDespacho.pasero else None)
-        and calcular_kg(data) == kg_guardado
+        and calcular_kg(data, await tara_del_despacho(db, data)) == kg_guardado
     )
     if not coincide:
         raise _conflicto_payload()
@@ -195,7 +217,8 @@ async def registrar_despacho(
         if comprador is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprador not found")
 
-    kg = calcular_kg(data)
+    tara = await tara_del_despacho(db, data)
+    kg = calcular_kg(data, tara)
 
     # ── Cosecha ──
     cosecha = RegistroCosecha(
@@ -218,7 +241,7 @@ async def registrar_despacho(
         cantidad_envases=float(data.cantidad_envases) if data.cantidad_envases is not None else None,
         peso_unitario_kg=float(data.peso_unitario_kg) if data.peso_unitario_kg is not None else None,
         bruto_kg=float(data.bruto_kg) if data.bruto_kg is not None else None,
-        tara_kg=float(data.tara_kg) if data.tara_kg is not None else None,
+        tara_kg=float(tara) if tara is not None else None,
         kg_total=float(kg),
         imagen_remito_url=data.imagen_remito_url,
         observaciones=data.observaciones,
