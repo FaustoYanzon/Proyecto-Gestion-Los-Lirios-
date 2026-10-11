@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4;
+    margin: 1.6cm 1.5cm;
+  }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1f1a17;
+    font-size: 9.5pt;
+  }
+  h1 {
+    font-size: 13pt;
+    color: #5a1320;
+    margin: 0 0 2px 0;
+  }
+  h2 {
+    font-size: 10.5pt;
+    color: #7a1f2c;
+    background-color: #fbfaf6;
+    border-bottom: 1pt solid #e2dbcc;
+    padding: 4px 6px;
+    margin: 14px 0 6px 0;
+  }
+  .header-table {
+    width: 100%;
+    border-bottom: 2pt solid #7a1f2c;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .header-table td { vertical-align: top; }
+  .empresa-datos { font-size: 8pt; color: #5a544c; text-align: right; }
+  .numero-box { font-size: 13pt; font-weight: bold; color: #7a1f2c; }
+  table.info {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+  }
+  table.info td {
+    padding: 3px 6px;
+    border: 0.5pt solid #e2dbcc;
+    font-size: 9pt;
+  }
+  table.info td.label {
+    background-color: #fbfaf6;
+    color: #5a544c;
+    width: 20%;
+    font-weight: bold;
+  }
+  table.datos { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  table.datos th {
+    background-color: #7a1f2c;
+    color: #ffffff;
+    font-size: 8.5pt;
+    padding: 4px 6px;
+    text-align: left;
+  }
+  table.datos td {
+    font-size: 9pt;
+    padding: 4px 6px;
+    border-bottom: 0.5pt solid #e2dbcc;
+    vertical-align: top;
+  }
+  .col-fecha { width: 90px; }
+  .col-kg { width: 110px; }
+  .num { text-align: right; }
+  .total td { font-weight: bold; border-top: 1pt solid #7a1f2c; }
+  .firmas { width: 100%; margin-top: 56px; }
+  .firmas td { width: 33%; text-align: center; font-size: 8.5pt; color: #5a544c; padding: 0 10px; }
+  .firma-linea { border-top: 0.7pt solid #1f1a17; padding-top: 3px; }
+  .pie {
+    margin-top: 26px;
+    padding-top: 6px;
+    border-top: 0.5pt solid #e2dbcc;
+    font-size: 8pt;
+    color: #5a544c;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td style="width: 70px;">
+        <img src="logo.png" style="width: 60px;">
+      </td>
+      <td>
+        <h1>REMITO — comprobante interno de entrega</h1>
+        <div class="numero-box">N° {{ remito.numero }}</div>
+        <div style="color:#5a544c;">Fecha: {{ remito.fecha }}</div>
+      </td>
+      <td class="empresa-datos" style="width: 150px;">
+        <strong>{{ empresa.razon_social }}</strong><br>
+        CUIT {{ empresa.cuit }}<br>
+        {{ empresa.domicilio }}
+      </td>
+    </tr>
+  </table>
+
+  <h2>DE</h2>
+  <table class="info">
+    <tr>
+      {% if de.propio %}
+      <td class="label">Origen</td><td>Propio — {{ de.nombre }}</td>
+      {% else %}
+      <td class="label">Origen</td><td>Tercero — productor {{ de.nombre }}</td>
+      {% endif %}
+      <td class="label">Variedad</td><td>{{ de.variedad or '—' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Temporada</td><td colspan="3">{{ de.temporada_label }}</td>
+    </tr>
+  </table>
+
+  <h2>PARA</h2>
+  <table class="info">
+    <tr>
+      <td class="label">{{ para.tipo_label }}</td><td>{{ para.nombre or '—' }}</td>
+      <td class="label">Destino</td><td>{{ para.destino_label }}</td>
+    </tr>
+    {% if para.es_pasero %}
+    <tr>
+      <td class="label">Carros</td><td>{{ para.carros }}</td>
+      <td class="label">Fichas</td><td>{{ para.fichas }}{% if para.carro_incompleto %} (estimadas por peso — carro incompleto){% endif %}</td>
+    </tr>
+    {% if para.ubicacion %}
+    <tr>
+      <td class="label">Ubicación</td><td colspan="3">{{ para.ubicacion }}</td>
+    </tr>
+    {% endif %}
+    {% endif %}
+  </table>
+
+  <h2>Detalle</h2>
+  <table class="datos">
+    <tr>
+      <th class="col-fecha">Fecha</th>
+      <th>Detalle</th>
+      <th class="num col-kg">Kilos</th>
+    </tr>
+    {% for l in lineas %}
+    <tr>
+      <td class="col-fecha">{{ l.fecha }}</td>
+      <td>{{ l.detalle }}</td>
+      <td class="num col-kg">{{ l.kg }} kg</td>
+    </tr>
+    {% endfor %}
+    <tr class="total">
+      <td class="col-fecha"></td>
+      <td>Total</td>
+      <td class="num col-kg">{{ kg_total }} kg</td>
+    </tr>
+  </table>
+
+  {# Transporte y observaciones: solo salidas en camión (comprador / bodega). #}
+  {% if not para.es_pasero %}
+  <h2>Transporte y observaciones</h2>
+  <table class="info">
+    <tr>
+      <td class="label">Vehículo / patente</td><td>{{ extra.vehiculo_patente or '—' }}</td>
+      <td class="label">Cuadrilla</td><td>{{ extra.cuadrilla or '—' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Acarreo</td><td>{{ extra.acarreo or '—' }}</td>
+      <td class="label">N° CIU</td><td>{{ extra.n_ciu or '—' }}</td>
+    </tr>
+    <tr>
+      <td class="label">Observaciones</td><td colspan="3">{{ extra.observaciones or '—' }}</td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <table class="firmas">
+    <tr>
+      <td><div class="firma-linea">Entrega</div></td>
+      <td><div class="firma-linea">Recibe</div></td>
+      {% if not para.es_pasero %}
+      <td><div class="firma-linea">Transportista</div></td>
+      {% endif %}
+    </tr>
+  </table>
+
+  <div class="pie">Comprobante interno, no válido como documento fiscal.</div>
+</body>
+</html>

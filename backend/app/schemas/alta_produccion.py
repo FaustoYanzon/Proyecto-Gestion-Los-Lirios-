@@ -1,13 +1,15 @@
+import enum
 from datetime import date, datetime
 from decimal import Decimal
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.alta_produccion import EstadoLote, TipoProductor, TipoRemito
 from app.models.parcela import VariedadUva
-from app.models.produccion import OrigenCosecha
+from app.models.produccion import OrigenCosecha, TipoEnvase
+from app.schemas.produccion import RegistroCosechaResponse
 
 
 # Coinciden con Numeric(14,2) / Numeric(14,4): fuera de rango Postgres daría 500.
@@ -130,6 +132,9 @@ class IngresoPaseroCreate(BaseModel):
     # permite cargar un carro incompleto.
     carros: int = Field(default=1, ge=1)
     fichas: int | None = Field(default=None, gt=0)
+    # True: carro incompleto. Las fichas se estiman por peso (si no vienen) y
+    # no se calcula merma (kg_teorico = kg_real, merma_kg = 0).
+    carro_incompleto: bool = False
     origen: OrigenCosecha = OrigenCosecha.propio
     productor_id: str | None = None
     ubicacion_id: str | None = None
@@ -151,6 +156,7 @@ class IngresoPaseroResponse(BaseModel):
     kg_teorico: Decimal
     kg_real: Decimal
     merma_kg: Decimal
+    carro_incompleto: bool = False
     observaciones: str | None
     created_at: datetime
 
@@ -277,10 +283,83 @@ class RemitoResponse(BaseModel):
     tipo: TipoRemito
     numero: str
     fecha: date
-    comprador_id: str
+    # None en remitos TRA (traslado a pasero), que llevan `pasero_id`.
+    comprador_id: str | None
+    pasero_id: str | None = None
+    comprador_nombre: str | None = None
+    pasero_nombre: str | None = None
     kg_total: Decimal
     vehiculo_patente: str | None
     observaciones: str | None
     created_at: datetime
     lineas: list[RemitoLineaResponse]
     comprobante_bodega: ComprobanteBodegaResponse | None = None
+
+
+# ── Despacho de cosecha ("De -> Para") ───────────────────────────────────────
+
+class ParaDespacho(str, enum.Enum):
+    bodega = "bodega"
+    comprador = "comprador"
+    pasero = "pasero"
+
+
+class DespachoCosechaCreate(BaseModel):
+    """Alta de cosecha + remito (+ ingreso al pasero). Un solo formulario."""
+
+    fecha: date
+    para: ParaDespacho
+
+    # DE. propio: `parcela_id` (parral); tercero: `productor_id` + `variedad`.
+    origen: OrigenCosecha = OrigenCosecha.propio
+    parcela_id: str | None = None
+    productor_id: str | None = None
+    # Propio: sobrescribe la variedad del parral. Tercero: obligatoria.
+    variedad: VariedadUva | None = None
+
+    # PARA. bodega/comprador: `comprador_id`. pasero: `pasero_id`.
+    comprador_id: str | None = None
+    pasero_id: str | None = None
+    ubicacion_id: str | None = None
+    carros: int = Field(default=1, ge=1)
+    # True: el carro no está completo y las fichas se estiman por peso.
+    carro_incompleto: bool = False
+
+    # Peso: kg_total directo, o envases, o bruto/tara (en ese orden de prioridad).
+    kg_total: KgPositivo | None = None
+    tipo_envase: TipoEnvase = TipoEnvase.caja
+    cantidad_envases: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    peso_unitario_kg: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=4)
+    bruto_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    tara_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+
+    vehiculo_patente: str | None = Field(default=None, max_length=20)
+    cuadrilla: str | None = Field(default=None, max_length=150)
+    acarreo: str | None = Field(default=None, max_length=150)
+    n_ciu: str | None = Field(default=None, max_length=50)
+    # N° del comprobante en papel; si no viene, se copia el del remito generado.
+    n_remito: str | None = Field(default=None, max_length=50)
+    observaciones: str | None = Field(default=None, max_length=500)
+    imagen_remito_url: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = Field(default=None, max_length=36)
+
+    @model_validator(mode="after")
+    def _hay_peso(self) -> "DespachoCosechaCreate":
+        por_envases = self.cantidad_envases is not None and self.peso_unitario_kg is not None
+        por_balanza = self.bruto_kg is not None and self.tara_kg is not None
+        if self.kg_total is None and not por_envases and not por_balanza:
+            raise ValueError("Indicá el peso: kg_total, envases (cantidad x peso unitario) o bruto y tara")
+        return self
+
+
+class DespachoCosechaResponse(BaseModel):
+    cosecha: RegistroCosechaResponse
+    remito: RemitoResponse
+    ingreso_pasero: IngresoPaseroResponse | None = None
+
+
+class RemitoPdfLinkResponse(BaseModel):
+    # Ruta relativa al API (con el token) y URL absoluta armada con el host del request.
+    path: str
+    url: str
+    expires_in: int

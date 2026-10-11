@@ -9,34 +9,46 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, require_encargado_up
+from app.api.deps import get_db, require_encargado_estricto
+from app.core.pdf_remito import DatosRemitoPdf, generar_pdf_remito
+from app.core.security import (
+    REMITO_PDF_TOKEN_TTL_SECONDS,
+    create_remito_pdf_token,
+    decode_remito_pdf_token,
+)
 from app.models.alta_produccion import (
     Comprador,
     ComprobanteBodega,
     EstadoLote,
+    IngresoPasero,
     Lote,
     Productor,
+    UbicacionPasero,
     Remito,
     RemitoLinea,
     TipoRemito,
 )
 from app.models.parcela import Parcela
-from app.models.produccion import DestinoCosecha, RegistroCosecha
+from app.models.produccion import DestinoCosecha, OrigenCosecha, RegistroCosecha
 from app.models.user import User
 from app.schemas.alta_produccion import (
     ComprobanteBodegaCreate,
     ComprobanteBodegaResponse,
     RemitoCreate,
     RemitoLineaResponse,
+    RemitoPdfLinkResponse,
     RemitoResponse,
 )
-from app.services.alta_produccion import saldo_cosecha, siguiente_numero_remito
+from app.services.alta_produccion import (
+    saldo_cosecha,
+    siguiente_numero_remito,
+)
 
 router = APIRouter(prefix="/remitos", tags=["Remitos"])
 
@@ -114,20 +126,51 @@ async def _origenes_cosecha(db: AsyncSession, remitos: list[Remito]) -> dict[str
     return origenes
 
 
-def _remito_response(remito: Remito, origenes: dict[str, str]) -> RemitoResponse:
+async def _destinatarios(db: AsyncSession, remitos: list[Remito]) -> dict[str, str]:
+    """Nombre de comprador / pasero por id (2 queries para todos los remitos).
+    Los ids son UUID, así que comparten un solo diccionario."""
+    comprador_ids = {r.comprador_id for r in remitos if r.comprador_id}
+    pasero_ids = {r.pasero_id for r in remitos if r.pasero_id}
+    nombres: dict[str, str] = {}
+    if comprador_ids:
+        nombres.update(dict((await db.execute(
+            select(Comprador.id, Comprador.nombre).where(Comprador.id.in_(comprador_ids))
+        )).all()))
+    if pasero_ids:
+        nombres.update(dict((await db.execute(
+            select(Parcela.id, Parcela.nombre).where(Parcela.id.in_(pasero_ids))
+        )).all()))
+    return nombres
+
+
+def _remito_response(
+    remito: Remito, origenes: dict[str, str], destinatarios: dict[str, str] | None = None
+) -> RemitoResponse:
     comprobante = remito.comprobante_bodega
+    destinatarios = destinatarios or {}
     return RemitoResponse(
         id=remito.id,
         tipo=remito.tipo,
         numero=remito.numero,
         fecha=remito.fecha,
         comprador_id=remito.comprador_id,
+        pasero_id=remito.pasero_id,
+        comprador_nombre=destinatarios.get(remito.comprador_id) if remito.comprador_id else None,
+        pasero_nombre=destinatarios.get(remito.pasero_id) if remito.pasero_id else None,
         kg_total=remito.kg_total,
         vehiculo_patente=remito.vehiculo_patente,
         observaciones=remito.observaciones,
         created_at=remito.created_at,
         lineas=[_linea_response(linea, origenes) for linea in remito.lineas],
         comprobante_bodega=_comprobante_response(comprobante, remito) if comprobante else None,
+    )
+
+
+async def remito_response_completo(db: AsyncSession, remito_id: str) -> RemitoResponse:
+    """Remito recién creado/leído con líneas, labels y destinatario."""
+    remito = await _get_remito(db, remito_id)
+    return _remito_response(
+        remito, await _origenes_cosecha(db, [remito]), await _destinatarios(db, [remito])
     )
 
 
@@ -149,10 +192,11 @@ async def _get_remito(db: AsyncSession, remito_id: str) -> Remito:
 async def list_remitos(
     tipo: TipoRemito | None = Query(None),
     comprador_id: str | None = Query(None),
+    pasero_id: str | None = Query(None),
     desde: date | None = Query(None),
     hasta: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_encargado_estricto),
 ) -> list[RemitoResponse]:
     stmt = (
         select(Remito)
@@ -163,21 +207,29 @@ async def list_remitos(
         stmt = stmt.where(Remito.tipo == tipo)
     if comprador_id:
         stmt = stmt.where(Remito.comprador_id == comprador_id)
+    if pasero_id:
+        stmt = stmt.where(Remito.pasero_id == pasero_id)
     if desde:
         stmt = stmt.where(Remito.fecha >= desde)
     if hasta:
         stmt = stmt.where(Remito.fecha <= hasta)
     remitos = list((await db.execute(stmt)).scalars().all())
     origenes = await _origenes_cosecha(db, remitos)
-    return [_remito_response(r, origenes) for r in remitos]
+    destinatarios = await _destinatarios(db, remitos)
+    return [_remito_response(r, origenes, destinatarios) for r in remitos]
 
 
 @router.post("/", response_model=RemitoResponse, status_code=status.HTTP_201_CREATED)
 async def create_remito(
     data: RemitoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_encargado_up),
+    current_user: User = Depends(require_encargado_estricto),
 ) -> RemitoResponse:
+    if data.tipo == TipoRemito.traslado_pasero:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Los remitos de traslado a pasero se generan con POST /produccion/cosecha/despacho",
+        )
     if await db.get(Comprador, data.comprador_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprador not found")
 
@@ -273,18 +325,133 @@ async def create_remito(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe el remito {numero} de tipo {data.tipo.value}"
         ) from exc
-    creado = await _get_remito(db, remito.id)
-    return _remito_response(creado, await _origenes_cosecha(db, [creado]))
+    return await remito_response_completo(db, remito.id)
+
+
+
+# ── PDF (comprobante interno de entrega) ─────────────────────────────────────
+
+PARA_TIPO_LABEL: dict[TipoRemito, str] = {
+    TipoRemito.salida_fresco: "Comprador",
+    TipoRemito.salida_bodega: "Bodega",
+    TipoRemito.entrega_pasa: "Comprador",
+    TipoRemito.traslado_pasero: "Pasero",
+}
+PARA_DESTINO_LABEL: dict[TipoRemito, str] = {
+    TipoRemito.salida_fresco: "Venta a comprador",
+    TipoRemito.salida_bodega: "Bodega",
+    TipoRemito.entrega_pasa: "Entrega de pasa",
+    TipoRemito.traslado_pasero: "Traslado a pasero",
+}
+
+
+def _titulo(texto: str | None) -> str | None:
+    return texto.replace("_", " ").title() if texto else None
+
+
+async def _datos_pdf(db: AsyncSession, remito: Remito) -> DatosRemitoPdf:
+    origenes = await _origenes_cosecha(db, [remito])
+    destinatarios = await _destinatarios(db, [remito])
+    cosechas = {ln.cosecha.id: ln.cosecha for ln in remito.lineas if ln.cosecha is not None}
+
+    propio, de_nombre, variedad = True, "Varios orígenes", None
+    temporada = remito.fecha.year if remito.fecha.month >= 5 else remito.fecha.year - 1
+    extra: dict[str, str | None] = {"cuadrilla": None, "acarreo": None, "n_ciu": None}
+    cosecha = next(iter(cosechas.values())) if len(cosechas) == 1 else None
+    if cosecha is not None:
+        propio = cosecha.origen == OrigenCosecha.propio
+        de_nombre = origenes.get(cosecha.id) or cosecha.proveedor_tercero or "—"
+        variedad = _titulo(cosecha.variedad)
+        temporada = cosecha.temporada
+        extra = {"cuadrilla": cosecha.cuadrilla, "acarreo": cosecha.acarreo, "n_ciu": cosecha.n_ciu}
+
+    lineas: list[tuple[date, str, Decimal]] = []
+    for linea in remito.lineas:
+        if linea.lote is not None:
+            detalle = _lote_label(linea.lote)
+        elif linea.cosecha is not None:
+            partes = [
+                p for p in (
+                    _titulo(linea.cosecha.variedad),
+                    origenes.get(linea.cosecha.id) or linea.cosecha.proveedor_tercero,
+                ) if p
+            ]
+            detalle = " · ".join(partes) or "Cosecha"
+        else:
+            detalle = "—"
+        lineas.append((remito.fecha, detalle, linea.kg))
+
+    es_pasero = remito.tipo == TipoRemito.traslado_pasero
+    carros: int | None = None
+    fichas: int | None = None
+    carro_incompleto = False
+    ubicacion: str | None = None
+    if es_pasero and cosecha is not None:
+        ingreso = (
+            await db.execute(select(IngresoPasero).where(IngresoPasero.cosecha_id == cosecha.id))
+        ).scalars().first()
+        if ingreso is not None:
+            carros, fichas = ingreso.carros, ingreso.fichas
+            carro_incompleto = ingreso.carro_incompleto
+            if ingreso.ubicacion_id:
+                ub = await db.get(UbicacionPasero, ingreso.ubicacion_id)
+                if ub is not None:
+                    ubicacion = f"Hilera {ub.hilera} · Parte {ub.parte}"
+
+    return DatosRemitoPdf(
+        numero=remito.numero,
+        fecha=remito.fecha,
+        kg_total=remito.kg_total,
+        origen_propio=propio,
+        de_nombre=de_nombre,
+        variedad=variedad,
+        temporada=temporada,
+        para_tipo_label=PARA_TIPO_LABEL[remito.tipo],
+        para_nombre=destinatarios.get(remito.pasero_id or remito.comprador_id or ""),
+        destino_label=PARA_DESTINO_LABEL[remito.tipo],
+        es_pasero=es_pasero,
+        lineas=lineas,
+        carros=carros,
+        fichas=fichas,
+        carro_incompleto=carro_incompleto,
+        ubicacion=ubicacion,
+        vehiculo_patente=remito.vehiculo_patente,
+        cuadrilla=extra["cuadrilla"],
+        acarreo=extra["acarreo"],
+        n_ciu=extra["n_ciu"],
+        observaciones=remito.observaciones,
+    )
+
+
+async def _pdf_response(db: AsyncSession, remito_id: str) -> Response:
+    remito = await _get_remito(db, remito_id)
+    pdf = generar_pdf_remito(await _datos_pdf(db, remito))
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="remito-{remito.numero}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+# Estática ANTES de /{remito_id}. Sin Authorization: la autoriza el token firmado.
+@router.get("/descarga/{token}")
+async def descargar_pdf_firmado(token: str, db: AsyncSession = Depends(get_db)) -> Response:
+    remito_id = decode_remito_pdf_token(token)
+    if remito_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Link inválido o vencido")
+    return await _pdf_response(db, remito_id)
 
 
 @router.get("/{remito_id}", response_model=RemitoResponse)
 async def get_remito(
     remito_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_encargado_estricto),
 ) -> RemitoResponse:
-    remito = await _get_remito(db, remito_id)
-    return _remito_response(remito, await _origenes_cosecha(db, [remito]))
+    return await remito_response_completo(db, remito_id)
 
 
 @router.post(
@@ -296,7 +463,7 @@ async def cargar_comprobante_bodega(
     remito_id: str,
     data: ComprobanteBodegaCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_encargado_up),
+    current_user: User = Depends(require_encargado_estricto),
 ) -> ComprobanteBodegaResponse:
     remito = await _get_remito(db, remito_id)
     if remito.tipo != TipoRemito.salida_bodega:
@@ -325,3 +492,30 @@ async def cargar_comprobante_bodega(
         ) from exc
     await db.refresh(comprobante)
     return _comprobante_response(comprobante, remito)
+
+
+@router.get("/{remito_id}/pdf")
+async def pdf_remito(
+    remito_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_estricto),
+) -> Response:
+    return await _pdf_response(db, remito_id)
+
+
+@router.post("/{remito_id}/pdf-link", response_model=RemitoPdfLinkResponse)
+async def pdf_link_remito(
+    remito_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_estricto),
+) -> RemitoPdfLinkResponse:
+    """Link firmado de vida corta (5 min, solo lectura de este remito) para
+    abrir el PDF desde mobile con Linking, sin header Authorization."""
+    remito = await _get_remito(db, remito_id)
+    path = f"/remitos/descarga/{create_remito_pdf_token(remito.id)}"
+    return RemitoPdfLinkResponse(
+        path=path,
+        url=f"{str(request.base_url).rstrip('/')}{path}",
+        expires_in=REMITO_PDF_TOKEN_TTL_SECONDS,
+    )

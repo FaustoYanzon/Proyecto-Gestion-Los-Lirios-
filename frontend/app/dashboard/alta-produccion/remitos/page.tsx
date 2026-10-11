@@ -2,16 +2,14 @@
 
 import { Fragment, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Trash2, ChevronDown, ChevronRight, ChevronLeft, FileCheck } from 'lucide-react'
+import { Plus, X, Trash2, ChevronDown, ChevronRight, ChevronLeft, FileCheck, Printer } from 'lucide-react'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { VARIEDAD_LABELS } from '@/lib/api/parcelas'
-import { getCosechas, DESTINO_LABELS, type DestinoCosecha, type RegistroCosechaResponse } from '@/lib/api/cosecha'
 import {
   getRemitos, createRemito, cargarComprobanteBodega, getCompradores, getLotesPasa,
-  TIPO_REMITO_LABELS, errorDetail,
+  TIPO_REMITO_LABELS, errorDetail, abrirRemitoPdf,
   type Remito, type TipoRemito,
 } from '@/lib/api/altaProduccion'
-import { useCampanaAnio } from '@/store/contextStore'
 import FormError from '@/components/ui/FormError'
 
 const PAGE_SIZE = 10
@@ -32,6 +30,7 @@ const TIPO_BADGE: Record<TipoRemito, string> = {
   entrega_pasa: 'bg-amber-100 text-amber-700',
   salida_fresco: 'bg-green-100 text-green-700',
   salida_bodega: 'bg-blue-100 text-blue-700',
+  traslado_pasero: 'bg-orange-100 text-orange-700',
 }
 
 const decimalOk = (v: string) => /^\d+([.,]\d{1,2})?$/.test(v.trim()) && Number(v.replace(',', '.')) > 0
@@ -49,7 +48,20 @@ export default function RemitosPage() {
     staleTime: 30_000,
   })
   const { data: compradores = [] } = useQuery({ queryKey: ['ap-compradores'], queryFn: () => getCompradores(), staleTime: 60_000 })
-  const nombreComprador = (id: string) => compradores.find((c) => c.id === id)?.nombre ?? '–'
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  // TRA no tiene comprador: se muestra el pasero.
+  const nombreDestino = (r: Remito) =>
+    r.comprador_id
+      ? (r.comprador_nombre ?? compradores.find((c) => c.id === r.comprador_id)?.nombre ?? '–')
+      : (r.pasero_nombre ?? '–')
+  async function imprimir(id: string) {
+    setPdfError(null)
+    try {
+      await abrirRemitoPdf(id)
+    } catch (e) {
+      setPdfError(errorDetail(e, 'No se pudo abrir el PDF del remito'))
+    }
+  }
   const { page, setPage, totalPages, paged } = usePaginatedList(remitos, PAGE_SIZE)
 
   const refrescar = () => Promise.all([
@@ -63,7 +75,7 @@ export default function RemitosPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Remitos</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Entregas de pasa, salidas de fresco y salidas a bodega (solo kilos)</p>
+          <p className="text-sm text-gray-500 mt-0.5">Entregas de pasa, despachos de fresco y bodega, y traslados a pasero (solo kilos). Los despachos se cargan desde Producción → Cosecha.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={tipo} onChange={(e) => setTipo(e.target.value as '' | TipoRemito)} className={selectFiltroCls}>
@@ -71,16 +83,18 @@ export default function RemitosPage() {
             <option value="entrega_pasa">Pasa (PAS)</option>
             <option value="salida_fresco">Fresco (FRE)</option>
             <option value="salida_bodega">Bodega (BOD)</option>
+            <option value="traslado_pasero">Traslado a pasero (TRA)</option>
           </select>
           <button
             onClick={() => setShowNuevo(true)}
             className="flex items-center gap-2 px-4 py-2 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
           >
-            <Plus size={16} /> Nuevo remito
+            <Plus size={16} /> Nueva entrega de pasa
           </button>
         </div>
       </div>
 
+      {pdfError && <FormError description={pdfError} />}
       {loadError && <FormError description={errorDetail(loadError, 'No se pudo cargar el listado')} />}
 
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -103,10 +117,11 @@ export default function RemitosPage() {
                   <th className={thCls}>Fecha</th>
                   <th className={thCls}>Tipo</th>
                   <th className={thCls}>N°</th>
-                  <th className={thCls}>Comprador</th>
+                  <th className={thCls}>Comprador / Pasero</th>
                   <th className={thCls}>Patente</th>
                   <th className={thRCls}>Kg total</th>
                   <th className={thCls}>Comprobante INV</th>
+                  <th className={thCls} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -127,7 +142,7 @@ export default function RemitosPage() {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 font-mono text-gray-900">{r.numero}</td>
-                        <td className="px-4 py-2.5 text-gray-700">{nombreComprador(r.comprador_id)}</td>
+                        <td className="px-4 py-2.5 text-gray-700">{nombreDestino(r)}</td>
                         <td className="px-4 py-2.5 text-gray-500">{r.vehiculo_patente ?? '–'}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtKg(r.kg_total)}</td>
                         <td className="px-4 py-2.5">
@@ -146,11 +161,20 @@ export default function RemitosPage() {
                             </button>
                           )}
                         </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <button
+                            onClick={() => imprimir(r.id)}
+                            title="Imprimir remito"
+                            className="p-1.5 rounded text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                          >
+                            <Printer size={14} />
+                          </button>
+                        </td>
                       </tr>
                       {abierto && (
                         <tr className="bg-gray-50">
                           <td />
-                          <td colSpan={7} className="px-4 py-3">
+                          <td colSpan={8} className="px-4 py-3">
                             <ul className="text-xs text-gray-600 space-y-1">
                               {r.lineas.map((l) => (
                                 <li key={l.id}>
@@ -222,11 +246,8 @@ export default function RemitosPage() {
 
 type Linea = { fuente: string; kg: string }
 
-function cosechaLabel(c: RegistroCosechaResponse): string {
-  const origen = c.origen === 'tercero' ? (c.proveedor_tercero ?? 'Tercero') : (c.parcela_nombre ?? 'Sin parcela')
-  return `${fmtFecha(c.fecha)} · ${origen} · ${c.variedad ?? 's/variedad'} · ${fmtKg(c.kg_total)} kg cosechados · saldo ${c.saldo_kg != null ? fmtKg(c.saldo_kg) : '–'} kg (${DESTINO_LABELS[c.destino]})`
-}
-
+// Solo Entrega de pasa: los despachos de fresco/bodega/pasero se cargan desde
+// Producción → Cosecha ("Nuevo despacho").
 function NuevoRemitoModal({
   compradores, onClose, onCreated,
 }: {
@@ -234,8 +255,6 @@ function NuevoRemitoModal({
   onClose: () => void
   onCreated: () => Promise<void>
 }) {
-  const [temporada] = useCampanaAnio()
-  const [tipo, setTipo] = useState<TipoRemito>('entrega_pasa')
   const [fecha, setFecha] = useState(TODAY)
   const [compradorId, setCompradorId] = useState('')
   const [numero, setNumero] = useState('')
@@ -245,28 +264,11 @@ function NuevoRemitoModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const esPasa = tipo === 'entrega_pasa'
-
   const { data: lotes = [] } = useQuery({
     queryKey: ['ap-lotes', 'cerrados-con-saldo'],
     queryFn: () => getLotesPasa({ estado: 'cerrado', con_saldo: true }),
-    enabled: esPasa,
-  })
-  const destinos: DestinoCosecha[] = tipo === 'salida_bodega' ? ['BODEGA'] : ['MI', 'EXPO']
-  const { data: cosechas = [] } = useQuery({
-    queryKey: ['ap-cosechas-remito', temporada, tipo],
-    queryFn: async () => {
-      const r = await Promise.all(destinos.map((d) => getCosechas({ temporada, destino: d, limit: 500 })))
-      // Solo cosechas con saldo sin despachar (null = el backend no lo informa: se ofrece igual).
-      return r.flat().filter((c) => c.saldo_kg == null || c.saldo_kg > 0).sort((a, b) => b.fecha.localeCompare(a.fecha))
-    },
-    enabled: !esPasa,
   })
 
-  function cambiarTipo(t: TipoRemito) {
-    setTipo(t)
-    setLineas([{ fuente: '', kg: '' }]) // las fuentes son distintas según el tipo
-  }
   const setLinea = (i: number, patch: Partial<Linea>) =>
     setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
 
@@ -275,25 +277,11 @@ function NuevoRemitoModal({
 
   // Líneas repetidas del mismo lote se suman en el backend: se avisa si excede el saldo.
   const pedidoPorLote = new Map<string, number>()
-  if (esPasa) {
-    for (const l of lineas) {
-      if (l.fuente && decimalOk(l.kg)) {
-        pedidoPorLote.set(l.fuente, (pedidoPorLote.get(l.fuente) ?? 0) + Number(l.kg.replace(',', '.')))
-      }
+  for (const l of lineas) {
+    if (l.fuente && decimalOk(l.kg)) {
+      pedidoPorLote.set(l.fuente, (pedidoPorLote.get(l.fuente) ?? 0) + Number(l.kg.replace(',', '.')))
     }
   }
-  // Cosechas: se avisa pero se deja enviar (el backend responde 409 si corresponde).
-  const pedidoPorCosecha = new Map<string, number>()
-  if (!esPasa) {
-    for (const l of lineas) {
-      if (l.fuente && decimalOk(l.kg)) {
-        pedidoPorCosecha.set(l.fuente, (pedidoPorCosecha.get(l.fuente) ?? 0) + Number(l.kg.replace(',', '.')))
-      }
-    }
-  }
-  const cosechasExcedidas = cosechas.filter(
-    (c) => c.saldo_kg != null && (pedidoPorCosecha.get(c.id) ?? 0) > c.saldo_kg,
-  )
   const excedidos = lotes.filter((l) => (pedidoPorLote.get(l.id) ?? 0) > l.saldo_kg)
 
   async function guardar() {
@@ -301,14 +289,11 @@ function NuevoRemitoModal({
     setError(null)
     try {
       await createRemito({
-        tipo, fecha, comprador_id: compradorId,
+        tipo: 'entrega_pasa', fecha, comprador_id: compradorId,
         numero: numero.trim() || null,
         vehiculo_patente: patente.trim() || null,
         observaciones: obs.trim() || null,
-        lineas: lineas.map((l) => ({
-          kg: l.kg.trim().replace(',', '.'),
-          ...(esPasa ? { lote_id: l.fuente } : { cosecha_id: l.fuente }),
-        })),
+        lineas: lineas.map((l) => ({ kg: l.kg.trim().replace(',', '.'), lote_id: l.fuente })),
       })
       await onCreated()
     } catch (e) {
@@ -322,17 +307,11 @@ function NuevoRemitoModal({
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-base font-semibold text-gray-900">Nuevo remito</h2>
+          <h2 className="text-base font-semibold text-gray-900">Nuevo remito · {TIPO_REMITO_LABELS.entrega_pasa}</h2>
           <button onClick={onClose} className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"><X size={18} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Tipo</label>
-              <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoRemito)} className={inputCls}>
-                {(Object.entries(TIPO_REMITO_LABELS) as [TipoRemito, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
             <div>
               <label className={labelCls}>Fecha <span className="text-red-500">*</span></label>
               <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
@@ -355,20 +334,16 @@ function NuevoRemitoModal({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-700">
-              {esPasa ? 'Líneas (lotes cerrados con saldo)' : `Líneas (cosechas con destino ${destinos.map((d) => DESTINO_LABELS[d]).join(' / ')})`}
-            </p>
+            <p className="text-xs font-semibold text-gray-700">Líneas (lotes cerrados con saldo)</p>
             {lineas.map((l, i) => (
               <div key={i} className="flex items-start gap-2">
                 <select value={l.fuente} onChange={(e) => setLinea(i, { fuente: e.target.value })} className={`${inputCls.replace('w-full', '')} min-w-0 flex-1`}>
-                  <option value="">— Seleccionar {esPasa ? 'lote' : 'cosecha'} —</option>
-                  {esPasa
-                    ? lotes.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          {VARIEDAD_LABELS[x.variedad]} C{x.calidad} N° {x.numero} · saldo {fmtKg(x.saldo_kg)} kg
-                        </option>
-                      ))
-                    : cosechas.map((c) => <option key={c.id} value={c.id}>{cosechaLabel(c)}</option>)}
+                  <option value="">— Seleccionar lote —</option>
+                  {lotes.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {VARIEDAD_LABELS[x.variedad]} C{x.calidad} N° {x.numero} · saldo {fmtKg(x.saldo_kg)} kg
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="text" inputMode="decimal" placeholder="Kg" value={l.kg}
@@ -388,14 +363,9 @@ function NuevoRemitoModal({
             <button onClick={() => setLineas((ls) => [...ls, { fuente: '', kg: '' }])} className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline">
               <Plus size={13} /> Agregar línea
             </button>
-            {esPasa && excedidos.map((l) => (
+            {excedidos.map((l) => (
               <p key={l.id} className="text-xs text-red-600">
                 El lote {VARIEDAD_LABELS[l.variedad]} C{l.calidad} N° {l.numero} tiene saldo {fmtKg(l.saldo_kg)} kg y estás pidiendo {fmtKg(pedidoPorLote.get(l.id) ?? 0)} kg (las líneas del mismo lote se suman).
-              </p>
-            ))}
-            {cosechasExcedidas.map((c) => (
-              <p key={c.id} className="text-xs text-amber-700">
-                Atención: la cosecha del {fmtFecha(c.fecha)} ({c.variedad ?? 's/variedad'}) tiene saldo {fmtKg(c.saldo_kg ?? 0)} kg y estás pidiendo {fmtKg(pedidoPorCosecha.get(c.id) ?? 0)} kg.
               </p>
             ))}
             <p className="text-xs text-gray-600 text-right">Total: <b className="font-mono">{fmtKg(total)} kg</b></p>

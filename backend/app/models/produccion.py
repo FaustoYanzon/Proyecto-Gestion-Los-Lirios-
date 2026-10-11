@@ -777,6 +777,14 @@ class RegistroCosecha(Base):
         SAEnum(DestinoCosecha), nullable=False
     )
     comprador: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Comprador normalizado (despacho de cosecha). `comprador` (texto) se sigue
+    # llenando con el nombre por compatibilidad.
+    comprador_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("compradores.id", name="fk_registros_cosecha_comprador_id_compradores"),
+        nullable=True,
+        index=True,
+    )
 
     cuadrilla: Mapped[str | None] = mapped_column(String(150), nullable=True)
     acarreo: Mapped[str | None] = mapped_column(String(150), nullable=True)

@@ -16,6 +16,13 @@ def kg_teorico_ingreso(fichas: int, kg_por_ficha: Decimal) -> Decimal:
     return _q(Decimal(fichas) * kg_por_ficha)
 
 
+def fichas_estimadas(kg_total: Decimal, kg_por_ficha: Decimal) -> int:
+    """Fichas de un carro incompleto estimadas por peso (mínimo 1)."""
+    if kg_por_ficha <= 0:
+        raise ValueError("kg_por_ficha debe ser mayor a cero")
+    return max(1, int((kg_total / kg_por_ficha).quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
+
+
 def merma_ingreso(kg_teorico: Decimal, kg_real: Decimal) -> Decimal:
     """Merma de un ingreso al pasero: teórico - báscula. Positiva = merma;
     negativa = la báscula pesó más de lo esperado."""

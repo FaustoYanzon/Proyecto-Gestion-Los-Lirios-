@@ -7,9 +7,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_encargado_up
-from app.models.alta_produccion import Bin, IngresoPasero, Lote, Productor, UbicacionPasero
-from app.models.parcela import Parcela, TipoParcela, VariedadUva
-from app.models.produccion import DestinoCosecha, OrigenCosecha, RegistroCosecha
+from app.models.alta_produccion import Bin, IngresoPasero, Lote, UbicacionPasero
+from app.models.parcela import Parcela, VariedadUva
 from app.models.user import User
 from app.schemas.alta_produccion import (
     IngresoPaseroCreate,
@@ -19,26 +18,13 @@ from app.schemas.alta_produccion import (
     UbicacionPaseroResponse,
 )
 from app.services import mermas
-from app.services.alta_produccion import get_parametros
+from app.services.alta_produccion import (
+    get_parametros,
+    get_pasero_or_404,
+    registrar_ingreso_pasero,
+)
 
 router = APIRouter(prefix="/pasero", tags=["Pasero"])
-
-DESTINOS_PASA = {DestinoCosecha.pasas, DestinoCosecha.rama_pasa}
-
-
-async def get_pasero_or_404(db: AsyncSession, pasero_id: str, for_update: bool = False) -> Parcela:
-    """`for_update` serializa las levantadas sobre el mismo pasero: la uva
-    disponible es un saldo derivado, no una columna con su propio lock."""
-    if for_update:
-        pasero = (
-            await db.execute(select(Parcela).where(Parcela.id == pasero_id).with_for_update())
-        ).scalar_one_or_none()
-    else:
-        pasero = await db.get(Parcela, pasero_id)
-    if pasero is None or pasero.tipo != TipoParcela.pasero:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pasero not found")
-    return pasero
-
 
 # ── Rutas estáticas primero ──────────────────────────────────────────────────
 
@@ -157,54 +143,4 @@ async def create_ingreso(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> IngresoPasero:
-    await get_pasero_or_404(db, data.pasero_id)
-
-    if data.origen == OrigenCosecha.tercero and data.productor_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Un ingreso de origen tercero requiere productor_id",
-        )
-    if data.productor_id is not None and await db.get(Productor, data.productor_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Productor not found")
-    if data.ubicacion_id is not None:
-        ubicacion = await db.get(UbicacionPasero, data.ubicacion_id)
-        if ubicacion is None or ubicacion.pasero_id != data.pasero_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="La ubicación no pertenece al pasero indicado",
-            )
-    if data.cosecha_id is not None:
-        cosecha = await db.get(RegistroCosecha, data.cosecha_id)
-        if cosecha is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro de cosecha not found")
-        if cosecha.destino not in DESTINOS_PASA:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"La cosecha tiene destino {cosecha.destino.value}: solo una cosecha "
-                "destinada a pasa puede ingresar al pasero",
-            )
-
-    params = await get_parametros(db)
-    fichas = data.fichas if data.fichas is not None else data.carros * params.fichas_por_carro
-    kg_teorico = mermas.kg_teorico_ingreso(fichas, params.kg_por_ficha)
-
-    ingreso = IngresoPasero(
-        fecha=data.fecha,
-        pasero_id=data.pasero_id,
-        ubicacion_id=data.ubicacion_id,
-        cosecha_id=data.cosecha_id,
-        variedad=data.variedad,
-        origen=data.origen,
-        productor_id=data.productor_id,
-        carros=data.carros,
-        fichas=fichas,
-        kg_teorico=kg_teorico,
-        kg_real=data.kg_real,
-        merma_kg=mermas.merma_ingreso(kg_teorico, data.kg_real),
-        observaciones=data.observaciones,
-        created_by=current_user.id,
-    )
-    db.add(ingreso)
-    await db.flush()
-    await db.refresh(ingreso)
-    return ingreso
+    return await registrar_ingreso_pasero(db, data, current_user.id)

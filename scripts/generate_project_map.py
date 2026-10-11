@@ -56,8 +56,8 @@ def alembic_migrations() -> tuple[int, str]:
     revs, downs = {}, set()
     for f in versions_dir.glob("*.py"):
         txt = f.read_text(encoding="utf-8")
-        m = re.search(r"^revision: str = '([a-f0-9]+)'", txt, re.M)
-        d = re.search(r"^down_revision.*?=\s*'([a-f0-9]+)'", txt, re.M)
+        m = re.search(r"""^revision(?::\s*str)?\s*=\s*['"]([a-f0-9]+)['"]""", txt, re.M)
+        d = re.search(r"""^down_revision.*?=\s*['"]([a-f0-9]+)['"]""", txt, re.M)
         if m:
             revs[m.group(1)] = f.name
         if d:

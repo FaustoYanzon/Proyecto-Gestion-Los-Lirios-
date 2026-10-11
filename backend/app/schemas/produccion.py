@@ -577,6 +577,7 @@ class RegistroCosechaBase(BaseModel):
     n_ciu: str | None = None
     destino: DestinoCosecha
     comprador: str | None = None
+    comprador_id: str | None = None
     cuadrilla: str | None = None
     acarreo: str | None = None
     vehiculo_patente: str | None = None
@@ -606,6 +607,7 @@ class RegistroCosechaUpdate(BaseModel):
     n_ciu: str | None = None
     destino: DestinoCosecha | None = None
     comprador: str | None = None
+    comprador_id: str | None = None
     cuadrilla: str | None = None
     acarreo: str | None = None
     vehiculo_patente: str | None = None
@@ -629,6 +631,9 @@ class RegistroCosechaResponse(RegistroCosechaBase):
     # kg_total menos lo despachado en remitos de salida. None si no se calculó
     # (p. ej. cosechas embebidas en la ficha de trazabilidad).
     saldo_kg: Decimal | None = None
+    # Remito más reciente que incluye esta cosecha (None en histórico sin remitos).
+    remito_id: str | None = None
+    remito_numero: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

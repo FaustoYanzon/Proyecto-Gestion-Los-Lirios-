@@ -189,7 +189,7 @@ export default function PaseroPage() {
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-700">Stock de uva por variedad</h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            Pasa esperada = uva consumida ÷ {parametros ? fmtKg(parametros.ratio_uva_pasa) : 'ratio'}. Diferencia = levantada − esperada.
+            Pasa esperada = uva ingresada ÷{parametros ? fmtKg(parametros.ratio_uva_pasa) : 'ratio'}. Diferencia = levantada − esperada.
           </p>
         </div>
         {stockError ? (

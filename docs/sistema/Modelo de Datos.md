@@ -4,9 +4,9 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-07 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-10 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
-**45 tablas** · **9 vistas** · **35 enums** · **76 relaciones**
+**45 tablas** · **9 vistas** · **35 enums** · **78 relaciones**
 
 ## Panorama general
 
@@ -19,29 +19,29 @@ erDiagram
     parcelas ||--o{ analisis_calidad : ""
     lotes_pasa ||--o{ bines_pasa : ""
     parcelas ||--o{ bines_pasa : ""
-    users ||--o{ ciclos_campana : ""
     parcelas ||--o{ ciclos_campana : ""
-    lotes_importacion_arca ||--o{ comprobantes_arca_importados : ""
+    users ||--o{ ciclos_campana : ""
     ingresos ||--o{ comprobantes_arca_importados : ""
+    lotes_importacion_arca ||--o{ comprobantes_arca_importados : ""
     egresos ||--o{ comprobantes_arca_importados : ""
     users ||--o{ comprobantes_arca_importados : ""
-    remitos ||--o{ comprobantes_bodega : ""
     users ||--o{ comprobantes_bodega : ""
-    users ||--o{ egresos : ""
+    remitos ||--o{ comprobantes_bodega : ""
     parcelas ||--o{ egresos : ""
-    parcelas ||--o{ enlaces_publicos_trazabilidad : ""
+    users ||--o{ egresos : ""
     users ||--o{ enlaces_publicos_trazabilidad : ""
+    parcelas ||--o{ enlaces_publicos_trazabilidad : ""
     users ||--o{ estados_variedad_campana : ""
     parcelas ||--o{ fotos_parcela : ""
     users ||--o{ fotos_parcela : ""
-    users ||--o{ fotos_registros_fitosanitarios : ""
     registros_fitosanitarios ||--o{ fotos_registros_fitosanitarios : ""
+    users ||--o{ fotos_registros_fitosanitarios : ""
     users ||--o{ ingresos : ""
     users ||--o{ ingresos_pasero : ""
     parcelas ||--o{ ingresos_pasero : ""
     productores ||--o{ ingresos_pasero : ""
-    registros_cosecha ||--o{ ingresos_pasero : ""
     ubicaciones_pasero ||--o{ ingresos_pasero : ""
+    registros_cosecha ||--o{ ingresos_pasero : ""
     lotes_importacion_termografo ||--o{ lecturas_termografo : ""
     users ||--o{ lotes_importacion_arca : ""
     users ||--o{ lotes_importacion_termografo : ""
@@ -54,36 +54,38 @@ erDiagram
     insumos ||--o{ movimientos_stock : ""
     registros_fitosanitarios ||--o{ movimientos_stock : ""
     users ||--o{ movimientos_stock : ""
+    insumos ||--o{ ordenes_aplicacion : ""
     planes_fitosanitarios ||--o{ ordenes_aplicacion : ""
     users ||--o{ ordenes_aplicacion : ""
-    insumos ||--o{ ordenes_aplicacion : ""
     ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : ""
-    parcelas ||--o{ ordenes_aplicacion_parcelas : ""
     registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : ""
-    users ||--o{ planes_fitosanitarios : ""
+    parcelas ||--o{ ordenes_aplicacion_parcelas : ""
     insumos ||--o{ planes_fitosanitarios : ""
+    users ||--o{ planes_fitosanitarios : ""
     users ||--o{ precios_tarea : ""
     parcelas ||--o{ precios_tarea : ""
     users ||--o{ presupuestos : ""
     users ||--o{ push_tokens : ""
+    compradores ||--o{ registros_cosecha : ""
     productores ||--o{ registros_cosecha : ""
-    parcelas ||--o{ registros_cosecha : ""
     users ||--o{ registros_cosecha : ""
+    parcelas ||--o{ registros_cosecha : ""
     insumos ||--o{ registros_fitosanitarios : ""
     trabajadores ||--o{ registros_fitosanitarios : ""
     parcelas ||--o{ registros_fitosanitarios : ""
     users ||--o{ registros_fitosanitarios : ""
-    parcelas ||--o{ registros_riego : ""
     users ||--o{ registros_riego : ""
     trabajadores ||--o{ registros_riego : ""
+    parcelas ||--o{ registros_riego : ""
+    trabajadores ||--o{ registros_trabajo : ""
     parcelas ||--o{ registros_trabajo : ""
     users ||--o{ registros_trabajo : ""
-    trabajadores ||--o{ registros_trabajo : ""
-    registros_cosecha ||--o{ remito_lineas : ""
     remitos ||--o{ remito_lineas : ""
     lotes_pasa ||--o{ remito_lineas : ""
+    registros_cosecha ||--o{ remito_lineas : ""
     users ||--o{ remitos : ""
     compradores ||--o{ remitos : ""
+    parcelas ||--o{ remitos : ""
     users ||--o{ telefonos_usuarios_whatsapp : ""
     parcelas ||--o{ ubicaciones_pasero : ""
     trabajadores ||--o{ users : ""
@@ -230,22 +232,23 @@ erDiagram
 erDiagram
     users ||--o{ analisis_calidad : "created_by"
     parcelas ||--o{ analisis_calidad : "parcela_id"
-    users ||--o{ ciclos_campana : "created_by"
     parcelas ||--o{ ciclos_campana : "parcela_id"
+    users ||--o{ ciclos_campana : "created_by"
     users ||--o{ estados_variedad_campana : "created_by"
     users ||--o{ metas_produccion : "created_by"
     parcelas ||--o{ metas_produccion : "parcela_id"
     users ||--o{ precios_tarea : "created_by"
     parcelas ||--o{ precios_tarea : "parcela_id"
+    compradores ||--o{ registros_cosecha : "comprador_id"
     productores ||--o{ registros_cosecha : "productor_id"
-    parcelas ||--o{ registros_cosecha : "parcela_id"
     users ||--o{ registros_cosecha : "created_by"
-    parcelas ||--o{ registros_riego : "parcela_id"
+    parcelas ||--o{ registros_cosecha : "parcela_id"
     users ||--o{ registros_riego : "created_by"
     trabajadores ||--o{ registros_riego : "responsable_id"
+    parcelas ||--o{ registros_riego : "parcela_id"
+    trabajadores ||--o{ registros_trabajo : "trabajador_id"
     parcelas ||--o{ registros_trabajo : "parcela_id"
     users ||--o{ registros_trabajo : "created_by"
-    trabajadores ||--o{ registros_trabajo : "trabajador_id"
     registros_trabajo {
         varchar(36) id PK
         date fecha
@@ -314,6 +317,7 @@ erDiagram
         origencosecha origen
         varchar(150) proveedor_tercero
         varchar(36) productor_id FK
+        varchar(36) comprador_id FK
     }
     precios_tarea {
         varchar(36) id PK
@@ -453,6 +457,7 @@ erDiagram
 | `origen` | origencosecha | NOT NULL |  |
 | `proveedor_tercero` | varchar(150) |  |  |
 | `productor_id` | varchar(36) |  | FK → `productores.id` |
+| `comprador_id` | varchar(36) |  | FK → `compradores.id` |
 
 ### `precios_tarea`
 
@@ -534,20 +539,21 @@ erDiagram
 erDiagram
     lotes_pasa ||--o{ bines_pasa : "lote_id"
     parcelas ||--o{ bines_pasa : "pasero_id"
-    remitos ||--o{ comprobantes_bodega : "remito_id"
     users ||--o{ comprobantes_bodega : "created_by"
+    remitos ||--o{ comprobantes_bodega : "remito_id"
     users ||--o{ ingresos_pasero : "created_by"
     parcelas ||--o{ ingresos_pasero : "pasero_id"
     productores ||--o{ ingresos_pasero : "productor_id"
-    registros_cosecha ||--o{ ingresos_pasero : "cosecha_id"
     ubicaciones_pasero ||--o{ ingresos_pasero : "ubicacion_id"
+    registros_cosecha ||--o{ ingresos_pasero : "cosecha_id"
     users ||--o{ lotes_pasa : "created_by"
     depositos ||--o{ lotes_pasa : "deposito_id"
-    registros_cosecha ||--o{ remito_lineas : "cosecha_id"
     remitos ||--o{ remito_lineas : "remito_id"
     lotes_pasa ||--o{ remito_lineas : "lote_id"
+    registros_cosecha ||--o{ remito_lineas : "cosecha_id"
     users ||--o{ remitos : "created_by"
     compradores ||--o{ remitos : "comprador_id"
+    parcelas ||--o{ remitos : "pasero_id"
     parcelas ||--o{ ubicaciones_pasero : "pasero_id"
     productores {
         varchar(36) id PK
@@ -600,6 +606,7 @@ erDiagram
         varchar(500) observaciones
         varchar(36) created_by FK
         timestamptz created_at
+        boolean carro_incompleto
     }
     lotes_pasa {
         varchar(36) id PK
@@ -636,6 +643,7 @@ erDiagram
         varchar(500) observaciones
         varchar(36) created_by FK
         timestamptz created_at
+        varchar(36) pasero_id FK
     }
     remito_lineas {
         varchar(36) id PK
@@ -725,6 +733,7 @@ erDiagram
 | `observaciones` | varchar(500) |  |  |
 | `created_by` | varchar(36) | NOT NULL | FK → `users.id` |
 | `created_at` | timestamptz | NOT NULL |  |
+| `carro_incompleto` | boolean | NOT NULL |  |
 
 ### `lotes_pasa`
 
@@ -764,12 +773,13 @@ erDiagram
 | `tipo` | tiporemito | NOT NULL |  |
 | `numero` | varchar(50) | NOT NULL |  |
 | `fecha` | date | NOT NULL |  |
-| `comprador_id` | varchar(36) | NOT NULL | FK → `compradores.id` |
+| `comprador_id` | varchar(36) |  | FK → `compradores.id` |
 | `kg_total` | numeric(14,2) | NOT NULL |  |
 | `vehiculo_patente` | varchar(20) |  |  |
 | `observaciones` | varchar(500) |  |  |
 | `created_by` | varchar(36) | NOT NULL | FK → `users.id` |
 | `created_at` | timestamptz | NOT NULL |  |
+| `pasero_id` | varchar(36) |  | FK → `parcelas.id` |
 
 ### `remito_lineas`
 
@@ -798,19 +808,19 @@ erDiagram
 
 ```mermaid
 erDiagram
-    users ||--o{ fotos_registros_fitosanitarios : "created_by"
     registros_fitosanitarios ||--o{ fotos_registros_fitosanitarios : "registro_fitosanitario_id"
+    users ||--o{ fotos_registros_fitosanitarios : "created_by"
     insumos ||--o{ movimientos_stock : "insumo_id"
     registros_fitosanitarios ||--o{ movimientos_stock : "registro_fitosanitario_id"
     users ||--o{ movimientos_stock : "created_by"
+    insumos ||--o{ ordenes_aplicacion : "insumo_id"
     planes_fitosanitarios ||--o{ ordenes_aplicacion : "plan_fitosanitario_id"
     users ||--o{ ordenes_aplicacion : "created_by"
-    insumos ||--o{ ordenes_aplicacion : "insumo_id"
     ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : "orden_id"
-    parcelas ||--o{ ordenes_aplicacion_parcelas : "parcela_id"
     registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : "registro_fitosanitario_id"
-    users ||--o{ planes_fitosanitarios : "created_by"
+    parcelas ||--o{ ordenes_aplicacion_parcelas : "parcela_id"
     insumos ||--o{ planes_fitosanitarios : "insumo_id"
+    users ||--o{ planes_fitosanitarios : "created_by"
     insumos ||--o{ registros_fitosanitarios : "insumo_id"
     trabajadores ||--o{ registros_fitosanitarios : "responsable_id"
     parcelas ||--o{ registros_fitosanitarios : "parcela_id"
@@ -1024,12 +1034,12 @@ erDiagram
 
 ```mermaid
 erDiagram
-    lotes_importacion_arca ||--o{ comprobantes_arca_importados : "lote_id"
     ingresos ||--o{ comprobantes_arca_importados : "ingreso_id"
+    lotes_importacion_arca ||--o{ comprobantes_arca_importados : "lote_id"
     egresos ||--o{ comprobantes_arca_importados : "egreso_id"
     users ||--o{ comprobantes_arca_importados : "clasificado_por"
-    users ||--o{ egresos : "created_by"
     parcelas ||--o{ egresos : "parcela_id"
+    users ||--o{ egresos : "created_by"
     users ||--o{ ingresos : "created_by"
     users ||--o{ lotes_importacion_arca : "importado_por"
     users ||--o{ presupuestos : "created_by"
@@ -1255,12 +1265,12 @@ erDiagram
 ```mermaid
 erDiagram
     users ||--o{ alertas_descartadas : "descartada_por"
-    users ||--o{ mensajes_whatsapp_pendientes : "user_id"
     users ||--o{ mensajes_whatsapp_pendientes : "clasificado_por"
     egresos ||--o{ mensajes_whatsapp_pendientes : "egreso_id"
+    users ||--o{ mensajes_whatsapp_pendientes : "user_id"
     users ||--o{ push_tokens : "user_id"
-    users ||--o{ telefonos_usuarios_whatsapp : "created_by"
     users ||--o{ telefonos_usuarios_whatsapp : "user_id"
+    users ||--o{ telefonos_usuarios_whatsapp : "created_by"
     mensajes_whatsapp_pendientes {
         varchar(36) id PK
         varchar(100) wa_message_id
@@ -1428,8 +1438,8 @@ erDiagram
 
 ```mermaid
 erDiagram
-    parcelas ||--o{ enlaces_publicos_trazabilidad : "parcela_id"
     users ||--o{ enlaces_publicos_trazabilidad : "created_by"
+    parcelas ||--o{ enlaces_publicos_trazabilidad : "parcela_id"
     parcelas ||--o{ fotos_parcela : "parcela_id"
     users ||--o{ fotos_parcela : "created_by"
     enlaces_publicos_trazabilidad {
@@ -1546,7 +1556,7 @@ erDiagram
 | `tipomovimientostock` | ingreso, egreso_aplicacion, ajuste |
 | `tipoparcela` | parral, potrero, pasero, cabezal |
 | `tipoproductor` | propio, externo |
-| `tiporemito` | salida_fresco, salida_bodega, entrega_pasa |
+| `tiporemito` | salida_fresco, salida_bodega, entrega_pasa, traslado_pasero |
 | `tiporiego` | goteo, manto |
 | `unidadinsumo` | kg, lt |
 | `unidadmedida` | dias, plantas, melgas, metros, vines, cajas, gamelas, otros |

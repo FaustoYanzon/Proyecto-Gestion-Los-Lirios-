@@ -83,14 +83,19 @@ VISTAS_DESC = {
 }
 
 
+# Objetos de la extensión PostGIS (solo existe en algunas bases, p. ej. la local):
+# no son del dominio y ensucian el doc.
+OBJETOS_POSTGIS = {"spatial_ref_sys", "geography_columns", "geometry_columns"}
+
+
 async def fetch_schema(conn: asyncpg.Connection) -> dict:
     tables = [r["table_name"] for r in await conn.fetch(
         "SELECT table_name FROM information_schema.tables "
         "WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name"
-    )]
+    ) if r["table_name"] not in OBJETOS_POSTGIS]
     views = [r["table_name"] for r in await conn.fetch(
         "SELECT table_name FROM information_schema.views WHERE table_schema='public' ORDER BY table_name"
-    )]
+    ) if r["table_name"] not in OBJETOS_POSTGIS]
     cols = await conn.fetch(
         "SELECT c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable, "
         "       c.column_default, c.character_maximum_length, c.numeric_precision, c.numeric_scale "

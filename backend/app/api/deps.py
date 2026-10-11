@@ -69,6 +69,13 @@ require_gerencial_up = RequireRoles([
     UserRole.gerencial,
 ])
 
+# Sin regador: despacho de cosecha y remitos (documentos comerciales).
+require_encargado_estricto = RequireRoles([
+    UserRole.super_admin,
+    UserRole.gerencial,
+    UserRole.encargado,
+])
+
 require_encargado_up = RequireRoles([
     UserRole.super_admin,
     UserRole.gerencial,

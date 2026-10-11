@@ -4,16 +4,18 @@ import { useState } from 'react'
 import { useChanged } from '@/lib/useChanged'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, X, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Download, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
-  getCosechas, createCosecha, updateCosecha, deleteCosecha,
+  getCosechas, updateCosecha, deleteCosecha,
   getCosechaTotales, getCosechaResumenPorSemana,
   DESTINO_LABELS, CULTIVO_LABELS, ENVASE_LABELS, ORIGEN_LABELS,
   type RegistroCosechaResponse, type RegistroCosechaCreate,
   type CultivoCosecha, type DestinoCosecha, type TipoEnvase, type OrigenCosecha,
 } from '@/lib/api/cosecha'
 import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
-import { getProductores } from '@/lib/api/altaProduccion'
+import { getProductores, abrirRemitoPdf, errorDetail } from '@/lib/api/altaProduccion'
+import DespachoCosechaModal from '@/components/produccion/DespachoCosechaModal'
+import FormError from '@/components/ui/FormError'
 import { useAuthStore } from '@/store/authStore'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
@@ -140,6 +142,8 @@ export default function CosechaPage() {
   const qc = useQueryClient()
   const [temporada, setTemporada] = useCampanaAnio()
   const [showModal, setShowModal] = useState(false)
+  const [showDespacho, setShowDespacho] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -215,9 +219,16 @@ export default function CosechaPage() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function openCreate() {
-    setForm(EMPTY_FORM)
-    setEditId(null)
-    setShowModal(true)
+    setShowDespacho(true)
+  }
+
+  async function imprimirRemito(remitoId: string) {
+    setPdfError(null)
+    try {
+      await abrirRemitoPdf(remitoId)
+    } catch (e) {
+      setPdfError(errorDetail(e, 'No se pudo abrir el PDF del remito'))
+    }
   }
 
   function openEdit(r: RegistroCosechaResponse) {
@@ -256,7 +267,8 @@ export default function CosechaPage() {
   }
 
   async function handleSubmit() {
-    if (!form.destino || form.kg_total == null || form.kg_total <= 0) return
+    // Solo edición de registros históricos: el alta nueva va por el despacho.
+    if (!editId || !form.destino || form.kg_total == null || form.kg_total <= 0) return
     setSaving(true)
     try {
       const payload: RegistroCosechaCreate = {
@@ -286,11 +298,7 @@ export default function CosechaPage() {
         kg_total: form.kg_total,
         observaciones: form.observaciones || null,
       }
-      if (editId) {
-        await updateCosecha(editId, payload)
-      } else {
-        await createCosecha(payload)
-      }
+      await updateCosecha(editId, payload)
       invalidateAll()
       setShowModal(false)
     } finally {
@@ -338,10 +346,12 @@ export default function CosechaPage() {
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-[#7a1f2c] text-white text-sm font-semibold rounded-lg hover:bg-[#5a1320] transition-colors"
           >
-            <Plus size={16} /> Nuevo Remito
+            <Plus size={16} /> Nuevo despacho
           </button>
         </div>
       </div>
+
+      {pdfError && <FormError description={pdfError} />}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -424,7 +434,12 @@ export default function CosechaPage() {
                     <td className="px-4 py-2.5 text-right font-semibold font-mono text-gray-900">
                       {fmtKg(r.kg_total)}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-500">{r.n_remito ?? '–'}</td>
+                    <td className="px-4 py-2.5 text-gray-500">
+                      {r.remito_numero && <span className="font-mono text-gray-800">{r.remito_numero}</span>}
+                      {/* El backend copia el N° del remito a n_remito: no repetirlo. */}
+                      {r.remito_numero && r.n_remito && r.n_remito !== r.remito_numero ? ' · ' : ''}
+                      {r.n_remito && r.n_remito !== r.remito_numero ? r.n_remito : (r.remito_numero ? '' : '–')}
+                    </td>
                     <td className="px-4 py-2.5 text-right">
                       {deleteConfirmId === r.id ? (
                         <div className="flex items-center justify-end gap-2">
@@ -440,6 +455,15 @@ export default function CosechaPage() {
                         </div>
                       ) : (
                         <div className="flex items-center justify-end gap-1">
+                          {r.remito_id && (
+                            <button
+                              onClick={() => imprimirRemito(r.remito_id as string)}
+                              title={`Imprimir remito${r.remito_numero ? ` ${r.remito_numero}` : ''}`}
+                              className="p-1.5 rounded text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                            >
+                              <Printer size={14} />
+                            </button>
+                          )}
                           <button
                             onClick={() => openEdit(r)}
                             className="p-1.5 rounded text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
@@ -496,7 +520,9 @@ export default function CosechaPage() {
 
       </div>
 
-      {/* Modal */}
+      {showDespacho && <DespachoCosechaModal onClose={() => setShowDespacho(false)} />}
+
+      {/* Modal de edición (registros históricos) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -504,7 +530,7 @@ export default function CosechaPage() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
               <h2 className="text-base font-semibold text-gray-900">
-                {editId ? 'Editar Remito' : 'Nuevo Remito'}
+                Editar Remito
               </h2>
               <button
                 onClick={() => setShowModal(false)}

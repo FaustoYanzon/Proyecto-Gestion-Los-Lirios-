@@ -190,7 +190,7 @@ export interface IngresoPaseroCreate {
   observaciones?: string | null
 }
 
-function parseIngreso(d: Record<string, unknown>): IngresoPasero {
+export function parseIngreso(d: Record<string, unknown>): IngresoPasero {
   return {
     ...(d as unknown as IngresoPasero),
     kg_teorico: num(d.kg_teorico),
@@ -354,12 +354,13 @@ export async function cerrarLotePasa(loteId: string, deposito_id?: string | null
 
 // ── Remitos ───────────────────────────────────────────────────────────────────
 
-export type TipoRemito = 'entrega_pasa' | 'salida_fresco' | 'salida_bodega'
+export type TipoRemito = 'entrega_pasa' | 'salida_fresco' | 'salida_bodega' | 'traslado_pasero'
 
 export const TIPO_REMITO_LABELS: Record<TipoRemito, string> = {
   entrega_pasa: 'Entrega de pasa (PAS)',
   salida_fresco: 'Salida de fresco (FRE)',
   salida_bodega: 'Salida a bodega (BOD)',
+  traslado_pasero: 'Traslado a pasero (TRA)',
 }
 
 export interface RemitoLinea {
@@ -387,7 +388,11 @@ export interface Remito {
   tipo: TipoRemito
   numero: string
   fecha: string
-  comprador_id: string
+  /** null en TRA (traslado a pasero): lleva pasero_id. */
+  comprador_id: string | null
+  pasero_id?: string | null
+  comprador_nombre?: string | null
+  pasero_nombre?: string | null
   kg_total: number
   vehiculo_patente: string | null
   observaciones: string | null
@@ -415,7 +420,7 @@ function parseComprobante(d: Record<string, unknown>): ComprobanteBodega {
   }
 }
 
-function parseRemito(d: Record<string, unknown>): Remito {
+export function parseRemito(d: Record<string, unknown>): Remito {
   return {
     ...(d as unknown as Remito),
     kg_total: num(d.kg_total),
@@ -450,4 +455,33 @@ export async function cargarComprobanteBodega(
 ): Promise<ComprobanteBodega> {
   const { data } = await api.post<Record<string, unknown>>(`/remitos/${remitoId}/comprobante-bodega`, payload)
   return parseComprobante(data)
+}
+
+/**
+ * Abre el PDF del remito en una pestaña nueva. La ventana se abre de forma
+ * síncrona (dentro del click) y recién después se le asigna la URL, para no
+ * caer en el bloqueador de pop-ups. Llamar directo desde un onClick.
+ */
+export async function abrirRemitoPdf(remitoId: string): Promise<void> {
+  const win = window.open('', '_blank')
+  try {
+    const { data } = await api.get<Blob>(`/remitos/${remitoId}/pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
+    if (win) {
+      win.location.href = url
+    } else {
+      // Pop-up bloqueado igual: descarga como respaldo.
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `remito-${remitoId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
+    // El visor necesita la URL viva un rato; se libera pasado un minuto.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (e) {
+    win?.close()
+    throw e
+  }
 }

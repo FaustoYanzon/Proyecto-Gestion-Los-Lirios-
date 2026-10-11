@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up
-from app.api.pasero import get_pasero_or_404
 from app.models.alta_produccion import Bin, Deposito, EstadoLote, Lote
 from app.models.parcela import VariedadUva
 from app.models.user import User
@@ -30,6 +29,7 @@ from app.services import mermas
 from app.services.alta_produccion import (
     Parametros,
     get_parametros,
+    get_pasero_or_404,
     siguiente_numero_lote,
     uva_disponible,
 )

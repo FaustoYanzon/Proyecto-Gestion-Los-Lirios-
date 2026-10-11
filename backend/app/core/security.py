@@ -54,3 +54,43 @@ def decode_access_token(token: str) -> dict | None:
     except PyJWTError:
         # Covers expired signature, invalid signature, malformed token, etc.
         return None
+
+
+# Links firmados de corta vida (PDF de remito). Token JWT de solo lectura atado
+# a UN remito. Lleva claims explícitos `typ` y `aud` = "remito_pdf" y se decodifica
+# con `audience` obligatorio: un token de acceso (sin `aud`) no pasa acá, y este
+# token no pasa como bearer (`decode_access_token` no acepta `aud` y además no
+# trae "sub"). Ojo: el token viaja en la RUTA (/remitos/descarga/{token}), por lo
+# que puede quedar en logs de acceso/proxy e historial; por eso vive solo 5 min y
+# sirve únicamente para leer ese PDF.
+REMITO_PDF_SCOPE = "remito_pdf"
+REMITO_PDF_TOKEN_TTL_SECONDS = 300
+
+
+def create_remito_pdf_token(remito_id: str, ttl_seconds: int = REMITO_PDF_TOKEN_TTL_SECONDS) -> str:
+    payload = {
+        "typ": REMITO_PDF_SCOPE,
+        "aud": REMITO_PDF_SCOPE,
+        "scope": REMITO_PDF_SCOPE,
+        "rid": remito_id,
+        "exp": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_remito_pdf_token(token: str) -> str | None:
+    """Devuelve el remito_id del token, o None si vence, está adulterado o no
+    es un token de PDF de remito (typ/aud incorrectos o ausentes)."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            audience=REMITO_PDF_SCOPE,
+            options={"require": ["exp", "aud"]},
+        )
+    except PyJWTError:
+        return None
+    if payload.get("typ") != REMITO_PDF_SCOPE or not isinstance(payload.get("rid"), str):
+        return None
+    return payload["rid"]

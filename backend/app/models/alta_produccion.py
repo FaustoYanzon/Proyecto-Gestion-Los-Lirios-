@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum as SAEnum,
@@ -62,6 +63,8 @@ class TipoRemito(str, enum.Enum):
     salida_fresco = "salida_fresco"
     salida_bodega = "salida_bodega"
     entrega_pasa = "entrega_pasa"
+    # Traslado de uva del parral al pasero (TRA-000001). No tiene comprador.
+    traslado_pasero = "traslado_pasero"
 
 
 class Productor(Base):
@@ -148,6 +151,11 @@ class IngresoPasero(Base):
     kg_real: Mapped[Decimal] = mapped_column(KG, nullable=False)
     # kg_teorico - kg_real (positivo = merma; negativo = la báscula pesó de más).
     merma_kg: Mapped[Decimal] = mapped_column(KG, nullable=False)
+    # Carro incompleto: las fichas se estimaron por peso, así que no hay merma
+    # calculable (kg_teorico = kg_real y merma_kg = 0).
+    carro_incompleto: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
@@ -211,13 +219,27 @@ class Bin(Base):
 
 class Remito(Base):
     __tablename__ = "remitos"
-    __table_args__ = (UniqueConstraint("tipo", "numero", name="uq_remito_tipo_numero"),)
+    __table_args__ = (
+        UniqueConstraint("tipo", "numero", name="uq_remito_tipo_numero"),
+        # TRA lleva pasero y no comprador; el resto lleva comprador y no pasero.
+        CheckConstraint(
+            "(tipo = 'traslado_pasero' AND pasero_id IS NOT NULL AND comprador_id IS NULL) "
+            "OR (tipo <> 'traslado_pasero' AND comprador_id IS NOT NULL AND pasero_id IS NULL)",
+            name="ck_remito_destinatario_segun_tipo",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tipo: Mapped[TipoRemito] = mapped_column(SAEnum(TipoRemito), nullable=False, index=True)
     numero: Mapped[str] = mapped_column(String(50), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
-    comprador_id: Mapped[str] = mapped_column(String(36), ForeignKey("compradores.id"), nullable=False)
+    comprador_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("compradores.id"), nullable=True
+    )
+    # Solo remitos TRA (traslado a pasero): `Parcela` de tipo pasero.
+    pasero_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("parcelas.id", name="fk_remitos_pasero_id_parcelas"), nullable=True, index=True
+    )
     kg_total: Mapped[Decimal] = mapped_column(KG, nullable=False, default=Decimal("0"))
     vehiculo_patente: Mapped[str | None] = mapped_column(String(20), nullable=True)
     observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -1,4 +1,9 @@
 import api from '@/lib/api'
+import type { VariedadUva } from '@/lib/api/parcelas'
+import {
+  parseRemito, parseIngreso,
+  type Remito, type IngresoPasero,
+} from '@/lib/api/altaProduccion'
 
 export type CultivoCosecha = 'vid' | 'chacra' | 'ind_pasa' | 'alfalfa' | 'otro'
 export type DestinoCosecha = 'MI' | 'BODEGA' | 'EXPO' | 'PASAS' | 'RAMA_PASA' | 'SEMILLA' | 'DESC' | 'FARDO'
@@ -34,6 +39,10 @@ export interface RegistroCosechaResponse {
   saldo_kg: number | null
   imagen_remito_url: string | null
   observaciones: string | null
+  /** Remito (BOD/FRE/TRA) generado por el despacho; ausente/null en registros históricos. */
+  remito_id?: string | null
+  remito_numero?: string | null
+  comprador_id?: string | null
   created_at: string
 }
 
@@ -133,7 +142,7 @@ export const ORIGEN_LABELS: Record<OrigenCosecha, string> = {
 // saldo_kg llega como string Decimal (o null): se convierte acá.
 function parseCosecha(d: RegistroCosechaResponse): RegistroCosechaResponse {
   const raw = (d as unknown as { saldo_kg?: string | number | null }).saldo_kg
-  return { ...d, saldo_kg: raw == null ? null : Number(raw) }
+  return { ...d, kg_total: Number(d.kg_total), saldo_kg: raw == null ? null : Number(raw) }
 }
 
 export async function getCosechas(params?: {
@@ -184,4 +193,57 @@ export async function getCosechaResumenPorSemana(temporada?: number): Promise<Co
     params: temporada != null ? { temporada } : {},
   })
   return data
+}
+
+// ── Despacho de cosecha (De -> Para) ──────────────────────────────────────────
+
+export type ParaDespacho = 'bodega' | 'comprador' | 'pasero'
+
+export const PARA_LABELS: Record<ParaDespacho, string> = {
+  bodega: 'Bodega',
+  comprador: 'Comprador',
+  pasero: 'Pasero',
+}
+
+export interface DespachoCosechaCreate {
+  fecha: string
+  para: ParaDespacho
+  origen?: OrigenCosecha
+  parcela_id?: string | null
+  productor_id?: string | null
+  variedad?: VariedadUva | null
+  comprador_id?: string | null
+  pasero_id?: string | null
+  ubicacion_id?: string | null
+  carros?: number
+  carro_incompleto?: boolean
+  kg_total?: number | null
+  tipo_envase?: TipoEnvase
+  cantidad_envases?: number | null
+  peso_unitario_kg?: number | null
+  bruto_kg?: number | null
+  tara_kg?: number | null
+  vehiculo_patente?: string | null
+  cuadrilla?: string | null
+  acarreo?: string | null
+  n_ciu?: string | null
+  n_remito?: string | null
+  observaciones?: string | null
+  imagen_remito_url?: string | null
+  idempotency_key?: string | null
+}
+
+export interface DespachoCosechaResponse {
+  cosecha: RegistroCosechaResponse
+  remito: Remito
+  ingreso_pasero: IngresoPasero | null
+}
+
+export async function createDespachoCosecha(payload: DespachoCosechaCreate): Promise<DespachoCosechaResponse> {
+  const { data } = await api.post<Record<string, unknown>>('/produccion/cosecha/despacho', payload)
+  return {
+    cosecha: parseCosecha(data.cosecha as RegistroCosechaResponse),
+    remito: parseRemito(data.remito as Record<string, unknown>),
+    ingreso_pasero: data.ingreso_pasero ? parseIngreso(data.ingreso_pasero as Record<string, unknown>) : null,
+  }
 }

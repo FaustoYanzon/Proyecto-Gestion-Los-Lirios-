@@ -8,10 +8,18 @@ from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, get_db, require_encargado_up, require_gerencial_up
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    require_encargado_estricto,
+    require_encargado_up,
+    require_gerencial_up,
+)
 from app.core import ciclo_campana, fenologia
-from app.models.alta_produccion import Productor
-from app.services.alta_produccion import saldo_cosecha, saldos_cosecha
+from app.api.remitos import remito_response_completo
+from app.models.alta_produccion import Comprador, IngresoPasero, Productor, RemitoLinea
+from app.services.alta_produccion import remitos_por_cosecha, saldo_cosecha, saldos_cosecha
+from app.services.despacho_cosecha import registrar_despacho
 from app.models.finanzas import (
     ClasificacionEgreso,
     Egreso,
@@ -48,6 +56,7 @@ from app.models.trabajador import Trabajador
 from app.models.user import User
 from app.models.valvula import Valvula
 from app.schemas.valvula import ValvulaResponse
+from app.schemas.alta_produccion import DespachoCosechaCreate, DespachoCosechaResponse, IngresoPaseroResponse
 from app.schemas.produccion import (
     CicloCampanaCreate,
     CicloCampanaResponse,
@@ -1539,10 +1548,17 @@ async def crear_estado_variedad_campana(
 # ── Cosecha ────────────────────────────────────────────────────────────────────
 
 async def _enrich_cosecha(
-    registro: RegistroCosecha, db: AsyncSession, saldo_kg: Decimal | None = None
+    registro: RegistroCosecha,
+    db: AsyncSession,
+    saldo_kg: Decimal | None = None,
+    remitos: dict[str, tuple[str, str]] | None = None,
 ) -> RegistroCosechaResponse:
     resp = RegistroCosechaResponse.model_validate(registro)
     resp.saldo_kg = saldo_kg if saldo_kg is not None else await saldo_cosecha(db, registro)
+    if remitos is None:
+        remitos = await remitos_por_cosecha(db, [registro])
+    if registro.id in remitos:
+        resp.remito_id, resp.remito_numero = remitos[registro.id]
     if registro.parcela_id:
         p = await db.get(Parcela, registro.parcela_id)
         resp.parcela_nombre = p.nombre if p else None
@@ -1703,7 +1719,8 @@ async def list_cosecha(
 
     records = list((await db.execute(stmt)).scalars().all())
     saldos = await saldos_cosecha(db, records)
-    return [await _enrich_cosecha(r, db, saldos[r.id]) for r in records]
+    remitos = await remitos_por_cosecha(db, records)
+    return [await _enrich_cosecha(r, db, saldos[r.id], remitos) for r in records]
 
 
 @router.get("/cosecha/{cosecha_id}", response_model=RegistroCosechaResponse)
@@ -1724,6 +1741,33 @@ async def _validar_productor(db: AsyncSession, productor_id: str | None) -> None
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Productor not found")
 
 
+async def _validar_comprador(db: AsyncSession, comprador_id: str | None) -> None:
+    if comprador_id is not None and await db.get(Comprador, comprador_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprador not found")
+
+
+# Estática: va antes de cualquier ruta parametrizada de /cosecha/{...}.
+@router.post(
+    "/cosecha/despacho", response_model=DespachoCosechaResponse, status_code=status.HTTP_201_CREATED
+)
+async def despachar_cosecha(
+    data: DespachoCosechaCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_estricto),
+) -> DespachoCosechaResponse:
+    """Formulario "De -> Para": crea la cosecha y, según el destino, el remito
+    (bodega BOD / comprador FRE / pasero TRA) y el ingreso al pasero, todo en
+    una transacción. Repetir la idempotency_key devuelve lo ya creado."""
+    resultado = await registrar_despacho(db, data, current_user.id)
+    return DespachoCosechaResponse(
+        cosecha=await _enrich_cosecha(resultado.cosecha, db),
+        remito=await remito_response_completo(db, resultado.remito.id),
+        ingreso_pasero=(
+            IngresoPaseroResponse.model_validate(resultado.ingreso) if resultado.ingreso else None
+        ),
+    )
+
+
 @router.post("/cosecha/", response_model=RegistroCosechaResponse, status_code=status.HTTP_201_CREATED)
 async def create_cosecha(
     cosecha_data: RegistroCosechaCreate,
@@ -1739,6 +1783,7 @@ async def create_cosecha(
             return await _enrich_cosecha(existing_row, db)
 
     await _validar_productor(db, cosecha_data.productor_id)
+    await _validar_comprador(db, cosecha_data.comprador_id)
     data = cosecha_data.model_dump()
     data["created_by"] = current_user.id
     f = cosecha_data.fecha
@@ -1748,6 +1793,35 @@ async def create_cosecha(
     await db.flush()
     await db.refresh(registro)
     return await _enrich_cosecha(registro, db)
+
+
+# Campos de la cosecha que el remito y el ingreso al pasero ya "copiaron": si
+# cambian con vínculos existentes, el comprobante y el stock quedan mintiendo.
+# Los demás (observaciones, cuadrilla, n_ciu, acarreo, patente...) son inocuos.
+CAMPOS_COSECHA_SINCRONIZADOS = (
+    "kg_total", "destino", "parcela_id", "comprador_id", "productor_id", "fecha", "variedad",
+    "origen", "comprador", "proveedor_tercero",
+)
+
+
+async def _vinculos_cosecha(db: AsyncSession, cosecha_id: str) -> tuple[int, int]:
+    """(líneas de remito, ingresos al pasero) que referencian la cosecha."""
+    lineas = await db.scalar(
+        select(func.count()).select_from(RemitoLinea).where(RemitoLinea.cosecha_id == cosecha_id)
+    )
+    ingresos = await db.scalar(
+        select(func.count()).select_from(IngresoPasero).where(IngresoPasero.cosecha_id == cosecha_id)
+    )
+    return int(lineas or 0), int(ingresos or 0)
+
+
+def _detalle_vinculos(lineas: int, ingresos: int) -> str:
+    partes = []
+    if lineas:
+        partes.append(f"{lineas} línea(s) de remito")
+    if ingresos:
+        partes.append(f"{ingresos} ingreso(s) al pasero")
+    return " y ".join(partes)
 
 
 @router.put("/cosecha/{cosecha_id}", response_model=RegistroCosechaResponse)
@@ -1764,6 +1838,9 @@ async def update_cosecha(
 
     update_data = cosecha_data.model_dump(exclude_unset=True)
     await _validar_productor(db, update_data.get("productor_id"))
+    await _validar_comprador(db, update_data.get("comprador_id"))
+    lineas, ingresos = await _vinculos_cosecha(db, registro.id)
+    antes = {c: getattr(registro, c) for c in CAMPOS_COSECHA_SINCRONIZADOS}
     for field, value in update_data.items():
         setattr(registro, field, value)
 
@@ -1776,6 +1853,22 @@ async def update_cosecha(
             registro.kg_total = round(registro.cantidad_envases * registro.peso_unitario_kg, 2)
         elif registro.bruto_kg is not None and registro.tara_kg is not None:
             registro.kg_total = round(registro.bruto_kg - registro.tara_kg, 2)
+
+    if lineas or ingresos:
+        cambiados = [
+            c for c in CAMPOS_COSECHA_SINCRONIZADOS
+            if (round(getattr(registro, c), 2) != round(antes[c], 2) if c == "kg_total"
+                else getattr(registro, c) != antes[c])
+        ]
+        if cambiados:
+            # La excepción hace rollback de la sesión: ningún cambio queda aplicado.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"No se pueden modificar {', '.join(cambiados)}: la cosecha tiene "
+                    f"{_detalle_vinculos(lineas, ingresos)} vinculados. Primero hay que resolver el remito o el ingreso vinculado."
+                ),
+            )
 
     await db.flush()
     await db.refresh(registro)
@@ -1792,5 +1885,14 @@ async def delete_cosecha(
     registro = result.scalar_one_or_none()
     if registro is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    lineas, ingresos = await _vinculos_cosecha(db, registro.id)
+    if lineas or ingresos:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"No se puede eliminar la cosecha: tiene {_detalle_vinculos(lineas, ingresos)} "
+                "vinculados. Primero hay que resolver el remito o el ingreso vinculado."
+            ),
+        )
     await db.delete(registro)
     await db.flush()

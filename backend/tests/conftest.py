@@ -195,3 +195,9 @@ async def create_valvula():
             return valvula
 
     return _create
+
+
+@pytest.fixture
+def session_factory():
+    """Sesiones directas a la base de test, para armar o inspeccionar datos."""
+    return TestSessionLocal
