@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 48 (head: `440f0e507ad5_despacho_de_cosecha_remito_tra_pasero_.py`)
+**Migraciones de Alembic:** 49 (head: `079038232ad0_depositos_fijos_paseros_1_3_y_deposito_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -90,28 +90,26 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (49):**
+**Rutas (47):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
 - `/dashboard/admin/whatsapp`
-- `/dashboard/alta-produccion/compradores`
-- `/dashboard/alta-produccion/depositos`
 - `/dashboard/alta-produccion/lotes`
-- `/dashboard/alta-produccion/parametros`
 - `/dashboard/alta-produccion/pasero`
-- `/dashboard/alta-produccion/productores`
 - `/dashboard/alta-produccion/remitos`
-- `/dashboard/alta-produccion/stock`
-- `/dashboard/alta-produccion/ubicaciones`
 - `/dashboard/documentacion/campana`
+- `/dashboard/documentacion/compradores`
 - `/dashboard/documentacion/empresa`
 - `/dashboard/documentacion/fenologia`
 - `/dashboard/documentacion/melgas`
+- `/dashboard/documentacion/parametros`
 - `/dashboard/documentacion/parcelas`
 - `/dashboard/documentacion/precios`
+- `/dashboard/documentacion/productores`
 - `/dashboard/documentacion/riego`
 - `/dashboard/documentacion/trabajadores`
+- `/dashboard/documentacion/ubicaciones`
 - `/dashboard/finanzas/a-pagar`
 - `/dashboard/finanzas/cheques`
 - `/dashboard/finanzas/dashboard`

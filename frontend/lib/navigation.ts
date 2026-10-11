@@ -119,15 +119,9 @@ export const SUB_NAVS: SubNav[] = [
   {
     prefix: '/dashboard/alta-produccion',
     items: [
-      { href: '/dashboard/alta-produccion/pasero',       label: 'Ingreso al pasero', group: 'Pasero' },
-      { href: '/dashboard/alta-produccion/ubicaciones',  label: 'Ubicaciones',       group: 'Pasero' },
-      { href: '/dashboard/alta-produccion/lotes',       label: 'Lotes de pasa',    group: 'Pasa' },
-      { href: '/dashboard/alta-produccion/remitos',      label: 'Remitos',          group: 'Pasa' },
-      { href: '/dashboard/alta-produccion/stock',        label: 'Stock',            group: 'Pasa' },
-      { href: '/dashboard/alta-produccion/productores',  label: 'Productores',       group: 'Maestros' },
-      { href: '/dashboard/alta-produccion/compradores',  label: 'Compradores',       group: 'Maestros' },
-      { href: '/dashboard/alta-produccion/depositos',    label: 'Depósitos',         group: 'Maestros' },
-      { href: '/dashboard/alta-produccion/parametros',   label: 'Parámetros',        group: 'Configuración' },
+      { href: '/dashboard/alta-produccion/pasero',  label: 'Ingreso al pasero', group: 'Pasero' },
+      { href: '/dashboard/alta-produccion/lotes',   label: 'Lotes de pasa',     group: 'Pasa' },
+      { href: '/dashboard/alta-produccion/remitos', label: 'Remitos',           group: 'Pasa' },
     ],
   },
   {
@@ -169,6 +163,11 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/documentacion/precios',      label: 'Precios'      },
       { href: '/dashboard/documentacion/melgas',       label: 'Melgas'       },
       { href: '/dashboard/documentacion/empresa',      label: 'Empresa'      },
+      // Maestros y configuración de Alta de producción.
+      { href: '/dashboard/documentacion/productores',  label: 'Productores',  group: 'Alta de producción' },
+      { href: '/dashboard/documentacion/compradores',  label: 'Compradores',  group: 'Alta de producción' },
+      { href: '/dashboard/documentacion/ubicaciones',  label: 'Ubicaciones',  group: 'Alta de producción' },
+      { href: '/dashboard/documentacion/parametros',   label: 'Parámetros',   group: 'Alta de producción' },
     ],
   },
 ]
