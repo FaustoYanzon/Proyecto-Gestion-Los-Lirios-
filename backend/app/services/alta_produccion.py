@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alta_produccion import (
     Bin,
+    Deposito,
     IngresoPasero,
     Lote,
     ParametroProduccion,
@@ -29,8 +30,8 @@ from app.services import mermas
 # Destinos de cosecha que pueden ingresar al pasero (PASAS es histórico).
 DESTINOS_PASA = {DestinoCosecha.pasas, DestinoCosecha.rama_pasa}
 
-# Clave -> default. `tope_bines_lote` no tiene default: sin valor = sin tope
-# (pendiente de definir con Fausto).
+# Clave -> default. `tope_bines_lote`: 10 bines por lote (definido con Fausto
+# 2026-10-13); borrar el parámetro vuelve a este valor.
 PARAMETROS_DEFAULT: dict[str, Decimal | None] = {
     "kg_por_ficha": Decimal("18"),
     "fichas_por_carro": Decimal("90"),
@@ -39,8 +40,12 @@ PARAMETROS_DEFAULT: dict[str, Decimal | None] = {
     # Peso del carro vacío (PROVISORIO, a confirmar): kg de uva = peso en báscula
     # - tara_carro x carros.
     "tara_carro": Decimal("400"),
-    "tope_bines_lote": None,
+    "tope_bines_lote": Decimal("10"),
 }
+
+# Depósito único de la pasa: no se elige, el lote se asigna solo (resuelto por
+# nombre; lo crea la migración 079038232ad0).
+DEPOSITO_UNICO = "Depósito bodega"
 
 PREFIJO_REMITO: dict[TipoRemito, str] = {
     TipoRemito.salida_fresco: "FRE",
@@ -177,6 +182,21 @@ async def siguiente_numero_lote(
         )
     )
     return int(maximo) + 1
+
+
+async def deposito_unico_id(db: AsyncSession) -> str | None:
+    """Id del depósito único de la pasa (por nombre). None si no existe todavía
+    (p. ej. SQLite de tests, donde no corre la migración que lo crea)."""
+    return await db.scalar(
+        select(Deposito.id).where(func.lower(Deposito.nombre) == DEPOSITO_UNICO.lower())
+    )
+
+
+def tarja_bin(lote: Lote, nro_bin: int) -> str:
+    """Tarja identificatoria del bin: temporada-VAR-calidad-N° lote-N° de bin,
+    p. ej. `2026-FLA-C1-N01-B03`. Única dentro del lote."""
+    var = str(getattr(lote.variedad, "value", lote.variedad)).replace("_", "")[:3].upper()
+    return f"{lote.temporada}-{var}-C{lote.calidad}-N{lote.numero:02d}-B{nro_bin:02d}"
 
 
 async def siguiente_numero_remito(db: AsyncSession, tipo: TipoRemito) -> str:

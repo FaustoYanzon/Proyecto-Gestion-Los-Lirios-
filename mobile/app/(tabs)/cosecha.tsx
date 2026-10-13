@@ -830,6 +830,10 @@ export default function CosechaScreen() {
       <Text style={styles.screenTitle}>Cosecha</Text>
 
       {/* Alta de producción */}
+      <TouchableOpacity style={styles.accesoPrincipal} onPress={() => router.push('/alta-produccion/levantada')} activeOpacity={0.85}>
+        <ICONS.capas size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
+        <Text style={styles.accesoPrincipalText}>Levantar pasa</Text>
+      </TouchableOpacity>
       <View style={styles.accesos}>
         <TouchableOpacity style={styles.acceso} onPress={() => router.push('/alta-produccion/pasero')} activeOpacity={0.85}>
           <ICONS.cosecha size={22} color={colors.tierra} strokeWidth={ICON_STROKE} />
@@ -1004,6 +1008,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
 
+  accesoPrincipal: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    marginHorizontal: 16, marginBottom: 10, minHeight: 56, borderRadius: 12, backgroundColor: colors.verdeCampo,
+  },
+  accesoPrincipalText: { fontSize: 15, fontWeight: '800', color: colors.blanco },
   accesos: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 12 },
   acceso: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,

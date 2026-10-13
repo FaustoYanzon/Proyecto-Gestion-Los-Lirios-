@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up
-from app.models.alta_produccion import Bin, Deposito, EstadoLote, Lote
+from app.models.alta_produccion import Bin, EstadoLote, Lote
 from app.models.parcela import VariedadUva
 from app.models.user import User
 from app.schemas.alta_produccion import (
@@ -28,9 +28,11 @@ from app.schemas.alta_produccion import (
 from app.services import mermas
 from app.services.alta_produccion import (
     Parametros,
+    deposito_unico_id,
     get_parametros,
     get_pasero_or_404,
     siguiente_numero_lote,
+    tarja_bin,
     uva_disponible,
 )
 
@@ -72,11 +74,6 @@ async def _get_lote(db: AsyncSession, lote_id: str, for_update: bool = False) ->
     return lote
 
 
-async def _validar_deposito(db: AsyncSession, deposito_id: str | None) -> None:
-    if deposito_id is not None and await db.get(Deposito, deposito_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deposito not found")
-
-
 def _cerrar(lote: Lote) -> None:
     lote.estado = EstadoLote.cerrado
     lote.closed_at = datetime.now(timezone.utc)
@@ -114,7 +111,6 @@ async def abrir_lote(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> LoteResponse:
-    await _validar_deposito(db, data.deposito_id)
     abierto = await db.scalar(
         select(Lote).where(
             Lote.variedad == data.variedad,
@@ -135,7 +131,8 @@ async def abrir_lote(
         variedad=data.variedad,
         calidad=data.calidad,
         numero=await siguiente_numero_lote(db, temporada, data.variedad, data.calidad),
-        deposito_id=data.deposito_id,
+        # El depósito es único y no se elige: se asigna solo.
+        deposito_id=await deposito_unico_id(db),
         kg_total=Decimal("0"),
         saldo_kg=Decimal("0"),
         tope_bines=params.tope_bines_lote,
@@ -200,6 +197,7 @@ async def agregar_bin(
 
     lote.bines.append(
         Bin(
+            tarja=tarja_bin(lote, len(lote.bines) + 1),
             pasero_id=data.pasero_id,
             fecha=data.fecha or date.today(),
             kg_real=data.kg_real,
@@ -230,9 +228,10 @@ async def cerrar_lote(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="No se puede cerrar un lote sin bines"
         )
-    if data is not None and data.deposito_id is not None:
-        await _validar_deposito(db, data.deposito_id)
-        lote.deposito_id = data.deposito_id
+    if lote.deposito_id is None:
+        # Lotes viejos sin depósito: se les asigna el único. `data` se acepta
+        # por compatibilidad pero el depósito ya no se elige.
+        lote.deposito_id = await deposito_unico_id(db)
     _cerrar(lote)
     await db.flush()
     lote = await _get_lote(db, lote.id)

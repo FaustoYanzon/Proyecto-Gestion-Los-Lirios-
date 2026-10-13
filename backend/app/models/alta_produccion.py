@@ -204,9 +204,12 @@ class Lote(Base):
 
 class Bin(Base):
     __tablename__ = "bines_pasa"
+    __table_args__ = (UniqueConstraint("lote_id", "tarja", name="uq_bin_pasa_tarja"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     lote_id: Mapped[str] = mapped_column(String(36), ForeignKey("lotes_pasa.id"), nullable=False, index=True)
+    # Tarja identificatoria generada por la app (ver services.tarja_bin).
+    tarja: Mapped[str] = mapped_column(String(40), nullable=False)
     pasero_id: Mapped[str] = mapped_column(String(36), ForeignKey("parcelas.id"), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     kg_real: Mapped[Decimal] = mapped_column(KG, nullable=False)

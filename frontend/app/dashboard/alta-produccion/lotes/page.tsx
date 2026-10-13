@@ -7,8 +7,7 @@ import { usePaginatedList } from '@/lib/usePaginatedList'
 import { getParcelas } from '@/lib/api/produccion'
 import { VARIEDAD_VALUES, VARIEDAD_LABELS, type VariedadUva } from '@/lib/api/parcelas'
 import {
-  getLotesPasa, getLotePasa, abrirLotePasa, agregarBinPasa, cerrarLotePasa,
-  getStockPasero, getParametros, getDepositos, errorDetail,
+  getLotesPasa, getLotePasa, abrirLotePasa, cerrarLotePasa, getDepositos, errorDetail,
   type EstadoLote, type LotePasa,
 } from '@/lib/api/altaProduccion'
 import FormError from '@/components/ui/FormError'
@@ -180,7 +179,6 @@ export default function LotesPage() {
 
       {showNuevo && (
         <NuevoLoteModal
-          depositos={depositos.filter((d) => d.is_active)}
           onClose={() => setShowNuevo(false)}
           onCreated={async (l) => { await refrescar(); setShowNuevo(false); setDetalleId(l.id) }}
         />
@@ -188,7 +186,6 @@ export default function LotesPage() {
       {detalleId && (
         <DetalleLoteModal
           loteId={detalleId}
-          depositos={depositos.filter((d) => d.is_active)}
           nombreDeposito={nombreDeposito}
           onClose={() => setDetalleId(null)}
           onChanged={refrescar}
@@ -201,16 +198,14 @@ export default function LotesPage() {
 // ── Abrir lote ────────────────────────────────────────────────────────────────
 
 function NuevoLoteModal({
-  depositos, onClose, onCreated,
+  onClose, onCreated,
 }: {
-  depositos: { id: string; nombre: string }[]
   onClose: () => void
   onCreated: (l: LotePasa) => Promise<void>
 }) {
   const [variedad, setVariedad] = useState<VariedadUva>('sultanina')
   const [calidad, setCalidad] = useState('1')
   const [fecha, setFecha] = useState(TODAY)
-  const [depositoId, setDepositoId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -219,7 +214,7 @@ function NuevoLoteModal({
     setError(null)
     try {
       const l = await abrirLotePasa({
-        variedad, calidad: Number(calidad), fecha: fecha || null, deposito_id: depositoId || null,
+        variedad, calidad: Number(calidad), fecha: fecha || null,
       })
       await onCreated(l)
     } catch (e) {
@@ -256,13 +251,6 @@ function NuevoLoteModal({
             <label className={labelCls}>Fecha (define la campaña)</label>
             <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
           </div>
-          <div>
-            <label className={labelCls}>Depósito (opcional, se puede asignar al cerrar)</label>
-            <select value={depositoId} onChange={(e) => setDepositoId(e.target.value)} className={inputCls}>
-              <option value="">Sin depósito</option>
-              {depositos.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-            </select>
-          </div>
           {error && <FormError description={error} />}
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
@@ -277,18 +265,13 @@ function NuevoLoteModal({
 // ── Detalle del lote ──────────────────────────────────────────────────────────
 
 function DetalleLoteModal({
-  loteId, depositos, nombreDeposito, onClose, onChanged,
+  loteId, nombreDeposito, onClose, onChanged,
 }: {
   loteId: string
-  depositos: { id: string; nombre: string }[]
   nombreDeposito: (id: string | null) => string
   onClose: () => void
   onChanged: () => Promise<unknown>
 }) {
-  const [paseroId, setPaseroId] = useState('')
-  const [kg, setKg] = useState('')
-  const [fecha, setFecha] = useState(TODAY)
-  const [depositoCierre, setDepositoCierre] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const qc = useQueryClient()
@@ -297,15 +280,7 @@ function DetalleLoteModal({
     queryKey: ['ap-lote', loteId], queryFn: () => getLotePasa(loteId),
   })
   const { data: parcelas = [] } = useQuery({ queryKey: ['parcelas'], queryFn: getParcelas, staleTime: 300_000 })
-  const paseros = parcelas.filter((p) => p.tipo === 'pasero' && p.is_active)
   const nombrePasero = (id: string) => parcelas.find((p) => p.id === id)?.nombre ?? '–'
-  const { data: parametros } = useQuery({ queryKey: ['ap-parametros'], queryFn: getParametros, staleTime: 60_000 })
-
-  const { data: stock = [] } = useQuery({
-    queryKey: ['ap-stock', paseroId],
-    queryFn: () => getStockPasero(paseroId),
-    enabled: !!paseroId,
-  })
 
   if (isLoading || !lote) {
     return (
@@ -316,44 +291,15 @@ function DetalleLoteModal({
   }
 
   const abierto = lote.estado === 'abierto'
-  const disponible = paseroId
-    ? stock.find((s) => s.variedad === lote.variedad)?.uva_disponible_kg ?? 0
-    : null
-  // Misma cuenta que el backend: redondeo hacia abajo a 2 decimales.
-  const maxima = disponible != null && parametros
-    ? Math.floor((disponible / parametros.ratio_uva_pasa) * 100) / 100
-    : null
-  const kgNum = Number(kg.replace(',', '.'))
-  const excede = maxima != null && kgNum > maxima
-  const kgValido = /^\d+([.,]\d{1,2})?$/.test(kg.trim()) && kgNum > 0
-
-  async function refrescarTodo() {
-    await qc.invalidateQueries({ queryKey: ['ap-lote', loteId] })
-    await onChanged()
-  }
-
-  async function agregarBin() {
-    if (!lote) return
-    setSaving(true)
-    setError(null)
-    try {
-      await agregarBinPasa(lote.id, { pasero_id: paseroId, kg_real: kg.trim().replace(',', '.'), fecha: fecha || null })
-      setKg('')
-      await refrescarTodo()
-    } catch (e) {
-      setError(errorDetail(e))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   async function cerrar() {
     if (!lote) return
     setSaving(true)
     setError(null)
     try {
-      await cerrarLotePasa(lote.id, depositoCierre || null)
-      await refrescarTodo()
+      await cerrarLotePasa(lote.id)
+      await qc.invalidateQueries({ queryKey: ['ap-lote', loteId] })
+      await onChanged()
     } catch (e) {
       setError(errorDetail(e))
     } finally {
@@ -387,7 +333,6 @@ function DetalleLoteModal({
               <p className="text-lg font-bold font-mono text-gray-900">
                 {lote.cantidad_bines}{lote.tope_bines != null ? ` / ${lote.tope_bines}` : ''}
               </p>
-              {lote.tope_bines == null && <p className="text-xs text-gray-400">Sin tope</p>}
             </div>
             <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
               <p className="text-xs text-gray-500 uppercase">Depósito</p>
@@ -398,13 +343,13 @@ function DetalleLoteModal({
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Bines</h3>
             {lote.bines.length === 0 ? (
-              <p className="text-sm text-gray-400">Todavía no tiene bines</p>
+              <p className="text-sm text-gray-400">Todavía no tiene bines. Se cargan desde Levantada.</p>
             ) : (
               <div className="overflow-x-auto border border-gray-100 rounded-lg">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className={thCls}>#</th>
+                      <th className={thCls}>Tarja</th>
                       <th className={thCls}>Fecha</th>
                       <th className={thCls}>Pasero</th>
                       <th className={thRCls}>Kg pasa</th>
@@ -412,9 +357,9 @@ function DetalleLoteModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {lote.bines.map((b, i) => (
+                    {lote.bines.map((b) => (
                       <tr key={b.id}>
-                        <td className="px-4 py-2 text-gray-500">{i + 1}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-gray-800">{b.tarja}</td>
                         <td className="px-4 py-2 text-gray-700">{fmtFecha(b.fecha)}</td>
                         <td className="px-4 py-2 text-gray-700">{nombrePasero(b.pasero_id)}</td>
                         <td className="px-4 py-2 text-right font-mono text-gray-900">{fmtKg(b.kg_real)}</td>
@@ -428,59 +373,17 @@ function DetalleLoteModal({
           </div>
 
           {abierto && (
-            <div className="rounded-lg border border-gray-200 p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700">Agregar bin</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className={labelCls}>Pasero</label>
-                  <select value={paseroId} onChange={(e) => setPaseroId(e.target.value)} className={inputCls}>
-                    <option value="">— Seleccionar —</option>
-                    {paseros.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Kg de pasa (báscula)</label>
-                  <input type="text" inputMode="decimal" value={kg} onChange={(e) => setKg(e.target.value)} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Fecha</label>
-                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
-                </div>
-              </div>
-              {disponible != null && maxima != null && parametros && (
-                <p className={`text-xs ${excede ? 'text-red-600' : 'text-gray-500'}`}>
-                  Uva disponible de {VARIEDAD_LABELS[lote.variedad]} en este pasero: <b>{fmtKg(disponible)} kg</b> ·
-                  Pasa máxima levantable ({fmtKg(parametros.ratio_uva_pasa)}:1): <b>{fmtKg(maxima)} kg</b>
-                  {kgValido && !excede && ` · Va a descontar ${fmtKg(kgNum * parametros.ratio_uva_pasa)} kg de uva`}
-                </p>
-              )}
-              <div className="flex justify-end">
-                <button onClick={agregarBin} disabled={saving || !paseroId || !kgValido} className={btnPrimary}>
-                  {saving ? 'Guardando...' : 'Agregar bin'}
-                </button>
-              </div>
-
-              <div className="border-t border-gray-100 pt-3 space-y-2">
-                <h3 className="text-sm font-semibold text-gray-700">Cerrar lote</h3>
-                <p className="text-xs text-gray-500">
-                  {lote.tope_bines != null
-                    ? `Se cierra solo al llegar a ${lote.tope_bines} bines. `
-                    : 'No hay tope de bines: se cierra a mano. '}
-                  No se puede cerrar sin bines; una vez cerrado no admite más bines.
-                </p>
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div className="min-w-[200px]">
-                    <label className={labelCls}>Depósito</label>
-                    <select value={depositoCierre} onChange={(e) => setDepositoCierre(e.target.value)} className={inputCls}>
-                      <option value="">{lote.deposito_id ? 'Mantener el actual' : 'Sin depósito'}</option>
-                      {depositos.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-                    </select>
-                  </div>
-                  <button onClick={cerrar} disabled={saving || lote.cantidad_bines === 0} className={btnSecondary}>
-                    Cerrar lote
-                  </button>
-                </div>
-              </div>
+            <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700">Cerrar lote</h3>
+              <p className="text-xs text-gray-500">
+                {lote.tope_bines != null
+                  ? `Se cierra solo al llegar a ${lote.tope_bines} bines. `
+                  : 'No hay tope de bines: se cierra a mano. '}
+                No se puede cerrar sin bines; una vez cerrado no admite más bines.
+              </p>
+              <button onClick={cerrar} disabled={saving || lote.cantidad_bines === 0} className={btnSecondary}>
+                Cerrar lote
+              </button>
             </div>
           )}
 

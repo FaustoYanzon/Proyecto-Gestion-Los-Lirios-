@@ -199,6 +199,7 @@ class LoteCierre(BaseModel):
 class BinResponse(BaseModel):
     id: str
     lote_id: str
+    tarja: str
     pasero_id: str
     fecha: date
     kg_real: Decimal

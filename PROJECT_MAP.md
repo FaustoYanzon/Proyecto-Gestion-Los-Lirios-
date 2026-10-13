@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-11
+> Última generación: 2026-10-13
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 49 (head: `079038232ad0_depositos_fijos_paseros_1_3_y_deposito_.py`)
+**Migraciones de Alembic:** 50 (head: `5b2f8c1d7a44_tarja_de_bines_y_deposito_unico.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -90,11 +90,12 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (47):**
+**Rutas (48):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
 - `/dashboard/admin/whatsapp`
+- `/dashboard/alta-produccion/levantada`
 - `/dashboard/alta-produccion/lotes`
 - `/dashboard/alta-produccion/pasero`
 - `/dashboard/alta-produccion/remitos`
@@ -156,7 +157,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (13):**
+**Pantallas (14):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -167,6 +168,7 @@ repo/
 - `(tabs)/perfil.tsx`
 - `(tabs)/riego.tsx`
 - `(tabs)/tareas.tsx`
+- `alta-produccion/levantada.tsx`
 - `alta-produccion/lotes.tsx`
 - `alta-produccion/pasero.tsx`
 - `estado-campana.tsx`

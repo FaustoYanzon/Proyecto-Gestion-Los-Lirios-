@@ -338,6 +338,7 @@ export interface LotePasa {
 
 export interface BinPasa {
   id: string
+  tarja: string
   pasero_id: string
   fecha: string
   kg_real: number

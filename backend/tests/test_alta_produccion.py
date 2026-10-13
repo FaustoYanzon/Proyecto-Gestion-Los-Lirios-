@@ -227,6 +227,66 @@ async def test_tope_de_bines_cierra_el_lote_y_rechaza_mas(client, create_user, c
     assert tercero.status_code == 409
 
 
+async def test_tarja_correlativa_y_unica_por_lote(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    await _ingresar_uva(client, headers, pasero.id, variedad="flame", kg="8000")
+    lote = (await client.post(
+        "/lotes-pasa/", json={"variedad": "flame", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
+    )).json()
+    for _ in range(3):
+        resp = await client.post(
+            f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "340"}, headers=headers
+        )
+        assert resp.status_code == 201, resp.text
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    # temporada 2025 (marzo 2026) - FLA - calidad 1 - lote 1 - bin 1..3
+    assert [b["tarja"] for b in detalle["bines"]] == [
+        "2025-FLA-C1-N01-B01", "2025-FLA-C1-N01-B02", "2025-FLA-C1-N01-B03",
+    ]
+
+
+async def test_lote_mezcla_paseros_y_cierra_al_bin_10(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    p1 = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    p2 = await create_parcela(nombre="Pasero 2", tipo=TipoParcela.pasero)
+    for p in (p1, p2):
+        await _ingresar_uva(client, headers, p.id, kg="20000")
+    lote = (await client.post(
+        "/lotes-pasa/", json={"variedad": "sultanina", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
+    )).json()
+    assert lote["tope_bines"] == 10
+    ultimo = None
+    for i in range(10):
+        ultimo = await client.post(
+            f"/lotes-pasa/{lote['id']}/bines",
+            json={"pasero_id": (p1 if i % 2 == 0 else p2).id, "kg_real": "350"}, headers=headers,
+        )
+        assert ultimo.status_code == 201, ultimo.text
+    assert ultimo.json()["estado"] == "cerrado"
+    assert ultimo.json()["cantidad_bines"] == 10
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    assert {b["pasero_id"] for b in detalle["bines"]} == {p1.id, p2.id}
+    assert detalle["bines"][-1]["tarja"].endswith("-B10")
+    undecimo = await client.post(
+        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": p1.id, "kg_real": "350"}, headers=headers
+    )
+    assert undecimo.status_code == 409
+
+
+async def test_el_lote_se_asigna_al_deposito_unico(client, create_user):
+    headers = await _auth(client, create_user)
+    dep = (await client.post("/alta-produccion/depositos", json={"nombre": "Depósito bodega"}, headers=headers)).json()
+    # Aunque el cliente mande otro depósito, manda el único.
+    otro = (await client.post("/alta-produccion/depositos", json={"nombre": "Otro"}, headers=headers)).json()
+    lote = (await client.post(
+        "/lotes-pasa/",
+        json={"variedad": "sultanina", "calidad": 1, "fecha": "2026-03-01", "deposito_id": otro["id"]},
+        headers=headers,
+    )).json()
+    assert lote["deposito_id"] == dep["id"]
+
+
 async def test_no_se_cierra_un_lote_sin_bines(client, create_user):
     headers = await _auth(client, create_user)
     lote = (await client.post(
@@ -443,7 +503,7 @@ async def test_parametros_defaults_y_tope_configurable(client, create_user):
     assert defaults["fichas_por_carro"] == 90
     assert Decimal(defaults["ratio_uva_pasa"]) == Decimal("4")
     assert Decimal(defaults["kg_nominal_bin"]) == Decimal("350")
-    assert defaults["tope_bines_lote"] is None
+    assert defaults["tope_bines_lote"] == 10  # 1 lote = 10 bines
 
     cambiado = (await client.patch(
         "/alta-produccion/parametros", json={"ratio_uva_pasa": "4.5", "tope_bines_lote": 10}, headers=headers
@@ -451,10 +511,11 @@ async def test_parametros_defaults_y_tope_configurable(client, create_user):
     assert Decimal(cambiado["ratio_uva_pasa"]) == Decimal("4.5")
     assert cambiado["tope_bines_lote"] == 10
 
-    sin_tope = (await client.patch(
+    # Borrar el parámetro (null) vuelve al default de 10.
+    reseteado = (await client.patch(
         "/alta-produccion/parametros", json={"tope_bines_lote": None}, headers=headers
     )).json()
-    assert sin_tope["tope_bines_lote"] is None
+    assert reseteado["tope_bines_lote"] == 10
 
 
 async def test_productor_nombre_duplicado_rechaza(client, create_user):

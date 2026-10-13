@@ -116,6 +116,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="alta-produccion/levantada"
+            options={{
+              headerShown: true,
+              title: 'Levantar pasa',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
             name="alta-produccion/lotes"
             options={{
               headerShown: true,

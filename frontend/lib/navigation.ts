@@ -120,6 +120,7 @@ export const SUB_NAVS: SubNav[] = [
     prefix: '/dashboard/alta-produccion',
     items: [
       { href: '/dashboard/alta-produccion/pasero',  label: 'Ingreso al pasero', group: 'Pasero' },
+      { href: '/dashboard/alta-produccion/levantada', label: 'Levantada',        group: 'Pasa' },
       { href: '/dashboard/alta-produccion/lotes',   label: 'Lotes de pasa',     group: 'Pasa' },
       { href: '/dashboard/alta-produccion/remitos', label: 'Remitos',           group: 'Pasa' },
     ],

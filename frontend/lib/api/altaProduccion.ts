@@ -288,6 +288,7 @@ export interface LotePasa {
 export interface BinPasa {
   id: string
   lote_id: string
+  tarja: string
   pasero_id: string
   fecha: string
   kg_real: number
@@ -328,11 +329,11 @@ export async function getLotePasa(id: string): Promise<LotePasaDetalle> {
   return { ...parseLote(data), bines }
 }
 
+// El depósito es único y lo asigna el backend: ya no se elige.
 export async function abrirLotePasa(payload: {
   variedad: VariedadUva
   calidad: number
   fecha?: string | null
-  deposito_id?: string | null
 }): Promise<LotePasa> {
   const { data } = await api.post<Record<string, unknown>>('/lotes-pasa/', payload)
   return parseLote(data)
@@ -346,11 +347,8 @@ export async function agregarBinPasa(
   return parseLote(data)
 }
 
-export async function cerrarLotePasa(loteId: string, deposito_id?: string | null): Promise<LotePasa> {
-  const { data } = await api.post<Record<string, unknown>>(
-    `/lotes-pasa/${loteId}/cerrar`,
-    deposito_id ? { deposito_id } : {},
-  )
+export async function cerrarLotePasa(loteId: string): Promise<LotePasa> {
+  const { data } = await api.post<Record<string, unknown>>(`/lotes-pasa/${loteId}/cerrar`, {})
   return parseLote(data)
 }
 

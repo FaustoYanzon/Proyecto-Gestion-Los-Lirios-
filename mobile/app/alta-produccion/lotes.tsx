@@ -1,13 +1,14 @@
-// Lotes de pasa: listar, abrir lote, agregar bines y cerrar. Solo encargado o
-// superior. Requiere conexión (el backend valida la uva disponible del pasero
-// en cada bin y no deduplica). Depósito y entregas (remitos) quedan en la web.
+// Lotes de pasa: listar, abrir lote y cerrar. Los bines se levantan desde
+// "Levantar pasa" (pantalla aparte, con su tarja). Solo encargado o superior.
+// Requiere conexión. El depósito es único y lo asigna el backend; las entregas
+// (remitos) quedan en la web.
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'expo-router'
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Modal,
   RefreshControl,
   ActivityIndicator,
@@ -20,10 +21,9 @@ import { useAuthStore } from '../../store/authStore'
 import { VARIEDAD_LABELS } from '../../lib/types'
 import type { Parcela, VariedadUva } from '../../lib/types'
 import {
-  VARIEDADES, puedeAltaProduccion, fmtKg, fmtFecha, hoyISO, kgValido, kgToString, errorDetail,
-  getLotesPasa, getLotePasa, abrirLotePasa, agregarBinPasa, cerrarLotePasa,
-  getStockPasero, getParametros, getPaseros,
-  type EstadoLote, type LotePasa, type LotePasaDetalle, type ParametrosProduccion, type StockPaseroItem,
+  VARIEDADES, puedeAltaProduccion, fmtKg, fmtFecha, hoyISO, errorDetail,
+  getLotesPasa, getLotePasa, abrirLotePasa, cerrarLotePasa, getPaseros,
+  type EstadoLote, type LotePasa, type LotePasaDetalle,
 } from '../../lib/altaProduccion'
 
 type Filtro = EstadoLote | 'todos'
@@ -33,12 +33,12 @@ const loteNombre = (l: LotePasa) =>
   `${VARIEDAD_LABELS[l.variedad] ?? l.variedad} C${l.calidad} · N° ${l.numero} (${l.temporada}/${l.temporada + 1})`
 
 export default function LotesScreen() {
+  const router = useRouter()
   const role = useAuthStore((s) => s.user?.role)
 
   const [filtro, setFiltro] = useState<Filtro>('abierto')
   const [lotes, setLotes] = useState<LotePasa[]>([])
   const [paseros, setPaseros] = useState<Parcela[]>([])
-  const [parametros, setParametros] = useState<ParametrosProduccion | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -49,12 +49,11 @@ export default function LotesScreen() {
   const fetchData = useCallback(async () => {
     setLoadError(null)
     try {
-      const [ls, pas, par] = await Promise.all([
-        getLotesPasa(filtro === 'todos' ? undefined : filtro), getPaseros(), getParametros(),
+      const [ls, pas] = await Promise.all([
+        getLotesPasa(filtro === 'todos' ? undefined : filtro), getPaseros(),
       ])
       setLotes(ls)
       setPaseros(pas)
-      setParametros(par)
     } catch (e) {
       setLoadError(errorDetail(e, 'No se pudieron cargar los lotes'))
     } finally {
@@ -138,9 +137,9 @@ export default function LotesScreen() {
         <DetalleLoteModal
           loteId={detalleId}
           paseros={paseros}
-          parametros={parametros}
           onClose={() => setDetalleId(null)}
           onChanged={fetchData}
+          onLevantar={() => { setDetalleId(null); router.push('/alta-produccion/levantada') }}
         />
       )}
     </View>
@@ -248,19 +247,16 @@ function NuevoLoteModal({
 // ── Detalle del lote (bines + cierre) ─────────────────────────────────────────
 
 function DetalleLoteModal({
-  loteId, paseros, parametros, onClose, onChanged,
+  loteId, paseros, onClose, onChanged, onLevantar,
 }: {
   loteId: string
   paseros: Parcela[]
-  parametros: ParametrosProduccion | null
   onClose: () => void
   onChanged: () => Promise<void>
+  onLevantar: () => void
 }) {
   const [lote, setLote] = useState<LotePasaDetalle | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [paseroId, setPaseroId] = useState('')
-  const [kg, setKg] = useState('')
-  const [stock, setStock] = useState<StockPaseroItem[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const submittingRef = useRef(false)
@@ -278,40 +274,7 @@ function DetalleLoteModal({
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Uva disponible del pasero elegido (para avisar antes de que el backend rechace).
-  useEffect(() => {
-    if (!paseroId) { setStock([]); return }
-    getStockPasero(paseroId).then(setStock).catch(() => setStock([]))
-  }, [paseroId])
-
   const abierto = lote?.estado === 'abierto'
-  const disponible = lote && paseroId ? stock.find((s) => s.variedad === lote.variedad)?.uva_disponible_kg ?? 0 : null
-  // Misma cuenta que el backend: redondeo hacia abajo a 2 decimales.
-  const maxima = disponible != null && parametros
-    ? Math.floor((disponible / parametros.ratio_uva_pasa) * 100) / 100
-    : null
-  const kgNum = Number(kg.trim().replace(',', '.'))
-  const excede = maxima != null && kgNum > maxima
-  const kgOk = kgValido(kg)
-
-  async function agregarBin() {
-    if (!lote || submittingRef.current) return
-    submittingRef.current = true
-    setSaving(true)
-    setError(null)
-    try {
-      await agregarBinPasa(lote.id, { pasero_id: paseroId, kg_real: kgToString(kg), fecha: hoyISO() })
-      setKg('')
-      await cargar()
-      if (paseroId) setStock(await getStockPasero(paseroId))
-      await onChanged()
-    } catch (e) {
-      setError(errorDetail(e))
-    } finally {
-      submittingRef.current = false
-      setSaving(false)
-    }
-  }
 
   function confirmarCierre() {
     if (!lote) return
@@ -382,10 +345,10 @@ function DetalleLoteModal({
             {lote.bines.length === 0 ? (
               <Text style={[styles.muted, { marginBottom: 16 }]}>Todavía no tiene bines</Text>
             ) : (
-              lote.bines.map((b, i) => (
+              lote.bines.map((b) => (
                 <View key={b.id} style={styles.binRow}>
-                  <Text style={styles.binIdx}>{i + 1}</Text>
                   <View style={{ flex: 1 }}>
+                    <Text style={styles.binTarja}>{b.tarja}</Text>
                     <Text style={styles.binKg}>{fmtKg(b.kg_real)} kg de pasa</Text>
                     <Text style={styles.metaText}>
                       {nombrePasero(b.pasero_id)} · {fmtFecha(b.fecha)} · uva {fmtKg(b.uva_consumida_kg)} kg
@@ -397,39 +360,8 @@ function DetalleLoteModal({
 
             {abierto && (
               <>
-                <Text style={[styles.sectionLabel, { marginTop: 16 }]}>AGREGAR BIN</Text>
-                <Text style={styles.fieldLabel}>PASERO *</Text>
-                <View style={styles.chipGroup}>
-                  {paseros.map((p) => (
-                    <Chip key={p.id} label={p.nombre} active={paseroId === p.id} onPress={() => setPaseroId(p.id)} />
-                  ))}
-                  {paseros.length === 0 && <Text style={styles.muted}>No hay paseros activos</Text>}
-                </View>
-
-                <Text style={styles.fieldLabel}>KG DE PASA (BÁSCULA) *</Text>
-                <TextInput
-                  style={[styles.input, styles.inputHighlight]}
-                  value={kg}
-                  onChangeText={setKg}
-                  placeholder="0"
-                  placeholderTextColor={colors.niebla}
-                  keyboardType="decimal-pad"
-                />
-                {disponible != null && maxima != null && parametros && (
-                  <Text style={[styles.hint, excede && { color: colors.sangre }]}>
-                    Uva disponible de {VARIEDAD_LABELS[lote.variedad] ?? lote.variedad} en este pasero: {fmtKg(disponible)} kg
-                    {' · '}Pasa máxima levantable ({fmtKg(parametros.ratio_uva_pasa)}:1): {fmtKg(maxima)} kg
-                    {kgOk && !excede ? ` · Va a descontar ${fmtKg(kgNum * parametros.ratio_uva_pasa)} kg de uva` : ''}
-                  </Text>
-                )}
-                <TouchableOpacity
-                  style={[styles.saveBtn, { flex: 0, marginTop: 8 }, (saving || !paseroId || !kgOk) && { opacity: 0.5 }]}
-                  onPress={agregarBin}
-                  disabled={saving || !paseroId || !kgOk}
-                >
-                  {saving
-                    ? <ActivityIndicator color={colors.blanco} size="small" />
-                    : <Text style={styles.saveBtnText}>Agregar bin</Text>}
+                <TouchableOpacity style={[styles.saveBtn, { flex: 0, marginTop: 16 }]} onPress={onLevantar} activeOpacity={0.85}>
+                  <Text style={styles.saveBtnText}>Levantar pasa en este lote</Text>
                 </TouchableOpacity>
 
                 <Text style={[styles.sectionLabel, { marginTop: 24 }]}>CERRAR LOTE</Text>
@@ -555,6 +487,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: colors.blanco, borderRadius: 12, padding: 12, marginBottom: 6,
   },
+  binTarja: { fontSize: 12, fontWeight: '800', color: colors.burdeos[600], letterSpacing: 0.4, marginBottom: 2 },
   binIdx: { fontSize: 13, fontWeight: '700', color: colors.niebla, width: 20 },
   binKg: { fontSize: 15, fontWeight: '700', color: colors.ink },
 })
