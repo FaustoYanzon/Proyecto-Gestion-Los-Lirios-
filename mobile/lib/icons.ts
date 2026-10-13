@@ -11,7 +11,7 @@
 // Requiere: npx expo install lucide-react-native react-native-svg
 
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, BookOpen, Settings, LogOut, ClipboardList, Droplet, FlaskConical, ShoppingBasket, Grape, Wheat, Bell, User, Search, Layers, BarChart3, AlertTriangle, Sun, Gauge, History,
+  LayoutDashboard, Map, Sprout, DollarSign, BookOpen, Settings, LogOut, ClipboardList, Droplet, FlaskConical, Grape, Wheat, Bell, User, Search, Layers, BarChart3, AlertTriangle, Sun, Gauge, History,
   X, Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Plus, Minus, Trash2, CheckCircle2, Leaf, Pencil, Fingerprint, AlertCircle, XCircle, MapPin, Camera, AtSign, Mail, ShieldCheck, Lock, Eye, EyeOff, Gift, CloudUpload, Clock, Play, RefreshCw, Wind, Zap, CloudOff, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, SquareCheck, Square,
 } from 'lucide-react-native'
 
@@ -26,8 +26,8 @@ export const ICONS = {
   tarea:           ClipboardList,
   riego:           Droplet,
   fitosanitario:   FlaskConical,
-  cosecha:         ShoppingBasket,
-  campana:         Grape,
+  cosecha:         Grape,          // racimo de uva
+  campana:         Sprout,
   parcela:         Wheat,
   notificacion:    Bell,
   usuario:         User,

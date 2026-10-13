@@ -109,7 +109,7 @@ export default function RootLayout() {
             name="alta-produccion/pasero"
             options={{
               headerShown: true,
-              title: 'Ingreso al pasero',
+              title: 'Ingresos al pasero',
               headerStyle: { backgroundColor: colors.burdeos[600] },
               headerTintColor: colors.blanco,
               headerTitleStyle: { fontWeight: 'bold' },

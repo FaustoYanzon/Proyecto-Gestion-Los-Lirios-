@@ -20,8 +20,11 @@ export interface WizardStep<T> {
 }
 
 interface WizardProps<T> {
-  steps: WizardStep<T>[];
+  /** Lista fija, o función del valor actual (pasos que dependen de lo elegido antes). */
+  steps: WizardStep<T>[] | ((value: T) => WizardStep<T>[]);
   initialValue: T;
+  /** Paso desde el que arranca (0 = el primero). Default: 0. */
+  initialStep?: number;
   /** Texto del header del wizard ("Nueva tarea", "Nuevo riego", etc.) */
   headerTitle: string;
   /** Callback al confirmar. Si tira, el botón muestra error y deja reintentar. */
@@ -33,18 +36,20 @@ interface WizardProps<T> {
 }
 
 export function Wizard<T>({
-  steps,
+  steps: stepsProp,
   initialValue,
+  initialStep = 0,
   headerTitle,
   onConfirm,
   onCancel,
   confirmLabel = '✓ Confirmar',
 }: WizardProps<T>) {
-  const [stepIdx, setStepIdx] = useState(0);
+  const [stepIdx, setStepIdx] = useState(initialStep);
   const [value, setValue] = useState<T>(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const steps = typeof stepsProp === 'function' ? stepsProp(value) : stepsProp;
   const isLast = stepIdx === steps.length - 1;
   const current = steps[stepIdx]!;
   const StepComponent = current.Component;

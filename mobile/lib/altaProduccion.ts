@@ -74,6 +74,7 @@ export interface ParametrosProduccion {
   fichas_por_carro: number
   ratio_uva_pasa: number
   kg_nominal_bin: number
+  tara_carro: number
   tope_bines_lote: number | null
 }
 
@@ -84,6 +85,7 @@ export async function getParametros(): Promise<ParametrosProduccion> {
     fichas_por_carro: num(data.fichas_por_carro),
     ratio_uva_pasa: num(data.ratio_uva_pasa),
     kg_nominal_bin: num(data.kg_nominal_bin),
+    tara_carro: num(data.tara_carro),
     tope_bines_lote: data.tope_bines_lote == null ? null : num(data.tope_bines_lote),
   }
 }
@@ -134,7 +136,7 @@ export type TipoEnvaseDespacho = 'caja' | 'bin' | 'chasis' | 'ficha' | 'vin' | '
 
 export const PARA_LABELS: Record<ParaDespacho, string> = {
   bodega: 'Bodega',
-  comprador: 'Comprador',
+  comprador: 'Uva en fresco',
   pasero: 'Pasero',
 }
 
