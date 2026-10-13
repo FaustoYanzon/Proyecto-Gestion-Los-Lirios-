@@ -234,6 +234,18 @@ function PasoDe({ value, onChange }: StepProps) {
   )
 }
 
+// De y Para van juntos: un solo paso con la ruta de la uva.
+function PasoRuta(props: StepProps) {
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>DE</Text>
+      <PasoDe {...props} />
+      <Text style={[styles.sectionLabel, { marginTop: 6 }]}>PARA</Text>
+      <PasoPara {...props} />
+    </View>
+  )
+}
+
 function puedeDe(f: DespachoForm, parrales: Parcela[]): boolean {
   if (!FECHA_REGEX.test(f.fecha)) return false
   if (f.origen === 'propio') {
@@ -627,15 +639,18 @@ export default function CosechaScreen() {
   useEffect(() => { if (puedeDespachar) fetchData(); else setLoading(false) }, [fetchData, puedeDespachar])
 
   // Maestros (todos requieren encargado o superior). Cada uno falla por separado.
-  useEffect(() => {
-    if (!puedeDespachar) return
+  // Se recargan al montar y cada vez que se abre el formulario: la pestaña queda
+  // montada y un comprador / productor dado de alta en la web no aparecería.
+  const cargarMaestros = useCallback(() => {
     const merge = (patch: Partial<Maestros>) => setMaestros((prev) => ({ ...prev, ...patch }))
     getParrales().then((parrales) => merge({ parrales })).catch(() => { /* sin lista no se puede elegir parral */ })
     getPaseros().then((paseros) => merge({ paseros })).catch(() => { /* idem pasero */ })
     getProductores().then((ps) => merge({ productores: ps.filter((p) => p.is_active) })).catch(() => { /* idem */ })
     getCompradores().then((cs) => merge({ compradores: cs.filter((c) => c.is_active) })).catch(() => { /* idem */ })
     getParametros().then((parametros) => merge({ parametros })).catch(() => { /* sin tara no se puede pesar un carro */ })
-  }, [puedeDespachar])
+  }, [])
+
+  useEffect(() => { if (puedeDespachar) cargarMaestros() }, [puedeDespachar, cargarMaestros])
 
   function onRefresh() {
     setRefreshing(true)
@@ -647,6 +662,7 @@ export default function CosechaScreen() {
   function abrirWizard(desde: DespachoForm, paso = 0) {
     setInicial(desde)
     setPasoInicial(paso)
+    cargarMaestros()
     setWizardKey((k) => k + 1)
     setResultado(null)
     setPdfError(null)
@@ -663,14 +679,9 @@ export default function CosechaScreen() {
   function pasosPara(form: DespachoForm): WizardStep<DespachoForm>[] {
     const pasos: WizardStep<DespachoForm>[] = [
       {
-        title: '¿De dónde sale la uva?',
-        Component: PasoDe,
-        canAdvance: (f) => puedeDe(f, maestros.parrales),
-      },
-      {
-        title: '¿A dónde va?',
-        Component: PasoPara,
-        canAdvance: puedePara,
+        title: '¿De dónde a dónde va la uva?',
+        Component: PasoRuta,
+        canAdvance: (f) => puedeDe(f, maestros.parrales) && puedePara(f),
       },
       {
         title: form.para === 'pasero' ? '¿Cuánto pesa el carro?' : '¿Cuánto pesa?',
@@ -916,7 +927,7 @@ export default function CosechaScreen() {
                 <TouchableOpacity
                   style={styles.cancelBtn}
                   // Mismo origen y destino; falta solo el peso del próximo carro.
-                  onPress={() => abrirWizard({ ...resultado.form, peso_carro: '', carro_incompleto: false }, 2)}
+                  onPress={() => abrirWizard({ ...resultado.form, peso_carro: '', carro_incompleto: false }, 1)}
                 >
                   <Text style={styles.cancelBtnText}>Otro carro</Text>
                 </TouchableOpacity>
@@ -1096,6 +1107,10 @@ const styles = StyleSheet.create({
   cerrarLinkText: { fontSize: 14, fontWeight: '700', color: colors.burdeos[600], padding: 8 },
 
   // Pasos del wizard
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.niebla,
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
+  },
   fieldLabel: {
     fontSize: 11, fontWeight: '700', color: colors.ink60,
     letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
