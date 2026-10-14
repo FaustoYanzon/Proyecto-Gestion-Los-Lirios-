@@ -45,6 +45,7 @@ class DatosTarjaPdf:
     lote_numero: int
     bin_numero: int
     bin_total: int | None
+    kg: Decimal
     observaciones: str | None = None
 
 
@@ -97,6 +98,7 @@ def generar_pdf_tarja(d: DatosTarjaPdf) -> bytes:
                 "calidad": CALIDAD_LABELS.get(d.calidad, str(d.calidad)),
                 "lote": f"N° {d.lote_numero} · campaña {d.temporada}/{d.temporada + 1}",
                 "bin": f"{d.bin_numero} de {d.bin_total}" if d.bin_total else str(d.bin_numero),
+                "kg": _fmt_kg(d.kg),
                 "observaciones": d.observaciones,
             },
         },

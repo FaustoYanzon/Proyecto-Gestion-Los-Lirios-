@@ -190,6 +190,7 @@ async def _pdf_tarja(db: AsyncSession, lote_id: str, bin_id: str) -> Response:
             lote_numero=lote.numero,
             bin_numero=nro,
             bin_total=lote.tope_bines,
+            kg=b.kg_real,
             observaciones=b.observaciones,
         )
     )

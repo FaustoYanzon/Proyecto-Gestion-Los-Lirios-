@@ -30,14 +30,14 @@ Segundo eslabón de la cadena de la pasa, después del ingreso de uva al pasero 
 Fausto pidió cambiar el flujo (web y mobile):
 - **Lotes de pasa**: abrir y cerrar lotes con pestañas **Abiertos / Cerrados / Todos** (default Abiertos), igual en web y mobile.
 - **Levantada**: lista **solo los lotes abiertos**; al elegir uno se abre su ventana para **agregar un bin/bolsón** (pasero, kg reales, **observaciones opcionales por bin**) y, a la derecha de cada bin, **Imprimir tarja**.
-- **Tarja**: PDF de **media hoja A4 horizontal (A5 apaisado)**; los dos lados repiten Fecha, Variedad, Calidad, Lote y N° de bin (con el código de tarja y las observaciones), separados por una línea de doblez.
-- **Hoja del lote**: al completarse (lote cerrado) se imprime una hoja A4 con los datos del lote y el listado de bines/bolsones (tarja, fecha, pasero, kg, observaciones, total y diferencia contra el teórico).
+- **Tarja**: PDF de **media hoja A4 horizontal (A5 apaisado)**; los dos lados repiten Fecha, Variedad, Calidad, Lote, **Peso (kg)** y N° de bin (con el código de tarja y las observaciones), separados por una línea de doblez.
+- **Hoja del lote**: al completarse (lote cerrado) se imprime una hoja A4 con los datos del lote y el listado de bines/bolsones (N° y tarja, fecha, pasero, kg, total y diferencia contra el teórico); las observaciones de cada bin van en una fila de ancho completo debajo, porque una columna angosta se salía de la hoja en xhtml2pdf.
 - Backend: migración `7c4e1a9d3b62` (`bines_pasa.observaciones`), `GET /lotes-pasa/{id}/bines/{bin}/tarja-pdf`, `GET /lotes-pasa/{id}/pdf` (409 si el lote no está cerrado) y links firmados de 5 min para mobile (`POST .../tarja-pdf-link`, `.../pdf-link`, descarga `GET /lotes-pasa/descarga/{token}`).
 - Componente compartido: `LoteDetalleModal` (web) y `LoteModal` (mobile), con modo `levantada` / `lotes`.
 
 ## Fuera de alcance / pendiente
 
-- La tarja no incluye el peso del bin (no se pidió); se puede sumar.
+- xhtml2pdf: las tablas con varias columnas de ancho fijo no respetan los anchos (la última columna se angosta y se sale); evitar columnas de texto libre en tablas de PDF, usar una fila de ancho completo.
 - Edición o anulación de bines (no existe a propósito, como los remitos).
 - Conciliación depósito → comprador y entregas desde mobile (siguen en la web).
 - Sin offline: el backend valida la uva disponible del pasero en cada bin.

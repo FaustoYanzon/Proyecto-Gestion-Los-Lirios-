@@ -29,8 +29,10 @@
   table.info td { padding: 3px 6px; border: 0.5pt solid #e2dbcc; font-size: 9pt; }
   table.info td.label { background-color: #fbfaf6; color: #5a544c; width: 20%; font-weight: bold; }
   table.datos { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
-  table.datos th { background-color: #7a1f2c; color: #ffffff; font-size: 8.5pt; padding: 4px 6px; text-align: left; }
-  table.datos td { font-size: 8.5pt; padding: 4px 6px; border-bottom: 0.5pt solid #e2dbcc; vertical-align: top; }
+  table.datos th { background-color: #7a1f2c; color: #ffffff; font-size: 8.5pt; padding: 4px 4px; text-align: left; }
+  table.datos td { font-size: 8.5pt; padding: 4px 4px; border-bottom: 0.5pt solid #e2dbcc; vertical-align: top; }
+  /* Texto libre: parte la línea aunque no tenga espacios (xhtml2pdf). */
+  td.obs { font-size: 8pt; color: #5a544c; border-bottom: 0.5pt solid #e2dbcc; }
   .num { text-align: right; }
   .total td { font-weight: bold; border-top: 1pt solid #7a1f2c; }
   .firmas { width: 100%; margin-top: 56px; }
@@ -84,27 +86,27 @@
   <h2>BINES / BOLSONES</h2>
   <table class="datos">
     <tr>
-      <th style="width:28px;">N°</th>
-      <th>Tarja</th>
-      <th style="width:62px;">Fecha</th>
+      <th>Bin / bolsón (tarja)</th>
+      <th style="width:90px;">Fecha</th>
       <th>Pasero</th>
-      <th class="num" style="width:70px;">Kg</th>
-      <th>Observaciones</th>
+      <th class="num" style="width:90px;">Kg</th>
     </tr>
     {% for f in filas %}
     <tr>
-      <td>{{ f.numero }}</td>
-      <td>{{ f.tarja }}</td>
+      <td>N° {{ f.numero }} · {{ f.tarja }}</td>
       <td>{{ f.fecha }}</td>
       <td>{{ f.pasero }}</td>
       <td class="num">{{ f.kg }}</td>
-      <td>{{ f.observaciones }}</td>
     </tr>
+    {% if f.observaciones %}
+    <tr>
+      <td colspan="4" class="obs"><b>Observaciones:</b> {{ f.observaciones }}</td>
+    </tr>
+    {% endif %}
     {% endfor %}
     <tr class="total">
-      <td colspan="4">TOTAL</td>
+      <td colspan="3">TOTAL</td>
       <td class="num">{{ l.kg_total }}</td>
-      <td></td>
     </tr>
   </table>
 

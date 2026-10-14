@@ -34,9 +34,9 @@
     margin-bottom: 8px;
   }
   table.datos { width: 100%; border-collapse: collapse; }
-  table.datos td { padding: 6px 4px; border-bottom: 0.5pt solid #e2dbcc; }
+  table.datos td { padding: 4px 4px; border-bottom: 0.5pt solid #e2dbcc; }
   td.label { font-size: 8.5pt; color: #5a544c; text-transform: uppercase; width: 34%; }
-  td.valor { font-size: 15pt; font-weight: bold; }
+  td.valor { font-size: 14pt; font-weight: bold; }
   td.valor-grande { font-size: 22pt; font-weight: bold; color: #7a1f2c; }
   .obs { font-size: 9pt; margin-top: 6px; color: #1f1a17; }
   .obs b { color: #5a544c; }
@@ -55,6 +55,7 @@
           <tr><td class="label">Variedad</td><td class="valor">{{ t.variedad }}</td></tr>
           <tr><td class="label">Calidad</td><td class="valor">{{ t.calidad }}</td></tr>
           <tr><td class="label">Lote</td><td class="valor">{{ t.lote }}</td></tr>
+          <tr><td class="label">Peso</td><td class="valor">{{ t.kg }} kg</td></tr>
           <tr><td class="label">Bin / bolsón</td><td class="valor-grande">N° {{ t.bin }}</td></tr>
         </table>
         {% if t.observaciones %}
