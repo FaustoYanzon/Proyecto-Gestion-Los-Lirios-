@@ -287,6 +287,44 @@ async def test_el_lote_se_asigna_al_deposito_unico(client, create_user):
     assert lote["deposito_id"] == dep["id"]
 
 
+async def test_bin_con_observaciones_y_pdfs_de_tarja_y_lote(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    await _ingresar_uva(client, headers, pasero.id, variedad="flame", kg="8000")
+    lote = (await client.post(
+        "/lotes-pasa/", json={"variedad": "flame", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
+    )).json()
+    resp = await client.post(
+        f"/lotes-pasa/{lote['id']}/bines",
+        json={"pasero_id": pasero.id, "kg_real": "340", "observaciones": "  bolsón húmedo  "},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    bin_ = detalle["bines"][0]
+    assert bin_["observaciones"] == "bolsón húmedo"
+
+    # Tarja: PDF directo (web) y link firmado (mobile).
+    tarja = await client.get(f"/lotes-pasa/{lote['id']}/bines/{bin_['id']}/tarja-pdf", headers=headers)
+    assert tarja.status_code == 200
+    assert tarja.headers["content-type"] == "application/pdf"
+    assert tarja.content.startswith(b"%PDF")
+    link = await client.post(f"/lotes-pasa/{lote['id']}/bines/{bin_['id']}/tarja-pdf-link", headers=headers)
+    assert link.status_code == 200, link.text
+    firmado = await client.get(link.json()["path"])  # sin Authorization
+    assert firmado.status_code == 200 and firmado.content.startswith(b"%PDF")
+    assert (await client.get("/lotes-pasa/descarga/token-invalido")).status_code == 401
+    assert (await client.get(f"/lotes-pasa/{lote['id']}/bines/no-existe/tarja-pdf", headers=headers)).status_code == 404
+
+    # Hoja del lote: solo con el lote completo (cerrado).
+    assert (await client.get(f"/lotes-pasa/{lote['id']}/pdf", headers=headers)).status_code == 409
+    assert (await client.post(f"/lotes-pasa/{lote['id']}/cerrar", headers=headers)).status_code == 200
+    hoja = await client.get(f"/lotes-pasa/{lote['id']}/pdf", headers=headers)
+    assert hoja.status_code == 200 and hoja.content.startswith(b"%PDF")
+    link_lote = await client.post(f"/lotes-pasa/{lote['id']}/pdf-link", headers=headers)
+    assert (await client.get(link_lote.json()["path"])).status_code == 200
+
+
 async def test_no_se_cierra_un_lote_sin_bines(client, create_user):
     headers = await _auth(client, create_user)
     lote = (await client.post(

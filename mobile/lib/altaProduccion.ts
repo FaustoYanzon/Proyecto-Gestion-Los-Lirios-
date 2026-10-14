@@ -343,6 +343,7 @@ export interface BinPasa {
   fecha: string
   kg_real: number
   uva_consumida_kg: number
+  observaciones: string | null
 }
 
 export interface LotePasaDetalle extends LotePasa {
@@ -385,7 +386,7 @@ export async function abrirLotePasa(payload: {
 
 export async function agregarBinPasa(
   loteId: string,
-  payload: { pasero_id: string; kg_real: string; fecha?: string | null },
+  payload: { pasero_id: string; kg_real: string; fecha?: string | null; observaciones?: string | null },
 ): Promise<LotePasa> {
   const { data } = await api.post<Record<string, unknown>>(`/lotes-pasa/${loteId}/bines`, payload)
   return parseLote(data)
@@ -394,4 +395,19 @@ export async function agregarBinPasa(
 export async function cerrarLotePasa(loteId: string): Promise<LotePasa> {
   const { data } = await api.post<Record<string, unknown>>(`/lotes-pasa/${loteId}/cerrar`, {})
   return parseLote(data)
+}
+
+// PDF de lotes: link firmado de 5 min (mismo esquema que el remito) y se abre con
+// Linking, sin header Authorization.
+
+/** Tarja del bin: media hoja A4 horizontal con los datos de los dos lados. */
+export async function abrirTarjaPdf(loteId: string, binId: string): Promise<void> {
+  const { data } = await api.post<{ url: string }>(`/lotes-pasa/${loteId}/bines/${binId}/tarja-pdf-link`)
+  await Linking.openURL(data.url)
+}
+
+/** Hoja del lote con el listado de bines (solo lotes completos / cerrados). */
+export async function abrirHojaLotePdf(loteId: string): Promise<void> {
+  const { data } = await api.post<{ url: string }>(`/lotes-pasa/${loteId}/pdf-link`)
+  await Linking.openURL(data.url)
 }

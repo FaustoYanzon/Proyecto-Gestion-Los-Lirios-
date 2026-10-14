@@ -7,15 +7,27 @@ descuenta `kg x ratio_uva_pasa` de uva fresca del pasero indicado.
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up
-from app.models.alta_produccion import Bin, EstadoLote, Lote
-from app.models.parcela import VariedadUva
+from app.core.pdf_lote import (
+    BinFilaPdf,
+    DatosLotePdf,
+    DatosTarjaPdf,
+    generar_pdf_lote,
+    generar_pdf_tarja,
+)
+from app.core.security import (
+    LOTE_PDF_TOKEN_TTL_SECONDS,
+    create_lote_pdf_token,
+    decode_lote_pdf_token,
+)
+from app.models.alta_produccion import Bin, Deposito, EstadoLote, Lote
+from app.models.parcela import Parcela, VariedadUva
 from app.models.user import User
 from app.schemas.alta_produccion import (
     BinCreate,
@@ -24,6 +36,7 @@ from app.schemas.alta_produccion import (
     LoteCreate,
     LoteDetalleResponse,
     LoteResponse,
+    RemitoPdfLinkResponse,
 )
 from app.services import mermas
 from app.services.alta_produccion import (
@@ -152,6 +165,105 @@ async def abrir_lote(
     return _lote_response(lote, params)
 
 
+def _variedad_label(variedad: VariedadUva) -> str:
+    return str(getattr(variedad, "value", variedad)).replace("_", " ").title()
+
+
+def _nro_bin(lote: Lote, bin_id: str) -> int:
+    for i, b in enumerate(lote.bines, start=1):
+        if b.id == bin_id:
+            return i
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bin not found")
+
+
+async def _pdf_tarja(db: AsyncSession, lote_id: str, bin_id: str) -> Response:
+    lote = await _get_lote(db, lote_id)
+    nro = _nro_bin(lote, bin_id)
+    b = lote.bines[nro - 1]
+    pdf = generar_pdf_tarja(
+        DatosTarjaPdf(
+            tarja=b.tarja,
+            fecha=b.fecha,
+            variedad=_variedad_label(lote.variedad),
+            calidad=lote.calidad,
+            temporada=lote.temporada,
+            lote_numero=lote.numero,
+            bin_numero=nro,
+            bin_total=lote.tope_bines,
+            observaciones=b.observaciones,
+        )
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="tarja-{b.tarja}.pdf"'},
+    )
+
+
+async def _pdf_lote(db: AsyncSession, lote_id: str) -> Response:
+    lote = await _get_lote(db, lote_id)
+    if lote.estado != EstadoLote.cerrado:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La hoja del lote se imprime cuando el lote está completo (cerrado)",
+        )
+    params = await get_parametros(db)
+    ids = {b.pasero_id for b in lote.bines}
+    paseros = (
+        {p.id: p.nombre for p in (await db.execute(select(Parcela).where(Parcela.id.in_(ids)))).scalars()}
+        if ids
+        else {}
+    )
+    deposito = await db.get(Deposito, lote.deposito_id) if lote.deposito_id else None
+    cantidad = len(lote.bines)
+    pdf = generar_pdf_lote(
+        DatosLotePdf(
+            variedad=_variedad_label(lote.variedad),
+            calidad=lote.calidad,
+            temporada=lote.temporada,
+            numero=lote.numero,
+            estado="Cerrado",
+            deposito=deposito.nombre if deposito else None,
+            abierto_el=lote.created_at.date(),
+            cerrado_el=lote.closed_at.date() if lote.closed_at else None,
+            tope_bines=lote.tope_bines,
+            kg_total=lote.kg_total,
+            kg_nominal_total=params.kg_nominal_bin * cantidad,
+            merma_kg=mermas.merma_bines(cantidad, params.kg_nominal_bin, lote.kg_total),
+            bines=[
+                BinFilaPdf(
+                    numero=i,
+                    tarja=b.tarja,
+                    fecha=b.fecha,
+                    pasero=paseros.get(b.pasero_id, "–"),
+                    kg=b.kg_real,
+                    observaciones=b.observaciones,
+                )
+                for i, b in enumerate(lote.bines, start=1)
+            ],
+        )
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="lote-{lote.temporada}-{lote.numero}.pdf"'
+        },
+    )
+
+
+# Estática ANTES de /{lote_id}. Sin Authorization: la autoriza el token firmado.
+@router.get("/descarga/{token}")
+async def descargar_pdf_firmado(token: str, db: AsyncSession = Depends(get_db)) -> Response:
+    datos = decode_lote_pdf_token(token)
+    if datos is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Link inválido o vencido")
+    kind, lote_id, bin_id = datos
+    if kind == "tarja" and bin_id:
+        return await _pdf_tarja(db, lote_id, bin_id)
+    return await _pdf_lote(db, lote_id)
+
+
 @router.get("/{lote_id}", response_model=LoteDetalleResponse)
 async def get_lote(
     lote_id: str,
@@ -201,6 +313,7 @@ async def agregar_bin(
             pasero_id=data.pasero_id,
             fecha=data.fecha or date.today(),
             kg_real=data.kg_real,
+            observaciones=(data.observaciones or "").strip() or None,
             uva_consumida_kg=mermas.uva_consumida(data.kg_real, params.ratio_uva_pasa),
         )
     )
@@ -236,3 +349,58 @@ async def cerrar_lote(
     await db.flush()
     lote = await _get_lote(db, lote.id)
     return _lote_response(lote, await get_parametros(db))
+
+
+@router.get("/{lote_id}/pdf")
+async def pdf_lote(
+    lote_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> Response:
+    """Hoja del lote con el listado de bines (solo lotes completos / cerrados)."""
+    return await _pdf_lote(db, lote_id)
+
+
+@router.get("/{lote_id}/bines/{bin_id}/tarja-pdf")
+async def pdf_tarja(
+    lote_id: str,
+    bin_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> Response:
+    """Tarja del bin: media hoja A4 horizontal con los datos de los dos lados."""
+    return await _pdf_tarja(db, lote_id, bin_id)
+
+
+def _link(request: Request, token: str) -> RemitoPdfLinkResponse:
+    path = f"/lotes-pasa/descarga/{token}"
+    return RemitoPdfLinkResponse(
+        path=path,
+        url=f"{str(request.base_url).rstrip('/')}{path}",
+        expires_in=LOTE_PDF_TOKEN_TTL_SECONDS,
+    )
+
+
+@router.post("/{lote_id}/pdf-link", response_model=RemitoPdfLinkResponse)
+async def pdf_lote_link(
+    lote_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> RemitoPdfLinkResponse:
+    """Link firmado de 5 min para abrir la hoja del lote desde mobile con Linking."""
+    lote = await _get_lote(db, lote_id)
+    return _link(request, create_lote_pdf_token("lote", lote.id))
+
+
+@router.post("/{lote_id}/bines/{bin_id}/tarja-pdf-link", response_model=RemitoPdfLinkResponse)
+async def pdf_tarja_link(
+    lote_id: str,
+    bin_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> RemitoPdfLinkResponse:
+    lote = await _get_lote(db, lote_id)
+    _nro_bin(lote, bin_id)
+    return _link(request, create_lote_pdf_token("tarja", lote.id, bin_id))

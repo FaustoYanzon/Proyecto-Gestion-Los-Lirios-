@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Media hoja A4 horizontal = A5 apaisado. Los dos paneles repiten los datos
+     (uno por cada lado de la tarja) con una línea de doblez en el medio. */
+  @page {
+    size: a5 landscape;
+    margin: 0.9cm 0.9cm;
+  }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1f1a17;
+  }
+  table.hoja { width: 100%; border-collapse: collapse; }
+  table.hoja td.panel { width: 49%; vertical-align: top; padding: 0 10px; }
+  table.hoja td.pliegue { width: 2%; border-left: 1pt dashed #9a9288; }
+  .empresa { font-size: 8.5pt; color: #5a544c; text-align: center; }
+  .titulo {
+    font-size: 15pt;
+    font-weight: bold;
+    color: #7a1f2c;
+    text-align: center;
+    border-bottom: 2pt solid #7a1f2c;
+    padding: 4px 0 6px 0;
+    margin: 4px 0 8px 0;
+  }
+  .codigo {
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #1f1a17;
+    margin-bottom: 8px;
+  }
+  table.datos { width: 100%; border-collapse: collapse; }
+  table.datos td { padding: 6px 4px; border-bottom: 0.5pt solid #e2dbcc; }
+  td.label { font-size: 8.5pt; color: #5a544c; text-transform: uppercase; width: 34%; }
+  td.valor { font-size: 15pt; font-weight: bold; }
+  td.valor-grande { font-size: 22pt; font-weight: bold; color: #7a1f2c; }
+  .obs { font-size: 9pt; margin-top: 6px; color: #1f1a17; }
+  .obs b { color: #5a544c; }
+</style>
+</head>
+<body>
+  <table class="hoja">
+    <tr>
+      {% for _ in range(2) %}
+      <td class="panel">
+        <div class="empresa">{{ empresa.razon_social }}</div>
+        <div class="titulo">TARJA · PASA</div>
+        <div class="codigo">{{ t.tarja }}</div>
+        <table class="datos">
+          <tr><td class="label">Fecha</td><td class="valor">{{ t.fecha }}</td></tr>
+          <tr><td class="label">Variedad</td><td class="valor">{{ t.variedad }}</td></tr>
+          <tr><td class="label">Calidad</td><td class="valor">{{ t.calidad }}</td></tr>
+          <tr><td class="label">Lote</td><td class="valor">{{ t.lote }}</td></tr>
+          <tr><td class="label">Bin / bolsón</td><td class="valor-grande">N° {{ t.bin }}</td></tr>
+        </table>
+        {% if t.observaciones %}
+        <div class="obs"><b>Observaciones:</b> {{ t.observaciones }}</div>
+        {% endif %}
+      </td>
+      {% if loop.first %}<td class="pliegue">&nbsp;</td>{% endif %}
+      {% endfor %}
+    </tr>
+  </table>
+</body>
+</html>

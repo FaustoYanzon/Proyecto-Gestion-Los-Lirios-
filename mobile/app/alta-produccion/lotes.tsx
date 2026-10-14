@@ -1,9 +1,9 @@
-// Lotes de pasa: listar, abrir lote y cerrar. Los bines se levantan desde
-// "Levantar pasa" (pantalla aparte, con su tarja). Solo encargado o superior.
+// Lotes de pasa: listar (abiertos / cerrados / todos), abrir y cerrar lotes e
+// imprimir tarjas y hoja del lote. Los bines se levantan desde "Levantar pasa"
+// (pantalla aparte, con su tarja). Solo encargado o superior.
 // Requiere conexión. El depósito es único y lo asigna el backend; las entregas
 // (remitos) quedan en la web.
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'expo-router'
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { colors } from '../../lib/theme'
 import { useAuthStore } from '../../store/authStore'
+import LoteModal, { loteNombre } from '../../components/LoteModal'
 import { VARIEDAD_LABELS } from '../../lib/types'
 import type { Parcela, VariedadUva } from '../../lib/types'
 import {
@@ -29,11 +30,7 @@ import {
 type Filtro = EstadoLote | 'todos'
 const FILTROS: [Filtro, string][] = [['abierto', 'Abiertos'], ['cerrado', 'Cerrados'], ['todos', 'Todos']]
 
-const loteNombre = (l: LotePasa) =>
-  `${VARIEDAD_LABELS[l.variedad] ?? l.variedad} C${l.calidad} · N° ${l.numero} (${l.temporada}/${l.temporada + 1})`
-
 export default function LotesScreen() {
-  const router = useRouter()
   const role = useAuthStore((s) => s.user?.role)
 
   const [filtro, setFiltro] = useState<Filtro>('abierto')
@@ -134,12 +131,12 @@ export default function LotesScreen() {
         onCreated={async (l) => { setNuevoVisible(false); await fetchData(); setDetalleId(l.id) }}
       />
       {detalleId && (
-        <DetalleLoteModal
+        <LoteModal
           loteId={detalleId}
+          modo="lotes"
           paseros={paseros}
           onClose={() => setDetalleId(null)}
           onChanged={fetchData}
-          onLevantar={() => { setDetalleId(null); router.push('/alta-produccion/levantada') }}
         />
       )}
     </View>
@@ -239,155 +236,6 @@ function NuevoLoteModal({
               : <Text style={styles.saveBtnText}>Abrir lote</Text>}
           </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
-  )
-}
-
-// ── Detalle del lote (bines + cierre) ─────────────────────────────────────────
-
-function DetalleLoteModal({
-  loteId, paseros, onClose, onChanged, onLevantar,
-}: {
-  loteId: string
-  paseros: Parcela[]
-  onClose: () => void
-  onChanged: () => Promise<void>
-  onLevantar: () => void
-}) {
-  const [lote, setLote] = useState<LotePasaDetalle | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const submittingRef = useRef(false)
-
-  const nombrePasero = (id: string) => paseros.find((p) => p.id === id)?.nombre ?? '–'
-
-  const cargar = useCallback(async () => {
-    try {
-      setLote(await getLotePasa(loteId))
-      setLoadError(null)
-    } catch (e) {
-      setLoadError(errorDetail(e, 'No se pudo cargar el lote'))
-    }
-  }, [loteId])
-
-  useEffect(() => { cargar() }, [cargar])
-
-  const abierto = lote?.estado === 'abierto'
-
-  function confirmarCierre() {
-    if (!lote) return
-    Alert.alert(
-      'Cerrar lote',
-      `${loteNombre(lote)} quedará cerrado y no admitirá más bines. ¿Cerrar?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar lote', style: 'destructive', onPress: cerrar },
-      ],
-    )
-  }
-
-  async function cerrar() {
-    if (!lote || submittingRef.current) return
-    submittingRef.current = true
-    setSaving(true)
-    setError(null)
-    try {
-      await cerrarLotePasa(lote.id)
-      await cargar()
-      await onChanged()
-    } catch (e) {
-      setError(errorDetail(e))
-    } finally {
-      submittingRef.current = false
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={[styles.modalTitle, { flex: 1 }]} numberOfLines={2}>
-            {lote ? loteNombre(lote) : 'Lote'}
-          </Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
-          </TouchableOpacity>
-        </View>
-
-        {!lote ? (
-          loadError
-            ? <View style={styles.modalScroll}><View style={styles.errorBox}><Text style={styles.errorText}>{loadError}</Text></View></View>
-            : <ActivityIndicator color={colors.tierra} style={{ marginTop: 32 }} />
-        ) : (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>KG TOTAL</Text>
-                <Text style={styles.statValue}>{fmtKg(lote.kg_total)}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>SALDO KG</Text>
-                <Text style={[styles.statValue, { color: colors.verdeCampo }]}>{fmtKg(lote.saldo_kg)}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>BINES</Text>
-                <Text style={styles.statValue}>
-                  {lote.cantidad_bines}{lote.tope_bines != null ? ` / ${lote.tope_bines}` : ''}
-                </Text>
-              </View>
-            </View>
-            <View style={{ alignItems: 'flex-start', marginBottom: 16 }}><EstadoBadge estado={lote.estado} /></View>
-
-            <Text style={styles.sectionLabel}>BINES</Text>
-            {lote.bines.length === 0 ? (
-              <Text style={[styles.muted, { marginBottom: 16 }]}>Todavía no tiene bines</Text>
-            ) : (
-              lote.bines.map((b) => (
-                <View key={b.id} style={styles.binRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.binTarja}>{b.tarja}</Text>
-                    <Text style={styles.binKg}>{fmtKg(b.kg_real)} kg de pasa</Text>
-                    <Text style={styles.metaText}>
-                      {nombrePasero(b.pasero_id)} · {fmtFecha(b.fecha)} · uva {fmtKg(b.uva_consumida_kg)} kg
-                    </Text>
-                  </View>
-                </View>
-              ))
-            )}
-
-            {abierto && (
-              <>
-                <TouchableOpacity style={[styles.saveBtn, { flex: 0, marginTop: 16 }]} onPress={onLevantar} activeOpacity={0.85}>
-                  <Text style={styles.saveBtnText}>Levantar pasa en este lote</Text>
-                </TouchableOpacity>
-
-                <Text style={[styles.sectionLabel, { marginTop: 24 }]}>CERRAR LOTE</Text>
-                <Text style={[styles.muted, { marginBottom: 10 }]}>
-                  {lote.tope_bines != null
-                    ? `Se cierra solo al llegar a ${lote.tope_bines} bines. `
-                    : 'No hay tope de bines: se cierra a mano. '}
-                  No se puede cerrar sin bines; una vez cerrado no admite más bines.
-                </Text>
-                <TouchableOpacity
-                  style={[styles.cancelBtn, { flex: 0 }, (saving || lote.cantidad_bines === 0) && { opacity: 0.5 }]}
-                  onPress={confirmarCierre}
-                  disabled={saving || lote.cantidad_bines === 0}
-                >
-                  <Text style={styles.cancelBtnText}>Cerrar lote</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {error && (
-              <View style={[styles.errorBox, { marginTop: 14 }]}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-          </ScrollView>
-        )}
       </View>
     </Modal>
   )

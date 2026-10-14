@@ -27,7 +27,7 @@ Segundo eslabón de la cadena de la pasa, después del ingreso de uva al pasero 
 
 ## Fuera de alcance / pendiente
 
-- Imprimir la tarja (PDF / etiqueta): hoy se muestra en pantalla.
+- La tarja no incluye el peso del bin (no se pidió); se puede sumar.
 - Edición o anulación de bines (no existe a propósito, como los remitos).
 - Conciliación depósito → comprador y entregas desde mobile (siguen en la web).
 - Sin offline: el backend valida la uva disponible del pasero en cada bin.

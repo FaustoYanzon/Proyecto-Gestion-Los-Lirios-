@@ -190,6 +190,7 @@ class BinCreate(BaseModel):
     pasero_id: str
     kg_real: KgPositivo
     fecha: date | None = None
+    observaciones: str | None = Field(default=None, max_length=500)
 
 
 class LoteCierre(BaseModel):
@@ -204,6 +205,7 @@ class BinResponse(BaseModel):
     fecha: date
     kg_real: Decimal
     uva_consumida_kg: Decimal
+    observaciones: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

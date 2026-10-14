@@ -215,6 +215,7 @@ class Bin(Base):
     kg_real: Mapped[Decimal] = mapped_column(KG, nullable=False)
     # Uva fresca descontada del pasero por este bin (kg_real * ratio uva/pasa).
     uva_consumida_kg: Mapped[Decimal] = mapped_column(KG, nullable=False)
+    observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     lote: Mapped["Lote"] = relationship("Lote", back_populates="bines")

@@ -293,6 +293,7 @@ export interface BinPasa {
   fecha: string
   kg_real: number
   uva_consumida_kg: number
+  observaciones: string | null
   created_at: string
 }
 
@@ -341,7 +342,7 @@ export async function abrirLotePasa(payload: {
 
 export async function agregarBinPasa(
   loteId: string,
-  payload: { pasero_id: string; kg_real: string; fecha?: string | null },
+  payload: { pasero_id: string; kg_real: string; fecha?: string | null; observaciones?: string | null },
 ): Promise<LotePasa> {
   const { data } = await api.post<Record<string, unknown>>(`/lotes-pasa/${loteId}/bines`, payload)
   return parseLote(data)
@@ -458,14 +459,14 @@ export async function cargarComprobanteBodega(
 }
 
 /**
- * Abre el PDF del remito en una pestaña nueva. La ventana se abre de forma
+ * Abre un PDF (GET autenticado) en una pestaña nueva. La ventana se abre de forma
  * síncrona (dentro del click) y recién después se le asigna la URL, para no
  * caer en el bloqueador de pop-ups. Llamar directo desde un onClick.
  */
-export async function abrirRemitoPdf(remitoId: string): Promise<void> {
+async function abrirPdf(path: string, filename: string): Promise<void> {
   const win = window.open('', '_blank')
   try {
-    const { data } = await api.get<Blob>(`/remitos/${remitoId}/pdf`, { responseType: 'blob' })
+    const { data } = await api.get<Blob>(path, { responseType: 'blob' })
     const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
     if (win) {
       win.location.href = url
@@ -473,7 +474,7 @@ export async function abrirRemitoPdf(remitoId: string): Promise<void> {
       // Pop-up bloqueado igual: descarga como respaldo.
       const a = document.createElement('a')
       a.href = url
-      a.download = `remito-${remitoId}.pdf`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -485,3 +486,14 @@ export async function abrirRemitoPdf(remitoId: string): Promise<void> {
     throw e
   }
 }
+
+export const abrirRemitoPdf = (remitoId: string): Promise<void> =>
+  abrirPdf(`/remitos/${remitoId}/pdf`, `remito-${remitoId}.pdf`)
+
+/** Tarja del bin: media hoja A4 horizontal, con los datos de los dos lados. */
+export const abrirTarjaPdf = (loteId: string, binId: string): Promise<void> =>
+  abrirPdf(`/lotes-pasa/${loteId}/bines/${binId}/tarja-pdf`, `tarja-${binId}.pdf`)
+
+/** Hoja del lote con el listado de bines (solo lotes completos / cerrados). */
+export const abrirHojaLotePdf = (loteId: string): Promise<void> =>
+  abrirPdf(`/lotes-pasa/${loteId}/pdf`, `lote-${loteId}.pdf`)

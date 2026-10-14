@@ -631,6 +631,7 @@ erDiagram
         numeric(14,2) kg_real
         numeric(14,2) uva_consumida_kg
         timestamptz created_at
+        varchar(40) tarja
     }
     remitos {
         varchar(36) id PK
@@ -764,6 +765,7 @@ erDiagram
 | `kg_real` | numeric(14,2) | NOT NULL |  |
 | `uva_consumida_kg` | numeric(14,2) | NOT NULL |  |
 | `created_at` | timestamptz | NOT NULL |  |
+| `tarja` | varchar(40) | NOT NULL |  |
 
 ### `remitos`
 

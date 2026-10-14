@@ -26,6 +26,11 @@ Continúa [[2026-10-11-despacho-de-cosecha]]. Decisión de la levantada: [[2026-
 - Web: pantalla **Levantada** (sub-nav Pasa); Lotes de pasa muestra tarja y ya no pide depósito.
 - Mobile: pantalla **Levantar pasa** por pasos, acceso destacado en Cosecha; el detalle del lote lleva a ella en lugar del form viejo.
 
+### Rediseño de la levantada (14/10)
+- Web y mobile: Lotes de pasa con pestañas Abiertos/Cerrados/Todos; Levantada muestra solo lotes abiertos y abre la ventana del lote para agregar bines (con observaciones) e imprimir la tarja de cada uno; lote cerrado → hoja del lote.
+- Backend: migración `7c4e1a9d3b62` (observaciones por bin), PDFs de tarja (A5 apaisado, dos lados) y de hoja del lote (A4), con links firmados para mobile. Tests: 229 verdes.
+- Probado en local con Chrome: bin con observación y tarja (PDF 200); el sistema bloquea el peso si excede la uva disponible del pasero.
+
 ## Verificación
 - pytest 228 verdes (4 tests nuevos: tarja correlativa, lote mixto y cierre al bin 10, depósito único, default 10); `tsc` mobile exit 0; lint web 0 errores y build OK.
 - Migración aplicada en la base local (backfill: `2026-FLA-C1-N01-B01`, depósito asignado). **Falta probarla en una copia de prod antes de pushear.**

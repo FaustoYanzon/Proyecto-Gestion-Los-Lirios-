@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 50 (head: `5b2f8c1d7a44_tarja_de_bines_y_deposito_unico.py`)
+**Migraciones de Alembic:** 51 (head: `7c4e1a9d3b62_observaciones_en_bines.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -145,7 +145,7 @@ repo/
 
 **Componentes por carpeta:**
 
-- `alta-produccion/`: MaestroCrud.tsx
+- `alta-produccion/`: LoteDetalleModal.tsx · MaestroCrud.tsx
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx

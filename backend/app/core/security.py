@@ -94,3 +94,45 @@ def decode_remito_pdf_token(token: str) -> str | None:
     if payload.get("typ") != REMITO_PDF_SCOPE or not isinstance(payload.get("rid"), str):
         return None
     return payload["rid"]
+
+
+# Link firmado de vida corta para abrir el PDF de un lote (hoja del lote) o de la
+# tarja de un bin desde mobile con Linking (sin header Authorization). Mismo
+# esquema que el del remito: claims `typ`/`aud` propios, 5 min, solo lectura.
+LOTE_PDF_SCOPE = "lote_pasa_pdf"
+LOTE_PDF_TOKEN_TTL_SECONDS = 300
+
+
+def create_lote_pdf_token(
+    kind: str, lote_id: str, bin_id: str | None = None, ttl_seconds: int = LOTE_PDF_TOKEN_TTL_SECONDS
+) -> str:
+    payload = {
+        "typ": LOTE_PDF_SCOPE,
+        "aud": LOTE_PDF_SCOPE,
+        "scope": LOTE_PDF_SCOPE,
+        "kind": kind,  # "lote" | "tarja"
+        "rid": lote_id,
+        "bid": bin_id,
+        "exp": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_lote_pdf_token(token: str) -> tuple[str, str, str | None] | None:
+    """(kind, lote_id, bin_id) o None si vence, está adulterado o no es de este tipo."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            audience=LOTE_PDF_SCOPE,
+            options={"require": ["exp", "aud"]},
+        )
+    except PyJWTError:
+        return None
+    kind, rid, bid = payload.get("kind"), payload.get("rid"), payload.get("bid")
+    if payload.get("typ") != LOTE_PDF_SCOPE or kind not in ("lote", "tarja") or not isinstance(rid, str):
+        return None
+    if kind == "tarja" and not isinstance(bid, str):
+        return None
+    return kind, rid, bid if isinstance(bid, str) else None

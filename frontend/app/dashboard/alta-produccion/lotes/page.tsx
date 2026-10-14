@@ -4,18 +4,17 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import { usePaginatedList } from '@/lib/usePaginatedList'
-import { getParcelas } from '@/lib/api/produccion'
 import { VARIEDAD_VALUES, VARIEDAD_LABELS, type VariedadUva } from '@/lib/api/parcelas'
 import {
-  getLotesPasa, getLotePasa, abrirLotePasa, cerrarLotePasa, getDepositos, errorDetail,
+  getLotesPasa, abrirLotePasa, getDepositos, errorDetail,
   type EstadoLote, type LotePasa,
 } from '@/lib/api/altaProduccion'
 import FormError from '@/components/ui/FormError'
+import LoteDetalleModal, { EstadoBadge, loteNombre } from '@/components/alta-produccion/LoteDetalleModal'
 
 const PAGE_SIZE = 10
 const KG_FMT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 })
 const fmtKg = (n: number) => KG_FMT.format(n)
-const fmtFecha = (iso: string) => iso.split('-').reverse().join('/')
 const TODAY = new Date().toISOString().split('T')[0]
 
 const inputCls = 'w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c]'
@@ -26,21 +25,9 @@ const thRCls = thCls.replace('text-left', 'text-right')
 const btnPrimary = 'px-4 py-2 bg-[#7a1f2c] text-white rounded-lg text-sm font-semibold hover:bg-[#5a1320] disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
 const btnSecondary = 'px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
 
-const loteNombre = (l: LotePasa) => `${VARIEDAD_LABELS[l.variedad]} C${l.calidad} · N° ${l.numero} (${l.temporada}/${l.temporada + 1})`
-
-function EstadoBadge({ estado }: { estado: EstadoLote }) {
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-      estado === 'abierto' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
-    }`}>
-      {estado === 'abierto' ? 'Abierto' : 'Cerrado'}
-    </span>
-  )
-}
-
 export default function LotesPage() {
   const qc = useQueryClient()
-  const [estado, setEstado] = useState<'' | EstadoLote>('')
+  const [estado, setEstado] = useState<'' | EstadoLote>('abierto')
   const [variedad, setVariedad] = useState<'' | VariedadUva>('')
   const [calidad, setCalidad] = useState<'' | '1' | '2'>('')
   const [showNuevo, setShowNuevo] = useState(false)
@@ -73,14 +60,22 @@ export default function LotesPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Lotes de pasa</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Un lote abierto por variedad y calidad; la pasa se entrega solo de lotes cerrados</p>
+          <p className="text-sm text-gray-500 mt-0.5">Abrí y cerrá lotes. Los bines se cargan en Levantada; la pasa se entrega solo de lotes cerrados.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <select value={estado} onChange={(e) => setEstado(e.target.value as '' | EstadoLote)} className={selectFiltroCls}>
-            <option value="">Todos los estados</option>
-            <option value="abierto">Abiertos</option>
-            <option value="cerrado">Cerrados</option>
-          </select>
+          <div className="inline-flex rounded-lg border border-gray-300 bg-gray-50 p-0.5">
+            {([['abierto', 'Abiertos'], ['cerrado', 'Cerrados'], ['', 'Todos']] as const).map(([key, label]) => (
+              <button
+                key={key || 'todos'}
+                onClick={() => { setEstado(key); setPage(1) }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  estado === key ? 'bg-[#7a1f2c] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <select value={variedad} onChange={(e) => setVariedad(e.target.value as '' | VariedadUva)} className={selectFiltroCls}>
             <option value="">Todas las variedades</option>
             {VARIEDAD_VALUES.map((v) => <option key={v} value={v}>{VARIEDAD_LABELS[v]}</option>)}
@@ -184,8 +179,9 @@ export default function LotesPage() {
         />
       )}
       {detalleId && (
-        <DetalleLoteModal
+        <LoteDetalleModal
           loteId={detalleId}
+          modo="lotes"
           nombreDeposito={nombreDeposito}
           onClose={() => setDetalleId(null)}
           onChanged={refrescar}
@@ -256,138 +252,6 @@ function NuevoLoteModal({
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
           <button onClick={onClose} className={btnSecondary}>Cancelar</button>
           <button onClick={guardar} disabled={saving} className={btnPrimary}>{saving ? 'Abriendo...' : 'Abrir lote'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Detalle del lote ──────────────────────────────────────────────────────────
-
-function DetalleLoteModal({
-  loteId, nombreDeposito, onClose, onChanged,
-}: {
-  loteId: string
-  nombreDeposito: (id: string | null) => string
-  onClose: () => void
-  onChanged: () => Promise<unknown>
-}) {
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const qc = useQueryClient()
-
-  const { data: lote, isLoading } = useQuery({
-    queryKey: ['ap-lote', loteId], queryFn: () => getLotePasa(loteId),
-  })
-  const { data: parcelas = [] } = useQuery({ queryKey: ['parcelas'], queryFn: getParcelas, staleTime: 300_000 })
-  const nombrePasero = (id: string) => parcelas.find((p) => p.id === id)?.nombre ?? '–'
-
-  if (isLoading || !lote) {
-    return (
-      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl p-8 text-sm text-gray-500">Cargando lote...</div>
-      </div>
-    )
-  }
-
-  const abierto = lote.estado === 'abierto'
-
-  async function cerrar() {
-    if (!lote) return
-    setSaving(true)
-    setError(null)
-    try {
-      await cerrarLotePasa(lote.id)
-      await qc.invalidateQueries({ queryKey: ['ap-lote', loteId] })
-      await onChanged()
-    } catch (e) {
-      setError(errorDetail(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-gray-900">{loteNombre(lote)}</h2>
-            <EstadoBadge estado={lote.estado} />
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"><X size={18} /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
-              <p className="text-xs text-gray-500 uppercase">Kg total</p>
-              <p className="text-lg font-bold font-mono text-gray-900">{fmtKg(lote.kg_total)}</p>
-            </div>
-            <div className="rounded-lg bg-green-50 border border-green-100 p-3">
-              <p className="text-xs text-green-700 uppercase">Saldo kg</p>
-              <p className="text-lg font-bold font-mono text-green-800">{fmtKg(lote.saldo_kg)}</p>
-            </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
-              <p className="text-xs text-gray-500 uppercase">Bines</p>
-              <p className="text-lg font-bold font-mono text-gray-900">
-                {lote.cantidad_bines}{lote.tope_bines != null ? ` / ${lote.tope_bines}` : ''}
-              </p>
-            </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
-              <p className="text-xs text-gray-500 uppercase">Depósito</p>
-              <p className="text-sm font-semibold text-gray-900 mt-1">{nombreDeposito(lote.deposito_id)}</p>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Bines</h3>
-            {lote.bines.length === 0 ? (
-              <p className="text-sm text-gray-400">Todavía no tiene bines. Se cargan desde Levantada.</p>
-            ) : (
-              <div className="overflow-x-auto border border-gray-100 rounded-lg">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className={thCls}>Tarja</th>
-                      <th className={thCls}>Fecha</th>
-                      <th className={thCls}>Pasero</th>
-                      <th className={thRCls}>Kg pasa</th>
-                      <th className={thRCls}>Uva consumida kg</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {lote.bines.map((b) => (
-                      <tr key={b.id}>
-                        <td className="px-4 py-2 font-mono text-xs text-gray-800">{b.tarja}</td>
-                        <td className="px-4 py-2 text-gray-700">{fmtFecha(b.fecha)}</td>
-                        <td className="px-4 py-2 text-gray-700">{nombrePasero(b.pasero_id)}</td>
-                        <td className="px-4 py-2 text-right font-mono text-gray-900">{fmtKg(b.kg_real)}</td>
-                        <td className="px-4 py-2 text-right font-mono text-gray-600">{fmtKg(b.uva_consumida_kg)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {abierto && (
-            <div className="rounded-lg border border-gray-200 p-4 space-y-2">
-              <h3 className="text-sm font-semibold text-gray-700">Cerrar lote</h3>
-              <p className="text-xs text-gray-500">
-                {lote.tope_bines != null
-                  ? `Se cierra solo al llegar a ${lote.tope_bines} bines. `
-                  : 'No hay tope de bines: se cierra a mano. '}
-                No se puede cerrar sin bines; una vez cerrado no admite más bines.
-              </p>
-              <button onClick={cerrar} disabled={saving || lote.cantidad_bines === 0} className={btnSecondary}>
-                Cerrar lote
-              </button>
-            </div>
-          )}
-
-          {error && <FormError description={error} />}
         </div>
       </div>
     </div>

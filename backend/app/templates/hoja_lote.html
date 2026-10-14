@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4;
+    margin: 1.6cm 1.5cm;
+  }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1f1a17;
+    font-size: 9.5pt;
+  }
+  h1 { font-size: 13pt; color: #5a1320; margin: 0 0 2px 0; }
+  h2 {
+    font-size: 10.5pt;
+    color: #7a1f2c;
+    background-color: #fbfaf6;
+    border-bottom: 1pt solid #e2dbcc;
+    padding: 4px 6px;
+    margin: 14px 0 6px 0;
+  }
+  .header-table { width: 100%; border-bottom: 2pt solid #7a1f2c; padding-bottom: 8px; margin-bottom: 10px; }
+  .header-table td { vertical-align: top; }
+  .empresa-datos { font-size: 8pt; color: #5a544c; text-align: right; }
+  .lote-box { font-size: 13pt; font-weight: bold; color: #7a1f2c; }
+  table.info { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  table.info td { padding: 3px 6px; border: 0.5pt solid #e2dbcc; font-size: 9pt; }
+  table.info td.label { background-color: #fbfaf6; color: #5a544c; width: 20%; font-weight: bold; }
+  table.datos { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  table.datos th { background-color: #7a1f2c; color: #ffffff; font-size: 8.5pt; padding: 4px 6px; text-align: left; }
+  table.datos td { font-size: 8.5pt; padding: 4px 6px; border-bottom: 0.5pt solid #e2dbcc; vertical-align: top; }
+  .num { text-align: right; }
+  .total td { font-weight: bold; border-top: 1pt solid #7a1f2c; }
+  .firmas { width: 100%; margin-top: 56px; }
+  .firmas td { width: 50%; text-align: center; font-size: 8.5pt; color: #5a544c; padding: 0 20px; }
+  .firma-linea { border-top: 0.7pt solid #1f1a17; padding-top: 3px; }
+  .pie { margin-top: 24px; padding-top: 6px; border-top: 0.5pt solid #e2dbcc; font-size: 8pt; color: #5a544c; text-align: center; }
+</style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td style="width: 70px;"><img src="logo.png" style="width: 60px;"></td>
+      <td>
+        <h1>HOJA DE LOTE DE PASA</h1>
+        <div class="lote-box">Lote N° {{ l.numero }} · {{ l.variedad }} · Calidad {{ l.calidad }}</div>
+        <div style="color:#5a544c;">Campaña {{ l.temporada }}</div>
+      </td>
+      <td class="empresa-datos" style="width: 150px;">
+        <strong>{{ empresa.razon_social }}</strong><br>
+        CUIT {{ empresa.cuit }}<br>
+        {{ empresa.domicilio }}
+      </td>
+    </tr>
+  </table>
+
+  <h2>DATOS DEL LOTE</h2>
+  <table class="info">
+    <tr>
+      <td class="label">Variedad</td><td>{{ l.variedad }}</td>
+      <td class="label">Calidad</td><td>{{ l.calidad }}</td>
+    </tr>
+    <tr>
+      <td class="label">Estado</td><td>{{ l.estado }}</td>
+      <td class="label">Depósito</td><td>{{ l.deposito }}</td>
+    </tr>
+    <tr>
+      <td class="label">Apertura</td><td>{{ l.abierto_el }}</td>
+      <td class="label">Cierre</td><td>{{ l.cerrado_el }}</td>
+    </tr>
+    <tr>
+      <td class="label">Bines / bolsones</td><td>{{ l.bines }}</td>
+      <td class="label">Kg total</td><td><strong>{{ l.kg_total }} kg</strong></td>
+    </tr>
+    <tr>
+      <td class="label">Peso teórico</td><td>{{ l.kg_nominal_total }} kg</td>
+      <td class="label">Diferencia</td><td>{{ l.merma_kg }} kg</td>
+    </tr>
+  </table>
+
+  <h2>BINES / BOLSONES</h2>
+  <table class="datos">
+    <tr>
+      <th style="width:28px;">N°</th>
+      <th>Tarja</th>
+      <th style="width:62px;">Fecha</th>
+      <th>Pasero</th>
+      <th class="num" style="width:70px;">Kg</th>
+      <th>Observaciones</th>
+    </tr>
+    {% for f in filas %}
+    <tr>
+      <td>{{ f.numero }}</td>
+      <td>{{ f.tarja }}</td>
+      <td>{{ f.fecha }}</td>
+      <td>{{ f.pasero }}</td>
+      <td class="num">{{ f.kg }}</td>
+      <td>{{ f.observaciones }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="total">
+      <td colspan="4">TOTAL</td>
+      <td class="num">{{ l.kg_total }}</td>
+      <td></td>
+    </tr>
+  </table>
+
+  <table class="firmas">
+    <tr>
+      <td><div class="firma-linea">Responsable</div></td>
+      <td><div class="firma-linea">Recibe en depósito</div></td>
+    </tr>
+  </table>
+
+  <div class="pie">Documento interno de control de producción — no fiscal.</div>
+</body>
+</html>
