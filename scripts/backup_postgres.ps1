@@ -62,8 +62,8 @@ try {
     # Prefer TLS when the server offers it (Railway does); fall back otherwise.
     $env:PGSSLMODE = 'prefer'
     try {
-        & $pgDump -Fc -h $dbHost -p $dbPort -U $dbUser -d $dbName -f $dumpFile
-        if ($LASTEXITCODE -ne 0) { throw "pg_dump exited with code $LASTEXITCODE (a 'server version mismatch' means the local pg_dump is older than the Railway server - install matching client tools)" }
+        $pgErr = & $pgDump -Fc -h $dbHost -p $dbPort -U $dbUser -d $dbName -f $dumpFile 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw "pg_dump exited with code $LASTEXITCODE : $($pgErr.Trim()) (a 'server version mismatch' means the local pg_dump is older than the Railway server - install matching client tools)" }
     }
     finally {
         Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
@@ -98,6 +98,10 @@ try {
     exit 0
 }
 catch {
+    # A failed or killed run leaves a 0-byte/partial dump behind that looks like a backup
+    if ($dumpFile -and (Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -lt 10KB) {
+        Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue
+    }
     Write-Log "FAIL [$Label] $($_.Exception.Message)"
     exit 1
 }

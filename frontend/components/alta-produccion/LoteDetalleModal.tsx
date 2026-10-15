@@ -90,6 +90,10 @@ export default function LoteDetalleModal({
   const kgNum = Number(kg.replace(',', '.'))
   const kgValido = /^\d+([.,]\d{1,2})?$/.test(kg.trim()) && kgNum > 0
   const excede = maxima != null && kgNum > maxima
+  // Mismo umbral que el backend (UMBRAL_BIN_INCOMPLETO): bajo el 80 % del teórico hay que aclarar.
+  const minimoSinAclarar = nominal != null ? nominal * 0.8 : null
+  const incompleto = kgValido && minimoSinAclarar != null && kgNum < minimoSinAclarar
+  const faltaAclarar = incompleto && !obs.trim()
   const progreso = lote.tope_bines ? Math.min(100, (lote.cantidad_bines / lote.tope_bines) * 100) : 0
 
   async function refrescar() {
@@ -255,11 +259,17 @@ export default function LoteDetalleModal({
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Observaciones (opcional)</label>
+                <label className={labelCls}>{incompleto ? 'Observaciones (obligatorio: bin incompleto)' : 'Observaciones (opcional)'}</label>
                 <input
                   type="text" value={obs} maxLength={500} onChange={(e) => setObs(e.target.value)}
-                  placeholder="Ej.: bolsón con humedad, bin golpeado…" className={inputCls}
+                  placeholder={incompleto ? 'Ej.: bin a medio llenar, fin de la levantada…' : 'Ej.: bolsón con humedad, bin golpeado…'}
+                  className={`${inputCls} ${faltaAclarar ? 'border-amber-400' : ''}`}
                 />
+                {faltaAclarar && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Pesa menos de {fmtKg(minimoSinAclarar ?? 0)} kg: aclará por qué antes de agregarlo.
+                  </p>
+                )}
               </div>
               {nominal != null && (
                 <p className="text-xs text-gray-500">
@@ -275,7 +285,7 @@ export default function LoteDetalleModal({
                 </p>
               )}
               <div className="flex justify-end">
-                <button onClick={agregarBin} disabled={saving || !paseroId || !kgValido || excede} className={btnPrimary}>
+                <button onClick={agregarBin} disabled={saving || !paseroId || !kgValido || excede || faltaAclarar} className={btnPrimary}>
                   {saving ? 'Guardando...' : 'Agregar bin'}
                 </button>
               </div>

@@ -75,7 +75,7 @@ export default function RemitosPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Remitos</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Entregas de pasa, despachos de fresco y bodega, y traslados a pasero (solo kilos). Los despachos se cargan desde Producción → Cosecha.</p>
+          <p className="text-sm text-gray-500 mt-0.5">Entregas de pasa (se cargan acá) y remitos de fresco, bodega y traslado a pasero (nacen del despacho en Producción → Cosecha, no se crean a mano). Solo kilos.</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={tipo} onChange={(e) => setTipo(e.target.value as '' | TipoRemito)} className={selectFiltroCls}>
@@ -120,7 +120,7 @@ export default function RemitosPage() {
                   <th className={thCls}>Comprador / Pasero</th>
                   <th className={thCls}>Patente</th>
                   <th className={thRCls}>Kg total</th>
-                  <th className={thCls}>Comprobante INV</th>
+                  <th className={thCls}>Comprobante de bodega</th>
                   <th className={thCls} />
                 </tr>
               </thead>
@@ -153,12 +153,16 @@ export default function RemitosPage() {
                               SUV {r.comprobante_bodega.numero_suv} · dif. {fmtKg(r.comprobante_bodega.diferencia_kg)} kg
                             </span>
                           ) : (
-                            <button
-                              onClick={() => setComprobanteDe(r)}
-                              className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
-                            >
-                              <FileCheck size={13} /> Cargar comprobante
-                            </button>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700">Pendiente</span>
+                              <button
+                                onClick={() => setComprobanteDe(r)}
+                                className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
+                                title="Cargá el pesaje de la bodega cuando llegue el camión"
+                              >
+                                <FileCheck size={13} /> Cargar cuando llegue
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="px-2 py-2.5 text-right">

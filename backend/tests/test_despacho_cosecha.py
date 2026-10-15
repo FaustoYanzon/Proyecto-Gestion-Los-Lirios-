@@ -269,7 +269,7 @@ async def test_idempotencia_no_duplica_nada(client, create_user, create_parcela,
 
 # ── Saldo ───────────────────────────────────────────────────────────────────
 
-async def test_saldo_comprador_agotado_no_admite_otro_remito(client, create_user, create_parcela):
+async def test_remito_manual_sobre_cosecha_despachada_no_se_admite(client, create_user, create_parcela):
     h = await _auth(client, create_user)
     parral = await create_parcela(nombre="Parral 1", variedad=VariedadUva.flame)
     comprador_id = await _comprador(client, h)
@@ -279,7 +279,7 @@ async def test_saldo_comprador_agotado_no_admite_otro_remito(client, create_user
         "tipo": "salida_fresco", "fecha": "2026-02-11", "comprador_id": comprador_id,
         "lineas": [{"cosecha_id": data["cosecha"]["id"], "kg": "1"}],
     }, headers=h)
-    assert resp.status_code == 409  # saldo 0
+    assert resp.status_code == 422  # el alta manual de FRE/BOD ya no existe
 
 
 async def test_linea_tra_no_descuenta_saldo(client, create_user, create_parcela, session_factory):

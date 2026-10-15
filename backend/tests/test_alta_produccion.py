@@ -3,10 +3,14 @@ entregas parciales, lotes de una sola variedad, mermas y conciliación INV.
 """
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import select
+
+from app.models.alta_produccion import Remito, RemitoLinea, TipoRemito
 from app.models.parcela import TipoParcela, VariedadUva
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.services import mermas
 
 
@@ -36,7 +40,7 @@ async def _lote_cerrado(client, headers, pasero_id, kg="1000", variedad="sultani
         "/lotes-pasa/", json={"variedad": variedad, "calidad": calidad, "fecha": "2026-03-01"}, headers=headers
     )).json()
     resp = await client.post(
-        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero_id, "kg_real": kg}, headers=headers
+        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero_id, "kg_real": kg, "observaciones": "bin de prueba"}, headers=headers
     )
     assert resp.status_code == 201, resp.text
     cerrado = await client.post(f"/lotes-pasa/{lote['id']}/cerrar", headers=headers)
@@ -165,12 +169,12 @@ async def test_no_se_levanta_mas_pasa_que_uva_disponible_sobre_4(client, create_
     )).json()
 
     demasiado = await client.post(
-        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "250.01"}, headers=headers
+        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "250.01", "observaciones": "bin incompleto"}, headers=headers
     )
     assert demasiado.status_code == 409
 
     justo = await client.post(
-        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "250"}, headers=headers
+        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "250", "observaciones": "bin incompleto"}, headers=headers
     )
     assert justo.status_code == 201
 
@@ -186,7 +190,7 @@ async def test_lote_de_una_variedad_no_toma_uva_de_otra(client, create_user, cre
     )).json()
 
     resp = await client.post(
-        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "100"}, headers=headers
+        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "100", "observaciones": "bin incompleto"}, headers=headers
     )
     assert resp.status_code == 409
 
@@ -435,47 +439,42 @@ async def _cosecha(client, headers, parcela_id, destino, kg=10000):
     return resp.json()["id"]
 
 
-async def test_remito_salida_fresco_descuenta_de_la_cosecha(client, create_user, create_parcela):
+async def _despachar(client, headers, parcela_id, para, comprador_id, kg="1000", fecha="2026-02-06"):
+    """Los remitos FRE/BOD nacen del despacho de cosecha (no hay alta manual)."""
+    resp = await client.post(
+        "/produccion/cosecha/despacho",
+        json={"fecha": fecha, "kg_total": kg, "para": para, "parcela_id": parcela_id,
+              "comprador_id": comprador_id},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def test_remito_manual_de_fresco_bodega_y_traslado_ya_no_se_admite(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
     cosecha_id = await _cosecha(client, headers, parral.id, "MI", kg=10000)
     comprador = await _comprador(client, headers, "Mercado Central")
-
-    def salida(kg):
-        return {"tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
-                "lineas": [{"cosecha_id": cosecha_id, "kg": kg}]}
-
-    assert (await client.post("/remitos/", json=salida("6000"), headers=headers)).status_code == 201
-    # Quedan 4000 sin despachar.
-    assert (await client.post("/remitos/", json=salida("4001"), headers=headers)).status_code == 409
-    assert (await client.post("/remitos/", json=salida("4000"), headers=headers)).status_code == 201
-
-
-async def test_remito_bodega_solo_acepta_cosecha_con_destino_bodega(client, create_user, create_parcela):
-    headers = await _auth(client, create_user)
-    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
-    cosecha_mi = await _cosecha(client, headers, parral.id, "MI")
-    comprador = await _comprador(client, headers, "Bodega Norte")
-    resp = await client.post(
-        "/remitos/",
-        json={"tipo": "salida_bodega", "fecha": "2026-02-06", "comprador_id": comprador,
-              "lineas": [{"cosecha_id": cosecha_mi, "kg": "1000"}]},
-        headers=headers,
-    )
-    assert resp.status_code == 422
+    for tipo in ("salida_fresco", "salida_bodega", "traslado_pasero"):
+        resp = await client.post(
+            "/remitos/",
+            json={"tipo": tipo, "fecha": "2026-02-06", "comprador_id": comprador,
+                  "lineas": [{"cosecha_id": cosecha_id, "kg": "1000"}]},
+            headers=headers,
+        )
+        assert resp.status_code == 422, (tipo, resp.text)
+        assert "despacho" in resp.json()["detail"]
+    # Nada quedó descontado de la cosecha.
+    detalle = (await client.get(f"/produccion/cosecha/{cosecha_id}", headers=headers)).json()
+    assert Decimal(detalle["saldo_kg"]) == Decimal("10000")
 
 
 async def test_comprobante_inv_calcula_diferencia_y_no_se_duplica(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
-    cosecha_id = await _cosecha(client, headers, parral.id, "BODEGA", kg=20000)
     comprador = await _comprador(client, headers, "Bodega Norte")
-    remito = (await client.post(
-        "/remitos/",
-        json={"tipo": "salida_bodega", "fecha": "2026-02-06", "comprador_id": comprador,
-              "lineas": [{"cosecha_id": cosecha_id, "kg": "18000"}]},
-        headers=headers,
-    )).json()
+    remito = (await _despachar(client, headers, parral.id, "bodega", comprador, kg="18000"))["remito"]
 
     resp = await client.post(
         f"/remitos/{remito['id']}/comprobante-bodega",
@@ -496,17 +495,21 @@ async def test_comprobante_inv_calcula_diferencia_y_no_se_duplica(client, create
     assert detalle["comprobante_bodega"]["numero_suv"] == "SUV-123"
 
 
+async def test_remito_bodega_sin_comprobante_queda_pendiente_hasta_que_llega(client, create_user, create_parcela):
+    """El comprobante de la bodega se carga cuando llega: el remito nace sin él."""
+    headers = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
+    comprador = await _comprador(client, headers, "Bodega Norte")
+    remito = (await _despachar(client, headers, parral.id, "bodega", comprador))["remito"]
+    detalle = (await client.get(f"/remitos/{remito['id']}", headers=headers)).json()
+    assert detalle["comprobante_bodega"] is None
+
+
 async def test_comprobante_inv_solo_para_remitos_a_bodega(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
-    cosecha_id = await _cosecha(client, headers, parral.id, "MI")
     comprador = await _comprador(client, headers)
-    remito = (await client.post(
-        "/remitos/",
-        json={"tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
-              "lineas": [{"cosecha_id": cosecha_id, "kg": "500"}]},
-        headers=headers,
-    )).json()
+    remito = (await _despachar(client, headers, parral.id, "comprador", comprador, kg="500"))["remito"]
     resp = await client.post(
         f"/remitos/{remito['id']}/comprobante-bodega",
         json={"numero_suv": "SUV-1", "kg_recibidos": "500"},
@@ -604,7 +607,9 @@ async def test_ubicacion_duplicada_devuelve_409(client, create_user, create_parc
 
 # ── saldo_kg en cosecha y labels en líneas de remito ────────────────────────
 
-async def test_cosecha_expone_saldo_kg_antes_y_despues_de_una_salida(client, create_user, create_parcela):
+async def test_cosecha_expone_saldo_kg_antes_y_despues_de_una_salida(
+    client, create_user, create_parcela, session_factory
+):
     headers = await _auth(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
     cosecha_id = await _cosecha(client, headers, parral.id, "MI", kg=10000)
@@ -613,9 +618,15 @@ async def test_cosecha_expone_saldo_kg_antes_y_despues_de_una_salida(client, cre
     antes = (await client.get(f"/produccion/cosecha/{cosecha_id}", headers=headers)).json()
     assert Decimal(antes["saldo_kg"]) == Decimal("10000")
 
-    salida = {"tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
-              "lineas": [{"cosecha_id": cosecha_id, "kg": "6000"}]}
-    assert (await client.post("/remitos/", json=salida, headers=headers)).status_code == 201
+    # Salida parcial de una cosecha ya existente (como las de antes del despacho).
+    async with session_factory() as s:
+        user = (await s.execute(select(User))).scalars().first()
+        s.add(Remito(
+            tipo=TipoRemito.salida_fresco, numero="FRE-000001", fecha=date(2026, 2, 6),
+            comprador_id=comprador, kg_total=Decimal("6000"), created_by=user.id,
+            lineas=[RemitoLinea(cosecha_id=cosecha_id, kg=Decimal("6000"))],
+        ))
+        await s.commit()
 
     detalle = (await client.get(f"/produccion/cosecha/{cosecha_id}", headers=headers)).json()
     assert Decimal(detalle["saldo_kg"]) == Decimal("4000")
@@ -628,7 +639,6 @@ async def test_lineas_de_remito_traen_lote_label_y_cosecha_label(client, create_
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
     lote = await _lote_cerrado(client, headers, pasero.id, kg="1000")
-    cosecha_id = await _cosecha(client, headers, parral.id, "MI", kg=5000)
     comprador = await _comprador(client, headers)
 
     pasa = await client.post("/remitos/", json={
@@ -639,14 +649,44 @@ async def test_lineas_de_remito_traen_lote_label_y_cosecha_label(client, create_
     assert linea["lote_label"] == f"{lote['temporada']} · sultanina · 1 · N°{lote['numero']}"
     assert linea["cosecha_label"] is None
 
-    fresco = await client.post("/remitos/", json={
-        "tipo": "salida_fresco", "fecha": "2026-02-06", "comprador_id": comprador,
-        "lineas": [{"cosecha_id": cosecha_id, "kg": "100"}]}, headers=headers)
-    assert fresco.status_code == 201, fresco.text
-    linea = fresco.json()["lineas"][0]
+    fresco = await _despachar(client, headers, parral.id, "comprador", comprador, kg="100", fecha="2026-02-05")
+    linea = fresco["remito"]["lineas"][0]
     assert linea["cosecha_label"] == "2026-02-05 · flame · Parral 1"
     assert linea["lote_label"] is None
 
     listado = (await client.get("/remitos/", headers=headers)).json()
     labels = {(l["lote_label"], l["cosecha_label"]) for r in listado for l in r["lineas"]}
     assert len(labels) == 2
+
+
+# ── Bin incompleto: exige aclaración ────────────────────────────────────────
+
+async def test_bin_incompleto_exige_aclaracion_y_con_ella_se_agrega(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    await _ingresar_uva(client, headers, pasero.id, kg="4000")
+    lote = (await client.post(
+        "/lotes-pasa/", json={"variedad": "sultanina", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
+    )).json()
+    url = f"/lotes-pasa/{lote['id']}/bines"
+
+    # Umbral: 80 % de 350 kg = 280 kg.
+    sin_aclarar = await client.post(url, json={"pasero_id": pasero.id, "kg_real": "279"}, headers=headers)
+    assert sin_aclarar.status_code == 422
+    assert "aclaración" in sin_aclarar.json()["detail"]
+    en_blanco = await client.post(
+        url, json={"pasero_id": pasero.id, "kg_real": "279", "observaciones": "   "}, headers=headers
+    )
+    assert en_blanco.status_code == 422
+
+    aclarado = await client.post(
+        url, json={"pasero_id": pasero.id, "kg_real": "279", "observaciones": "medio bin, fin de la levantada"},
+        headers=headers,
+    )
+    assert aclarado.status_code == 201
+    # En el umbral o por encima no hace falta aclarar.
+    normal = await client.post(url, json={"pasero_id": pasero.id, "kg_real": "280"}, headers=headers)
+    assert normal.status_code == 201
+
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    assert [b["observaciones"] for b in detalle["bines"]] == ["medio bin, fin de la levantada", None]

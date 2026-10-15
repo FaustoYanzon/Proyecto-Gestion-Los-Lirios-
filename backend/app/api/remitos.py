@@ -1,9 +1,10 @@
-"""Remitos de salida (fresco / bodega) y de entrega de pasa, más el
+"""Remitos: consulta/PDF de todos los tipos, alta manual solo de entrega de pasa, y
 comprobante INV (SUV + kg recibidos) que concilia un remito a bodega.
 
-- salida_fresco / salida_bodega: cada línea descuenta de un `RegistroCosecha`.
+- salida_fresco / salida_bodega / traslado_pasero: nacen únicamente del despacho de
+  cosecha (`POST /produccion/cosecha/despacho`); acá solo se consultan y se imprimen.
 - entrega_pasa: cada línea descuenta del saldo de un `Lote` cerrado
-  (entregas parciales).
+  (entregas parciales) y se crea con `POST /remitos/`.
 """
 from collections import defaultdict
 from datetime import date
@@ -35,7 +36,7 @@ from app.models.alta_produccion import (
     TipoRemito,
 )
 from app.models.parcela import Parcela
-from app.models.produccion import DestinoCosecha, OrigenCosecha, RegistroCosecha
+from app.models.produccion import OrigenCosecha
 from app.models.user import User
 from app.schemas.alta_produccion import (
     ComprobanteBodegaCreate,
@@ -45,18 +46,9 @@ from app.schemas.alta_produccion import (
     RemitoPdfLinkResponse,
     RemitoResponse,
 )
-from app.services.alta_produccion import (
-    saldo_cosecha,
-    siguiente_numero_remito,
-)
+from app.services.alta_produccion import siguiente_numero_remito
 
 router = APIRouter(prefix="/remitos", tags=["Remitos"])
-
-DESTINOS_POR_TIPO: dict[TipoRemito, set[DestinoCosecha]] = {
-    TipoRemito.salida_fresco: {DestinoCosecha.mercado_interno, DestinoCosecha.exportacion},
-    TipoRemito.salida_bodega: {DestinoCosecha.bodega},
-}
-
 
 _LOAD_OPTS = (
     selectinload(Remito.lineas).selectinload(RemitoLinea.lote),
@@ -225,75 +217,44 @@ async def create_remito(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_estricto),
 ) -> RemitoResponse:
-    if data.tipo == TipoRemito.traslado_pasero:
+    if data.tipo != TipoRemito.entrega_pasa:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Los remitos de traslado a pasero se generan con POST /produccion/cosecha/despacho",
+            detail="Los remitos de fresco, bodega y traslado a pasero se generan con "
+            "POST /produccion/cosecha/despacho; acá solo se crean entregas de pasa",
         )
     if await db.get(Comprador, data.comprador_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprador not found")
 
-    entrega_pasa = data.tipo == TipoRemito.entrega_pasa
     for linea in data.lineas:
-        if entrega_pasa and (linea.lote_id is None or linea.cosecha_id is not None):
+        if linea.lote_id is None or linea.cosecha_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Una entrega de pasa descuenta de lotes: cada línea lleva solo lote_id",
             )
-        if not entrega_pasa and (linea.cosecha_id is None or linea.lote_id is not None):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Una salida de fresco/bodega descuenta de cosecha: cada línea lleva solo cosecha_id",
-            )
 
-    # Total pedido por fuente (una misma fuente puede repetirse en varias líneas).
+    # Total pedido por lote (un mismo lote puede repetirse en varias líneas).
     pedido: dict[str, Decimal] = defaultdict(Decimal)
     for linea in data.lineas:
-        pedido[linea.lote_id if entrega_pasa else linea.cosecha_id] += linea.kg  # type: ignore[index]
+        pedido[linea.lote_id] += linea.kg  # type: ignore[index]
 
-    if entrega_pasa:
-        # Orden determinístico: dos remitos sobre los mismos lotes no se traban.
-        for lote_id, kg in sorted(pedido.items()):
-            lote = (
-                await db.execute(select(Lote).where(Lote.id == lote_id).with_for_update())
-            ).scalar_one_or_none()
-            if lote is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Lote {lote_id} not found")
-            if lote.estado != EstadoLote.cerrado:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT, detail="Solo se entrega pasa de lotes cerrados"
-                )
-            if kg > lote.saldo_kg:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"El lote {lote.numero} tiene saldo {lote.saldo_kg} kg; se piden {kg} kg",
-                )
-            lote.saldo_kg -= kg
-    else:
-        for cosecha_id, kg in sorted(pedido.items()):
-            # Lock de la cosecha: su saldo es derivado (suma de líneas), así que
-            # sin esto dos remitos simultáneos despachan más de lo cosechado.
-            cosecha = (
-                await db.execute(
-                    select(RegistroCosecha).where(RegistroCosecha.id == cosecha_id).with_for_update()
-                )
-            ).scalar_one_or_none()
-            if cosecha is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail=f"Registro de cosecha {cosecha_id} not found"
-                )
-            if cosecha.destino not in DESTINOS_POR_TIPO[data.tipo]:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"La cosecha tiene destino {cosecha.destino.value}, "
-                    f"incompatible con un remito {data.tipo.value}",
-                )
-            saldo = await saldo_cosecha(db, cosecha)
-            if kg > saldo:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"La cosecha tiene {saldo} kg sin despachar; se piden {kg} kg",
-                )
+    # Orden determinístico: dos remitos sobre los mismos lotes no se traban.
+    for lote_id, kg in sorted(pedido.items()):
+        lote = (
+            await db.execute(select(Lote).where(Lote.id == lote_id).with_for_update())
+        ).scalar_one_or_none()
+        if lote is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Lote {lote_id} not found")
+        if lote.estado != EstadoLote.cerrado:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Solo se entrega pasa de lotes cerrados"
+            )
+        if kg > lote.saldo_kg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El lote {lote.numero} tiene saldo {lote.saldo_kg} kg; se piden {kg} kg",
+            )
+        lote.saldo_kg -= kg
 
     numero = data.numero or await siguiente_numero_remito(db, data.tipo)
     duplicado = await db.scalar(

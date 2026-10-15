@@ -51,6 +51,9 @@ from app.services.alta_produccion import (
 
 router = APIRouter(prefix="/lotes-pasa", tags=["Lotes de pasa"])
 
+# Bajo este porcentaje del peso teórico el bin se considera incompleto y exige aclaración.
+UMBRAL_BIN_INCOMPLETO = Decimal("0.8")
+
 
 def temporada_de(fecha: date) -> int:
     """Campaña mayo -> abril (NO año calendario)."""
@@ -299,6 +302,14 @@ async def agregar_bin(
     await get_pasero_or_404(db, data.pasero_id, for_update=True)
 
     params = await get_parametros(db)
+    # Un bin a medio llenar es válido, pero hay que dejar constancia de por qué.
+    minimo_sin_aclarar = params.kg_nominal_bin * UMBRAL_BIN_INCOMPLETO
+    if data.kg_real < minimo_sin_aclarar and not (data.observaciones or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Un bin de menos de {minimo_sin_aclarar:.0f} kg (bin incompleto) "
+            "requiere una aclaración en observaciones",
+        )
     disponible = await uva_disponible(db, data.pasero_id, lote.variedad)
     maxima = mermas.pasa_maxima(disponible, params.ratio_uva_pasa)
     if data.kg_real > maxima:

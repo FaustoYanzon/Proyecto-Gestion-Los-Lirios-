@@ -84,6 +84,10 @@ export default function LoteModal({ loteId, modo, paseros, onClose, onChanged }:
   const kgOk = kgValido(kg)
   const excede = maxima != null && kgOk && kgNum > maxima
   const dif = kgOk && nominal != null ? kgNum - nominal : null
+  // Mismo umbral que el backend (UMBRAL_BIN_INCOMPLETO): bajo el 80 % del teórico hay que aclarar.
+  const minimoSinAclarar = nominal != null ? nominal * 0.8 : null
+  const incompleto = kgOk && minimoSinAclarar != null && kgNum < minimoSinAclarar
+  const faltaAclarar = incompleto && !obs.trim()
   const progreso = lote?.tope_bines ? Math.min(100, (lote.cantidad_bines / lote.tope_bines) * 100) : 0
 
   const paseroOpts: SelectOption[] = paseros.map((p) => ({ value: p.id, label: p.nombre }))
@@ -267,12 +271,14 @@ export default function LoteModal({ loteId, modo, paseros, onClose, onChanged }:
                   </Text>
                 )}
 
-                <Text style={styles.fieldLabel}>OBSERVACIONES (OPCIONAL)</Text>
+                <Text style={styles.fieldLabel}>
+                  {incompleto ? 'OBSERVACIONES * (BIN INCOMPLETO)' : 'OBSERVACIONES (OPCIONAL)'}
+                </Text>
                 <TextInput
-                  style={[styles.input, styles.inputMultiline]}
+                  style={[styles.input, styles.inputMultiline, faltaAclarar && { borderColor: colors.sangre }]}
                   value={obs}
                   onChangeText={setObs}
-                  placeholder="Ej.: bolsón con humedad, bin golpeado…"
+                  placeholder={incompleto ? 'Ej.: bin a medio llenar, fin de la levantada…' : 'Ej.: bolsón con humedad, bin golpeado…'}
                   placeholderTextColor={colors.niebla}
                   multiline
                   textAlignVertical="top"
@@ -287,9 +293,9 @@ export default function LoteModal({ loteId, modo, paseros, onClose, onChanged }:
                   </Text>
                 )}
                 <TouchableOpacity
-                  style={[styles.saveBtn, (saving || !paseroId || !kgOk || excede) && { opacity: 0.5 }]}
+                  style={[styles.saveBtn, (saving || !paseroId || !kgOk || excede || faltaAclarar) && { opacity: 0.5 }]}
                   onPress={agregarBin}
-                  disabled={saving || !paseroId || !kgOk || excede}
+                  disabled={saving || !paseroId || !kgOk || excede || faltaAclarar}
                 >
                   {saving
                     ? <ActivityIndicator color={colors.blanco} size="small" />
