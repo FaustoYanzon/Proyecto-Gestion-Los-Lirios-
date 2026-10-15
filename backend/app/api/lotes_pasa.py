@@ -26,7 +26,7 @@ from app.core.security import (
     create_lote_pdf_token,
     decode_lote_pdf_token,
 )
-from app.models.alta_produccion import Bin, Deposito, EstadoLote, Lote
+from app.models.alta_produccion import Bin, Deposito, EstadoLote, Lote, Remito, RemitoLinea
 from app.models.parcela import Parcela, VariedadUva
 from app.models.user import User
 from app.schemas.alta_produccion import (
@@ -268,6 +268,20 @@ async def descargar_pdf_firmado(token: str, db: AsyncSession = Depends(get_db)) 
     return await _pdf_lote(db, lote_id)
 
 
+async def _entregas_de(db: AsyncSession, bin_ids: list[str]) -> dict[str, str]:
+    """bin_id -> N° de remito al que salió (solo los bines ya entregados)."""
+    if not bin_ids:
+        return {}
+    filas = (
+        await db.execute(
+            select(RemitoLinea.bin_id, Remito.numero)
+            .join(Remito, Remito.id == RemitoLinea.remito_id)
+            .where(RemitoLinea.bin_id.in_(bin_ids))
+        )
+    ).all()
+    return dict(filas)
+
+
 @router.get("/{lote_id}", response_model=LoteDetalleResponse)
 async def get_lote(
     lote_id: str,
@@ -277,9 +291,14 @@ async def get_lote(
     lote = await _get_lote(db, lote_id)
     params = await get_parametros(db)
     base = _lote_response(lote, params)
-    return LoteDetalleResponse(
-        **base.model_dump(), bines=[BinResponse.model_validate(b) for b in lote.bines]
-    )
+    entregas = await _entregas_de(db, [b.id for b in lote.bines])
+    bines = []
+    for b in lote.bines:
+        resp = BinResponse.model_validate(b)
+        resp.entregado = b.id in entregas
+        resp.remito_numero = entregas.get(b.id)
+        bines.append(resp)
+    return LoteDetalleResponse(**base.model_dump(), bines=bines)
 
 
 @router.post("/{lote_id}/bines", response_model=LoteResponse, status_code=status.HTTP_201_CREATED)

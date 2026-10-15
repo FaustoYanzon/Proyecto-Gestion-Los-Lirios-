@@ -135,6 +135,16 @@ export default function RootLayout() {
               headerTitleStyle: { fontWeight: 'bold' },
             }}
           />
+          <Stack.Screen
+            name="alta-produccion/entrega"
+            options={{
+              headerShown: true,
+              title: 'Entregar pasa',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
         </Stack>
       </ErrorBoundary>
     </GestureHandlerRootView>

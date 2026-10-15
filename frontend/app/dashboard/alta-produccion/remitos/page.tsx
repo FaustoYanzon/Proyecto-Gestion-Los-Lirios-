@@ -2,11 +2,11 @@
 
 import { Fragment, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Trash2, ChevronDown, ChevronRight, ChevronLeft, FileCheck, Printer } from 'lucide-react'
+import { Plus, X, ChevronDown, ChevronRight, ChevronLeft, FileCheck, Printer } from 'lucide-react'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { VARIEDAD_LABELS } from '@/lib/api/parcelas'
 import {
-  getRemitos, createRemito, cargarComprobanteBodega, getCompradores, getLotesPasa,
+  getRemitos, createRemito, cargarComprobanteBodega, getCompradores, getLotesPasa, getLotePasa,
   TIPO_REMITO_LABELS, errorDetail, abrirRemitoPdf,
   type Remito, type TipoRemito,
 } from '@/lib/api/altaProduccion'
@@ -183,6 +183,7 @@ export default function RemitosPage() {
                               {r.lineas.map((l) => (
                                 <li key={l.id}>
                                   {l.lote_label ?? l.cosecha_label ?? `${l.lote_id ? 'Lote' : 'Cosecha'} ${(l.lote_id ?? l.cosecha_id ?? '').slice(0, 8)}`}
+                                  {l.tarja && <>{' · '}<span className="font-mono">{l.tarja}</span></>}
                                   {' · '}<b className="font-mono">{fmtKg(l.kg)} kg</b>
                                 </li>
                               ))}
@@ -248,10 +249,8 @@ export default function RemitosPage() {
 
 // ── Nuevo remito ──────────────────────────────────────────────────────────────
 
-type Linea = { fuente: string; kg: string }
-
-// Solo Entrega de pasa: los despachos de fresco/bodega/pasero se cargan desde
-// Producción → Cosecha ("Nuevo despacho").
+// Solo Entrega de pasa, por bines: el peso es el real de cada bin/bolsón. Los
+// despachos de fresco/bodega/pasero se cargan desde Producción → Cosecha.
 function NuevoRemitoModal({
   compradores, onClose, onCreated,
 }: {
@@ -264,7 +263,9 @@ function NuevoRemitoModal({
   const [numero, setNumero] = useState('')
   const [patente, setPatente] = useState('')
   const [obs, setObs] = useState('')
-  const [lineas, setLineas] = useState<Linea[]>([{ fuente: '', kg: '' }])
+  const [loteId, setLoteId] = useState('')
+  // bin id -> kg (los elegidos, de cualquier lote que se haya ido tocando)
+  const [elegidos, setElegidos] = useState<Record<string, number>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -272,21 +273,30 @@ function NuevoRemitoModal({
     queryKey: ['ap-lotes', 'cerrados-con-saldo'],
     queryFn: () => getLotesPasa({ estado: 'cerrado', con_saldo: true }),
   })
+  const { data: lote } = useQuery({
+    queryKey: ['ap-lote', loteId],
+    queryFn: () => getLotePasa(loteId),
+    enabled: !!loteId,
+  })
 
-  const setLinea = (i: number, patch: Partial<Linea>) =>
-    setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
+  const disponibles = (lote?.bines ?? []).filter((b) => !b.entregado)
+  const cantidad = Object.keys(elegidos).length
+  const total = Object.values(elegidos).reduce((s, kg) => s + kg, 0)
 
-  const lineasValidas = lineas.every((l) => l.fuente && decimalOk(l.kg))
-  const total = lineas.reduce((s, l) => s + (decimalOk(l.kg) ? Number(l.kg.replace(',', '.')) : 0), 0)
-
-  // Líneas repetidas del mismo lote se suman en el backend: se avisa si excede el saldo.
-  const pedidoPorLote = new Map<string, number>()
-  for (const l of lineas) {
-    if (l.fuente && decimalOk(l.kg)) {
-      pedidoPorLote.set(l.fuente, (pedidoPorLote.get(l.fuente) ?? 0) + Number(l.kg.replace(',', '.')))
-    }
-  }
-  const excedidos = lotes.filter((l) => (pedidoPorLote.get(l.id) ?? 0) > l.saldo_kg)
+  const toggle = (id: string, kg: number) =>
+    setElegidos((e) => {
+      const { [id]: quitado, ...resto } = e
+      return quitado !== undefined ? resto : { ...e, [id]: kg }
+    })
+  const todosDelLote = disponibles.length > 0 && disponibles.every((b) => elegidos[b.id] !== undefined)
+  const toggleTodos = () =>
+    setElegidos((e) => {
+      const resto = { ...e }
+      for (const b of disponibles) delete resto[b.id]
+      if (todosDelLote) return resto
+      for (const b of disponibles) resto[b.id] = b.kg_real
+      return resto
+    })
 
   async function guardar() {
     setSaving(true)
@@ -297,7 +307,7 @@ function NuevoRemitoModal({
         numero: numero.trim() || null,
         vehiculo_patente: patente.trim() || null,
         observaciones: obs.trim() || null,
-        lineas: lineas.map((l) => ({ kg: l.kg.trim().replace(',', '.'), lote_id: l.fuente })),
+        lineas: Object.keys(elegidos).map((bin_id) => ({ bin_id })),
       })
       await onCreated()
     } catch (e) {
@@ -338,41 +348,46 @@ function NuevoRemitoModal({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-gray-700">Líneas (lotes cerrados con saldo)</p>
-            {lineas.map((l, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <select value={l.fuente} onChange={(e) => setLinea(i, { fuente: e.target.value })} className={`${inputCls.replace('w-full', '')} min-w-0 flex-1`}>
-                  <option value="">— Seleccionar lote —</option>
-                  {lotes.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {VARIEDAD_LABELS[x.variedad]} C{x.calidad} N° {x.numero} · saldo {fmtKg(x.saldo_kg)} kg
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text" inputMode="decimal" placeholder="Kg" value={l.kg}
-                  onChange={(e) => setLinea(i, { kg: e.target.value })}
-                  className={`${inputCls.replace('w-full', '')} w-28 shrink-0`}
-                />
-                <button
-                  onClick={() => setLineas((ls) => ls.filter((_, j) => j !== i))}
-                  disabled={lineas.length === 1}
-                  title="Quitar línea"
-                  className="p-2 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
-                >
-                  <Trash2 size={14} />
-                </button>
+            <p className="text-xs font-semibold text-gray-700">Bines / bolsones (de lotes cerrados con saldo)</p>
+            <select value={loteId} onChange={(e) => setLoteId(e.target.value)} className={inputCls}>
+              <option value="">— Elegí un lote para ver sus bines —</option>
+              {lotes.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {VARIEDAD_LABELS[x.variedad]} C{x.calidad} N° {x.numero} · saldo {fmtKg(x.saldo_kg)} kg
+                </option>
+              ))}
+            </select>
+
+            {lote && (
+              <div className="rounded border border-gray-200 divide-y divide-gray-100">
+                <label className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={todosDelLote} onChange={toggleTodos} disabled={disponibles.length === 0} />
+                  Todo el lote ({disponibles.length} bines disponibles · {fmtKg(disponibles.reduce((s, b) => s + b.kg_real, 0))} kg)
+                </label>
+                {lote.bines.map((b) => (
+                  <label
+                    key={b.id}
+                    className={`flex items-center gap-3 px-3 py-2 text-sm ${b.entregado ? 'opacity-50' : 'cursor-pointer hover:bg-gray-50'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={elegidos[b.id] !== undefined}
+                      disabled={b.entregado}
+                      onChange={() => toggle(b.id, b.kg_real)}
+                    />
+                    <span className="font-mono text-gray-900">{b.tarja}</span>
+                    <span className="font-mono text-gray-700 ml-auto">{fmtKg(b.kg_real)} kg</span>
+                    {b.entregado && <span className="text-xs text-gray-500">entregado en {b.remito_numero}</span>}
+                    {!b.entregado && b.observaciones && (
+                      <span className="text-xs text-gray-500 max-w-[180px] truncate" title={b.observaciones}>{b.observaciones}</span>
+                    )}
+                  </label>
+                ))}
               </div>
-            ))}
-            <button onClick={() => setLineas((ls) => [...ls, { fuente: '', kg: '' }])} className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline">
-              <Plus size={13} /> Agregar línea
-            </button>
-            {excedidos.map((l) => (
-              <p key={l.id} className="text-xs text-red-600">
-                El lote {VARIEDAD_LABELS[l.variedad]} C{l.calidad} N° {l.numero} tiene saldo {fmtKg(l.saldo_kg)} kg y estás pidiendo {fmtKg(pedidoPorLote.get(l.id) ?? 0)} kg (las líneas del mismo lote se suman).
-              </p>
-            ))}
-            <p className="text-xs text-gray-600 text-right">Total: <b className="font-mono">{fmtKg(total)} kg</b></p>
+            )}
+            <p className="text-xs text-gray-600 text-right">
+              {cantidad} {cantidad === 1 ? 'bin' : 'bines'} · Total: <b className="font-mono">{fmtKg(total)} kg</b>
+            </p>
           </div>
 
           <div>
@@ -383,7 +398,7 @@ function NuevoRemitoModal({
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className={btnSecondary}>Cancelar</button>
-          <button onClick={guardar} disabled={saving || !compradorId || !fecha || !lineasValidas || excedidos.length > 0} className={btnPrimary}>
+          <button onClick={guardar} disabled={saving || !compradorId || !fecha || cantidad === 0} className={btnPrimary}>
             {saving ? 'Guardando...' : 'Emitir remito'}
           </button>
         </div>

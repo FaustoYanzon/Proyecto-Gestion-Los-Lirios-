@@ -344,6 +344,9 @@ export interface BinPasa {
   kg_real: number
   uva_consumida_kg: number
   observaciones: string | null
+  /** Ya salió en un remito de entrega (un bin sale una sola vez). */
+  entregado: boolean
+  remito_numero: string | null
 }
 
 export interface LotePasaDetalle extends LotePasa {
@@ -358,9 +361,9 @@ function parseLote(d: Record<string, unknown>): LotePasa {
   }
 }
 
-export async function getLotesPasa(estado?: EstadoLote): Promise<LotePasa[]> {
+export async function getLotesPasa(estado?: EstadoLote, conSaldo = false): Promise<LotePasa[]> {
   const { data } = await api.get<Record<string, unknown>[]>('/lotes-pasa/', {
-    params: estado ? { estado } : {},
+    params: { ...(estado ? { estado } : {}), ...(conSaldo ? { con_saldo: true } : {}) },
   })
   return data.map(parseLote)
 }
@@ -395,6 +398,39 @@ export async function agregarBinPasa(
 export async function cerrarLotePasa(loteId: string): Promise<LotePasa> {
   const { data } = await api.post<Record<string, unknown>>(`/lotes-pasa/${loteId}/cerrar`, {})
   return parseLote(data)
+}
+
+// ── Entrega de pasa a comprador (por bines) ───────────────────────────────────
+
+export interface RemitoEntrega {
+  id: string
+  numero: string
+  kg_total: number
+  cantidad_bines: number
+  comprador_nombre: string | null
+}
+
+/** Remito PAS: cada línea es un bin; el peso lo pone el backend (peso real del bin). */
+export async function createEntregaPasa(payload: {
+  fecha: string
+  comprador_id: string
+  vehiculo_patente?: string | null
+  observaciones?: string | null
+  bin_ids: string[]
+}): Promise<RemitoEntrega> {
+  const { bin_ids, ...resto } = payload
+  const { data } = await api.post<Record<string, unknown>>('/remitos/', {
+    ...resto,
+    tipo: 'entrega_pasa',
+    lineas: bin_ids.map((bin_id) => ({ bin_id })),
+  })
+  return {
+    id: String(data.id),
+    numero: String(data.numero),
+    kg_total: num(data.kg_total),
+    cantidad_bines: (data.lineas as unknown[]).length,
+    comprador_nombre: (data.comprador_nombre as string | null) ?? null,
+  }
 }
 
 // PDF de lotes: link firmado de 5 min (mismo esquema que el remito) y se abre con

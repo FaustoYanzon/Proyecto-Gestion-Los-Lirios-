@@ -295,6 +295,9 @@ export interface BinPasa {
   uva_consumida_kg: number
   observaciones: string | null
   created_at: string
+  /** Ya salió en un remito de entrega a comprador (un bin sale una sola vez). */
+  entregado: boolean
+  remito_numero: string | null
 }
 
 export interface LotePasaDetalle extends LotePasa {
@@ -370,6 +373,8 @@ export interface RemitoLinea {
   cosecha_id: string | null
   lote_label: string | null
   cosecha_label: string | null
+  /** Tarja del bin entregado (solo entregas de pasa). */
+  tarja?: string | null
   kg: number
 }
 
@@ -409,8 +414,8 @@ export interface RemitoCreate {
   numero?: string | null
   vehiculo_patente?: string | null
   observaciones?: string | null
-  /** kg como string decimal; entrega_pasa usa lote_id, salidas usan cosecha_id. */
-  lineas: { kg: string; lote_id?: string | null; cosecha_id?: string | null }[]
+  /** entrega_pasa: una línea por bin (el peso es el real del bin, no se manda). */
+  lineas: { bin_id: string }[]
 }
 
 function parseComprobante(d: Record<string, unknown>): ComprobanteBodega {

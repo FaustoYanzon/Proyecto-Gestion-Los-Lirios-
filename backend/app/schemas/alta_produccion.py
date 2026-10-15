@@ -207,6 +207,9 @@ class BinResponse(BaseModel):
     uva_consumida_kg: Decimal
     observaciones: str | None = None
     created_at: datetime
+    # Entrega a comprador: el bin sale una sola vez (ver RemitoLinea.bin_id).
+    entregado: bool = False
+    remito_numero: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -235,7 +238,9 @@ class LoteDetalleResponse(LoteResponse):
 # ── Remitos ──────────────────────────────────────────────────────────────────
 
 class RemitoLineaCreate(BaseModel):
-    kg: KgPositivo
+    # Entrega de pasa: solo `bin_id`; los kg son el peso real del bin (se ignoran si vienen).
+    bin_id: str | None = None
+    kg: KgPositivo | None = None
     lote_id: str | None = None
     cosecha_id: str | None = None
 
@@ -255,6 +260,9 @@ class RemitoLineaResponse(BaseModel):
     id: str
     lote_id: str | None
     cosecha_id: str | None
+    bin_id: str | None = None
+    # Tarja del bin entregado (solo entregas de pasa).
+    tarja: str | None = None
     kg: Decimal
     # "2026 · sultanina · 1 · N°3" (solo líneas con lote).
     lote_label: str | None = None

@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-13
+> Última generación: 2026-10-15
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 51 (head: `7c4e1a9d3b62_observaciones_en_bines.py`)
+**Migraciones de Alembic:** 52 (head: `9d3a6f1b2c85_remito_linea_bin_id.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -157,7 +157,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (14):**
+**Pantallas (15):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -168,6 +168,7 @@ repo/
 - `(tabs)/perfil.tsx`
 - `(tabs)/riego.tsx`
 - `(tabs)/tareas.tsx`
+- `alta-produccion/entrega.tsx`
 - `alta-produccion/levantada.tsx`
 - `alta-produccion/lotes.tsx`
 - `alta-produccion/pasero.tsx`

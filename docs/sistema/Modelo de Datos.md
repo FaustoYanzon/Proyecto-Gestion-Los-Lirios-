@@ -4,7 +4,7 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-13 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-15 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
 **45 tablas** · **9 vistas** · **35 enums** · **78 relaciones**
 
@@ -632,6 +632,7 @@ erDiagram
         numeric(14,2) uva_consumida_kg
         timestamptz created_at
         varchar(40) tarja
+        varchar(500) observaciones
     }
     remitos {
         varchar(36) id PK
@@ -766,6 +767,7 @@ erDiagram
 | `uva_consumida_kg` | numeric(14,2) | NOT NULL |  |
 | `created_at` | timestamptz | NOT NULL |  |
 | `tarja` | varchar(40) | NOT NULL |  |
+| `observaciones` | varchar(500) |  |  |
 
 ### `remitos`
 

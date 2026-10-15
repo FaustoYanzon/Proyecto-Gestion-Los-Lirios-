@@ -844,6 +844,10 @@ export default function CosechaScreen() {
           <Text style={styles.accesoText}>Lotes de pasa</Text>
         </TouchableOpacity>
       </View>
+      <TouchableOpacity style={[styles.acceso, { flex: 0, marginBottom: 12 }]} onPress={() => router.push('/alta-produccion/entrega')} activeOpacity={0.85}>
+        <ICONS.completado size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
+        <Text style={styles.accesoText}>Entregar pasa a un comprador</Text>
+      </TouchableOpacity>
 
       {registros.length > 0 && (
         <View style={styles.summaryStrip}>

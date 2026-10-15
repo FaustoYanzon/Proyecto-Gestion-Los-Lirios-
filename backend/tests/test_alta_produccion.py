@@ -353,77 +353,100 @@ async def test_merma_de_bines_en_el_lote(client, create_user, create_parcela):
     assert Decimal(detalle["merma_bines_kg"]) == Decimal("20")  # 2 x 350 - 680
 
 
-# ── Remitos: entrega de pasa con saldo ──────────────────────────────────────
+# ── Remitos: entrega de pasa por bines ──────────────────────────────────────
 
-async def test_entregas_parciales_descuentan_saldo_del_lote(client, create_user, create_parcela):
+async def _lote_con_bines(client, headers, pasero_id, pesos=("400", "300", "350"), cerrar=True):
+    """Lote de sultanina con un bin por peso; devuelve el detalle (con `bines`)."""
+    await _ingresar_uva(client, headers, pasero_id, kg=str(sum(Decimal(p) for p in pesos) * 4))
+    lote = (await client.post(
+        "/lotes-pasa/", json={"variedad": "sultanina", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
+    )).json()
+    for peso in pesos:
+        resp = await client.post(
+            f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero_id, "kg_real": peso}, headers=headers
+        )
+        assert resp.status_code == 201, resp.text
+    if cerrar:
+        assert (await client.post(f"/lotes-pasa/{lote['id']}/cerrar", headers=headers)).status_code == 200
+    return (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+
+
+def _entrega(comprador, *bin_ids):
+    return {"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
+            "lineas": [{"bin_id": b} for b in bin_ids]}
+
+
+async def test_entrega_por_bines_toma_el_peso_del_bin_y_descuenta_el_saldo(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
-    lote = await _lote_cerrado(client, headers, pasero.id, kg="1000")
+    lote = await _lote_con_bines(client, headers, pasero.id)  # 400 + 300 + 350 = 1050
     comprador = await _comprador(client, headers)
+    b1, b2, b3 = lote["bines"]
 
-    def entrega(kg):
-        return {"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
-                "lineas": [{"lote_id": lote["id"], "kg": kg}]}
-
-    primera = await client.post("/remitos/", json=entrega("400"), headers=headers)
-    assert primera.status_code == 201
+    primera = await client.post("/remitos/", json=_entrega(comprador, b1["id"], b2["id"]), headers=headers)
+    assert primera.status_code == 201, primera.text
     assert primera.json()["numero"] == "PAS-000001"
-    assert Decimal((await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()["saldo_kg"]) == Decimal("600")
+    assert Decimal(primera.json()["kg_total"]) == Decimal("700")  # peso real de los bines, nadie lo tipea
+    assert [l["tarja"] for l in primera.json()["lineas"]] == [b1["tarja"], b2["tarja"]]
 
-    segunda = await client.post("/remitos/", json=entrega("600"), headers=headers)
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    assert Decimal(detalle["saldo_kg"]) == Decimal("350")
+    estado = {b["id"]: (b["entregado"], b["remito_numero"]) for b in detalle["bines"]}
+    assert estado == {b1["id"]: (True, "PAS-000001"), b2["id"]: (True, "PAS-000001"), b3["id"]: (False, None)}
+
+    segunda = await client.post("/remitos/", json=_entrega(comprador, b3["id"]), headers=headers)
     assert segunda.status_code == 201
     assert Decimal((await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()["saldo_kg"]) == Decimal("0")
 
-    # El lote quedó en cero: no se puede entregar un kilo más.
-    assert (await client.post("/remitos/", json=entrega("1"), headers=headers)).status_code == 409
 
-
-async def test_no_se_entrega_mas_que_el_saldo_y_no_descuenta_a_medias(client, create_user, create_parcela):
+async def test_un_bin_no_sale_dos_veces_ni_se_descuenta_a_medias(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
-    lote = await _lote_cerrado(client, headers, pasero.id, kg="1000")
+    lote = await _lote_con_bines(client, headers, pasero.id)
     comprador = await _comprador(client, headers)
+    b1, b2, b3 = lote["bines"]
+    assert (await client.post("/remitos/", json=_entrega(comprador, b1["id"]), headers=headers)).status_code == 201
 
-    resp = await client.post(
-        "/remitos/",
-        json={"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
-              "lineas": [{"lote_id": lote["id"], "kg": "600"}, {"lote_id": lote["id"], "kg": "600"}]},
-        headers=headers,
-    )
-    assert resp.status_code == 409  # 1200 > 1000: se suman las líneas del mismo lote
-    assert Decimal((await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()["saldo_kg"]) == Decimal("1000")
+    # b1 ya salió: el remito entero se rechaza y b2 no queda descontado.
+    repetido = await client.post("/remitos/", json=_entrega(comprador, b2["id"], b1["id"]), headers=headers)
+    assert repetido.status_code == 409
+    assert b1["tarja"] in repetido.json()["detail"]
+    detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
+    assert Decimal(detalle["saldo_kg"]) == Decimal("650")
+    assert [b["entregado"] for b in detalle["bines"]] == [True, False, False]
+
+    # El mismo bin dos veces en un mismo remito.
+    doble = await client.post("/remitos/", json=_entrega(comprador, b2["id"], b2["id"]), headers=headers)
+    assert doble.status_code == 422
 
 
 async def test_no_se_entrega_de_un_lote_abierto(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
-    await _ingresar_uva(client, headers, pasero.id, kg="4000")
-    lote = (await client.post(
-        "/lotes-pasa/", json={"variedad": "sultanina", "calidad": 1, "fecha": "2026-03-01"}, headers=headers
-    )).json()
-    await client.post(
-        f"/lotes-pasa/{lote['id']}/bines", json={"pasero_id": pasero.id, "kg_real": "300"}, headers=headers
-    )
+    lote = await _lote_con_bines(client, headers, pasero.id, pesos=("300",), cerrar=False)
     comprador = await _comprador(client, headers)
-    resp = await client.post(
-        "/remitos/",
-        json={"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
-              "lineas": [{"lote_id": lote["id"], "kg": "100"}]},
-        headers=headers,
-    )
+    resp = await client.post("/remitos/", json=_entrega(comprador, lote["bines"][0]["id"]), headers=headers)
     assert resp.status_code == 409
 
 
-async def test_entrega_de_pasa_rechaza_lineas_de_cosecha(client, create_user):
+async def test_entrega_de_pasa_solo_acepta_bin_id(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
+    lote = await _lote_con_bines(client, headers, pasero.id, pesos=("300",))
     comprador = await _comprador(client, headers)
-    resp = await client.post(
-        "/remitos/",
-        json={"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
-              "lineas": [{"cosecha_id": "x", "kg": "100"}]},
-        headers=headers,
-    )
-    assert resp.status_code == 422
+    for linea in (
+        {"cosecha_id": "x", "kg": "100"},
+        {"lote_id": lote["id"], "kg": "100"},  # kg libres: ya no existe
+        {"bin_id": lote["bines"][0]["id"], "lote_id": lote["id"]},
+    ):
+        resp = await client.post(
+            "/remitos/",
+            json={"tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador, "lineas": [linea]},
+            headers=headers,
+        )
+        assert resp.status_code == 422, (linea, resp.text)
+    inexistente = await client.post("/remitos/", json=_entrega(comprador, "no-existe"), headers=headers)
+    assert inexistente.status_code == 404
 
 
 # ── Remitos de salida (fresco / bodega) e INV ───────────────────────────────
@@ -638,14 +661,13 @@ async def test_lineas_de_remito_traen_lote_label_y_cosecha_label(client, create_
     headers = await _auth(client, create_user)
     pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
-    lote = await _lote_cerrado(client, headers, pasero.id, kg="1000")
+    lote = await _lote_con_bines(client, headers, pasero.id, pesos=("400",))
     comprador = await _comprador(client, headers)
 
-    pasa = await client.post("/remitos/", json={
-        "tipo": "entrega_pasa", "fecha": "2026-04-01", "comprador_id": comprador,
-        "lineas": [{"lote_id": lote["id"], "kg": "100"}]}, headers=headers)
+    pasa = await client.post("/remitos/", json=_entrega(comprador, lote["bines"][0]["id"]), headers=headers)
     assert pasa.status_code == 201, pasa.text
     linea = pasa.json()["lineas"][0]
+    assert linea["tarja"] == lote["bines"][0]["tarja"]
     assert linea["lote_label"] == f"{lote['temporada']} · sultanina · 1 · N°{lote['numero']}"
     assert linea["cosecha_label"] is None
 

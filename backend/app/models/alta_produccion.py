@@ -259,10 +259,20 @@ class Remito(Base):
 
 
 class RemitoLinea(Base):
-    """Descuento concreto de stock: de un `Lote` (entrega de pasa) o de un
-    `RegistroCosecha` (salida de fresco/bodega). Exactamente uno de los dos."""
+    """Descuento concreto de stock: de un `Lote` (entrega de pasa, una línea por
+    `Bin` entregado) o de un `RegistroCosecha` (salida de fresco/bodega)."""
 
     __tablename__ = "remito_lineas"
+    __table_args__ = (
+        # Un bin sale una sola vez: garantizado en la base, no solo en el endpoint.
+        Index(
+            "uq_remito_linea_bin",
+            "bin_id",
+            unique=True,
+            postgresql_where=text("bin_id IS NOT NULL"),
+            sqlite_where=text("bin_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     remito_id: Mapped[str] = mapped_column(String(36), ForeignKey("remitos.id"), nullable=False, index=True)
@@ -270,10 +280,15 @@ class RemitoLinea(Base):
     cosecha_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("registros_cosecha.id"), nullable=True, index=True
     )
+    # Entrega de pasa: el bin/bolsón concreto que sale (kg = su peso real).
+    bin_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("bines_pasa.id"), nullable=True
+    )
     kg: Mapped[Decimal] = mapped_column(KG, nullable=False)
 
     remito: Mapped["Remito"] = relationship("Remito", back_populates="lineas")
     lote: Mapped["Lote | None"] = relationship("Lote")
+    bin: Mapped["Bin | None"] = relationship("Bin")
     cosecha: Mapped["RegistroCosecha | None"] = relationship("RegistroCosecha")
 
 

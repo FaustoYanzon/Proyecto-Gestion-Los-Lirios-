@@ -6,7 +6,6 @@ comprobante INV (SUV + kg recibidos) que concilia un remito a bodega.
 - entrega_pasa: cada línea descuenta del saldo de un `Lote` cerrado
   (entregas parciales) y se crea con `POST /remitos/`.
 """
-from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
@@ -24,6 +23,7 @@ from app.core.security import (
     decode_remito_pdf_token,
 )
 from app.models.alta_produccion import (
+    Bin,
     Comprador,
     ComprobanteBodega,
     EstadoLote,
@@ -52,6 +52,7 @@ router = APIRouter(prefix="/remitos", tags=["Remitos"])
 
 _LOAD_OPTS = (
     selectinload(Remito.lineas).selectinload(RemitoLinea.lote),
+    selectinload(Remito.lineas).selectinload(RemitoLinea.bin),
     selectinload(Remito.lineas).selectinload(RemitoLinea.cosecha),
     selectinload(Remito.comprobante_bodega),
 )
@@ -78,6 +79,8 @@ def _linea_response(linea: RemitoLinea, origenes: dict[str, str]) -> RemitoLinea
     resp = RemitoLineaResponse.model_validate(linea)
     if linea.lote is not None:
         resp.lote_label = _lote_label(linea.lote)
+    if linea.bin is not None:
+        resp.tarja = linea.bin.tarja
     if linea.cosecha is not None:
         partes = [linea.cosecha.fecha.isoformat()]
         if linea.cosecha.variedad:
@@ -226,35 +229,51 @@ async def create_remito(
     if await db.get(Comprador, data.comprador_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comprador not found")
 
+    # Entrega por bin: cada línea es un bin/bolsón y sus kg son su peso real.
     for linea in data.lineas:
-        if linea.lote_id is None or linea.cosecha_id is not None:
+        if linea.bin_id is None or linea.lote_id is not None or linea.cosecha_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Una entrega de pasa descuenta de lotes: cada línea lleva solo lote_id",
+                detail="Una entrega de pasa se arma por bines: cada línea lleva solo bin_id",
             )
-
-    # Total pedido por lote (un mismo lote puede repetirse en varias líneas).
-    pedido: dict[str, Decimal] = defaultdict(Decimal)
-    for linea in data.lineas:
-        pedido[linea.lote_id] += linea.kg  # type: ignore[index]
+    bin_ids = [linea.bin_id for linea in data.lineas]
+    if len(set(bin_ids)) != len(bin_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Hay bines repetidos en la entrega"
+        )
+    bines = {
+        b.id: b for b in (await db.execute(select(Bin).where(Bin.id.in_(bin_ids)))).scalars().all()
+    }
+    faltantes = [i for i in bin_ids if i not in bines]
+    if faltantes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Bin {faltantes[0]} not found")
 
     # Orden determinístico: dos remitos sobre los mismos lotes no se traban.
-    for lote_id, kg in sorted(pedido.items()):
+    lotes: dict[str, Lote] = {}
+    for lote_id in sorted({b.lote_id for b in bines.values()}):
         lote = (
             await db.execute(select(Lote).where(Lote.id == lote_id).with_for_update())
-        ).scalar_one_or_none()
-        if lote is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Lote {lote_id} not found")
+        ).scalar_one()
         if lote.estado != EstadoLote.cerrado:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Solo se entrega pasa de lotes cerrados"
             )
-        if kg > lote.saldo_kg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"El lote {lote.numero} tiene saldo {lote.saldo_kg} kg; se piden {kg} kg",
-            )
-        lote.saldo_kg -= kg
+        lotes[lote_id] = lote
+
+    ya_entregados = (
+        await db.execute(select(RemitoLinea.bin_id).where(RemitoLinea.bin_id.in_(bin_ids)))
+    ).scalars().all()
+    if ya_entregados:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El bin {bines[ya_entregados[0]].tarja} ya fue entregado",
+        )
+
+    lineas: list[RemitoLinea] = []
+    for bin_id in bin_ids:
+        b = bines[bin_id]
+        lotes[b.lote_id].saldo_kg -= b.kg_real
+        lineas.append(RemitoLinea(lote_id=b.lote_id, bin_id=b.id, kg=b.kg_real))
 
     numero = data.numero or await siguiente_numero_remito(db, data.tipo)
     duplicado = await db.scalar(
@@ -270,21 +289,19 @@ async def create_remito(
         numero=numero,
         fecha=data.fecha,
         comprador_id=data.comprador_id,
-        kg_total=sum((linea.kg for linea in data.lineas), Decimal("0")),
+        kg_total=sum((linea.kg for linea in lineas), Decimal("0")),
         vehiculo_patente=data.vehiculo_patente,
         observaciones=data.observaciones,
         created_by=current_user.id,
-        lineas=[
-            RemitoLinea(lote_id=linea.lote_id, cosecha_id=linea.cosecha_id, kg=linea.kg)
-            for linea in data.lineas
-        ],
+        lineas=lineas,
     )
     db.add(remito)
     try:
         await db.flush()
     except IntegrityError as exc:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe el remito {numero} de tipo {data.tipo.value}"
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya existe el remito {numero} de tipo {data.tipo.value}, o un bin ya fue entregado",
         ) from exc
     return await remito_response_completo(db, remito.id)
 
@@ -330,6 +347,8 @@ async def _datos_pdf(db: AsyncSession, remito: Remito) -> DatosRemitoPdf:
     for linea in remito.lineas:
         if linea.lote is not None:
             detalle = _lote_label(linea.lote)
+            if linea.bin is not None:
+                detalle += f" · Tarja {linea.bin.tarja}"
         elif linea.cosecha is not None:
             partes = [
                 p for p in (
