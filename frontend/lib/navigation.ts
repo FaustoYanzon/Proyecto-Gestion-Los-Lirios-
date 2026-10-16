@@ -123,6 +123,7 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/alta-produccion/levantada', label: 'Levantada',        group: 'Pasa' },
       { href: '/dashboard/alta-produccion/lotes',   label: 'Lotes de pasa',     group: 'Pasa' },
       { href: '/dashboard/alta-produccion/remitos', label: 'Remitos',           group: 'Pasa' },
+      { href: '/dashboard/alta-produccion/conciliacion', label: 'Conciliación', group: 'Bodega' },
     ],
   },
   {

@@ -712,3 +712,65 @@ async def test_bin_incompleto_exige_aclaracion_y_con_ella_se_agrega(client, crea
 
     detalle = (await client.get(f"/lotes-pasa/{lote['id']}", headers=headers)).json()
     assert [b["observaciones"] for b in detalle["bines"]] == ["medio bin, fin de la levantada", None]
+
+
+# ── Conciliación remito BOD vs comprobante de bodega ────────────────────────
+
+async def test_conciliacion_bodega_filas_totales_y_filtros(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
+    norte = await _comprador(client, headers, "Bodega Norte")
+    sur = await _comprador(client, headers, "Bodega Sur")
+    r1 = (await _despachar(client, headers, parral.id, "bodega", norte, kg="10000", fecha="2026-02-06"))["remito"]
+    r2 = (await _despachar(client, headers, parral.id, "bodega", norte, kg="5000", fecha="2026-02-07"))["remito"]
+    r3 = (await _despachar(client, headers, parral.id, "bodega", sur, kg="2000", fecha="2026-02-08"))["remito"]
+    # Un FRE no es de bodega: no debe aparecer.
+    await _despachar(client, headers, parral.id, "comprador", norte, kg="300", fecha="2026-02-08")
+
+    for rid, suv, kg in ((r1["id"], "SUV-1", "9950"), (r2["id"], "SUV-2", "5000")):
+        resp = await client.post(
+            f"/remitos/{rid}/comprobante-bodega", json={"numero_suv": suv, "kg_recibidos": kg}, headers=headers
+        )
+        assert resp.status_code == 201, resp.text
+
+    todo = (await client.get("/remitos/conciliacion-bodega", headers=headers)).json()
+    assert [f["numero"] for f in todo["filas"]] == [r3["numero"], r2["numero"], r1["numero"]]  # más nuevo primero
+    por_numero = {f["numero"]: f for f in todo["filas"]}
+    assert Decimal(por_numero[r1["numero"]]["diferencia_kg"]) == Decimal("-50")
+    assert Decimal(por_numero[r1["numero"]]["diferencia_pct"]) == Decimal("-0.50")
+    assert Decimal(por_numero[r2["numero"]]["diferencia_kg"]) == 0
+    pendiente = por_numero[r3["numero"]]
+    assert pendiente["kg_recibidos"] is None and pendiente["diferencia_kg"] is None
+
+    t = todo["totales"]
+    assert t["remitos"] == 3 and t["pendientes"] == 1 and t["conciliados"] == 2
+    assert Decimal(t["kg_despachados"]) == Decimal("17000")
+    assert Decimal(t["kg_pendientes"]) == Decimal("2000")
+    # La diferencia compara solo lo conciliado: 9950 + 5000 recibidos contra 10000 + 5000.
+    assert Decimal(t["kg_despachados_conciliados"]) == Decimal("15000")
+    assert Decimal(t["kg_recibidos"]) == Decimal("14950")
+    assert Decimal(t["diferencia_kg"]) == Decimal("-50")
+
+    def numeros(resp):
+        return [f["numero"] for f in resp.json()["filas"]]
+
+    pend = await client.get("/remitos/conciliacion-bodega", params={"estado": "pendientes"}, headers=headers)
+    assert numeros(pend) == [r3["numero"]]
+    con_dif = await client.get("/remitos/conciliacion-bodega", params={"estado": "con_diferencia"}, headers=headers)
+    assert numeros(con_dif) == [r1["numero"]]
+    conc = await client.get("/remitos/conciliacion-bodega", params={"estado": "conciliados"}, headers=headers)
+    assert numeros(conc) == [r2["numero"], r1["numero"]]
+    de_sur = await client.get("/remitos/conciliacion-bodega", params={"comprador_id": sur}, headers=headers)
+    assert numeros(de_sur) == [r3["numero"]]
+    fechas = await client.get(
+        "/remitos/conciliacion-bodega", params={"desde": "2026-02-07", "hasta": "2026-02-07"}, headers=headers
+    )
+    assert numeros(fechas) == [r2["numero"]]
+
+
+async def test_conciliacion_bodega_vacia_no_rompe(client, create_user):
+    headers = await _auth(client, create_user)
+    resp = await client.get("/remitos/conciliacion-bodega", headers=headers)
+    assert resp.status_code == 200
+    t = resp.json()["totales"]
+    assert t["remitos"] == 0 and t["diferencia_pct"] is None and Decimal(t["diferencia_kg"]) == 0

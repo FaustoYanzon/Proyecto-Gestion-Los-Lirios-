@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-15
+> Última generación: 2026-10-16
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -90,11 +90,12 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (48):**
+**Rutas (49):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
 - `/dashboard/admin/whatsapp`
+- `/dashboard/alta-produccion/conciliacion`
 - `/dashboard/alta-produccion/levantada`
 - `/dashboard/alta-produccion/lotes`
 - `/dashboard/alta-produccion/pasero`
@@ -145,7 +146,7 @@ repo/
 
 **Componentes por carpeta:**
 
-- `alta-produccion/`: LoteDetalleModal.tsx · MaestroCrud.tsx
+- `alta-produccion/`: ComprobanteBodegaModal.tsx · LoteDetalleModal.tsx · MaestroCrud.tsx
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx

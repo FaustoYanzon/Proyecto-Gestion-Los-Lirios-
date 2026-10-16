@@ -309,6 +309,42 @@ class RemitoResponse(BaseModel):
     comprobante_bodega: ComprobanteBodegaResponse | None = None
 
 
+# ── Conciliación remito BOD vs comprobante de bodega ─────────────────────────
+
+class ConciliacionBodegaFila(BaseModel):
+    remito_id: str
+    numero: str
+    fecha: date
+    comprador_id: str | None
+    comprador_nombre: str | None
+    kg_despachados: Decimal
+    # None mientras la bodega no mandó su comprobante (pendiente).
+    numero_suv: str | None = None
+    fecha_comprobante: date | None = None
+    kg_recibidos: Decimal | None = None
+    # kg_recibidos - kg_despachados (negativo = la bodega recibió menos).
+    diferencia_kg: Decimal | None = None
+    diferencia_pct: Decimal | None = None
+
+
+class ConciliacionBodegaTotales(BaseModel):
+    remitos: int
+    kg_despachados: Decimal
+    pendientes: int
+    kg_pendientes: Decimal
+    # Solo remitos con comprobante: se compara lo despachado contra lo recibido.
+    conciliados: int
+    kg_despachados_conciliados: Decimal
+    kg_recibidos: Decimal
+    diferencia_kg: Decimal
+    diferencia_pct: Decimal | None = None
+
+
+class ConciliacionBodegaResponse(BaseModel):
+    filas: list[ConciliacionBodegaFila]
+    totales: ConciliacionBodegaTotales
+
+
 # ── Despacho de cosecha ("De -> Para") ───────────────────────────────────────
 
 class ParaDespacho(str, enum.Enum):
@@ -317,11 +353,19 @@ class ParaDespacho(str, enum.Enum):
     pasero = "pasero"
 
 
+class MercadoDespacho(str, enum.Enum):
+    interno = "interno"
+    exportacion = "exportacion"
+
+
 class DespachoCosechaCreate(BaseModel):
     """Alta de cosecha + remito (+ ingreso al pasero). Un solo formulario."""
 
     fecha: date
     para: ParaDespacho
+    # Solo para "comprador": mercado interno (MI) o exportación (EXPO). Las apps
+    # lo piden explícito; si no llega (clientes viejos) se asume interno.
+    mercado: MercadoDespacho | None = None
 
     # DE. propio: `parcela_id` (parral); tercero: `productor_id` + `variedad`.
     origen: OrigenCosecha = OrigenCosecha.propio
@@ -358,6 +402,8 @@ class DespachoCosechaCreate(BaseModel):
 
     @model_validator(mode="after")
     def _hay_peso(self) -> "DespachoCosechaCreate":
+        if self.mercado is not None and self.para != ParaDespacho.comprador:
+            raise ValueError("El mercado (interno / exportación) solo aplica a despachos a comprador")
         por_envases = self.cantidad_envases is not None and self.peso_unitario_kg is not None
         # Propio -> pasero: la tara la pone el servidor (tara_carro x carros), alcanza
         # con el peso medido en la báscula (bruto_kg).

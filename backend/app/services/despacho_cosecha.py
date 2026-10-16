@@ -32,6 +32,7 @@ from app.models.produccion import (
 from app.schemas.alta_produccion import (
     DespachoCosechaCreate,
     IngresoPaseroCreate,
+    MercadoDespacho,
     ParaDespacho,
 )
 from app.services.alta_produccion import (
@@ -41,15 +42,21 @@ from app.services.alta_produccion import (
     siguiente_numero_remito,
 )
 
-# Destino de `RegistroCosecha` según el "Para". PROVISIONAL: "comprador" se
-# registra como MI (mercado interno); la distinción mercado interno /
-# exportación está en stand-by (a definir con Fausto). Para pasero se usa
-# RAMA_PASA: PASAS queda solo para el histórico.
+# Destino de `RegistroCosecha` según el "Para". "comprador" es MI (mercado
+# interno) o EXPO según `data.mercado` (ver `destino_cosecha`). Para pasero se
+# usa RAMA_PASA: PASAS queda solo para el histórico.
 DESTINO_COSECHA_POR_PARA: dict[ParaDespacho, DestinoCosecha] = {
     ParaDespacho.bodega: DestinoCosecha.bodega,
     ParaDespacho.comprador: DestinoCosecha.mercado_interno,
     ParaDespacho.pasero: DestinoCosecha.rama_pasa,
 }
+
+
+def destino_cosecha(data: DespachoCosechaCreate) -> DestinoCosecha:
+    """Destino de la cosecha: a comprador, `mercado` decide MI o EXPO (sin dato = MI)."""
+    if data.para == ParaDespacho.comprador and data.mercado == MercadoDespacho.exportacion:
+        return DestinoCosecha.exportacion
+    return DESTINO_COSECHA_POR_PARA[data.para]
 
 TIPO_REMITO_POR_PARA: dict[ParaDespacho, TipoRemito] = {
     ParaDespacho.bodega: TipoRemito.salida_bodega,
@@ -144,7 +151,7 @@ async def _resultado_existente(
     kg_guardado = Decimal(str(cosecha.kg_total)).quantize(CENTAVO, rounding=ROUND_HALF_UP)
     coincide = (
         cosecha.fecha == data.fecha
-        and cosecha.destino == DESTINO_COSECHA_POR_PARA[data.para]
+        and cosecha.destino == destino_cosecha(data)
         and remito.tipo == TIPO_REMITO_POR_PARA[data.para]
         and cosecha.origen == data.origen
         and cosecha.parcela_id == data.parcela_id
@@ -231,7 +238,7 @@ async def registrar_despacho(
         productor_id=productor.id if productor else None,
         n_remito=data.n_remito,
         n_ciu=data.n_ciu,
-        destino=DESTINO_COSECHA_POR_PARA[data.para],
+        destino=destino_cosecha(data),
         comprador=comprador.nombre if comprador else None,
         comprador_id=comprador.id if comprador else None,
         cuadrilla=data.cuadrilla,

@@ -450,6 +450,69 @@ export async function getRemitos(params?: {
   return data.map(parseRemito)
 }
 
+// ── Conciliación remito BOD vs comprobante de bodega ──────────────────────────
+
+export interface ConciliacionFila {
+  remito_id: string
+  numero: string
+  fecha: string
+  comprador_id: string | null
+  comprador_nombre: string | null
+  kg_despachados: number
+  /** null mientras la bodega no mandó su comprobante (pendiente). */
+  numero_suv: string | null
+  fecha_comprobante: string | null
+  kg_recibidos: number | null
+  /** kg_recibidos - kg_despachados (negativo = la bodega recibió menos). */
+  diferencia_kg: number | null
+  diferencia_pct: number | null
+}
+
+export interface ConciliacionTotales {
+  remitos: number
+  kg_despachados: number
+  pendientes: number
+  kg_pendientes: number
+  conciliados: number
+  kg_despachados_conciliados: number
+  kg_recibidos: number
+  diferencia_kg: number
+  diferencia_pct: number | null
+}
+
+export type EstadoConciliacion = 'todos' | 'pendientes' | 'conciliados' | 'con_diferencia'
+
+
+export async function getConciliacionBodega(params?: {
+  desde?: string
+  hasta?: string
+  comprador_id?: string
+  estado?: EstadoConciliacion
+}): Promise<{ filas: ConciliacionFila[]; totales: ConciliacionTotales }> {
+  const { data } = await api.get<{ filas: Record<string, unknown>[]; totales: Record<string, unknown> }>(
+    '/remitos/conciliacion-bodega', { params },
+  )
+  const t = data.totales
+  return {
+    filas: data.filas.map((f) => ({
+      ...(f as unknown as ConciliacionFila),
+      kg_despachados: num(f.kg_despachados),
+      kg_recibidos: numOrNull(f.kg_recibidos),
+      diferencia_kg: numOrNull(f.diferencia_kg),
+      diferencia_pct: numOrNull(f.diferencia_pct),
+    })),
+    totales: {
+      ...(t as unknown as ConciliacionTotales),
+      kg_despachados: num(t.kg_despachados),
+      kg_pendientes: num(t.kg_pendientes),
+      kg_despachados_conciliados: num(t.kg_despachados_conciliados),
+      kg_recibidos: num(t.kg_recibidos),
+      diferencia_kg: num(t.diferencia_kg),
+      diferencia_pct: numOrNull(t.diferencia_pct),
+    },
+  }
+}
+
 export async function createRemito(payload: RemitoCreate): Promise<Remito> {
   const { data } = await api.post<Record<string, unknown>>('/remitos/', payload)
   return parseRemito(data)

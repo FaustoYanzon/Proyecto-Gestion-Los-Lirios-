@@ -29,9 +29,9 @@ import SelectField, { type SelectOption } from '../../components/SelectField'
 import {
   VARIEDADES, puedeAltaProduccion, fmtKg, hoyISO, kgToString, errorDetail,
   getProductores, getCompradores, getParametros, getPaseros, getParrales, getUbicacionesPasero,
-  createDespachoCosecha, abrirRemitoPdf, PARA_LABELS, ENVASE_LABELS, PREFIJO_REMITO,
+  createDespachoCosecha, abrirRemitoPdf, PARA_LABELS, ENVASE_LABELS, PREFIJO_REMITO, MERCADO_LABELS,
   type Productor, type Comprador, type ParametrosProduccion, type UbicacionPasero,
-  type ParaDespacho, type TipoEnvaseDespacho, type DespachoCosechaResultado, type OrigenIngreso,
+  type ParaDespacho, type MercadoDespacho, type TipoEnvaseDespacho, type DespachoCosechaResultado, type OrigenIngreso,
 } from '../../lib/altaProduccion'
 import type { RegistroCosecha, VariedadUva, Parcela } from '../../lib/types'
 import { DESTINO_LABELS, DESTINO_COLORS, VARIEDAD_LABELS } from '../../lib/types'
@@ -66,6 +66,8 @@ interface DespachoForm {
   productor_id: string
   variedad: VariedadUva | ''
   para: ParaDespacho
+  // Solo "Uva en fresco": se elige en cada despacho, sin valor por defecto.
+  mercado: MercadoDespacho | ''
   comprador_id: string
   pasero_id: string
   ubicacion_id: string
@@ -90,7 +92,7 @@ interface DespachoForm {
 function emptyForm(): DespachoForm {
   return {
     fecha: hoyISO(), origen: 'propio', parcela_id: '', productor_id: '', variedad: '',
-    para: 'bodega', comprador_id: '', pasero_id: '', ubicacion_id: '',
+    para: 'bodega', mercado: '', comprador_id: '', pasero_id: '', ubicacion_id: '',
     peso_carro: '', carro_incompleto: false,
     tipo_envase: 'caja', cantidad_envases: '', peso_unitario_kg: '', bruto_kg: '', tara_kg: '', kg_total: '',
     vehiculo_patente: '', cuadrilla: '', acarreo: '', n_ciu: '', n_remito: '', observaciones: '',
@@ -157,6 +159,7 @@ function PasoDe({ value, onChange }: StepProps) {
       // Un tercero solo puede ir a un pasero.
       para: origen === 'tercero' ? 'pasero' : value.para,
       comprador_id: origen === 'tercero' ? '' : value.comprador_id,
+      mercado: origen === 'tercero' ? '' : value.mercado,
     })
   }
 
@@ -272,7 +275,7 @@ function PasoPara({ value, onChange }: StepProps) {
 
   function elegirPara(para: ParaDespacho) {
     if (para === value.para) return
-    onChange({ ...value, para, comprador_id: '', pasero_id: '', ubicacion_id: '' })
+    onChange({ ...value, para, mercado: '', comprador_id: '', pasero_id: '', ubicacion_id: '' })
   }
 
   const paseroOpts: SelectOption[] = paseros.map((p) => ({ value: p.id, label: p.nombre }))
@@ -327,12 +330,30 @@ function PasoPara({ value, onChange }: StepProps) {
           onChange={(id) => onChange({ ...value, comprador_id: id })}
         />
       )}
+
+      {value.para === 'comprador' && (
+        <>
+          <Text style={styles.fieldLabel}>MERCADO *</Text>
+          <View style={styles.chipGroup}>
+            {(['interno', 'exportacion'] as MercadoDespacho[]).map((m) => (
+              <Chip
+                key={m}
+                label={MERCADO_LABELS[m]}
+                active={value.mercado === m}
+                onPress={() => onChange({ ...value, mercado: m })}
+              />
+            ))}
+          </View>
+        </>
+      )}
     </View>
   )
 }
 
 const puedePara = (f: DespachoForm): boolean =>
-  f.para === 'pasero' ? f.pasero_id !== '' : f.comprador_id !== ''
+  f.para === 'pasero'
+    ? f.pasero_id !== ''
+    : f.comprador_id !== '' && (f.para !== 'comprador' || f.mercado !== '')
 
 function PasoPeso({ value, onChange }: StepProps) {
   const { parametros } = useContext(MaestrosCtx)
@@ -575,6 +596,9 @@ function PasoConfirmar({ value }: StepProps) {
         <ResumenRow label="De" value={de} />
         <ResumenRow label="Variedad" value={variedad ? VARIEDAD_LABELS[variedad] : '–'} />
         <ResumenRow label="Para" value={`${PARA_LABELS[value.para]} · ${para}`} />
+        {value.para === 'comprador' && value.mercado !== '' ? (
+          <ResumenRow label="Mercado" value={MERCADO_LABELS[value.mercado]} />
+        ) : null}
         {esPasero ? (
           <>
             <ResumenRow label="Carro" value={`1 carro${value.carro_incompleto ? ' (incompleto)' : ''}`} />
@@ -721,6 +745,7 @@ export default function CosechaScreen() {
       const res = await createDespachoCosecha({
         fecha: form.fecha,
         para: form.para,
+        mercado: form.para === 'comprador' && form.mercado !== '' ? form.mercado : null,
         origen: form.origen,
         parcela_id: form.origen === 'propio' ? form.parcela_id : null,
         productor_id: form.origen === 'tercero' ? form.productor_id : null,

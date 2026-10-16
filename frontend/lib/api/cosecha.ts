@@ -198,6 +198,9 @@ export async function getCosechaResumenPorSemana(temporada?: number): Promise<Co
 // ── Despacho de cosecha (De -> Para) ──────────────────────────────────────────
 
 export type ParaDespacho = 'bodega' | 'comprador' | 'pasero'
+/** Solo despachos a comprador: mercado interno (MI) o exportación (EXPO). */
+export type MercadoDespacho = 'interno' | 'exportacion'
+export const MERCADO_LABELS: Record<MercadoDespacho, string> = { interno: 'Mercado interno', exportacion: 'Exportación' }
 
 export const PARA_LABELS: Record<ParaDespacho, string> = {
   bodega: 'Bodega',
@@ -208,6 +211,7 @@ export const PARA_LABELS: Record<ParaDespacho, string> = {
 export interface DespachoCosechaCreate {
   fecha: string
   para: ParaDespacho
+  mercado?: MercadoDespacho | null
   origen?: OrigenCosecha
   parcela_id?: string | null
   productor_id?: string | null

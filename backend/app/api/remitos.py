@@ -8,6 +8,7 @@ comprobante INV (SUV + kg recibidos) que concilia un remito a bodega.
 """
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
@@ -41,6 +42,9 @@ from app.models.user import User
 from app.schemas.alta_produccion import (
     ComprobanteBodegaCreate,
     ComprobanteBodegaResponse,
+    ConciliacionBodegaFila,
+    ConciliacionBodegaResponse,
+    ConciliacionBodegaTotales,
     RemitoCreate,
     RemitoLineaResponse,
     RemitoPdfLinkResponse,
@@ -305,6 +309,83 @@ async def create_remito(
         ) from exc
     return await remito_response_completo(db, remito.id)
 
+
+
+# ── Conciliación: remitos a bodega vs comprobante de la bodega ──────────────
+
+def _pct(diferencia: Decimal, base: Decimal) -> Decimal | None:
+    return (diferencia / base * 100).quantize(Decimal("0.01")) if base else None
+
+
+# Estática ANTES de /{remito_id}.
+@router.get("/conciliacion-bodega", response_model=ConciliacionBodegaResponse)
+async def conciliacion_bodega(
+    desde: date | None = Query(None),
+    hasta: date | None = Query(None),
+    comprador_id: str | None = Query(None, description="Bodega (comprador) del remito"),
+    estado: Literal["todos", "pendientes", "conciliados", "con_diferencia"] = Query("todos"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_estricto),
+) -> ConciliacionBodegaResponse:
+    """Una fila por remito BOD con lo despachado, lo que recibió la bodega y la
+    diferencia. Los totales de diferencia comparan solo remitos con comprobante."""
+    stmt = (
+        select(Remito)
+        .options(selectinload(Remito.comprobante_bodega))
+        .where(Remito.tipo == TipoRemito.salida_bodega)
+        .order_by(Remito.fecha.desc(), Remito.created_at.desc())
+    )
+    if desde:
+        stmt = stmt.where(Remito.fecha >= desde)
+    if hasta:
+        stmt = stmt.where(Remito.fecha <= hasta)
+    if comprador_id:
+        stmt = stmt.where(Remito.comprador_id == comprador_id)
+    remitos = (await db.execute(stmt)).scalars().all()
+    nombres = await _destinatarios(db, list(remitos))
+
+    filas: list[ConciliacionBodegaFila] = []
+    for r in remitos:
+        c = r.comprobante_bodega
+        dif = (c.kg_recibidos - r.kg_total) if c else None
+        if estado == "pendientes" and c is not None:
+            continue
+        if estado == "conciliados" and c is None:
+            continue
+        if estado == "con_diferencia" and (c is None or dif == 0):
+            continue
+        filas.append(ConciliacionBodegaFila(
+            remito_id=r.id,
+            numero=r.numero,
+            fecha=r.fecha,
+            comprador_id=r.comprador_id,
+            comprador_nombre=nombres.get(r.comprador_id) if r.comprador_id else None,
+            kg_despachados=r.kg_total,
+            numero_suv=c.numero_suv if c else None,
+            fecha_comprobante=c.fecha if c else None,
+            kg_recibidos=c.kg_recibidos if c else None,
+            diferencia_kg=dif,
+            diferencia_pct=_pct(dif, r.kg_total) if dif is not None else None,
+        ))
+
+    cero = Decimal("0")
+    conciliadas = [f for f in filas if f.kg_recibidos is not None]
+    pendientes = [f for f in filas if f.kg_recibidos is None]
+    desp_conc = sum((f.kg_despachados for f in conciliadas), cero)
+    recibidos = sum((f.kg_recibidos for f in conciliadas), cero)  # type: ignore[misc]
+    dif_total = recibidos - desp_conc
+    totales = ConciliacionBodegaTotales(
+        remitos=len(filas),
+        kg_despachados=sum((f.kg_despachados for f in filas), cero),
+        pendientes=len(pendientes),
+        kg_pendientes=sum((f.kg_despachados for f in pendientes), cero),
+        conciliados=len(conciliadas),
+        kg_despachados_conciliados=desp_conc,
+        kg_recibidos=recibidos,
+        diferencia_kg=dif_total,
+        diferencia_pct=_pct(dif_total, desp_conc),
+    )
+    return ConciliacionBodegaResponse(filas=filas, totales=totales)
 
 
 # ── PDF (comprobante interno de entrega) ─────────────────────────────────────

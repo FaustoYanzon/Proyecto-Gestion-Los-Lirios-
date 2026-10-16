@@ -8,7 +8,7 @@ import { getParcelas, formatParcelaLabel } from '@/lib/api/produccion'
 import { VARIEDAD_VALUES, VARIEDAD_LABELS, type VariedadUva } from '@/lib/api/parcelas'
 import {
   createDespachoCosecha, ENVASE_LABELS, PARA_LABELS,
-  type DespachoCosechaResponse, type DespachoCosechaCreate, type OrigenCosecha, type ParaDespacho, type TipoEnvase,
+  type DespachoCosechaResponse, type DespachoCosechaCreate, type OrigenCosecha, type ParaDespacho, type MercadoDespacho, type TipoEnvase,
 } from '@/lib/api/cosecha'
 import {
   getProductores, getCompradores, getUbicacionesPasero, getParametros, errorDetail, abrirRemitoPdf,
@@ -65,6 +65,8 @@ interface FormState {
   productor_id: string
   variedad: VariedadUva | ''
   para: ParaDespacho
+  // Solo "comprador": se elige en cada despacho, sin valor por defecto.
+  mercado: MercadoDespacho | ''
   comprador_id: string
   pasero_id: string
   ubicacion_id: string
@@ -88,7 +90,7 @@ const PESO_VACIO = { cantidad_envases: null, peso_unitario_kg: null, bruto_kg: n
 function emptyForm(): FormState {
   return {
     fecha: TODAY(), origen: 'propio', parcela_id: '', productor_id: '', variedad: '',
-    para: 'bodega', comprador_id: '', pasero_id: '', ubicacion_id: '',
+    para: 'bodega', mercado: '', comprador_id: '', pasero_id: '', ubicacion_id: '',
     carros: 1, carro_incompleto: false,
     tipo_envase: 'caja', cantidad_envases: null, peso_unitario_kg: null, bruto_kg: null, tara_kg: null,
     vehiculo_patente: '', cuadrilla: '', acarreo: '', n_ciu: '', n_remito: '', observaciones: '',
@@ -180,7 +182,7 @@ export default function DespachoCosechaModal({ onClose }: { onClose: () => void 
     setForm((f) => ({ ...f, tipo_envase: t, ...((t === 'chasis') !== (f.tipo_envase === 'chasis') ? PESO_VACIO : {}) }))
   }
   function cambiarPara(p: ParaDespacho) {
-    setForm((f) => ({ ...f, para: p, comprador_id: '', pasero_id: '', ubicacion_id: '', ...PESO_VACIO }))
+    setForm((f) => ({ ...f, para: p, mercado: '', comprador_id: '', pasero_id: '', ubicacion_id: '', ...PESO_VACIO }))
   }
 
   const kgOk = kgTotal != null && kgTotal > 0
@@ -188,7 +190,9 @@ export default function DespachoCosechaModal({ onClose }: { onClose: () => void 
     ? !!form.parcela_id
     : !!form.productor_id
   const variedadOk = form.origen === 'tercero' ? !!form.variedad : true
-  const paraOk = esPasero ? !!form.pasero_id : !!form.comprador_id
+  const paraOk = esPasero
+    ? !!form.pasero_id
+    : !!form.comprador_id && (form.para !== 'comprador' || !!form.mercado)
   const puedeGuardar = !!form.fecha && deOk && variedadOk && paraOk && kgOk && !saving
 
   const fichasEstimadas = esPasero && form.carro_incompleto && parametros && kgOk && parametros.kg_por_ficha > 0
@@ -209,6 +213,7 @@ export default function DespachoCosechaModal({ onClose }: { onClose: () => void 
       const payload: DespachoCosechaCreate = {
         fecha: form.fecha,
         para: form.para,
+        mercado: form.para === 'comprador' && form.mercado ? form.mercado : null,
         origen: form.origen,
         parcela_id: form.origen === 'propio' ? form.parcela_id : null,
         productor_id: form.origen === 'tercero' ? form.productor_id : null,
@@ -411,6 +416,19 @@ export default function DespachoCosechaModal({ onClose }: { onClose: () => void 
                   <option value="">— Seleccionar —</option>
                   {compradoresActivos.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
+                {form.para === 'comprador' && (
+                  <div className="mt-3">
+                    <label className={labelCls}>Mercado <span className="text-red-500">*</span></label>
+                    <Segmented<MercadoDespacho | ''>
+                      value={form.mercado}
+                      options={[
+                        { value: 'interno', label: 'Mercado interno' },
+                        { value: 'exportacion', label: 'Exportación' },
+                      ]}
+                      onChange={(v) => set('mercado', v)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </section>

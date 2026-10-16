@@ -132,6 +132,9 @@ export async function getUbicacionesPasero(pasero_id: string): Promise<Ubicacion
 // reintentar el mismo envío. Espejo de frontend/lib/api/cosecha.ts.
 
 export type ParaDespacho = 'bodega' | 'comprador' | 'pasero'
+/** Solo despachos a comprador ("Uva en fresco"): mercado interno (MI) o exportación (EXPO). */
+export type MercadoDespacho = 'interno' | 'exportacion'
+export const MERCADO_LABELS: Record<MercadoDespacho, string> = { interno: 'Mercado interno', exportacion: 'Exportación' }
 export type TipoEnvaseDespacho = 'caja' | 'bin' | 'chasis' | 'ficha' | 'vin' | 'bolsa' | 'otro'
 
 export const PARA_LABELS: Record<ParaDespacho, string> = {
@@ -149,6 +152,7 @@ export const PREFIJO_REMITO: Record<ParaDespacho, string> = { bodega: 'BOD', com
 export interface DespachoCosechaCreate {
   fecha: string
   para: ParaDespacho
+  mercado?: MercadoDespacho | null
   origen: OrigenIngreso
   parcela_id?: string | null
   productor_id?: string | null

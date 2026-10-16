@@ -876,3 +876,51 @@ def test_token_pdf_exige_typ_y_aud():
     assert decode_remito_pdf_token(create_access_token({"sub": "a@b.com", "rid": "r-1"})) is None
     # ...ni el link de PDF pasa como token de acceso.
     assert decode_access_token(ok) is None
+
+
+# ── Mercado interno / exportación ───────────────────────────────────────────
+
+async def test_despacho_a_comprador_elige_mercado_interno_o_exportacion(client, create_user, create_parcela):
+    h = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", variedad=VariedadUva.red_globe)
+    comprador_id = await _comprador(client, h, "Exportadora Andes")
+
+    expo = await client.post(URL, json=_body(
+        para="comprador", mercado="exportacion", parcela_id=parral.id, comprador_id=comprador_id), headers=h)
+    assert expo.status_code == 201, expo.text
+    assert expo.json()["cosecha"]["destino"] == "EXPO"
+    assert expo.json()["remito"]["numero"].startswith("FRE-")  # sigue siendo un remito FRE
+
+    interno = await client.post(URL, json=_body(
+        para="comprador", mercado="interno", parcela_id=parral.id, comprador_id=comprador_id), headers=h)
+    assert interno.json()["cosecha"]["destino"] == "MI"
+
+    # Clientes viejos que no mandan mercado: se mantiene el comportamiento anterior (MI).
+    sin_dato = await client.post(URL, json=_body(
+        para="comprador", parcela_id=parral.id, comprador_id=comprador_id), headers=h)
+    assert sin_dato.json()["cosecha"]["destino"] == "MI"
+
+
+async def test_mercado_solo_aplica_a_despachos_a_comprador(client, create_user, create_parcela):
+    h = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", variedad=VariedadUva.flame)
+    comprador_id = await _comprador(client, h)
+    resp = await client.post(URL, json=_body(
+        para="bodega", mercado="exportacion", parcela_id=parral.id, comprador_id=comprador_id), headers=h)
+    assert resp.status_code == 422
+
+
+async def test_reenvio_idempotente_distingue_el_mercado(client, create_user, create_parcela):
+    h = await _auth(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", variedad=VariedadUva.red_globe)
+    comprador_id = await _comprador(client, h)
+    base = dict(para="comprador", parcela_id=parral.id, comprador_id=comprador_id,
+                idempotency_key="11111111-1111-1111-1111-111111111111")
+    primero = await client.post(URL, json=_body(mercado="exportacion", **base), headers=h)
+    assert primero.status_code == 201
+    mismo = await client.post(URL, json=_body(mercado="exportacion", **base), headers=h)
+    assert mismo.status_code in (200, 201)
+    assert mismo.json()["remito"]["id"] == primero.json()["remito"]["id"]
+    # Misma clave con otro mercado = otro envío: no se reusa en silencio.
+    otro = await client.post(URL, json=_body(mercado="interno", **base), headers=h)
+    assert otro.status_code == 409
