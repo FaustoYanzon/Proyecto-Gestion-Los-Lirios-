@@ -10,20 +10,25 @@ interface Props {
 
 interface State {
   error: Error | null
+  // Primeras líneas del componentStack: sin esto el cartel no dice qué pantalla
+  // ni qué componente rompió y un reporte desde la finca no se puede diagnosticar.
+  stack: string
 }
 
 // React Error Boundaries solo funcionan como class components (no hay
 // equivalente en hooks). Sin esto, cualquier excepcion de render en
 // cualquier pantalla tira abajo toda la app en vez de mostrar una salida.
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null }
+  state: State = { error: null, stack: '' }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error }
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     console.error('ErrorBoundary capturo un error:', error, info.componentStack)
+    const stack = (info.componentStack ?? '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 4).join(' > ')
+    this.setState({ stack })
   }
 
   // Vuelve a Inicio antes de limpiar el error: si solo limpiara el estado,
@@ -31,7 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
   // volvería a crashear en loop.
   reset = () => {
     router.replace('/(tabs)')
-    this.setState({ error: null })
+    this.setState({ error: null, stack: '' })
   }
 
   render() {
@@ -48,6 +53,10 @@ export class ErrorBoundary extends Component<Props, State> {
           <TouchableOpacity style={styles.retryBtn} onPress={this.reset} activeOpacity={0.85}>
             <Text style={styles.retryBtnText}>Volver a intentar</Text>
           </TouchableOpacity>
+          <Text style={styles.detail} selectable>
+            {`${this.state.error.name}: ${this.state.error.message}`.slice(0, 240)}
+            {this.state.stack ? `\n${this.state.stack}`.slice(0, 240) : ''}
+          </Text>
         </View>
       )
     }
@@ -72,4 +81,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.burdeos[600], justifyContent: 'center', alignItems: 'center',
   },
   retryBtnText: { color: colors.blanco, fontSize: 15, fontWeight: '700' },
+  detail: { marginTop: 28, fontSize: 11, color: colors.ink60, textAlign: 'center', lineHeight: 16 },
 })
