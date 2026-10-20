@@ -1286,9 +1286,13 @@ export default function RiegoScreen() {
     setStep('ubicacion')
   }
 
+  // Primero se cambia de pantalla y despues se vacia el borrador: si algun render
+  // intermedio viera el borrador vacio con step 'confirmar', StepConfirmar leeria
+  // draft.parcela.nombre de null y tiraria el cartel "Algo salio mal" (visto en el
+  // teléfono del encargado justo despues de guardar un riego).
   function resetWizard() {
-    setDraft(emptyDraft)
     setStep('list')
+    setDraft(emptyDraft)
   }
 
   function handleCancelar() {
@@ -1365,7 +1369,7 @@ export default function RiegoScreen() {
     )
   }
 
-  if (step === 'confirmar') {
+  if (step === 'confirmar' && draft.parcela) {
     return (
       <StepConfirmar
         draft={draft}
