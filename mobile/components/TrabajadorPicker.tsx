@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import api from '../lib/api'
 import { colors } from '../lib/theme'
@@ -11,6 +11,16 @@ function normalizar(nombre: string): string {
     .replace(new RegExp(`[${String.fromCharCode(0x0300)}-${String.fromCharCode(0x036f)}]`, 'g'), '')
     .trim()
     .toLowerCase()
+}
+
+// Trabajadores creados o recuperados en esta sesión. Las pantallas cargan la
+// lista una sola vez al montarse, así que sin esto un trabajador recién creado
+// no aparece en el siguiente riego/tarea y tampoco se puede crear de nuevo
+// (409): el usuario queda sin salida y termina inventando nombres ("Rafael.").
+const vistosEnSesion: TrabajadorDb[] = []
+
+function recordar(t: TrabajadorDb) {
+  if (!vistosEnSesion.some((v) => v.id === t.id)) vistosEnSesion.push(t)
 }
 
 interface Props {
@@ -28,16 +38,31 @@ interface Props {
 // trabajador" pide confirmar con un aviso de los nombres más parecidos antes
 // de crearlo (doble verificación) -- mismo comportamiento que
 // frontend/components/produccion/TrabajadorSelect.tsx.
-export default function TrabajadorPicker({ value, trabajadorId, trabajadoresDb, onChange, onCreated, placeholder }: Props) {
+export default function TrabajadorPicker({ value, trabajadorId, trabajadoresDb: trabajadoresProp, onChange, onCreated, placeholder }: Props) {
   const [focused, setFocused] = useState(false)
   const [addMode, setAddMode] = useState(false)
   const [addName, setAddName] = useState('')
   const [creating, setCreating] = useState(false)
 
+  const trabajadoresDb = [
+    ...trabajadoresProp,
+    ...vistosEnSesion.filter((v) => !trabajadoresProp.some((t) => t.id === v.id)),
+  ]
   const trimmed = value.trim()
   const matches = trimmed
     ? trabajadoresDb.filter((t) => normalizar(t.nombre_completo).includes(normalizar(trimmed))).slice(0, 5)
     : []
+
+  // Nombre que coincide exacto con alguien de la lista (p. ej. el borrador
+  // arranca con el nombre del usuario logueado): se elige solo, sin obligar a
+  // tocar la sugerencia.
+  const exacto = !trabajadorId && trimmed
+    ? trabajadoresDb.find((t) => normalizar(t.nombre_completo) === normalizar(trimmed))
+    : undefined
+  useEffect(() => {
+    if (exacto) onChange(exacto.nombre_completo, exacto.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exacto?.id])
 
   function openAddPanel() {
     setAddName(trimmed)
@@ -62,11 +87,28 @@ export default function TrabajadorPicker({ value, trabajadorId, trabajadoresDb, 
     setCreating(true)
     try {
       const { data } = await api.post<TrabajadorDb>('/trabajadores/', { nombre_completo: nombre })
+      recordar(data)
       onChange(data.nombre_completo, data.id)
       onCreated?.(data)
       setAddMode(false)
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const err = e as { response?: { status?: number; data?: { detail?: string } } }
+      if (err.response?.status === 409) {
+        // Ya existe: la lista local estaba desactualizada. Se recupera de la
+        // API y se elige al existente en vez de dejar al usuario sin salida.
+        try {
+          const { data: lista } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
+          const existente = lista.find((t) => normalizar(t.nombre_completo) === normalizar(nombre))
+          if (existente) {
+            recordar(existente)
+            onChange(existente.nombre_completo, existente.id)
+            onCreated?.(existente)
+            setAddMode(false)
+            return
+          }
+        } catch { /* sin conexión: cae al mensaje de abajo */ }
+      }
+      const detail = err.response?.data?.detail
       Alert.alert('Error', typeof detail === 'string' ? detail : 'Error al crear el trabajador.')
     } finally {
       setCreating(false)
