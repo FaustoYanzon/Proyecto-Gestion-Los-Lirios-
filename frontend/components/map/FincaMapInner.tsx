@@ -67,11 +67,11 @@ function costoColor(monto: number, maxMonto: number): string {
   return `rgb(${r},${g},${b})`
 }
 
-// Escala clara → oscura (celeste pálido → azul de marca): litros totales de
-// riego aplicados en la temporada, por parral. Mismo criterio que costoColor.
-function riegoTotalColor(litros: number, maxLitros: number): string {
-  if (litros <= 0 || maxLitros <= 0) return '#f3f4f6'
-  const ratio = Math.min(litros / maxLitros, 1)
+// Escala clara → oscura (celeste pálido → azul de marca): mm de riego
+// aplicados en la temporada, por parral. Mismo criterio que costoColor.
+function riegoTotalColor(mm: number, maxMm: number): string {
+  if (mm <= 0 || maxMm <= 0) return '#f3f4f6'
+  const ratio = Math.min(mm / maxMm, 1)
   const r = Math.round(224 - ratio * (224 - 30))
   const g = Math.round(242 - ratio * (242 - 64))
   const b = Math.round(254 - ratio * (254 - 175))
@@ -123,6 +123,8 @@ export interface EstadoCampanaMapaInfo {
   estado_campana_label: string
   fuente: 'automatico' | 'manual'
   fecha_confirmacion: string | null
+  // Inicio del estado vigente: desde acá se cuentan los riegos que le tocan.
+  fecha_inicio: string
   riegos_esperados: number
 }
 
@@ -164,8 +166,8 @@ function getPolyStyle(
     }
   }
   if (mode === 'riego') {
-    const litros = (p?.id != null && riegoByParcelaId?.[p.id]) ? riegoByParcelaId[p.id].litros : 0
-    const fill = riegoTotalColor(litros, maxRiego ?? 0)
+    const mm = (p?.id != null && riegoByParcelaId?.[p.id]) ? riegoByParcelaId[p.id].mm : 0
+    const fill = riegoTotalColor(mm, maxRiego ?? 0)
     return {
       color: '#1e3a8a',
       weight: selected ? 3 : 1.5,
@@ -276,7 +278,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
   const { data: riegos = [], isLoading: loadRiego } = useQuery({
     queryKey: ['panel-riego', parcela?.id, fechaDesde],
     queryFn: async () => {
-      const { data } = await api.get<{ id: string; inicio: string; mm_aplicados: number; litros_aplicados: number }[]>(
+      const { data } = await api.get<{ id: string; fecha: string; inicio: string; mm_aplicados: number; litros_aplicados: number }[]>(
         '/produccion/riego/', { params: { parcela_id: parcela!.id, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, limit: 200 } }
       )
       return data
@@ -302,6 +304,14 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
   // Litros totales entregados al parral (ya contempla la cantidad de válvulas
   // abiertas en cada riego, calculado en el backend) vs. objetivo anual.
   const litrosTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.litros_aplicados ?? 0), 0), [riegos])
+  // Riegos registrados dentro del estado de campaña vigente (desde que empezó)
+  // vs. los esperados para ese estado. Solo con la campaña actual: el estado
+  // es del presente, no hay snapshot histórico.
+  const riegosEstado = useMemo(() => {
+    if (!esTemporadaActual || !estadoCampana) return null
+    const n = riegos.filter((r) => r.fecha >= estadoCampana.fecha_inicio).length
+    return { n, esperados: estadoCampana.riegos_esperados, label: estadoCampana.estado_campana_label }
+  }, [riegos, estadoCampana, esTemporadaActual])
   const objetivoAnual = parcela?.superficie_ha ? parcela.superficie_ha * LITROS_OBJETIVO_ANUAL_POR_HA : null
   const porcentajeCumplimiento = objetivoAnual ? (litrosTotal / objetivoAnual) * 100 : null
   const lastFitos = useMemo(() => [...fitos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5), [fitos])
@@ -487,12 +497,18 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                 <>
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-[#3d6b86]">
-                      {(litrosTotal / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} m³
+                      {mmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })} mm
                     </span>
-                    <span className="text-xs text-gray-400">{litrosTotal.toLocaleString('es-AR')} L</span>
-                    <span className="text-xs text-gray-400">{mmTotal.toFixed(1)} mm</span>
-                    <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
+                    {!riegosEstado && (
+                      <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
+                    )}
                   </div>
+                  {riegosEstado && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      <span className="font-semibold text-[#3d6b86]">{riegosEstado.n} de {riegosEstado.esperados}</span>
+                      {' '}riego{riegosEstado.esperados !== 1 ? 's' : ''} esperado{riegosEstado.esperados !== 1 ? 's' : ''} en {riegosEstado.label}
+                    </p>
+                  )}
                   {objetivoAnual != null && porcentajeCumplimiento != null && (
                     <div className="mt-1.5">
                       <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -779,7 +795,7 @@ export default function FincaMapInner({
   }, [costoByParcelaId])
 
   const maxRiegoLegend = useMemo(() => {
-    const vals = Object.values(riegoByParcelaId ?? {}).map((r) => r.litros)
+    const vals = Object.values(riegoByParcelaId ?? {}).map((r) => r.mm)
     return vals.length > 0 ? Math.max(...vals) : 0
   }, [riegoByParcelaId])
 
@@ -978,27 +994,27 @@ export default function FincaMapInner({
 
       {/* Legend — bottom left */}
       {!compact && (
-        <div className="absolute bottom-4 left-3 z-[1000] bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 px-3 py-2.5">
+        <div className="absolute bottom-4 left-3 z-[1000] w-48 bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 px-3 py-2.5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
             {colorMode === 'type' ? 'Tipo'
               : colorMode === 'variedad' ? 'Variedad'
               : colorMode === 'cosecha' ? `Cosecha (${campanaLabel})`
               : colorMode === 'costo' ? `Costo laboral (${campanaLabel})`
-              : colorMode === 'riego' ? `Riego total (${campanaLabel})`
+              : colorMode === 'riego' ? `Riego aplicado, mm (${campanaLabel})`
               : colorMode === 'fito' ? `Aplicaciones fito (${campanaLabel})`
               : colorMode === 'fenologia' ? 'Ciclo de Campaña (estado actual)'
               : 'Cumpl. riego (estado actual)'}
           </p>
           {colorMode === 'cosecha' ? (
-            <div>
-              <div className="w-28 h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #dcfce7, #15803d)' }} />
+            <div className="w-full">
+              <div className="w-full h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #dcfce7, #15803d)' }} />
               <div className="flex justify-between text-xs text-gray-500">
                 <span>0</span>
                 <span>{maxKgLegend > 0 ? `${(maxKgLegend / 1000).toFixed(1)}t` : '—'}</span>
               </div>
             </div>
           ) : colorMode === 'costo' ? (
-            <div className="w-36">
+            <div className="w-full">
               <div className="h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #fef3c7, #7a1f2c)' }} />
               <div className="flex justify-between text-xs text-gray-500 gap-2">
                 <span>$0</span>
@@ -1011,15 +1027,16 @@ export default function FincaMapInner({
               )}
             </div>
           ) : colorMode === 'riego' ? (
-            <div className="w-32">
+            <div className="w-full">
               <div className="h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #e0f2fe, #1e3a8a)' }} />
               <div className="flex justify-between text-xs text-gray-500 gap-2">
                 <span>0</span>
-                <span className="text-right">{maxRiegoLegend > 0 ? `${(maxRiegoLegend / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} m³` : '—'}</span>
+                <span className="text-right">{maxRiegoLegend > 0 ? `${maxRiegoLegend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} mm` : '—'}</span>
               </div>
+              <p className="text-xs text-gray-400 mt-1.5">Riegos del estado: ver detalle de la parcela</p>
             </div>
           ) : colorMode === 'fito' ? (
-            <div className="w-32">
+            <div className="w-full">
               <div className="h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #ede9fe, #5b21b6)' }} />
               <div className="flex justify-between text-xs text-gray-500 gap-2">
                 <span>0</span>

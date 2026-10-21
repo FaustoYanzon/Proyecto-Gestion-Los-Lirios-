@@ -166,6 +166,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
         estado_campana_label: item.estado_campana_label,
         fuente: item.fuente,
         fecha_confirmacion: item.fecha_confirmacion,
+        fecha_inicio: item.fecha_inicio,
         riegos_esperados: item.riegos_esperados,
       }
     }

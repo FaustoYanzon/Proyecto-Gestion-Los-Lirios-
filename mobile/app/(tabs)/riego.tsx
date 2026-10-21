@@ -1046,6 +1046,8 @@ function RecentRiegos({
   onTerminar: (r: RiegoEnCurso, horas: number, litros: number) => void
   terminandoId: string | null
 }) {
+  const [tab, setTab] = useState<'curso' | 'realizados'>('curso')
+
   function parcelaNombre(id: string) {
     return parcelas.find((p) => p.id === id)?.nombre ?? '—'
   }
@@ -1058,9 +1060,31 @@ function RecentRiegos({
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cielo} />
       }
     >
-      {riegosEnCurso.length > 0 && (
+      <View style={styles.segment}>
+        {([
+          ['curso', `En curso${riegosEnCurso.length > 0 ? ` (${riegosEnCurso.length})` : ''}`],
+          ['realizados', 'Realizados'],
+        ] as const).map(([key, label]) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.segmentBtn, tab === key && styles.segmentBtnActive]}
+            onPress={() => setTab(key)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.segmentText, tab === key && styles.segmentTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tab === 'curso' && riegosEnCurso.length === 0 && (
+        <View style={styles.emptyState}>
+          <ICONS.riego size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
+          <Text style={styles.emptyStateTitle}>Sin riegos en curso</Text>
+        </View>
+      )}
+
+      {tab === 'curso' && riegosEnCurso.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
           {riegosEnCurso.map((r) => {
             const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
             return (
@@ -1088,14 +1112,13 @@ function RecentRiegos({
         </>
       )}
 
-      {riegos.length === 0 ? (
+      {tab === 'realizados' && (riegos.length === 0 ? (
         <View style={styles.emptyState}>
           <ICONS.riego size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
-          <Text style={styles.emptyStateTitle}>Sin riegos recientes</Text>
+          <Text style={styles.emptyStateTitle}>Sin riegos realizados</Text>
         </View>
       ) : (
         <>
-          <Text style={styles.sectionLabel}>RIEGOS RECIENTES</Text>
           {riegos.map((r) => (
             <View key={r.id} style={styles.riegoCard}>
               <View style={styles.riegoCardHeader}>
@@ -1131,7 +1154,7 @@ function RecentRiegos({
             </View>
           ))}
         </>
-      )}
+      ))}
     </ScrollView>
   )
 }
@@ -1583,6 +1606,16 @@ const styles = StyleSheet.create({
   },
   modoCardTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
   modoCardSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
+
+  // segmented tabs (En curso / Realizados) — mismo patrón que la pestaña Fito
+  segment: {
+    flexDirection: 'row', backgroundColor: colors.blanco, borderRadius: 12,
+    padding: 4, marginBottom: 16, borderWidth: 1, borderColor: colors.borde,
+  },
+  segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
+  segmentBtnActive: { backgroundColor: colors.cielo },
+  segmentText: { fontSize: 14, fontWeight: '700', color: colors.ink60 },
+  segmentTextActive: { color: colors.blanco },
 
   // riegos en curso
   enCursoCard: {

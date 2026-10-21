@@ -38,3 +38,15 @@ export function uvLevel(uv: number): { label: string; color: string } {
   if (uv < 11) return { label: 'Muy alto', color: '#a3293a' }
   return { label: 'Extremo', color: '#7a1f2c' }
 }
+
+// Paleta del widget de clima según el cielo: da carácter a la tarjeta (antes
+// era crema liso y se confundía con el fondo). Texto siempre blanco encima.
+export function weatherTheme(code: number): { from: string; to: string } {
+  if (code === 0) return { from: '#e0902b', to: '#c2571a' }          // despejado: sol cálido
+  if (code <= 2) return { from: '#3d86b0', to: '#2d5f86' }           // parcial: cielo
+  if (code === 3) return { from: '#6b7f8f', to: '#465868' }          // nublado: pizarra
+  if (code <= 49) return { from: '#7c8a94', to: '#56636d' }          // niebla
+  if (code <= 69 || (code >= 80 && code <= 82)) return { from: '#2f6a99', to: '#1e4268' } // lluvia
+  if (code <= 99) return { from: '#4a4a7a', to: '#2b2b52' }          // tormenta/nieve
+  return { from: '#3d6b86', to: '#2d5468' }
+}

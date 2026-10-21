@@ -69,6 +69,9 @@ function RiegosEnCursoInicio({
         const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
         return (
           <View key={r.id} style={styles.enCursoCard}>
+            <View style={styles.enCursoIcon}>
+              <ICONS.riego size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.enCursoTitle}>
                 Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
@@ -136,6 +139,18 @@ function windDirectionLabelMini(deg: number): string {
   return dirs[Math.round(deg / 45) % 8]
 }
 
+// Color de fondo de la tarjeta según el cielo (espejo de weatherTheme en
+// frontend/lib/weather.ts, sin degradé: expo-linear-gradient exigiría build).
+function weatherBgMini(code: number): string {
+  if (code === 0) return '#d9822b'
+  if (code <= 2) return '#3d86b0'
+  if (code === 3) return '#5f7383'
+  if (code <= 49) return '#6f7f8a'
+  if (code <= 69 || code === 80 || code === 81 || code === 82) return '#2a6190'
+  if (code <= 99) return '#44447a'
+  return colors.cielo
+}
+
 function uvLevelMini(uv: number): { label: string; color: string } {
   if (uv < 3) return { label: 'Bajo', color: colors.verdeCampo }
   if (uv < 6) return { label: 'Moderado', color: '#b8860b' }
@@ -163,7 +178,7 @@ function ClimateCardMini() {
   }, [finca])
 
   if (loading && !clima) {
-    return <View style={[styles.climateCard, { height: 132 }]} />
+    return <View style={[styles.climateCard, { height: 150, backgroundColor: colors.cielo, borderColor: colors.cielo, opacity: 0.4 }]} />
   }
   if (!clima) return null
 
@@ -178,16 +193,21 @@ function ClimateCardMini() {
   const uvInfo = uv !== null ? uvLevelMini(uv) : null
   const WeatherIcon = ICONS[wmoIconNameMini(clima.current.weather_code)]
 
+  const bg = weatherBgMini(clima.current.weather_code)
+
   return (
-    <View style={styles.climateCard}>
+    <View style={[styles.climateCard, { backgroundColor: bg, borderColor: bg }]}>
       <View style={styles.climateHeader}>
-        <WeatherIcon size={16} color={colors.cielo} strokeWidth={ICON_STROKE} />
         <Text style={styles.climateHeaderText}>
           CLIMA — {(FINCA_COORDS[finca as keyof typeof FINCA_COORDS]?.label ?? finca).toUpperCase()}
+        </Text>
+        <Text style={styles.climateUpdated}>
+          {clima._cached ? 'hace <30 min' : 'ahora'}
         </Text>
       </View>
 
       <View style={styles.climateBigRow}>
+        <WeatherIcon size={44} color={colors.blanco} strokeWidth={1.5} />
         <Text style={styles.climateTemp}>{temp}°</Text>
         <View style={{ flex: 1 }}>
           <Text style={styles.climateDesc}>
@@ -202,25 +222,21 @@ function ClimateCardMini() {
 
       <View style={styles.climateStatsRow}>
         <View style={styles.climateStatCol}>
-          <ICONS.viento size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
+          <ICONS.viento size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.climateStatValue}>{wind} km/h</Text>
           <Text style={styles.climateStatLabel}>{windDir}</Text>
         </View>
         <View style={styles.climateStatCol}>
-          <ICONS.humedad size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
+          <ICONS.humedad size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
           <Text style={styles.climateStatValue}>{humidity}%</Text>
           <Text style={styles.climateStatLabel}>Humedad</Text>
         </View>
         <View style={styles.climateStatCol}>
-          <ICONS.uv size={15} color={colors.ink60} strokeWidth={ICON_STROKE} />
-          <Text style={[styles.climateStatValue, uvInfo && { color: uvInfo.color }]}>UV {uv}</Text>
+          <ICONS.uv size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
+          <Text style={styles.climateStatValue}>UV {uv}</Text>
           <Text style={styles.climateStatLabel}>{uvInfo?.label}</Text>
         </View>
       </View>
-
-      <Text style={styles.climateUpdated}>
-        {clima._cached ? 'Actualizado hace menos de 30 min' : 'Actualizado ahora'}
-      </Text>
     </View>
   )
 }
@@ -418,13 +434,18 @@ const styles = StyleSheet.create({
 
   // riegos en curso
   enCursoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: colors.crema, borderRadius: 14, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: colors.hueso,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.cielo, borderRadius: 16, padding: 14, marginBottom: 8,
+    shadowColor: colors.cielo,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
   },
-  enCursoTitle: { fontSize: 14, fontWeight: '700', color: colors.ink },
-  enCursoStats: { fontSize: 13, color: colors.cielo, fontWeight: '700', fontFamily: fonts.mono, marginTop: 2 },
-  enCursoResp: { fontSize: 12, color: colors.ink60, marginTop: 1 },
+  enCursoIcon: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  enCursoTitle: { fontSize: 14, fontWeight: '700', color: colors.blanco },
+  enCursoStats: { fontSize: 18, color: colors.blanco, fontWeight: '800', fontFamily: fonts.mono, marginTop: 3 },
+  enCursoResp: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   terminarBtn: {
     backgroundColor: colors.cielo, borderRadius: 10,
     paddingVertical: 10, paddingHorizontal: 14, flexShrink: 0,
@@ -432,29 +453,32 @@ const styles = StyleSheet.create({
   terminarBtnText: { color: colors.blanco, fontSize: 13, fontWeight: '700' },
 
   climateCard: {
-    backgroundColor: colors.crema, borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16, paddingVertical: 14,
     marginBottom: 24,
-    borderWidth: 1, borderColor: colors.hueso,
+    borderWidth: 1,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
-  climateHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  climateHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10,
+  },
   climateHeaderText: {
-    fontSize: 11, fontWeight: '700', color: colors.ink60,
+    fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.6,
   },
-  climateBigRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  climateTemp: { fontSize: 34, fontWeight: '800', color: colors.ink, lineHeight: 36 },
-  climateDesc: { fontSize: 13, color: colors.ink60, marginBottom: 2 },
-  climateMaxMin: { fontSize: 12, color: colors.niebla },
-  climateStatsRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    marginTop: 14, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: colors.hueso,
+  climateBigRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  climateTemp: { fontSize: 40, fontWeight: '800', color: colors.blanco, lineHeight: 44 },
+  climateDesc: { fontSize: 13, color: colors.blanco, fontWeight: '600', marginBottom: 2 },
+  climateMaxMin: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
+  climateStatsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  climateStatCol: {
+    alignItems: 'center', gap: 3, flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 10, paddingVertical: 8,
   },
-  climateStatCol: { alignItems: 'center', gap: 3, flex: 1 },
-  climateStatValue: { fontSize: 13, fontWeight: '700', color: colors.ink },
-  climateStatLabel: { fontSize: 10, color: colors.niebla },
-  climateUpdated: { fontSize: 11, color: colors.niebla, marginTop: 12 },
+  climateStatValue: { fontSize: 13, fontWeight: '700', color: colors.blanco },
+  climateStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.78)' },
+  climateUpdated: { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
   fenologiaCard: {
     backgroundColor: colors.blanco, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,

@@ -5,24 +5,16 @@ import { useMemo } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, BarChart3, Wallet, Users } from 'lucide-react'
-import {
-  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, ReferenceLine,
-} from 'recharts'
 import FincaMap from '@/components/map/FincaMap'
 import FenologiaNotificaciones from '@/components/FenologiaNotificaciones'
 import RiegosEnCurso from '@/components/produccion/RiegosEnCurso'
 import { ClimateCard } from '@/components/ClimateWidget'
+import PronosticoCard from '@/components/PronosticoCard'
 import { getPresupuestoVsReal, getKpiProduccionParcelas } from '@/lib/api/kpis'
 import { getParcelasMapa } from '@/lib/api/produccion'
 
 const now = new Date()
 const TEMPORADA = now.getMonth() >= 4 ? now.getFullYear() : now.getFullYear() - 1
-const MESES_ORDER = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4]
-const MES_LABELS: Record<number, string> = {
-  5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Oct',
-  11: 'Nov', 12: 'Dic', 1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
-}
 const fmtM = (n: number) =>
   Math.abs(n) >= 1_000_000
     ? `$${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`
@@ -88,29 +80,6 @@ function DireccionSection() {
     }
   }, [pvr, parcelasKpi])
 
-  const curva = useMemo(() => {
-    const base = MESES_ORDER.map((m) => ({
-      label: MES_LABELS[m], mes: m, ingReal: 0, ingPresup: 0, egrReal: 0, egrPresup: 0,
-    }))
-    const idx = new Map(base.map((r) => [r.mes, r]))
-    for (const r of pvr) {
-      const row = idx.get(r.mes)
-      if (!row) continue
-      if (r.concepto === 'ingreso') {
-        row.ingReal += Number(r.monto_real); row.ingPresup += Number(r.monto_presupuesto)
-      } else {
-        row.egrReal += Number(r.monto_real); row.egrPresup += Number(r.monto_presupuesto)
-      }
-    }
-    let aIR = 0, aIP = 0, aER = 0, aEP = 0
-    const result = []
-    for (const r of base) {
-      aIR += r.ingReal; aIP += r.ingPresup; aER += r.egrReal; aEP += r.egrPresup
-      result.push({ label: r.label, 'Ingresos real': aIR, 'Ingresos presup.': aIP, 'Egresos real': aER, 'Egresos presup.': aEP })
-    }
-    return result
-  }, [pvr])
-
   const hayDatos = pvr.length > 0 || parcelasKpi.length > 0
   if (!hayDatos) return null
 
@@ -167,33 +136,12 @@ function DireccionSection() {
           hint="ARS/ha · campañas entre sí → comparar en USD"
         />
       </div>
-
-      <div className="bg-white rounded-[10px] border border-[#e2dbcc] p-4"
-        style={{ boxShadow: '0 1px 2px rgba(31,26,23,0.06)' }}>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-[#5a544c] mb-2">
-          Flujo acumulado: real vs presupuesto (ARS)
-        </p>
-        <ResponsiveContainer width="100%" height={200}>
-          <ComposedChart data={curva} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} width={55} tickFormatter={(v) => fmtM(Number(v))} />
-            <Tooltip formatter={(v, name) => [fmtM(Number(v)), name]} contentStyle={{ fontSize: 12 }} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Area dataKey="Ingresos presup." fill="#3f5c3a" fillOpacity={0.12} stroke="none" />
-            <Area dataKey="Egresos presup." fill="#9a3140" fillOpacity={0.12} stroke="none" />
-            <Line dataKey="Ingresos real" stroke="#3f5c3a" strokeWidth={2} dot={false} />
-            <Line dataKey="Egresos real" stroke="#9a3140" strokeWidth={2} dot={false} />
-            <ReferenceLine y={0} stroke="#5a544c" />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
     </div>
   )
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-// Inicio queda reducido a lo esencial: mapa compacto + clima/riegos,
+// Inicio queda reducido a lo esencial: mapa compacto + riegos en curso (clima en el encabezado),
 // notificación fenológica y Dirección (D1, solo gerencial). Las alertas
 // genéricas (riego atrasado, carencia, ARCA) viven en la campanita del
 // header (NotificacionesBell), no acá — ver dashboard/layout.tsx.
@@ -227,11 +175,17 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex-shrink-0">
-        <h1 className="text-2xl font-semibold text-[#1f1a17]">
-          Bienvenido{firstName ? `, ${firstName}` : ''}
-        </h1>
-        <p className="text-sm text-[#a09584] mt-0.5">{todayLabel}</p>
+      <div className="flex-shrink-0 flex flex-col gap-3 xl:flex-row xl:items-stretch xl:justify-between">
+        <div className="xl:self-center xl:flex-shrink-0">
+          <h1 className="text-2xl font-semibold text-[#1f1a17]">
+            Bienvenido{firstName ? `, ${firstName}` : ''}
+          </h1>
+          <p className="text-sm text-[#a09584] mt-0.5">{todayLabel}</p>
+        </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-stretch xl:max-w-[1000px] xl:flex-1">
+          <PronosticoCard />
+          <ClimateCard variant="banner" />
+        </div>
       </div>
 
       {/* Dirección (gerencial only) — primero de todo */}
@@ -263,9 +217,8 @@ export default function DashboardPage() {
           </span>
         </Link>
 
-        {/* Sidebar derecho: clima + riegos en curso (ahora sin Alertas, que se movió a la campanita) */}
+        {/* Sidebar derecho: solo riegos en curso (el clima vive en el encabezado) */}
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
-          <ClimateCard />
           <RiegosEnCurso
             parcelaNombre={parcelaNombre}
             showTerminar={false}
