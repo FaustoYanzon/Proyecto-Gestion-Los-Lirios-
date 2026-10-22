@@ -11,12 +11,12 @@ import { useRouter, useFocusEffect } from 'expo-router'
 import { ICONS, ICON_STROKE, type IconKey } from '../../lib/icons'
 import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
-import api, { getRiegosEnCurso } from '../../lib/api'
+import api from '../../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
-import type { FaseVariedad, Parcela, RiegoEnCurso } from '../../lib/types'
-import { VARIEDAD_LABELS, calcRiegoTotales } from '../../lib/types'
+import type { FaseVariedad } from '../../lib/types'
+import { VARIEDAD_LABELS } from '../../lib/types'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
 const NOTIF_ROTATION_INTERVAL_MS = 15 * 60 * 1000
@@ -45,47 +45,6 @@ function ActionButton({
       <Icon size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
       <Text style={styles.actionBtnText}>{label}</Text>
     </TouchableOpacity>
-  )
-}
-
-function formatTranscurrido(horas: number): string {
-  const totalMin = Math.floor(horas * 60)
-  const h = Math.floor(totalMin / 60)
-  const m = totalMin % 60
-  return `${h}h ${m.toString().padStart(2, '0')}m`
-}
-
-function RiegosEnCursoInicio({
-  riegos, parcelaNombre,
-}: {
-  riegos: RiegoEnCurso[]
-  parcelaNombre: (id: string) => string
-}) {
-  if (riegos.length === 0) return null
-  return (
-    <View style={{ marginBottom: 24 }}>
-      <Text style={styles.sectionLabel}>RIEGOS EN CURSO</Text>
-      {riegos.map((r) => {
-        const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
-        return (
-          <View key={r.id} style={styles.enCursoCard}>
-            <View style={styles.enCursoIcon}>
-              <ICONS.riego size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.enCursoTitle}>
-                Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
-                {r.tipo === 'manto' ? ' · Manto' : ''}
-              </Text>
-              <Text style={styles.enCursoStats}>
-                {formatTranscurrido(totales.horas)}
-              </Text>
-              <Text style={styles.enCursoResp}>{r.responsable}</Text>
-            </View>
-          </View>
-        )
-      })}
-    </View>
   )
 }
 
@@ -241,6 +200,94 @@ function ClimateCardMini() {
   )
 }
 
+// ── Pronóstico 5 días (espejo de PronosticoCard en la web) ──
+interface PronosticoMini {
+  daily: {
+    time: string[]
+    temperature_2m_max: number[]
+    temperature_2m_min: number[]
+    precipitation_sum: number[]
+    precipitation_probability_max: number[]
+    wind_speed_10m_max: number[]
+    weather_code: number[]
+  }
+}
+
+const DIAS_PRONOSTICO = 5
+
+function fmtDiaMini(iso: string, idx: number): string {
+  if (idx === 0) return 'Hoy'
+  const d = new Date(iso + 'T12:00:00')
+  return d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.', '')
+}
+
+// Lo más grave de los próximos días. Umbrales orientativos: helada ≤ 2 °C de
+// mínima, viento ≥ 40 km/h, códigos WMO 96/99 = tormenta con granizo.
+function alertaPronosticoMini(d: PronosticoMini['daily']): { texto: string; grave: boolean } | null {
+  const n = Math.min(DIAS_PRONOSTICO, d.time.length)
+  const cuando = (i: number) => (i === 0 ? 'hoy' : i === 1 ? 'mañana' : fmtDiaMini(d.time[i], i))
+  for (let i = 0; i < n; i++) {
+    if (d.weather_code[i] === 96 || d.weather_code[i] === 99) return { texto: `Riesgo de granizo ${cuando(i)}`, grave: true }
+    if (d.temperature_2m_min[i] <= 2) return { texto: `Posible helada ${cuando(i)} (mín ${Math.round(d.temperature_2m_min[i])}°)`, grave: true }
+  }
+  for (let i = 0; i < n; i++) {
+    if (d.wind_speed_10m_max[i] >= 40) return { texto: `Viento fuerte ${cuando(i)} (${Math.round(d.wind_speed_10m_max[i])} km/h)`, grave: false }
+  }
+  const lluvia = d.precipitation_sum.slice(0, n).findIndex((v) => v >= 5)
+  if (lluvia >= 0) return { texto: `Lluvia ${cuando(lluvia)} (${d.precipitation_sum[lluvia].toFixed(0)} mm)`, grave: false }
+  return null
+}
+
+function PronosticoCardMini() {
+  const finca = useFincaStore((s) => s.active.key)
+  const [data, setData] = useState<PronosticoMini | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      const cached = await getCache<PronosticoMini>('clima_pronostico', CACHE_TTL.clima)
+      if (cached) setData(cached)
+      try {
+        const { data: fresh } = await api.get<PronosticoMini>('/clima/pronostico-extendido', { params: { finca } })
+        setData(fresh)
+        await setCache('clima_pronostico', fresh)
+      } catch { /* usa lo cacheado si existe, si no queda oculto */ }
+    })()
+  }, [finca])
+
+  // Un dato inventado es peor que ninguno: sin datos, no se muestra la tarjeta.
+  if (!data) return null
+  const d = data.daily
+  const alerta = alertaPronosticoMini(d)
+  const AlertIcon = ICONS[alerta?.grave ? 'alerta' : 'lluvia']
+
+  return (
+    <View style={styles.pronCard}>
+      <Text style={styles.pronTitle}>PRÓXIMOS DÍAS</Text>
+      {alerta && (
+        <View style={[styles.pronAlert, alerta.grave ? styles.pronAlertGrave : styles.pronAlertInfo]}>
+          <AlertIcon size={14} color={alerta.grave ? colors.sangre : colors.cielo} strokeWidth={ICON_STROKE} />
+          <Text style={[styles.pronAlertText, { color: alerta.grave ? colors.sangre : colors.cielo }]}>{alerta.texto}</Text>
+        </View>
+      )}
+      <View style={styles.pronRow}>
+        {d.time.slice(0, DIAS_PRONOSTICO).map((dia, i) => {
+          const Icon = ICONS[wmoIconNameMini(d.weather_code[i])]
+          const prob = Math.round(d.precipitation_probability_max[i] ?? 0)
+          return (
+            <View key={dia} style={[styles.pronDay, i === 0 && styles.pronDayToday]}>
+              <Text style={styles.pronDayName}>{fmtDiaMini(dia, i)}</Text>
+              <Icon size={22} color={colors.cielo} strokeWidth={ICON_STROKE} />
+              <Text style={styles.pronMax}>{Math.round(d.temperature_2m_max[i])}°</Text>
+              <Text style={styles.pronMin}>{Math.round(d.temperature_2m_min[i])}°</Text>
+              <Text style={styles.pronRain}>{prob > 0 ? `${prob}%` : ' '}</Text>
+            </View>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 // Tarea recomendada de UNA variedad por vez (no todas juntas), calculada
 // automáticamente por fecha (app.core.fenologia en el backend) salvo que
 // exista una confirmación manual vigente en Ciclo de Campaña (ventana de 45
@@ -291,22 +338,6 @@ export default function InicioScreen() {
   const [fases, setFases] = useState<FaseVariedad[]>([])
   const [loadingFases, setLoadingFases] = useState(true)
   const [notifIdx, setNotifIdx] = useState(0)
-  const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
-  const [parcelas, setParcelas] = useState<Parcela[]>([])
-
-  function parcelaNombre(id: string) {
-    return parcelas.find((p) => p.id === id)?.nombre ?? '—'
-  }
-
-  const loadParcelas = useCallback(async () => {
-    const cached = await getCache<Parcela[]>('parcelas', CACHE_TTL.parcelas)
-    if (cached) setParcelas(cached)
-    try {
-      const { data } = await api.get<Parcela[]>('/parcelas/mapa')
-      setParcelas(data)
-      await setCache('parcelas', data)
-    } catch { /* usa lo cacheado si existe */ }
-  }, [])
 
   const loadFenologia = useCallback(async () => {
     const cached = await getCache<FaseVariedad[]>('fenologia', CACHE_TTL.fenologia)
@@ -319,27 +350,7 @@ export default function InicioScreen() {
     finally { setLoadingFases(false); setRefreshing(false) }
   }, [])
 
-  const loadRiegosEnCurso = useCallback(async () => {
-    try {
-      setRiegosEnCurso(await getRiegosEnCurso())
-    } catch { /* offline */ }
-  }, [])
-
-  useEffect(() => { loadFenologia(); loadRiegosEnCurso(); loadParcelas() }, [loadFenologia, loadRiegosEnCurso, loadParcelas])
-
-  // Refetch cada 30s para detectar riegos iniciados/cerrados desde otra
-  // pantalla/dispositivo — el cronómetro de cada card es puramente local.
-  useEffect(() => {
-    const t = setInterval(loadRiegosEnCurso, 30_000)
-    return () => clearInterval(t)
-  }, [loadRiegosEnCurso])
-
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    if (riegosEnCurso.length === 0) return
-    const t = setInterval(() => setTick((n) => n + 1), 1000)
-    return () => clearInterval(t)
-  }, [riegosEnCurso.length])
+  useEffect(() => { loadFenologia() }, [loadFenologia])
 
   // Rota la notificación fenológica mostrada: avanza cada vez que esta
   // pestaña gana foco (login, volver de otra pestaña) y además cada 15 min
@@ -360,7 +371,7 @@ export default function InicioScreen() {
     }, [fases.length]),
   )
 
-  function onRefresh() { setRefreshing(true); loadFenologia(); loadRiegosEnCurso(); loadParcelas() }
+  function onRefresh() { setRefreshing(true); loadFenologia() }
 
   const firstName = user?.full_name?.split(' ')[0] ?? ''
 
@@ -401,14 +412,11 @@ export default function InicioScreen() {
         />
       </View>
 
-      {/* ── Riegos en curso ── */}
-      <RiegosEnCursoInicio
-        riegos={riegosEnCurso}
-        parcelaNombre={parcelaNombre}
-      />
-
       {/* ── Climate mini ── */}
       <ClimateCardMini />
+
+      {/* ── Pronóstico 5 días ── */}
+      <PronosticoCardMini />
 
       {/* ── Tareas recomendadas (fenología automática) ── */}
       <FenologiaNotificaciones fases={fases} loading={loadingFases} idx={notifIdx} />
@@ -431,26 +439,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
   },
   actionBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700', flex: 1 },
-
-  // riegos en curso
-  enCursoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.cielo, borderRadius: 16, padding: 14, marginBottom: 8,
-    shadowColor: colors.cielo,
-    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
-  },
-  enCursoIcon: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  enCursoTitle: { fontSize: 14, fontWeight: '700', color: colors.blanco },
-  enCursoStats: { fontSize: 18, color: colors.blanco, fontWeight: '800', fontFamily: fonts.mono, marginTop: 3 },
-  enCursoResp: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  terminarBtn: {
-    backgroundColor: colors.cielo, borderRadius: 10,
-    paddingVertical: 10, paddingHorizontal: 14, flexShrink: 0,
-  },
-  terminarBtnText: { color: colors.blanco, fontSize: 13, fontWeight: '700' },
 
   climateCard: {
     borderRadius: 16,
@@ -479,6 +467,28 @@ const styles = StyleSheet.create({
   climateStatValue: { fontSize: 13, fontWeight: '700', color: colors.blanco },
   climateStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.78)' },
   climateUpdated: { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
+  pronCard: {
+    backgroundColor: colors.blanco, borderRadius: 16, padding: 14, marginBottom: 24,
+    borderWidth: 1, borderColor: colors.borde,
+  },
+  pronTitle: { fontSize: 11, fontWeight: '700', color: colors.ink60, letterSpacing: 0.6, marginBottom: 10 },
+  pronAlert: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 10,
+  },
+  pronAlertGrave: { backgroundColor: '#fbe9ec' },
+  pronAlertInfo: { backgroundColor: '#e8f0f5' },
+  pronAlertText: { fontSize: 12, fontWeight: '700', flex: 1 },
+  pronRow: { flexDirection: 'row', gap: 6 },
+  pronDay: {
+    flex: 1, alignItems: 'center', gap: 3, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: colors.hueso,
+  },
+  pronDayToday: { backgroundColor: '#f3e9e1' },
+  pronDayName: { fontSize: 11, fontWeight: '700', color: colors.ink60, textTransform: 'capitalize' },
+  pronMax: { fontSize: 15, fontWeight: '800', color: colors.ink },
+  pronMin: { fontSize: 12, color: colors.ink60 },
+  pronRain: { fontSize: 10, color: colors.cielo, fontWeight: '600' },
   fenologiaCard: {
     backgroundColor: colors.blanco, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
