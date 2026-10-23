@@ -87,6 +87,15 @@ async def _override_get_db():
 
 
 @pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
+    """Sesión directa sobre la misma DB de test que usa `client` (para armar o
+    inspeccionar estado sin pasar por la API). No importar TestSessionLocal
+    desde otro módulo: re-importar conftest crearía un segundo engine vacío."""
+    async with TestSessionLocal() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
 async def client() -> AsyncClient:
     app.dependency_overrides[get_db] = _override_get_db
     transport = ASGITransport(app=app)
@@ -183,11 +192,12 @@ async def create_valvula():
         orden: int | None = 1,
         lat: float = -32.02,
         lon: float = -68.40,
+        superficie_ha: float | None = None,
     ) -> Valvula:
         async with TestSessionLocal() as session:
             valvula = Valvula(
                 nombre=nombre, parcela_id=parcela_id, cabezal=cabezal,
-                orden=orden, lat=lat, lon=lon,
+                orden=orden, lat=lat, lon=lon, superficie_ha=superficie_ha,
             )
             session.add(valvula)
             await session.commit()

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from app.models.parcela import Parcela
     from app.models.trabajador import Trabajador
     from app.models.user import User
+    from app.models.valvula import Valvula
 
 
 TAREAS_POR_CLASIFICACION: dict[str, list[str]] = {
@@ -359,6 +360,12 @@ class RegistroFitosanitario(Base):
     # "faltó producto para el último parral"). Libre, no afecta cantidad ni
     # producto, que quedan fijos por la orden -- ver OrdenAplicacionParcela.
     observaciones: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Válvula puntual cuando el registro nace de confirmar una orden de
+    # aplicación por válvula (OrdenAplicacionValvula); null en los registros
+    # por parcela entera (carga histórica y confirmación de respaldo).
+    valvula_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("valvulas.id"), nullable=True
+    )
     # Ver nota en RegistroTrabajo.idempotency_key.
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
@@ -411,6 +418,9 @@ class RegistroFitosanitario(Base):
     )
     orden_parcela: Mapped[OrdenAplicacionParcela | None] = relationship(
         "OrdenAplicacionParcela", back_populates="registro_fitosanitario", uselist=False
+    )
+    orden_valvula: Mapped[OrdenAplicacionValvula | None] = relationship(
+        "OrdenAplicacionValvula", back_populates="registro_fitosanitario", uselist=False
     )
     fotos: Mapped[list[FotoRegistroFitosanitario]] = relationship(
         "FotoRegistroFitosanitario", back_populates="registro_fitosanitario"
@@ -475,6 +485,15 @@ class EstadoOrdenAplicacion(str, enum.Enum):
 class EstadoOrdenAplicacionParcela(str, enum.Enum):
     pendiente = "pendiente"
     aplicada = "aplicada"
+
+
+class ResultadoValvula(str, enum.Enum):
+    """Resultado de confirmar una válvula. No existe "parcial": una aplicación
+    incompleta se registra como `completa` con observaciones (y descuenta la
+    superficie entera de la válvula); la revisión posterior decide qué hacer."""
+
+    completa = "completa"
+    no_aplicada = "no_aplicada"
 
 
 class OrdenAplicacion(Base):
@@ -592,6 +611,89 @@ class OrdenAplicacionParcela(Base):
     parcela: Mapped[Parcela] = relationship("Parcela")
     registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
         "RegistroFitosanitario", back_populates="orden_parcela"
+    )
+    valvulas: Mapped[list[OrdenAplicacionValvula]] = relationship(
+        "OrdenAplicacionValvula",
+        back_populates="orden_parcela",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrdenAplicacionValvula(Base):
+    """Una fila por válvula de cada parcela de la orden. El operario confirma
+    válvula por válvula (en cualquier orden); cada confirmación `completa`
+    crea su propio RegistroFitosanitario con la superficie de la válvula. La
+    parcela pasa a `aplicada` cuando todas sus válvulas están resueltas
+    (aplicada, sea completa o no_aplicada). Las parcelas sin válvulas, y las
+    órdenes anteriores a este modelo, se confirman por parcela entera."""
+
+    __tablename__ = "ordenes_aplicacion_valvulas"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    orden_parcela_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ordenes_aplicacion_parcelas.id"), nullable=False
+    )
+    valvula_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("valvulas.id"), nullable=False
+    )
+    estado: Mapped[EstadoOrdenAplicacionParcela] = mapped_column(
+        SAEnum(EstadoOrdenAplicacionParcela),
+        default=EstadoOrdenAplicacionParcela.pendiente,
+        server_default=EstadoOrdenAplicacionParcela.pendiente.value,
+        nullable=False,
+    )
+    resultado: Mapped[ResultadoValvula | None] = mapped_column(
+        SAEnum(ResultadoValvula), nullable=True
+    )
+    responsable_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trabajadores.id"), nullable=True
+    )
+    responsable: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    observaciones: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    registro_fitosanitario_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("registros_fitosanitarios.id"), nullable=True
+    )
+    confirmada_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revisada_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revisada_por: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_ordenes_aplicacion_valvulas_parcela_valvula",
+            "orden_parcela_id", "valvula_id",
+            unique=True,
+        ),
+        Index("ix_ordenes_aplicacion_valvulas_valvula", "valvula_id"),
+        Index(
+            "ix_ordenes_aplicacion_valvulas_a_revisar",
+            "confirmada_at",
+            postgresql_where=text("estado = 'aplicada' AND revisada_at IS NULL"),
+        ),
+        Index(
+            "uq_ordenes_aplicacion_valvulas_registro",
+            "registro_fitosanitario_id",
+            unique=True,
+            postgresql_where=text("registro_fitosanitario_id IS NOT NULL"),
+        ),
+    )
+
+    orden_parcela: Mapped[OrdenAplicacionParcela] = relationship(
+        "OrdenAplicacionParcela", back_populates="valvulas"
+    )
+    valvula: Mapped[Valvula] = relationship("Valvula")
+    registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
+        "RegistroFitosanitario", back_populates="orden_valvula"
     )
 
 

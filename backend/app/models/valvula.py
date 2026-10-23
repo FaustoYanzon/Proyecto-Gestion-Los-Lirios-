@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -40,6 +41,10 @@ class Valvula(Base):
     # Posicion oeste->este dentro de su parcela (1 = mas al oeste). Nula para
     # valvulas sin un orden fisico relevante conocido todavia.
     orden: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Hectareas del cuadrante de riego de la valvula (poligono de "Cuadrantes
+    # de Riego.geojson", cargado con scripts/cargar_superficie_valvulas.py).
+    # Base del calculo de producto/stock al confirmar una orden por valvula.
+    superficie_ha: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
