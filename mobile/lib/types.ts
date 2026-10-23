@@ -126,12 +126,30 @@ export type OrigenOrdenAplicacion = 'plan' | 'extra'
 export type EstadoOrdenAplicacion = 'pendiente' | 'en_curso' | 'completada'
 export type EstadoOrdenAplicacionParcela = 'pendiente' | 'aplicada'
 
+export type ResultadoValvula = 'completa' | 'no_aplicada'
+
+export interface OrdenAplicacionValvulaItem {
+  id: string
+  valvula_id: string
+  valvula_nombre: string
+  superficie_ha: string | null
+  estado: EstadoOrdenAplicacionParcela
+  resultado: ResultadoValvula | null
+  responsable: string | null
+  observaciones: string | null
+  registro_fitosanitario_id: string | null
+  confirmada_at: string | null
+}
+
 export interface OrdenAplicacionParcelaItem {
   id: string
   parcela_id: string
   parcela_nombre: string
   estado: EstadoOrdenAplicacionParcela
   registro_fitosanitario_id: string | null
+  // Vacía en parcelas sin válvulas y en órdenes viejas: esas se confirman
+  // por parcela entera.
+  valvulas: OrdenAplicacionValvulaItem[]
 }
 
 export interface OrdenAplicacion {

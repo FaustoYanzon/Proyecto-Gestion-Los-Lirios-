@@ -166,7 +166,9 @@ export async function postEstadoVariedadCampana(
 
 // ─── Órdenes de Aplicación ──────────────────────────────────────────────────
 
-import type { OrdenAplicacion, OrdenAplicacionParcelaItem } from './types'
+import type {
+  OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem, ResultadoValvula,
+} from './types'
 
 export async function getOrdenesPendientes(): Promise<OrdenAplicacion[]> {
   const { data } = await api.get<OrdenAplicacion[]>('/ordenes-aplicacion/pendientes')
@@ -183,6 +185,29 @@ export async function confirmarAplicacionOrden(
     { observaciones: observaciones || undefined },
   )
   return data
+}
+
+export async function confirmarValvulaOrden(
+  ordenId: string,
+  ordenValvulaId: string,
+  body: { resultado: ResultadoValvula; responsable_id?: string; observaciones?: string },
+): Promise<OrdenAplicacionValvulaItem> {
+  const { data } = await api.post<OrdenAplicacionValvulaItem>(
+    `/ordenes-aplicacion/${ordenId}/valvulas/${ordenValvulaId}/confirmar`,
+    body,
+  )
+  return data
+}
+
+export async function subirFotoValvula(ordenValvulaId: string, uri: string): Promise<void> {
+  const formData = new FormData()
+  // Mismo shape de React Native que subirFotoAplicacion (no es un File del DOM).
+  formData.append('file', {
+    uri, name: 'aplicacion.jpg', type: 'image/jpeg',
+  } as any)
+  await api.post(`/ordenes-aplicacion/valvulas/${ordenValvulaId}/fotos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }
 
 export async function subirFotoAplicacion(ordenParcelaId: string, uri: string): Promise<void> {

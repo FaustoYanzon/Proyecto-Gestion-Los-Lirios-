@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-16
+> Última generación: 2026-10-23
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,7 +26,7 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 42 clases ORM
+**Modelos:** 16 archivos, 43 clases ORM
 
 | Archivo | Clases |
 |---|---|
@@ -38,7 +38,7 @@ repo/
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
 | `presupuesto.py` | Presupuesto, MetaProduccion |
-| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionParcela, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
+| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionParcela, OrdenAplicacionValvula, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
 | `push_token.py` | PushToken |
 | `termografo.py` | LoteImportacionTermografo, LecturaTermografo |
 | `trabajador.py` | Trabajador |
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 52 (head: `9d3a6f1b2c85_remito_linea_bin_id.py`)
+**Migraciones de Alembic:** 54 (head: `33a3c708b565_foto_orden_valvula.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -150,7 +150,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `produccion/`: AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
+- `produccion/`: ARevisarPanel.tsx · AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 

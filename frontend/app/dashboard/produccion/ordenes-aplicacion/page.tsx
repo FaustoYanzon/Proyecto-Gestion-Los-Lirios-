@@ -13,13 +13,17 @@ import {
   crearOrdenExtra,
   actualizarOrdenExtra,
   eliminarOrdenExtra,
+  getValvulasARevisar,
+  revisarValvula,
   type OrdenAplicacion,
   type EstadoOrdenAplicacion,
+  type ValvulaARevisar,
 } from '@/lib/api/ordenesAplicacion'
 import { getPlanFitosanitario, type PlanFitosanitario } from '@/lib/api/planFitosanitario'
 import { getParcelas, VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
 import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
+import ARevisarPanel, { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
 import type { InsumoResponse } from '@/lib/api/insumos'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
@@ -348,29 +352,33 @@ const schemaExtra = z.object({
 type FormExtra = z.infer<typeof schemaExtra>
 
 function FormOrdenExtra({
-  parcelas, variedadesDisponibles, temporada, orden, onSuccess, onCancel,
+  parcelas, variedadesDisponibles, temporada, orden, repaso, onSuccess, onCancel,
 }: {
   parcelas: ParcelaItem[]
   variedadesDisponibles: string[]
   temporada: number
   // Si viene, el form edita esa orden en vez de crear una nueva.
   orden?: OrdenAplicacion
+  // Si viene, crea una orden de repaso para esa válvula (precargada) y, al
+  // crearla, la marca como revisada.
+  repaso?: ValvulaARevisar
   onSuccess: () => void
   onCancel: () => void
 }) {
   const queryClient = useQueryClient()
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [insumoNombre, setInsumoNombre] = useState(orden?.insumo_nombre ?? '')
+  const [insumoNombre, setInsumoNombre] = useState(orden?.insumo_nombre ?? repaso?.insumo_nombre ?? '')
   const [insumoInfo, setInsumoInfo] = useState<InsumoResponse | null>(null)
   // Una orden editada "restringe" si no cubre todas las parcelas activas de
   // su variedad -- así el picker muestra exactamente lo que tiene hoy.
   const [restringir, setRestringir] = useState(() => {
+    if (repaso) return true
     if (!orden) return false
     const total = parcelas.filter((p) => p.is_active && p.variedad === orden.variedad).length
     return orden.parcelas.length !== total
   })
   const [seleccionadas, setSeleccionadas] = useState<string[]>(
-    () => orden?.parcelas.map((p) => p.parcela_id) ?? [],
+    () => (repaso ? [repaso.parcela_id] : orden?.parcelas.map((p) => p.parcela_id) ?? []),
   )
 
   const {
@@ -384,7 +392,14 @@ function FormOrdenExtra({
           dias_reingreso: orden.dias_reingreso, fecha_planificada: orden.fecha_planificada,
           notas: orden.notas ?? '',
         }
-      : {
+      : repaso
+        ? {
+            variedad: repaso.variedad, insumo_id: repaso.insumo_id, dosis_por_ha: repaso.dosis_por_ha,
+            objetivo: repaso.objetivo, dias_carencia: 7, dias_reingreso: 2,
+            fecha_planificada: TODAY,
+            notas: `Repaso: válvula ${repaso.valvula_nombre} de ${repaso.parcela_nombre}`,
+          }
+        : {
           variedad: variedadesDisponibles[0] ?? '',
           insumo_id: '', objetivo: '', dias_carencia: 7, dias_reingreso: 2,
           fecha_planificada: TODAY, notas: '',
@@ -411,7 +426,17 @@ function FormOrdenExtra({
         parcela_ids: restringir ? seleccionadas : undefined,
       }
       if (orden) await actualizarOrdenExtra(orden.id, payload)
-      else await crearOrdenExtra({ ...payload, temporada })
+      else {
+        await crearOrdenExtra({
+          ...payload,
+          temporada,
+          valvula_ids: repaso ? [repaso.valvula_id] : undefined,
+        })
+        if (repaso) {
+          await revisarValvula(repaso.id)
+          queryClient.invalidateQueries({ queryKey: A_REVISAR_QUERY_KEY })
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
       onSuccess()
     } catch (e: unknown) {
@@ -479,13 +504,20 @@ function FormOrdenExtra({
         {errors.fecha_planificada && <p className={err}>{errors.fecha_planificada.message}</p>}
       </div>
 
-      <ParcelaPicker
-        parcelasVariedad={parcelasVariedad}
-        restringir={restringir}
-        setRestringir={setRestringir}
-        seleccionadas={seleccionadas}
-        setSeleccionadas={setSeleccionadas}
-      />
+      {repaso ? (
+        <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+          Repaso de la válvula <strong>{repaso.valvula_nombre}</strong> de {repaso.parcela_nombre}. Al crear la orden,
+          queda marcada como revisada.
+        </p>
+      ) : (
+        <ParcelaPicker
+          parcelasVariedad={parcelasVariedad}
+          restringir={restringir}
+          setRestringir={setRestringir}
+          seleccionadas={seleccionadas}
+          setSeleccionadas={setSeleccionadas}
+        />
+      )}
 
       <div>
         <label className={label}>Notas (opcional)</label>
@@ -509,6 +541,24 @@ function FormOrdenExtra({
 
 // ── Tarjeta de orden ─────────────────────────────────────────────────────────
 
+// Avance en unidades confirmables: cada válvula si la parcela las tiene, o la
+// parcela entera (parcelas sin válvulas y órdenes anteriores al modelo).
+function progresoOrden(orden: OrdenAplicacion) {
+  let total = 0
+  let hechas = 0
+  for (const p of orden.parcelas) {
+    const vs = p.valvulas ?? []
+    if (vs.length === 0) {
+      total += 1
+      if (p.estado === 'aplicada') hechas += 1
+    } else {
+      total += vs.length
+      hechas += vs.filter((v) => v.estado === 'aplicada').length
+    }
+  }
+  return { total, hechas }
+}
+
 function OrdenCard({
   orden, puedeGestionar, onEditar, onEliminar,
 }: {
@@ -518,11 +568,10 @@ function OrdenCard({
   onEliminar: (orden: OrdenAplicacion) => void
 }) {
   const [abierta, setAbierta] = useState(false)
-  const total = orden.parcelas.length
-  const aplicadas = orden.parcelas.filter((p) => p.estado === 'aplicada').length
+  const { total, hechas: aplicadas } = progresoOrden(orden)
   const pct = total ? Math.round((100 * aplicadas) / total) : 0
   // Mismo criterio que el backend (_get_orden_extra_editable): solo las
-  // extra, y mientras nadie haya confirmado ninguna parcela.
+  // extra, y mientras nadie haya confirmado ninguna parcela ni válvula.
   const editable = puedeGestionar && orden.origen === 'extra' && aplicadas === 0
 
   return (
@@ -561,19 +610,40 @@ function OrdenCard({
 
       {abierta && (
         <div className="px-4 pb-4 border-t border-gray-100">
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-3 mt-3">
             {orden.parcelas.map((p) => (
-              <span
-                key={p.id}
-                className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md ${
-                  p.estado === 'aplicada'
-                    ? 'bg-green-50 text-green-700 border border-green-200'
-                    : 'bg-gray-50 text-gray-600 border border-gray-200'
-                }`}
-              >
-                {p.estado === 'aplicada' && <Check size={11} />}
-                {p.parcela_nombre}
-              </span>
+              <div key={p.id}>
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md ${
+                    p.estado === 'aplicada'
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-gray-50 text-gray-600 border border-gray-200'
+                  }`}
+                >
+                  {p.estado === 'aplicada' && <Check size={11} />}
+                  {p.parcela_nombre}
+                  {(p.valvulas ?? []).length > 0 &&
+                    ` · ${p.valvulas.filter((v) => v.estado === 'aplicada').length}/${p.valvulas.length}`}
+                </span>
+                {(p.valvulas ?? []).length > 0 && (
+                  <ul className="mt-1.5 ml-2 space-y-1">
+                    {p.valvulas.map((v) => (
+                      <li key={v.id} className="text-xs text-gray-600">
+                        <span className="font-medium text-gray-800">Válvula {v.valvula_nombre}</span>{' '}
+                        {v.estado === 'pendiente' ? (
+                          <span className="text-gray-400">pendiente</span>
+                        ) : v.resultado === 'no_aplicada' ? (
+                          <span className="text-red-600 font-medium">no aplicada</span>
+                        ) : (
+                          <span className="text-green-700">aplicada</span>
+                        )}
+                        {v.responsable && <span className="text-gray-500"> · {v.responsable}</span>}
+                        {v.observaciones && <span className="italic text-gray-500"> · “{v.observaciones}”</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
           </div>
           {orden.notas && <p className="text-xs text-gray-500 mt-3">Notas: {orden.notas}</p>}
@@ -624,9 +694,16 @@ function OrdenesAplicacion() {
   // curso). Aplicadas = historial de lo efectivamente aplicado, parcela por
   // parcela, con filtros de fecha (ex página "Fitosanitarios").
   const searchParams = useSearchParams()
-  const [vista, setVista] = useState<'pendientes' | 'aplicadas'>(
-    searchParams.get('vista') === 'aplicadas' ? 'aplicadas' : 'pendientes',
+  // Revisar lo no aplicado / observado es de encargado para arriba (mismo
+  // criterio que el backend: el regador no ve esta pestaña).
+  const puedeRevisar = currentUser
+    ? ['super_admin', 'gerencial', 'encargado'].includes(currentUser.role)
+    : false
+  const vistaParam = searchParams.get('vista')
+  const [vista, setVista] = useState<'pendientes' | 'aplicadas' | 'arevisar'>(
+    vistaParam === 'aplicadas' ? 'aplicadas' : vistaParam === 'arevisar' && puedeRevisar ? 'arevisar' : 'pendientes',
   )
+  const [repaso, setRepaso] = useState<ValvulaARevisar | null>(null)
   const [modal, setModal] = useState<'desde-plan' | 'extra' | null>(null)
   const [ordenEditar, setOrdenEditar] = useState<OrdenAplicacion | null>(null)
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
@@ -655,6 +732,13 @@ function OrdenesAplicacion() {
     queryFn: () => getOrdenesAplicacion({ temporada }),
   })
 
+  const { data: aRevisar = [] } = useQuery({
+    queryKey: A_REVISAR_QUERY_KEY,
+    queryFn: getValvulasARevisar,
+    enabled: puedeRevisar,
+    staleTime: 30_000,
+  })
+
   const { data: planes = [] } = useQuery({
     queryKey: ['plan-fitosanitario', temporada],
     queryFn: () => getPlanFitosanitario(temporada),
@@ -679,9 +763,12 @@ function OrdenesAplicacion() {
     [ordenes],
   )
 
-  const TABS: { value: 'pendientes' | 'aplicadas'; label: string }[] = [
+  const TABS: { value: 'pendientes' | 'aplicadas' | 'arevisar'; label: string }[] = [
     { value: 'pendientes', label: `Pendientes${ordenesPendientes.length ? ` (${ordenesPendientes.length})` : ''}` },
     { value: 'aplicadas', label: 'Aplicadas' },
+    ...(puedeRevisar
+      ? [{ value: 'arevisar' as const, label: `A revisar${aRevisar.length ? ` (${aRevisar.length})` : ''}` }]
+      : []),
   ]
 
   return (
@@ -744,7 +831,9 @@ function OrdenesAplicacion() {
         ))}
       </div>
 
-      {vista === 'aplicadas' ? (
+      {vista === 'arevisar' ? (
+        <ARevisarPanel onCrearRepaso={setRepaso} />
+      ) : vista === 'aplicadas' ? (
         <AplicacionesRealizadas />
       ) : (
       <div className="space-y-2">
@@ -791,6 +880,19 @@ function OrdenesAplicacion() {
             orden={ordenEditar}
             onSuccess={() => setOrdenEditar(null)}
             onCancel={() => setOrdenEditar(null)}
+          />
+        </Modal>
+      )}
+
+      {repaso && (
+        <Modal title="Orden de repaso" onClose={() => setRepaso(null)}>
+          <FormOrdenExtra
+            parcelas={parcelas}
+            variedadesDisponibles={variedadesDisponibles}
+            temporada={temporada}
+            repaso={repaso}
+            onSuccess={() => setRepaso(null)}
+            onCancel={() => setRepaso(null)}
           />
         </Modal>
       )}

@@ -9,12 +9,19 @@ import {
   TextInput, Modal, Image,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
-import {
+import api, {
   getOrdenesPendientes, confirmarAplicacionOrden, subirFotoAplicacion,
+  confirmarValvulaOrden, subirFotoValvula,
 } from '../lib/api'
+import { getCache, setCache, CACHE_TTL } from '../lib/cache'
+import TrabajadorPicker from './TrabajadorPicker'
+import { useAuthStore } from '../store/authStore'
 import { elegirImagenDeGaleria } from '../lib/imagePicker'
 import { colors } from '../lib/theme'
-import type { OrdenAplicacion, OrdenAplicacionParcelaItem } from '../lib/types'
+import type {
+  OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem,
+  ResultadoValvula, Trabajador as TrabajadorDb,
+} from '../lib/types'
 import { VARIEDAD_LABELS } from '../lib/types'
 
 function formatDateDisplay(iso: string) {
@@ -151,16 +158,207 @@ function ConfirmarModal({
   )
 }
 
+// ─── Modal de confirmación por válvula ──────────────────────────────────────
+
+function ConfirmarValvulaModal({
+  visible, orden, item, valvula, trabajadoresDb, onClose, onConfirmed,
+}: {
+  visible: boolean
+  orden: OrdenAplicacion | null
+  item: OrdenAplicacionParcelaItem | null
+  valvula: OrdenAplicacionValvulaItem | null
+  trabajadoresDb: TrabajadorDb[]
+  onClose: () => void
+  onConfirmed: () => void
+}) {
+  const user = useAuthStore((s) => s.user)
+  const [resultado, setResultado] = useState<ResultadoValvula>('completa')
+  const [observaciones, setObservaciones] = useState('')
+  const [responsable, setResponsable] = useState('')
+  const [responsableId, setResponsableId] = useState<string | undefined>(undefined)
+  const [fotoUri, setFotoUri] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
+
+  useEffect(() => {
+    if (visible) {
+      setResultado('completa'); setObservaciones(''); setFotoUri(null)
+      setResponsable(user?.full_name ?? ''); setResponsableId(undefined)
+    }
+  }, [visible, user?.full_name])
+
+  async function handleElegirFoto() {
+    const uri = await elegirImagenDeGaleria()
+    if (uri) setFotoUri(uri)
+  }
+
+  async function handleConfirmar() {
+    if (!orden || !valvula || submittingRef.current) return
+    if (resultado === 'no_aplicada' && !observaciones.trim()) {
+      Alert.alert('Falta contar por qué', 'Si la válvula no se aplicó, escribí el motivo en las observaciones.')
+      return
+    }
+    submittingRef.current = true
+    setLoading(true)
+    try {
+      await confirmarValvulaOrden(orden.id, valvula.id, {
+        resultado,
+        responsable_id: responsableId,
+        observaciones: observaciones.trim() || undefined,
+      })
+      if (fotoUri) {
+        try {
+          await subirFotoValvula(valvula.id, fotoUri)
+        } catch {
+          Alert.alert(
+            'Válvula confirmada',
+            'Se guardó la confirmación, pero la foto no se pudo subir.',
+          )
+        }
+      }
+      onConfirmed()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      const detail = err.response?.data?.detail
+      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo confirmar la válvula.')
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
+    }
+  }
+
+  if (!orden || !item || !valvula) return null
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: colors.hueso }}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Confirmar válvula</Text>
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+            <ICONS.cerrar size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.summaryCard}>
+            {[
+              { label: 'Parral', value: item.parcela_nombre },
+              { label: 'Válvula', value: valvula.valvula_nombre },
+              { label: 'Superficie', value: valvula.superficie_ha ? `${Number(valvula.superficie_ha).toFixed(2)} ha` : '—' },
+              { label: 'Producto', value: orden.insumo_nombre },
+              { label: 'Dosis', value: `${orden.dosis_por_ha} ${orden.insumo_unidad}/ha` },
+              { label: 'Objetivo', value: orden.objetivo },
+            ].map(({ label, value }, idx, arr) => (
+              <View key={label} style={[styles.summaryRow, idx < arr.length - 1 && styles.summaryRowBorder]}>
+                <Text style={styles.summaryLabel}>{label}</Text>
+                <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right' }]}>{value}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={[styles.fieldLabel, { marginTop: 20 }]}>RESPONSABLE</Text>
+          <TrabajadorPicker
+            value={responsable}
+            trabajadorId={responsableId}
+            trabajadoresDb={trabajadoresDb}
+            onChange={(nombre, trabajadorId) => { setResponsable(nombre); setResponsableId(trabajadorId) }}
+            placeholder="Nombre del responsable..."
+          />
+
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RESULTADO</Text>
+          <View style={styles.resultadoRow}>
+            {([['completa', 'Aplicada'], ['no_aplicada', 'No aplicada']] as const).map(([key, label]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.resultadoBtn,
+                  resultado === key && (key === 'completa' ? styles.resultadoBtnOk : styles.resultadoBtnMal),
+                ]}
+                onPress={() => setResultado(key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.resultadoText, resultado === key && { color: colors.blanco }]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
+            OBSERVACIONES{' '}
+            <Text style={{ textTransform: 'none', fontWeight: '400' }}>
+              {resultado === 'no_aplicada' ? '(obligatorias)' : '(opcional)'}
+            </Text>
+          </Text>
+          <TextInput
+            style={styles.textarea}
+            value={observaciones}
+            onChangeText={setObservaciones}
+            placeholder={
+              resultado === 'no_aplicada'
+                ? 'Ej: se cortó el agua, caño roto...'
+                : 'Si quedó incompleta, anotalo: se avisa al encargado'
+            }
+            placeholderTextColor={colors.niebla}
+            multiline
+          />
+
+          <Text style={[styles.fieldLabel, { marginTop: 4 }]}>
+            FOTO <Text style={{ textTransform: 'none', fontWeight: '400' }}>(opcional)</Text>
+          </Text>
+          {fotoUri ? (
+            <View style={styles.fotoPreviewWrap}>
+              <Image source={{ uri: fotoUri }} style={styles.fotoPreview} />
+              <TouchableOpacity style={styles.fotoRemoveBtn} onPress={() => setFotoUri(null)}>
+                <ICONS.cancelar size={20} color={colors.blanco} strokeWidth={ICON_STROKE} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.fotoBtn} onPress={handleElegirFoto}>
+              <ICONS.camara size={18} color={colors.tierra} strokeWidth={ICON_STROKE} />
+              <Text style={styles.fotoBtnText}>Adjuntar foto</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, { marginTop: 24 }, loading && { opacity: 0.6 }]}
+            onPress={handleConfirmar}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.blanco} size="small" />
+            ) : (
+              <>
+                <ICONS.check size={18} color={colors.blanco} style={{ marginRight: 6 }} strokeWidth={ICON_STROKE} />
+                <Text style={styles.primaryBtnText}>Confirmar válvula</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  )
+}
+
 // ─── Tarjeta de orden ───────────────────────────────────────────────────────
 
 function OrdenCard({
-  orden, onSelectItem,
+  orden, onSelectItem, onSelectValvula,
 }: {
   orden: OrdenAplicacion
   onSelectItem: (item: OrdenAplicacionParcelaItem) => void
+  onSelectValvula: (item: OrdenAplicacionParcelaItem, valvula: OrdenAplicacionValvulaItem) => void
 }) {
   const pendientes = orden.parcelas.filter((p) => p.estado === 'pendiente')
   const aplicadas = orden.parcelas.filter((p) => p.estado === 'aplicada')
+  // Parrales con válvulas: al tocarlos se despliegan para confirmar de a una.
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
+
+  function toggle(id: string) {
+    setAbiertas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <View style={styles.ordenCard}>
@@ -180,16 +378,61 @@ function OrdenCard({
       </Text>
 
       <View style={styles.parcelasWrap}>
-        {pendientes.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.parcelaChipPendiente}
-            onPress={() => onSelectItem(item)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.parcelaChipPendienteText}>{item.parcela_nombre}</Text>
-          </TouchableOpacity>
-        ))}
+        {pendientes.map((item) => {
+          const valvulas = item.valvulas ?? []
+          if (valvulas.length === 0) {
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.parcelaChipPendiente}
+                onPress={() => onSelectItem(item)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.parcelaChipPendienteText}>{item.parcela_nombre}</Text>
+              </TouchableOpacity>
+            )
+          }
+          const hechas = valvulas.filter((v) => v.estado === 'aplicada').length
+          const abierta = abiertas.has(item.id)
+          return (
+            <View key={item.id} style={styles.parcelaGrupo}>
+              <TouchableOpacity
+                style={styles.parcelaChipPendiente}
+                onPress={() => toggle(item.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.parcelaChipPendienteText}>
+                  {item.parcela_nombre} · {hechas}/{valvulas.length} {abierta ? '▲' : '▼'}
+                </Text>
+              </TouchableOpacity>
+              {abierta && (
+                <View style={styles.valvulasWrap}>
+                  {valvulas.map((v) =>
+                    v.estado === 'pendiente' ? (
+                      <TouchableOpacity
+                        key={v.id}
+                        style={styles.valvulaChipPendiente}
+                        onPress={() => onSelectValvula(item, v)}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={styles.valvulaChipPendienteText}>Válvula {v.valvula_nombre}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View
+                        key={v.id}
+                        style={[styles.valvulaChipHecha, v.resultado === 'no_aplicada' && styles.valvulaChipMal]}
+                      >
+                        <Text style={[styles.parcelaChipAplicadaText, v.resultado === 'no_aplicada' && { color: colors.blanco, textDecorationLine: 'none' }]}>
+                          {v.resultado === 'no_aplicada' ? '✕ ' : '✓ '}Válvula {v.valvula_nombre}
+                        </Text>
+                      </View>
+                    ),
+                  )}
+                </View>
+              )}
+            </View>
+          )
+        })}
         {aplicadas.map((item) => (
           <View key={item.id} style={styles.parcelaChipAplicada}>
             <ICONS.check size={12} color={colors.ink60} strokeWidth={ICON_STROKE} />
@@ -208,6 +451,18 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
   const [loading, setLoading] = useState(true)
   const [modalOrden, setModalOrden] = useState<OrdenAplicacion | null>(null)
   const [modalItem, setModalItem] = useState<OrdenAplicacionParcelaItem | null>(null)
+  const [modalValvula, setModalValvula] = useState<OrdenAplicacionValvulaItem | null>(null)
+  const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
+
+  const loadTrabajadoresDb = useCallback(async () => {
+    const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
+    if (cached) setTrabajadoresDb(cached)
+    try {
+      const { data } = await api.get<TrabajadorDb[]>('/trabajadores/', { params: { is_active: true } })
+      setTrabajadoresDb(data)
+      await setCache('trabajadores', data)
+    } catch { /* offline: queda la lista en cache */ }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -218,15 +473,25 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadTrabajadoresDb() }, [loadTrabajadoresDb])
 
   function handleSelectItem(orden: OrdenAplicacion, item: OrdenAplicacionParcelaItem) {
     setModalOrden(orden)
     setModalItem(item)
   }
 
+  function handleSelectValvula(
+    orden: OrdenAplicacion, item: OrdenAplicacionParcelaItem, valvula: OrdenAplicacionValvulaItem,
+  ) {
+    setModalOrden(orden)
+    setModalItem(item)
+    setModalValvula(valvula)
+  }
+
   function handleConfirmed() {
     setModalOrden(null)
     setModalItem(null)
+    setModalValvula(null)
     load()
     onConfirmado()
   }
@@ -247,10 +512,24 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
     <View style={{ marginBottom: 22 }}>
       <Text style={styles.sectionLabel}>PENDIENTES Y EN CURSO</Text>
       {ordenes.map((orden) => (
-        <OrdenCard key={orden.id} orden={orden} onSelectItem={(item) => handleSelectItem(orden, item)} />
+        <OrdenCard
+          key={orden.id}
+          orden={orden}
+          onSelectItem={(item) => handleSelectItem(orden, item)}
+          onSelectValvula={(item, valvula) => handleSelectValvula(orden, item, valvula)}
+        />
       ))}
+      <ConfirmarValvulaModal
+        visible={!!modalValvula}
+        orden={modalOrden}
+        item={modalItem}
+        valvula={modalValvula}
+        trabajadoresDb={trabajadoresDb}
+        onClose={() => { setModalOrden(null); setModalItem(null); setModalValvula(null) }}
+        onConfirmed={handleConfirmed}
+      />
       <ConfirmarModal
-        visible={!!modalItem}
+        visible={!!modalItem && !modalValvula}
         orden={modalOrden}
         item={modalItem}
         onClose={() => { setModalOrden(null); setModalItem(null) }}
@@ -291,6 +570,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: colors.hueso, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
   },
+  parcelaGrupo: { alignItems: 'flex-start' },
+  valvulasWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 8 },
+  valvulaChipPendiente: {
+    backgroundColor: colors.crema, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: colors.tierra,
+  },
+  valvulaChipPendienteText: { fontSize: 13, fontWeight: '700', color: colors.tierra },
+  valvulaChipHecha: {
+    backgroundColor: colors.hueso, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  valvulaChipMal: { backgroundColor: colors.ink60 },
+  resultadoRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  resultadoBtn: {
+    flex: 1, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borde,
+    backgroundColor: colors.blanco, justifyContent: 'center', alignItems: 'center',
+  },
+  resultadoBtnOk: { backgroundColor: colors.tierra, borderColor: colors.tierra },
+  resultadoBtnMal: { backgroundColor: colors.ink60, borderColor: colors.ink60 },
+  resultadoText: { fontSize: 14, fontWeight: '700', color: colors.ink60 },
   parcelaChipAplicadaText: { fontSize: 13, fontWeight: '600', color: colors.ink60, textDecorationLine: 'line-through' },
 
   // modal
