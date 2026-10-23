@@ -5,6 +5,8 @@ El borde HTTP con Expo es `app.core.push._post_expo`: se reemplaza acá; el rest
 """
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from sqlalchemy import select
 
@@ -125,6 +127,7 @@ async def test_crear_orden_extra_notifica_a_todos(
         "/ordenes-aplicacion/", json=_payload_extra(insumo.id, [parcela.id]), headers=headers,
     )
     assert r.status_code == 201, r.text
+    await push.esperar_avisos()
 
     assert len(llamadas) == 1
     assert llamadas[0]["titulo"].startswith("Nueva orden")
@@ -156,6 +159,7 @@ async def test_crear_orden_desde_plan_notifica_a_todos(
         headers=headers,
     )
     assert r.status_code == 201, r.text
+    await push.esperar_avisos()
     assert len(llamadas) == 1 and llamadas[0]["user_ids"] is None
 
 
@@ -175,6 +179,7 @@ async def test_confirmar_con_observaciones_avisa_solo_a_encargados_y_superiores(
         json={"resultado": "completa", "observaciones": "Alcanzó para la mitad"}, headers=headers,
     )
     assert r.status_code == 200, r.text
+    await push.esperar_avisos()
 
     assert len(llamadas) == 1
     assert set(llamadas[0]["user_ids"]) == {ger.id, enc.id}
@@ -191,12 +196,14 @@ async def test_confirmar_no_aplicada_avisa_y_completa_sin_observaciones_no(
     llamadas.clear()
 
     await client.post(_url(orden, filas["21"]), json={"resultado": "completa"}, headers=headers)
+    await push.esperar_avisos()
     assert llamadas == []
 
     await client.post(
         _url(orden, filas["22"]),
         json={"resultado": "no_aplicada", "observaciones": "Se cortó el agua"}, headers=headers,
     )
+    await push.esperar_avisos()
     assert len(llamadas) == 1
     assert llamadas[0]["titulo"].startswith("Revisar aplicación")
 
@@ -216,3 +223,32 @@ async def test_si_el_push_falla_la_orden_se_crea_igual(
         "/ordenes-aplicacion/", json=_payload_extra(insumo.id, [parcela.id]), headers=headers,
     )
     assert r.status_code == 201, r.text
+
+
+async def test_un_push_lento_no_demora_la_respuesta_ni_el_commit(
+    client, monkeypatch, create_user, create_insumo, create_parcela, create_valvula,
+):
+    """En este FastAPI el commit de get_db corre DESPUÉS de los BackgroundTasks:
+    colgar el push en uno retenía el commit de la orden (y los locks de la
+    confirmación) hasta que Expo respondiera. El aviso tiene que ir aparte."""
+    liberar = asyncio.Event()
+
+    async def lento(titulo, cuerpo, user_ids=None, data=None, session_factory=None):
+        await liberar.wait()
+
+    monkeypatch.setattr("app.api.ordenes_aplicacion.notificar_tokens", lento)
+    headers, _ = await _auth(client, create_user)
+    insumo = await create_insumo(nombre="Azufre")
+    parcela, _v = await _parral2_con_valvulas(create_parcela, create_valvula)
+
+    try:
+        r = await asyncio.wait_for(
+            client.post(
+                "/ordenes-aplicacion/", json=_payload_extra(insumo.id, [parcela.id]), headers=headers,
+            ),
+            timeout=3,
+        )
+        assert r.status_code == 201, r.text
+    finally:
+        liberar.set()
+        await push.esperar_avisos()

@@ -3,8 +3,9 @@ de notificaciones, el job automático de cumpleaños (app/core/birthdays.py) y
 los avisos de órdenes de aplicación (app/api/ordenes_aplicacion.py).
 """
 
+import asyncio
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine
 
 import httpx
 from sqlalchemy import delete, select
@@ -39,6 +40,32 @@ async def _post_expo(messages: list[dict]) -> list[dict[str, Any]]:
         )
         resp.raise_for_status()
         return resp.json().get("data", [])
+
+
+# Referencias fuertes a los avisos en vuelo: el loop solo guarda referencias
+# débiles a las tasks y una fire-and-forget sin dueño puede recolectarse a mitad.
+_avisos_en_vuelo: set[asyncio.Task] = set()
+
+
+def lanzar_aviso(coro: Coroutine[Any, Any, None]) -> None:
+    """Corre un aviso aparte de la request, sin esperarlo.
+
+    NO usar BackgroundTasks para esto: en el FastAPI instalado el exit de las
+    dependencias con yield (el commit de `get_db`) corre DESPUÉS de los
+    BackgroundTasks, así que un push lento retenía el commit de la orden (y los
+    locks de la confirmación) hasta que Expo respondiera, y el cliente leía
+    datos viejos al refrescar. Los avisos solo leen tokens, nunca la orden
+    recién escrita, así que no necesitan esperar el commit.
+    """
+    tarea = asyncio.ensure_future(coro)
+    _avisos_en_vuelo.add(tarea)
+    tarea.add_done_callback(_avisos_en_vuelo.discard)
+
+
+async def esperar_avisos() -> None:
+    """Espera a los avisos en vuelo (para tests y para un shutdown ordenado)."""
+    if _avisos_en_vuelo:
+        await asyncio.gather(*list(_avisos_en_vuelo), return_exceptions=True)
 
 
 async def notificar_tokens(

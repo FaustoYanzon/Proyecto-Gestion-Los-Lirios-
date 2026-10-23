@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,7 +14,7 @@ from app.api.produccion import (
     _resolve_responsable_nombre,
 )
 from app.core.cloudinary_client import upload_foto_orden_aplicacion
-from app.core.push import notificar_tokens
+from app.core.push import lanzar_aviso, notificar_tokens
 from app.models.parcela import Parcela, VariedadUva
 from app.models.valvula import Valvula
 from app.models.produccion import (
@@ -154,22 +154,22 @@ async def _resolve_parcelas_orden(
     return list(parcelas)
 
 
-def _avisar_orden_nueva(background_tasks: BackgroundTasks, orden: OrdenAplicacion) -> None:
+def _avisar_orden_nueva(orden: OrdenAplicacion) -> None:
     """Push a todos los celulares: salió una orden de aplicación nueva."""
     nombres = [p.parcela.nombre for p in orden.parcelas]
     parcelas = ", ".join(nombres[:3]) + (f" y {len(nombres) - 3} más" if len(nombres) > 3 else "")
-    background_tasks.add_task(
-        notificar_tokens,
-        "Nueva orden de aplicación",
-        f"{orden.insumo.nombre} · {parcelas}",
-        user_ids=None,
-        data={"tipo": "orden_aplicacion", "orden_id": orden.id},
+    lanzar_aviso(
+        notificar_tokens(
+            "Nueva orden de aplicación",
+            f"{orden.insumo.nombre} · {parcelas}",
+            user_ids=None,
+            data={"tipo": "orden_aplicacion", "orden_id": orden.id},
+        )
     )
 
 
 async def _avisar_revision(
     db: AsyncSession,
-    background_tasks: BackgroundTasks,
     fila: OrdenAplicacionValvula,
     parcela: Parcela,
 ) -> None:
@@ -187,12 +187,13 @@ async def _avisar_revision(
     ).scalars().all()
     que = "no se aplicó" if fila.resultado == ResultadoValvula.no_aplicada else "se aplicó con observaciones"
     obs = (fila.observaciones or "")[:120]
-    background_tasks.add_task(
-        notificar_tokens,
-        "Revisar aplicación",
-        f"{parcela.nombre} · válvula {fila.valvula.nombre}: {que}. {obs}".strip(),
-        user_ids=list(destinatarios),
-        data={"tipo": "revisar_valvula", "orden_valvula_id": fila.id},
+    lanzar_aviso(
+        notificar_tokens(
+            "Revisar aplicación",
+            f"{parcela.nombre} · válvula {fila.valvula.nombre}: {que}. {obs}".strip(),
+            user_ids=list(destinatarios),
+            data={"tipo": "revisar_valvula", "orden_valvula_id": fila.id},
+        )
     )
 
 
@@ -258,7 +259,6 @@ async def _crear_filas_valvula(
 )
 async def crear_orden_desde_plan(
     data: OrdenAplicacionCreateDesdePlan,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
@@ -295,14 +295,13 @@ async def crear_orden_desde_plan(
         await _crear_filas_valvula(db, item)
 
     await db.flush()
-    _avisar_orden_nueva(background_tasks, orden)
+    _avisar_orden_nueva(orden)
     return _to_response(orden)
 
 
 @router.post("/", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED)
 async def crear_orden_extra(
     data: OrdenAplicacionCreateExtra,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
@@ -333,7 +332,7 @@ async def crear_orden_extra(
         await _crear_filas_valvula(db, item, valvulas_por_parcela.get(parcela.id))
 
     await db.flush()
-    _avisar_orden_nueva(background_tasks, orden)
+    _avisar_orden_nueva(orden)
     return _to_response(orden)
 
 
@@ -588,7 +587,6 @@ async def confirmar_valvula(
     orden_id: str,
     orden_valvula_id: str,
     data: ConfirmarValvulaRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_any_role),
 ) -> OrdenAplicacionValvulaResponse:
@@ -685,7 +683,7 @@ async def confirmar_valvula(
     await _recalcular_estado_orden(db, orden)
 
     if requiere_revision(fila):
-        await _avisar_revision(db, background_tasks, fila, parcela)
+        await _avisar_revision(db, fila, parcela)
 
     return _valvula_response(fila)
 
