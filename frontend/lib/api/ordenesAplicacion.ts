@@ -4,12 +4,30 @@ export type OrigenOrdenAplicacion = 'plan' | 'extra'
 export type EstadoOrdenAplicacion = 'pendiente' | 'en_curso' | 'completada'
 export type EstadoOrdenAplicacionParcela = 'pendiente' | 'aplicada'
 
+export type ResultadoValvula = 'completa' | 'no_aplicada'
+
+export interface OrdenAplicacionValvula {
+  id: string
+  valvula_id: string
+  valvula_nombre: string
+  superficie_ha: string | null
+  estado: EstadoOrdenAplicacionParcela
+  resultado: ResultadoValvula | null
+  responsable: string | null
+  observaciones: string | null
+  registro_fitosanitario_id: string | null
+  confirmada_at: string | null
+}
+
 export interface OrdenAplicacionParcela {
   id: string
   parcela_id: string
   parcela_nombre: string
   estado: EstadoOrdenAplicacionParcela
   registro_fitosanitario_id: string | null
+  // Vacía en parcelas sin válvulas y en órdenes anteriores a la confirmación
+  // por válvula: esas se confirman por parcela entera.
+  valvulas: OrdenAplicacionValvula[]
 }
 
 export interface OrdenAplicacion {
@@ -52,6 +70,8 @@ export interface OrdenAplicacionCreateExtra {
   dias_reingreso: number
   fecha_planificada: string
   parcela_ids?: string[] | null
+  // Orden de repaso: restringe la orden a estas válvulas puntuales.
+  valvula_ids?: string[] | null
   notas?: string | null
 }
 
@@ -95,4 +115,34 @@ export async function actualizarOrdenExtra(
 
 export async function eliminarOrdenExtra(id: string): Promise<void> {
   await api.delete(`/ordenes-aplicacion/${id}`)
+}
+
+// Válvula confirmada que no se aplicó, o que se aplicó con observaciones, y
+// que nadie revisó todavía (GET /ordenes-aplicacion/a-revisar).
+export interface ValvulaARevisar {
+  id: string
+  orden_id: string
+  parcela_id: string
+  parcela_nombre: string
+  valvula_id: string
+  valvula_nombre: string
+  variedad: string
+  insumo_id: string
+  insumo_nombre: string
+  dosis_por_ha: number
+  objetivo: string
+  resultado: ResultadoValvula
+  responsable: string | null
+  observaciones: string | null
+  confirmada_at: string | null
+  fotos: string[]
+}
+
+export async function getValvulasARevisar(): Promise<ValvulaARevisar[]> {
+  const { data } = await api.get('/ordenes-aplicacion/a-revisar')
+  return data
+}
+
+export async function revisarValvula(ordenValvulaId: string): Promise<void> {
+  await api.post(`/ordenes-aplicacion/valvulas/${ordenValvulaId}/revisar`)
 }
