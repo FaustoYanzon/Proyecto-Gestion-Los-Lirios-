@@ -18,9 +18,14 @@ Plan y spec: ver los archivos hermanos `2026-10-23-fito-confirmacion-por-valvula
 ```
 ! cd /c/claude-projects/los-lirios && backend/venv/Scripts/python.exe scripts/cargar_superficie_valvulas.py --db prod
 ```
-Mirar: líneas `!!` (válvulas sin cuadrante / cuadrantes sin válvula) y marcas `<-- REVISAR` (> 5 % de desvío contra
-`Parcela.superficie_ha`). Sospecha abierta: los cuadrantes `211`–`214` quizá no matcheen la válvula `21`.
-**Si hay desvíos o válvulas sin cuadrante, resolverlos antes de seguir** (una válvula con superficie NULL no se puede confirmar: 422).
+**Hecho el 2026-10-23 (dry-run en prod):** 57 válvulas / 55 cuadrantes; total 56,74 ha vs 57,05 declaradas (−0,5 %).
+Los desvíos por parcela (Parral 13–16 ±20 %, 10/11/Bond. +8–12 %) son válvulas que riegan el límite entre dos parrales
+(la válvula se asigna entera a uno): el total por grupo cierra, y para el stock es lo correcto. Decisiones de Fausto:
+- **Potrero 3** (válvulas `31` y `32`, sin cuadrante): 1,10 ha cada una → `EXCEPCIONES_HA` en el script.
+- **Parral 4 y 5** (cuadrantes 4,16 ha vs 5,70 declaradas, −27 %): se usan los **cuadrantes** tal cual (las 5,70 ha
+  incluirían superficie que ninguna válvula riega). El stock de esos parrales baja menos que antes con la carga por parcela.
+Al repetir el dry-run no debería salir ninguna línea `!!`; Potrero 3 debe dar 2,20 vs 2,20. Los demás desvíos son esperados.
+(Una válvula con superficie NULL no se puede confirmar: 422.)
 
 ## 2. Backup y merge (backend)
 - [ ] `scripts/backup_postgres.ps1` (dump de prod).

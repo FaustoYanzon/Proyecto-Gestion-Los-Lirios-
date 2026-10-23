@@ -47,7 +47,21 @@ def area_ha(anillo: list[list[float]]) -> Decimal:
     return (Decimal(str(abs(doble_area) / 2.0)) / Decimal(10_000)).quantize(Decimal("0.0001"))
 
 
+# Valvulas sin cuadrante en el GeoJSON, con la superficie que confirmo Fausto (2026-10-23):
+# 31 y 32 riegan Potrero 3 (2,20 ha declaradas) y se reparten 1,10 ha cada una.
+EXCEPCIONES_HA: dict[str, Decimal] = {
+    "31": Decimal("1.1000"),
+    "32": Decimal("1.1000"),
+}
+
+
 def superficies_por_valvula() -> dict[str, Decimal]:
+    """nombre de valvula -> ha: los cuadrantes del GeoJSON mas las EXCEPCIONES_HA.
+    Una excepcion nunca reemplaza a un cuadrante real."""
+    return {**EXCEPCIONES_HA, **superficies_de_cuadrantes()}
+
+
+def superficies_de_cuadrantes() -> dict[str, Decimal]:
     """nombre de valvula -> ha (suma si una valvula tuviera mas de un cuadrante)."""
     data = json.loads(CUADRANTES_GEOJSON.read_text(encoding="utf-8"))
     resultado: dict[str, Decimal] = {}
