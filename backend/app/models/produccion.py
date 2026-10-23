@@ -695,6 +695,9 @@ class OrdenAplicacionValvula(Base):
     registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
         "RegistroFitosanitario", back_populates="orden_valvula"
     )
+    fotos: Mapped[list[FotoRegistroFitosanitario]] = relationship(
+        "FotoRegistroFitosanitario"
+    )
 
 
 class FotoRegistroFitosanitario(Base):
@@ -707,8 +710,13 @@ class FotoRegistroFitosanitario(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    registro_fitosanitario_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("registros_fitosanitarios.id"), nullable=False
+    # Null en las fotos de una válvula `no_aplicada` (no hay registro: nada se
+    # aplicó) -- esas cuelgan solo de `orden_valvula_id`.
+    registro_fitosanitario_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("registros_fitosanitarios.id"), nullable=True
+    )
+    orden_valvula_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("ordenes_aplicacion_valvulas.id"), nullable=True
     )
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     created_by: Mapped[str] = mapped_column(
@@ -720,9 +728,10 @@ class FotoRegistroFitosanitario(Base):
 
     __table_args__ = (
         Index("ix_fotos_registros_fitosanitarios_registro", "registro_fitosanitario_id"),
+        Index("ix_fotos_registros_fitosanitarios_orden_valvula", "orden_valvula_id"),
     )
 
-    registro_fitosanitario: Mapped[RegistroFitosanitario] = relationship(
+    registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
         "RegistroFitosanitario", back_populates="fotos"
     )
 

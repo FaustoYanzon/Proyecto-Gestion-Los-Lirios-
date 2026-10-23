@@ -17,6 +17,7 @@ from app.models.produccion import (
     EstadoOrdenAplicacionParcela,
     OrigenCosecha,
     OrigenOrdenAplicacion,
+    ResultadoValvula,
     TipoEnvase,
     UnidadMedida,
 )
@@ -327,12 +328,49 @@ class NecesidadInsumoItem(BaseModel):
 
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────
 
+class OrdenAplicacionValvulaResponse(BaseModel):
+    id: str
+    valvula_id: str
+    valvula_nombre: str
+    superficie_ha: Decimal | None = None
+    estado: EstadoOrdenAplicacionParcela
+    resultado: ResultadoValvula | None = None
+    responsable: str | None = None
+    observaciones: str | None = None
+    registro_fitosanitario_id: str | None = None
+    confirmada_at: datetime | None = None
+
+
+class ValvulaARevisarResponse(BaseModel):
+    """Una válvula confirmada que pide una segunda mirada: no se aplicó, o se
+    aplicó con observaciones (así se señalan las aplicaciones incompletas)."""
+    id: str
+    orden_id: str
+    parcela_id: str
+    parcela_nombre: str
+    valvula_id: str
+    valvula_nombre: str
+    variedad: VariedadUva
+    insumo_id: str
+    insumo_nombre: str
+    dosis_por_ha: float
+    objetivo: str
+    resultado: ResultadoValvula
+    responsable: str | None = None
+    observaciones: str | None = None
+    confirmada_at: datetime | None = None
+    fotos: list[str] = []
+
+
 class OrdenAplicacionParcelaResponse(BaseModel):
     id: str
     parcela_id: str
     parcela_nombre: str
     estado: EstadoOrdenAplicacionParcela
     registro_fitosanitario_id: str | None = None
+    # Vacía en parcelas sin válvulas y en órdenes anteriores al modelo por
+    # válvula: esas se confirman por parcela entera.
+    valvulas: list[OrdenAplicacionValvulaResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -381,6 +419,9 @@ class OrdenAplicacionCreateExtra(BaseModel):
     fecha_planificada: date
     # None = todas las parcelas activas de la variedad.
     parcela_ids: list[str] | None = None
+    # None = todas las válvulas de cada parcela. Con valores (orden de
+    # repaso) restringe la orden a esas válvulas puntuales.
+    valvula_ids: list[str] | None = None
     notas: str | None = None
 
 
@@ -400,6 +441,14 @@ class OrdenAplicacionUpdateExtra(BaseModel):
 
 
 class ConfirmarAplicacionRequest(BaseModel):
+    observaciones: str | None = None
+
+
+class ConfirmarValvulaRequest(BaseModel):
+    resultado: ResultadoValvula
+    # None = el trabajador vinculado al usuario que confirma.
+    responsable_id: str | None = None
+    # Obligatoria si el resultado es `no_aplicada`.
     observaciones: str | None = None
 
 

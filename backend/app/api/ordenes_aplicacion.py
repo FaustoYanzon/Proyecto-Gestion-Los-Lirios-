@@ -1,11 +1,12 @@
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, require_any_role, require_encargado_up
+from app.api.deps import get_db, require_any_role, require_encargado_estricto, require_encargado_up
 from app.api.produccion import (
     _aplicar_movimiento_stock,
     _calcular_cantidad_total,
@@ -13,26 +14,33 @@ from app.api.produccion import (
     _resolve_responsable_nombre,
 )
 from app.core.cloudinary_client import upload_foto_orden_aplicacion
+from app.core.push import notificar_tokens
 from app.models.parcela import Parcela, VariedadUva
+from app.models.valvula import Valvula
 from app.models.produccion import (
     EstadoOrdenAplicacion,
     EstadoOrdenAplicacionParcela,
     FotoRegistroFitosanitario,
     OrdenAplicacion,
     OrdenAplicacionParcela,
+    OrdenAplicacionValvula,
     OrigenOrdenAplicacion,
     PlanFitosanitario,
     RegistroFitosanitario,
+    ResultadoValvula,
 )
 from app.models.user import User, UserRole
 from app.schemas.produccion import (
     ConfirmarAplicacionRequest,
+    ConfirmarValvulaRequest,
     FotoRegistroFitosanitarioResponse,
     OrdenAplicacionCreateDesdePlan,
     OrdenAplicacionCreateExtra,
     OrdenAplicacionParcelaResponse,
     OrdenAplicacionResponse,
     OrdenAplicacionUpdateExtra,
+    OrdenAplicacionValvulaResponse,
+    ValvulaARevisarResponse,
 )
 
 router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
@@ -40,7 +48,33 @@ router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
 _ORDEN_LOAD_OPTS = (
     selectinload(OrdenAplicacion.insumo),
     selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.parcela),
+    selectinload(OrdenAplicacion.parcelas)
+    .selectinload(OrdenAplicacionParcela.valvulas)
+    .selectinload(OrdenAplicacionValvula.valvula),
 )
+
+
+def _valvula_response(item: OrdenAplicacionValvula) -> OrdenAplicacionValvulaResponse:
+    return OrdenAplicacionValvulaResponse(
+        id=item.id,
+        valvula_id=item.valvula_id,
+        valvula_nombre=item.valvula.nombre,
+        superficie_ha=item.valvula.superficie_ha,
+        estado=item.estado,
+        resultado=item.resultado,
+        responsable=item.responsable,
+        observaciones=item.observaciones,
+        registro_fitosanitario_id=item.registro_fitosanitario_id,
+        confirmada_at=item.confirmada_at,
+    )
+
+
+def _valvulas_ordenadas(item: OrdenAplicacionParcela) -> list[OrdenAplicacionValvula]:
+    # Oeste->este (`Valvula.orden`); las sin orden fisico conocido, al final.
+    return sorted(
+        item.valvulas,
+        key=lambda v: (v.valvula.orden is None, v.valvula.orden or 0, v.valvula.nombre),
+    )
 
 
 def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
@@ -69,6 +103,7 @@ def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
                 parcela_nombre=item.parcela.nombre,
                 estado=item.estado,
                 registro_fitosanitario_id=item.registro_fitosanitario_id,
+                valvulas=[_valvula_response(v) for v in _valvulas_ordenadas(item)],
             )
             for item in orden.parcelas
         ],
@@ -119,11 +154,111 @@ async def _resolve_parcelas_orden(
     return list(parcelas)
 
 
+def _avisar_orden_nueva(background_tasks: BackgroundTasks, orden: OrdenAplicacion) -> None:
+    """Push a todos los celulares: salió una orden de aplicación nueva."""
+    nombres = [p.parcela.nombre for p in orden.parcelas]
+    parcelas = ", ".join(nombres[:3]) + (f" y {len(nombres) - 3} más" if len(nombres) > 3 else "")
+    background_tasks.add_task(
+        notificar_tokens,
+        "Nueva orden de aplicación",
+        f"{orden.insumo.nombre} · {parcelas}",
+        user_ids=None,
+        data={"tipo": "orden_aplicacion", "orden_id": orden.id},
+    )
+
+
+async def _avisar_revision(
+    db: AsyncSession,
+    background_tasks: BackgroundTasks,
+    fila: OrdenAplicacionValvula,
+    parcela: Parcela,
+) -> None:
+    """Push a encargados y superiores: una válvula quedó sin aplicar o con
+    observaciones (ver `requiere_revision`)."""
+    destinatarios = (
+        await db.execute(
+            select(User.id).where(
+                User.is_active.is_(True),
+                User.role.in_(
+                    [UserRole.super_admin, UserRole.gerencial, UserRole.encargado]
+                ),
+            )
+        )
+    ).scalars().all()
+    que = "no se aplicó" if fila.resultado == ResultadoValvula.no_aplicada else "se aplicó con observaciones"
+    obs = (fila.observaciones or "")[:120]
+    background_tasks.add_task(
+        notificar_tokens,
+        "Revisar aplicación",
+        f"{parcela.nombre} · válvula {fila.valvula.nombre}: {que}. {obs}".strip(),
+        user_ids=list(destinatarios),
+        data={"tipo": "revisar_valvula", "orden_valvula_id": fila.id},
+    )
+
+
+async def _validar_valvula_ids(
+    db: AsyncSession, parcelas: list[Parcela], valvula_ids: list[str] | None
+) -> dict[str, set[str]]:
+    """Con `valvula_ids=None` devuelve {} (todas las válvulas de cada parcela).
+    Con valores, comprueba que existan, estén activas y pertenezcan a las
+    parcelas elegidas, y que cada parcela conserve al menos una (si no, esa
+    parcela quedaría confirmable entera, que no es lo que se pidió).
+    Devuelve {parcela_id: {valvula_id, ...}}."""
+    if valvula_ids is None:
+        return {}
+    if not valvula_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="valvula_ids no puede ser una lista vacía (omitila para incluir todas).",
+        )
+    valvulas = (
+        await db.execute(select(Valvula).where(Valvula.id.in_(valvula_ids)))
+    ).scalars().all()
+    ids_parcelas = {p.id for p in parcelas}
+    invalidas = (set(valvula_ids) - {v.id for v in valvulas}) | {
+        v.id for v in valvulas if not v.is_active or v.parcela_id not in ids_parcelas
+    }
+    if invalidas:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Hay válvulas inexistentes, inactivas o que no son de las parcelas elegidas.",
+        )
+    por_parcela: dict[str, set[str]] = {}
+    for v in valvulas:
+        por_parcela.setdefault(v.parcela_id, set()).add(v.id)
+    sin_valvula = [p.nombre for p in parcelas if p.id not in por_parcela]
+    if sin_valvula:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Estas parcelas quedarían sin ninguna de las válvulas elegidas: {', '.join(sin_valvula)}",
+        )
+    return por_parcela
+
+
+async def _crear_filas_valvula(
+    db: AsyncSession, item: OrdenAplicacionParcela, solo_ids: set[str] | None = None
+) -> None:
+    """Agrega a `item` una fila pendiente por cada válvula activa de su
+    parcela (o solo las de `solo_ids`). Una parcela sin válvulas queda sin
+    filas: se confirma entera. `item` debe nacer con `valvulas=[]`: la query de
+    acá dispara un autoflush y una colección sin cargar haría lazy-load."""
+    stmt = select(Valvula).where(
+        Valvula.parcela_id == item.parcela_id, Valvula.is_active.is_(True)
+    )
+    if solo_ids is not None:
+        stmt = stmt.where(Valvula.id.in_(solo_ids))
+    for valvula in (await db.execute(stmt)).scalars().all():
+        fila = OrdenAplicacionValvula(valvula_id=valvula.id)
+        fila.valvula = valvula
+        item.valvulas.append(fila)
+
+
 @router.post(
     "/desde-plan", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED
 )
 async def crear_orden_desde_plan(
     data: OrdenAplicacionCreateDesdePlan,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
@@ -154,22 +289,26 @@ async def crear_orden_desde_plan(
     orden.insumo = plan.insumo
     db.add(orden)
     for parcela in parcelas:
-        item = OrdenAplicacionParcela(parcela_id=parcela.id)
+        item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
         item.parcela = parcela
         orden.parcelas.append(item)
+        await _crear_filas_valvula(db, item)
 
     await db.flush()
+    _avisar_orden_nueva(background_tasks, orden)
     return _to_response(orden)
 
 
 @router.post("/", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED)
 async def crear_orden_extra(
     data: OrdenAplicacionCreateExtra,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
     insumo = await _resolve_insumo(db, data.insumo_id)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
+    valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
 
     orden = OrdenAplicacion(
         temporada=data.temporada,
@@ -188,11 +327,13 @@ async def crear_orden_extra(
     orden.insumo = insumo
     db.add(orden)
     for parcela in parcelas:
-        item = OrdenAplicacionParcela(parcela_id=parcela.id)
+        item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
         item.parcela = parcela
         orden.parcelas.append(item)
+        await _crear_filas_valvula(db, item, valvulas_por_parcela.get(parcela.id))
 
     await db.flush()
+    _avisar_orden_nueva(background_tasks, orden)
     return _to_response(orden)
 
 
@@ -226,6 +367,75 @@ async def list_ordenes_pendientes(
         resp = _to_response(orden)
         resp.parcelas = [p for p in resp.parcelas if p.parcela_id in parcelas_finca_ids]
         resultado.append(resp)
+    return resultado
+
+
+def requiere_revision(valvula: OrdenAplicacionValvula) -> bool:
+    """Una válvula pide revisión si ya se confirmó, nadie la revisó todavía y
+    o no se aplicó, o se aplicó con observaciones (la forma de dejar dicho
+    "se aplicó a medias": no existe resultado parcial)."""
+    if valvula.estado != EstadoOrdenAplicacionParcela.aplicada or valvula.revisada_at is not None:
+        return False
+    return valvula.resultado == ResultadoValvula.no_aplicada or bool(
+        (valvula.observaciones or "").strip()
+    )
+
+
+@router.get("/a-revisar", response_model=list[ValvulaARevisarResponse])
+async def list_valvulas_a_revisar(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_estricto),
+) -> list[ValvulaARevisarResponse]:
+    """Válvulas confirmadas con problemas o con observaciones, sin revisar.
+    Los encargados ven solo su finca; gerencia y super_admin ven todo."""
+    stmt = (
+        select(OrdenAplicacionValvula)
+        .options(
+            selectinload(OrdenAplicacionValvula.valvula),
+            selectinload(OrdenAplicacionValvula.fotos),
+            selectinload(OrdenAplicacionValvula.orden_parcela).selectinload(
+                OrdenAplicacionParcela.parcela
+            ),
+            selectinload(OrdenAplicacionValvula.orden_parcela)
+            .selectinload(OrdenAplicacionParcela.orden)
+            .selectinload(OrdenAplicacion.insumo),
+        )
+        .where(
+            OrdenAplicacionValvula.estado == EstadoOrdenAplicacionParcela.aplicada,
+            OrdenAplicacionValvula.revisada_at.is_(None),
+        )
+        .order_by(OrdenAplicacionValvula.confirmada_at.desc())
+    )
+    filas = (await db.execute(stmt)).scalars().all()
+    ve_todo = current_user.role in (UserRole.super_admin, UserRole.gerencial)
+    resultado: list[ValvulaARevisarResponse] = []
+    for fila in filas:
+        if not requiere_revision(fila):
+            continue
+        parcela = fila.orden_parcela.parcela
+        if not ve_todo and parcela.finca != current_user.finca:
+            continue
+        orden = fila.orden_parcela.orden
+        resultado.append(
+            ValvulaARevisarResponse(
+                id=fila.id,
+                orden_id=orden.id,
+                parcela_id=parcela.id,
+                parcela_nombre=parcela.nombre,
+                valvula_id=fila.valvula_id,
+                valvula_nombre=fila.valvula.nombre,
+                variedad=orden.variedad,
+                insumo_id=orden.insumo_id,
+                insumo_nombre=orden.insumo.nombre,
+                dosis_por_ha=orden.dosis_por_ha,
+                objetivo=orden.objetivo,
+                resultado=fila.resultado,
+                responsable=fila.responsable,
+                observaciones=fila.observaciones,
+                confirmada_at=fila.confirmada_at,
+                fotos=[f.url for f in fila.fotos],
+            )
+        )
     return resultado
 
 
@@ -276,7 +486,11 @@ async def _get_orden_extra_editable(db: AsyncSession, orden_id: str) -> OrdenApl
             status_code=status.HTTP_409_CONFLICT,
             detail="Las órdenes del plan no se editan ni eliminan desde acá.",
         )
-    if any(p.estado == EstadoOrdenAplicacionParcela.aplicada for p in orden.parcelas):
+    if any(
+        p.estado == EstadoOrdenAplicacionParcela.aplicada
+        or any(v.estado == EstadoOrdenAplicacionParcela.aplicada for v in p.valvulas)
+        for p in orden.parcelas
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La orden ya tiene aplicaciones confirmadas, no se puede modificar.",
@@ -313,9 +527,10 @@ async def actualizar_orden_extra(
     existentes = {item.parcela_id for item in orden.parcelas}
     for parcela in parcelas:
         if parcela.id not in existentes:
-            item = OrdenAplicacionParcela(parcela_id=parcela.id)
+            item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
             item.parcela = parcela
             orden.parcelas.append(item)
+            await _crear_filas_valvula(db, item)
 
     await db.flush()
     return _to_response(orden)
@@ -330,6 +545,149 @@ async def eliminar_orden_extra(
     orden = await _get_orden_extra_editable(db, orden_id)
     await db.delete(orden)
     await db.flush()
+
+
+async def _recalcular_estado_orden(db: AsyncSession, orden: OrdenAplicacion) -> None:
+    """completada si todas las parcelas están aplicadas; en_curso si alguna
+    parcela o alguna válvula ya se confirmó."""
+    await db.refresh(orden, attribute_names=["parcelas"])
+    estados = {p.estado for p in orden.parcelas}
+    if estados == {EstadoOrdenAplicacionParcela.aplicada}:
+        orden.estado = EstadoOrdenAplicacion.completada
+        await db.flush()
+        return
+    valvulas_aplicadas = (
+        await db.execute(
+            select(func.count(OrdenAplicacionValvula.id))
+            .join(OrdenAplicacionParcela)
+            .where(
+                OrdenAplicacionParcela.orden_id == orden.id,
+                OrdenAplicacionValvula.estado == EstadoOrdenAplicacionParcela.aplicada,
+            )
+        )
+    ).scalar_one()
+    if EstadoOrdenAplicacionParcela.aplicada in estados or valvulas_aplicadas:
+        orden.estado = EstadoOrdenAplicacion.en_curso
+    await db.flush()
+
+
+def _calcular_cantidad_valvula(dosis_por_ha: float, valvula: Valvula) -> Decimal:
+    if valvula.superficie_ha is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"La válvula {valvula.nombre} no tiene hectáreas cargadas — no se puede calcular la cantidad aplicada.",
+        )
+    return (Decimal(str(dosis_por_ha)) * Decimal(str(valvula.superficie_ha))).quantize(Decimal("0.01"))
+
+
+@router.post(
+    "/{orden_id}/valvulas/{orden_valvula_id}/confirmar",
+    response_model=OrdenAplicacionValvulaResponse,
+)
+async def confirmar_valvula(
+    orden_id: str,
+    orden_valvula_id: str,
+    data: ConfirmarValvulaRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_role),
+) -> OrdenAplicacionValvulaResponse:
+    orden = await db.get(OrdenAplicacion, orden_id, options=[selectinload(OrdenAplicacion.insumo)])
+    if orden is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
+
+    # FOR UPDATE: un doble toque o un reintento de red no puede confirmar (y
+    # descontar stock) dos veces la misma válvula.
+    fila = await db.get(
+        OrdenAplicacionValvula,
+        orden_valvula_id,
+        options=[
+            selectinload(OrdenAplicacionValvula.valvula),
+            selectinload(OrdenAplicacionValvula.orden_parcela).selectinload(
+                OrdenAplicacionParcela.parcela
+            ),
+        ],
+        with_for_update=True,
+    )
+    if fila is None or fila.orden_parcela.orden_id != orden_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Válvula de la orden not found"
+        )
+    if fila.estado == EstadoOrdenAplicacionParcela.aplicada:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Esta válvula ya fue confirmada"
+        )
+
+    item = fila.orden_parcela
+    parcela = item.parcela
+    if current_user.role not in (UserRole.super_admin, UserRole.gerencial):
+        if parcela.finca != current_user.finca:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No podés confirmar aplicaciones fuera de tu finca.",
+            )
+
+    observaciones = (data.observaciones or "").strip() or None
+    if data.resultado == ResultadoValvula.no_aplicada and observaciones is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Si la válvula no se aplicó, contá por qué en las observaciones.",
+        )
+
+    responsable_id = data.responsable_id or current_user.trabajador_id
+    responsable_nombre = current_user.full_name
+    if responsable_id:
+        responsable_nombre = await _resolve_responsable_nombre(db, responsable_id)
+
+    if data.resultado == ResultadoValvula.completa:
+        cantidad_total = _calcular_cantidad_valvula(orden.dosis_por_ha, fila.valvula)
+        fito = RegistroFitosanitario(
+            fecha=date.today(),
+            parcela_id=parcela.id,
+            valvula_id=fila.valvula_id,
+            producto_nombre=orden.insumo.nombre,
+            dosis_por_ha=orden.dosis_por_ha,
+            insumo_id=orden.insumo_id,
+            unidad=orden.insumo.unidad,
+            cantidad_total=cantidad_total,
+            motivo=orden.objetivo,
+            dias_carencia=orden.dias_carencia,
+            dias_reingreso=orden.dias_reingreso,
+            responsable=responsable_nombre,
+            responsable_id=responsable_id,
+            observaciones=observaciones,
+            created_by=current_user.id,
+        )
+        db.add(fito)
+        await db.flush()
+        await _aplicar_movimiento_stock(db, fito, orden.insumo, cantidad_total, current_user.id)
+        fila.registro_fitosanitario_id = fito.id
+
+    fila.estado = EstadoOrdenAplicacionParcela.aplicada
+    fila.resultado = data.resultado
+    fila.responsable_id = responsable_id
+    fila.responsable = responsable_nombre
+    fila.observaciones = observaciones
+    fila.confirmada_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    pendientes = (
+        await db.execute(
+            select(func.count(OrdenAplicacionValvula.id)).where(
+                OrdenAplicacionValvula.orden_parcela_id == item.id,
+                OrdenAplicacionValvula.estado == EstadoOrdenAplicacionParcela.pendiente,
+            )
+        )
+    ).scalar_one()
+    if pendientes == 0:
+        item.estado = EstadoOrdenAplicacionParcela.aplicada
+        await db.flush()
+    await _recalcular_estado_orden(db, orden)
+
+    if requiere_revision(fila):
+        await _avisar_revision(db, background_tasks, fila, parcela)
+
+    return _valvula_response(fila)
 
 
 @router.post(
@@ -350,7 +708,10 @@ async def confirmar_aplicacion(
     item = await db.get(
         OrdenAplicacionParcela,
         orden_parcela_id,
-        options=[selectinload(OrdenAplicacionParcela.parcela)],
+        options=[
+            selectinload(OrdenAplicacionParcela.parcela),
+            selectinload(OrdenAplicacionParcela.valvulas),
+        ],
     )
     if item is None or item.orden_id != orden_id:
         raise HTTPException(
@@ -359,6 +720,11 @@ async def confirmar_aplicacion(
     if item.estado == EstadoOrdenAplicacionParcela.aplicada:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Esta parcela ya fue confirmada"
+        )
+    if item.valvulas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta parcela se confirma válvula por válvula.",
         )
 
     parcela = item.parcela
@@ -401,13 +767,7 @@ async def confirmar_aplicacion(
     item.registro_fitosanitario_id = fito.id
     await db.flush()
 
-    await db.refresh(orden, attribute_names=["parcelas"])
-    estados = {p.estado for p in orden.parcelas}
-    if estados == {EstadoOrdenAplicacionParcela.aplicada}:
-        orden.estado = EstadoOrdenAplicacion.completada
-    elif EstadoOrdenAplicacionParcela.aplicada in estados:
-        orden.estado = EstadoOrdenAplicacion.en_curso
-    await db.flush()
+    await _recalcular_estado_orden(db, orden)
 
     return OrdenAplicacionParcelaResponse(
         id=item.id,
@@ -452,3 +812,79 @@ async def subir_foto_aplicacion(
     await db.flush()
     await db.refresh(foto)
     return foto
+
+
+@router.post(
+    "/valvulas/{orden_valvula_id}/fotos",
+    response_model=FotoRegistroFitosanitarioResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def subir_foto_valvula(
+    orden_valvula_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_role),
+) -> FotoRegistroFitosanitarioResponse:
+    fila = await db.get(OrdenAplicacionValvula, orden_valvula_id)
+    if fila is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Válvula de la orden not found"
+        )
+    if fila.estado != EstadoOrdenAplicacionParcela.aplicada:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Primero hay que confirmar la válvula antes de subir fotos.",
+        )
+
+    raw = await file.read()
+    url = await upload_foto_orden_aplicacion(raw, file.content_type or "", orden_valvula_id)
+
+    # Una válvula no_aplicada no tiene registro: la foto cuelga solo de la fila.
+    foto = FotoRegistroFitosanitario(
+        registro_fitosanitario_id=fila.registro_fitosanitario_id,
+        orden_valvula_id=fila.id,
+        url=url,
+        created_by=current_user.id,
+    )
+    db.add(foto)
+    await db.flush()
+    await db.refresh(foto)
+    return foto
+
+
+@router.post("/valvulas/{orden_valvula_id}/revisar", status_code=status.HTTP_204_NO_CONTENT)
+async def revisar_valvula(
+    orden_valvula_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_estricto),
+) -> None:
+    """Marca la válvula como revisada (con o sin orden de repaso): sale del
+    listado "A revisar". Idempotente."""
+    fila = await db.get(
+        OrdenAplicacionValvula,
+        orden_valvula_id,
+        options=[
+            selectinload(OrdenAplicacionValvula.orden_parcela).selectinload(
+                OrdenAplicacionParcela.parcela
+            )
+        ],
+    )
+    if fila is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Válvula de la orden not found"
+        )
+    if current_user.role not in (UserRole.super_admin, UserRole.gerencial):
+        if fila.orden_parcela.parcela.finca != current_user.finca:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No podés revisar válvulas fuera de tu finca.",
+            )
+    if fila.estado != EstadoOrdenAplicacionParcela.aplicada:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La válvula todavía no se confirmó, no hay nada que revisar.",
+        )
+    if fila.revisada_at is None:
+        fila.revisada_at = datetime.now(timezone.utc)
+        fila.revisada_por = current_user.id
+        await db.flush()
