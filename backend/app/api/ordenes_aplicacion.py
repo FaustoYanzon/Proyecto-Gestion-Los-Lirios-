@@ -546,6 +546,21 @@ async def eliminar_orden_extra(
     await db.flush()
 
 
+async def _bloquear_orden(db: AsyncSession, orden_id: str) -> None:
+    """Toma el lock (FOR UPDATE) de la fila de la orden antes de confirmar nada.
+
+    Serializa las confirmaciones de una misma orden: un doble toque o un
+    reintento de red no confirma (ni descuenta stock) dos veces, y dos operarios
+    cerrando a la vez las últimas válvulas de un parral no dejan la parcela o la
+    orden trabadas en pendiente (en READ COMMITTED cada uno contaría como
+    pendiente la válvula que el otro todavía no commiteó). El commit de `get_db`
+    libera el lock. SQLite (tests) ignora el FOR UPDATE.
+    """
+    await db.execute(
+        select(OrdenAplicacion.id).where(OrdenAplicacion.id == orden_id).with_for_update()
+    )
+
+
 async def _recalcular_estado_orden(db: AsyncSession, orden: OrdenAplicacion) -> None:
     """completada si todas las parcelas están aplicadas; en_curso si alguna
     parcela o alguna válvula ya se confirmó."""
@@ -594,8 +609,7 @@ async def confirmar_valvula(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
-    # FOR UPDATE: un doble toque o un reintento de red no puede confirmar (y
-    # descontar stock) dos veces la misma válvula.
+    await _bloquear_orden(db, orden_id)
     fila = await db.get(
         OrdenAplicacionValvula,
         orden_valvula_id,
@@ -605,7 +619,6 @@ async def confirmar_valvula(
                 OrdenAplicacionParcela.parcela
             ),
         ],
-        with_for_update=True,
     )
     if fila is None or fila.orden_parcela.orden_id != orden_id:
         raise HTTPException(
@@ -703,6 +716,7 @@ async def confirmar_aplicacion(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
+    await _bloquear_orden(db, orden_id)
     item = await db.get(
         OrdenAplicacionParcela,
         orden_parcela_id,
@@ -823,11 +837,25 @@ async def subir_foto_valvula(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_any_role),
 ) -> FotoRegistroFitosanitarioResponse:
-    fila = await db.get(OrdenAplicacionValvula, orden_valvula_id)
+    fila = await db.get(
+        OrdenAplicacionValvula,
+        orden_valvula_id,
+        options=[
+            selectinload(OrdenAplicacionValvula.orden_parcela).selectinload(
+                OrdenAplicacionParcela.parcela
+            )
+        ],
+    )
     if fila is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Válvula de la orden not found"
         )
+    if current_user.role not in (UserRole.super_admin, UserRole.gerencial):
+        if fila.orden_parcela.parcela.finca != current_user.finca:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No podés subir fotos fuera de tu finca.",
+            )
     if fila.estado != EstadoOrdenAplicacionParcela.aplicada:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

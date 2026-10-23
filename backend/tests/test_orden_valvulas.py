@@ -578,3 +578,24 @@ async def test_encargado_solo_ve_las_revisiones_de_su_finca(
     assert (await client.get("/ordenes-aplicacion/a-revisar", headers=ajeno)).json() == []
     r = await client.post(f"/ordenes-aplicacion/valvulas/{filas['23']}/revisar", headers=ajeno)
     assert r.status_code == 403, r.text
+
+
+async def test_operario_de_otra_finca_no_puede_subir_foto_a_una_valvula(
+    client, monkeypatch, create_user, create_insumo, create_parcela, create_valvula,
+):
+    async def _fake_upload(raw, content_type, ident):
+        return f"https://fotos.test/{ident}.jpg"
+
+    monkeypatch.setattr("app.api.ordenes_aplicacion.upload_foto_orden_aplicacion", _fake_upload)
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(_url(orden, filas["21"]), json={"resultado": "completa"}, headers=headers)
+    ajeno, _u = await _auth(
+        client, create_user, email="reg@test.com", role=UserRole.regador, finca=Finca.caucete,
+    )
+
+    r = await client.post(
+        f"/ordenes-aplicacion/valvulas/{filas['21']}/fotos",
+        files={"file": ("a.jpg", b"\xff\xd8\xff", "image/jpeg")}, headers=ajeno,
+    )
+    assert r.status_code == 403, r.text

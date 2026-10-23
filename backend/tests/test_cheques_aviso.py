@@ -2,10 +2,17 @@
 app/core/cheques_aviso.py."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app.core import cheques_aviso
+from app.core.birthdays import FINCA_TZ
 from app.models.user import UserRole
+
+
+def _hoy() -> date:
+    # El aviso calcula "hoy" en hora de la finca; date.today() es UTC en CI y
+    # entre las 21 y las 24 de Argentina cae un dia adelante.
+    return datetime.now(FINCA_TZ).date()
 
 
 async def _auth(client, create_user):
@@ -41,7 +48,7 @@ async def test_avisa_una_sola_vez_cheques_cobrables_y_emitidos(client, create_us
 
     monkeypatch.setattr(cheques_aviso, "send_expo_push", fake_push)
     headers = await _auth(client, create_user)
-    hoy = date.today()
+    hoy = _hoy()
     await client.post("/finanzas/ingresos/", json=_ingreso(hoy), headers=headers)
     await client.post("/finanzas/ingresos/", json=_ingreso(hoy + timedelta(days=5)), headers=headers)
     # Ya endosado a un tercero: no se avisa como "para cobrar".
@@ -69,8 +76,8 @@ async def test_cambiar_fecha_de_pago_rearma_el_aviso(client, create_user, monkey
 
     monkeypatch.setattr(cheques_aviso, "send_expo_push", fake_push)
     headers = await _auth(client, create_user)
-    hoy = date.today()
-    creado = await client.post("/finanzas/ingresos/", json=_ingreso(hoy), headers=headers)
+    hoy = _hoy()
+    creado =await client.post("/finanzas/ingresos/", json=_ingreso(hoy), headers=headers)
     await client.post("/notificaciones/cheques/ejecutar", headers=headers)
 
     # Se reprograma a otra fecha que también ya llegó -> vuelve a avisar.
