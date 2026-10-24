@@ -76,5 +76,17 @@ Tras agregar modelo, router, migración o pantalla:
 - `release-manager` — deploy Railway/Vercel/EAS + verificación (confirma antes de publicar)
 - `docs-sync` — regenera PROJECT_MAP/Modelo de Datos y escribe la bitácora
 
+## Qué usar según la tarea (skills `.claude/skills/`)
+| Si la tarea es… | Usar |
+|---|---|
+| Cambiar el esquema de la BD | skill `nueva-migracion` |
+| Agregar o cambiar un endpoint | skill `nuevo-endpoint` |
+| Probar un cambio en local antes de commitear | skill `verificar-local` |
+| "¿Está listo?" / antes de commit | skill `revisar-antes-de-commit` (code-reviewer + qa-tester en paralelo) |
+| Deployar (Railway / Vercel / EAS) | skill `deploy-lirios` (+ agente `release-manager`) |
+| Análisis de cosecha, destinos, variedades, temporadas | skill `analisis-produccion` |
+
+Trabajo en backend y frontend a la vez: lanzar `backend-fastapi` y `frontend-nextjs` en paralelo. `code-reviewer`, `qa-tester` y `docs-sync` se usan solos tras cada cambio de código.
+
 ## Compactación
 Conservar: objetivo actual, decisiones de arquitectura/esquema, archivos modificados. Descartar salida verbosa de herramientas.

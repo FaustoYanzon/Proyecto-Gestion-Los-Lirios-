@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_on_stop.py\"",
+            "timeout": 600
+          }
+        ]
+      }
     ]
   },
   "permissions": {
@@ -42,7 +53,18 @@
       "Read(**/.env.production)",
       "Edit(**/.env)",
       "Write(**/.env)",
-      "Read(**/pg_backups/**)"
+      "Read(**/pg_backups/**)",
+      "Bash(cat *.env)",
+      "Bash(cat *backend/.env*)",
+      "Bash(cat *mobile/.env*)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(npx eas update*)",
+      "Bash(npx eas build*)",
+      "Bash(npx eas submit*)",
+      "Bash(npx vercel --prod*)",
+      "Bash(npx vercel deploy*)"
     ]
   }
 }
