@@ -1,6 +1,6 @@
 ---
 name: qa-tester
-description: Use to verify a change works — runs backend pytest, frontend lint+build, mobile tsc, and reports pass/fail with the relevant error output. Can drive the local app in the browser for a real click-through. Reports only; does not fix code.
+description: Use to verify a change works — runs backend pytest, frontend lint+build, mobile tsc, and reports pass/fail with the relevant error output. Can drive the local app in the browser for a real click-through. Reports only; does not fix code.  Use proactively after any code change.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---

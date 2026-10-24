@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Use after finishing a change (or before commit/deploy) to review the diff against Los Lirios conventions — UUID ids, flush/refresh without commit in routers, Decimal for money, static routes before parameterized, PATCH exclude_unset, ARS/USD never mixed, Decimal-as-string handled in front/mobile. Read-only; reports findings, never edits.
+description: Use after finishing a change (or before commit/deploy) to review the diff against Los Lirios conventions — UUID ids, flush/refresh without commit in routers, Decimal for money, static routes before parameterized, PATCH exclude_unset, ARS/USD never mixed, Decimal-as-string handled in front/mobile. Read-only; reports findings, never edits.  Use proactively after any code change.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

@@ -1,6 +1,6 @@
 ---
 name: docs-sync
-description: Use after adding a model, router, migration or screen, or at the end of a work session — regenerates PROJECT_MAP.md and the data-model doc, and writes the session entry in the Obsidian Bitácora. Only touches documentation files.
+description: Use after adding a model, router, migration or screen, or at the end of a work session — regenerates PROJECT_MAP.md and the data-model doc, and writes the session entry in the Obsidian Bitácora. Only touches documentation files.  Use proactively after adding a model, router, migration or screen.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: haiku
 ---
