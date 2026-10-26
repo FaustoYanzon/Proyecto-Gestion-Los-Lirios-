@@ -755,6 +755,15 @@ async def test_deshacer_limpia_revision(
     assert fila.revisada_por is None
     assert (await client.get("/ordenes-aplicacion/a-revisar", headers=headers)).json() == []
 
+    # Re-confirming as no_aplicada must put it back in the review list.
+    again = await client.post(
+        _url(orden, filas["23"]),
+        json={"resultado": "no_aplicada", "observaciones": "Otra vez sin agua"}, headers=headers,
+    )
+    assert again.status_code == 200, again.text
+    pendientes = (await client.get("/ordenes-aplicacion/a-revisar", headers=headers)).json()
+    assert [r["valvula_nombre"] for r in pendientes] == ["23"]
+
 
 async def test_deshacer_roles(
     client, create_user, create_insumo, create_parcela, create_valvula,
@@ -796,3 +805,93 @@ async def test_deshacer_valvula_o_orden_inexistente_es_404(
         f"/ordenes-aplicacion/no-existe/valvulas/{filas['21']}/deshacer", headers=headers,
     )
     assert r.status_code == 404, r.text
+
+
+async def test_deshacer_y_reconfirmar_no_viola_uniques(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    from app.models.insumo import MovimientoStock
+    from sqlalchemy import func
+
+    headers, _ = await _auth(client, create_user)
+    orden, filas, insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    for nombre in ("21", "22", "23"):
+        r = await client.post(_url(orden, filas[nombre]), json={"resultado": "completa"}, headers=headers)
+        assert r.status_code == 200, r.text
+    stock_completo = await _stock(db_session, insumo)
+
+    assert (await client.post(_url_deshacer(orden, filas["22"]), headers=headers)).status_code == 200
+    r = await client.post(_url(orden, filas["22"]), json={"resultado": "completa"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["registro_fitosanitario_id"]
+
+    # 100 - (1 + 2 + 3 ha) x 2 per ha
+    assert await _stock(db_session, insumo) == stock_completo == 88.0
+    db_session.expire_all()
+    registros = (await db_session.execute(select(func.count(RegistroFitosanitario.id)))).scalar_one()
+    movimientos = (await db_session.execute(select(func.count(MovimientoStock.id)))).scalar_one()
+    assert (registros, movimientos) == (3, 3)
+    body = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert (body["estado"], body["parcelas"][0]["estado"]) == ("completada", "aplicada")
+
+
+async def test_deshacer_encargado_ajeno_sobre_pendiente_da_403_no_409(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    ajeno, _u = await _auth(
+        client, create_user, email="enc3@test.com", role=UserRole.encargado, finca=Finca.caucete,
+    )
+
+    # Finca check must run before the state check so state is not leaked across fincas.
+    r = await client.post(_url_deshacer(orden, filas["21"]), headers=ajeno)
+    assert r.status_code == 403, r.text
+
+
+async def test_deshacer_valvula_de_otra_orden_da_404(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    otra = await client.post(
+        "/ordenes-aplicacion/",
+        json=_payload_extra(_i.id, [(await _otra_parcela(create_parcela, create_valvula)).id]),
+        headers=headers,
+    )
+    assert otra.status_code == 201, otra.text
+    fila_otra = otra.json()["parcelas"][0]["valvulas"][0]["id"]
+    await client.post(_url(otra.json(), fila_otra), json={"resultado": "completa"}, headers=headers)
+
+    r = await client.post(_url_deshacer(orden, fila_otra), headers=headers)
+    assert r.status_code == 404, r.text
+
+
+async def _otra_parcela(create_parcela, create_valvula):
+    parcela = await create_parcela(nombre="Parral 9", variedad="flame", finca=Finca.media_agua, superficie_ha=1.0)
+    await create_valvula(parcela_id=parcela.id, nombre="91", superficie_ha=1.0)
+    return parcela
+
+
+async def test_borrar_registro_de_valvula_es_409_y_no_toca_nada(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    from app.models.insumo import MovimientoStock
+    from sqlalchemy import func
+
+    headers, _ = await _auth(client, create_user)
+    orden, filas, insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    conf = await client.post(_url(orden, filas["22"]), json={"resultado": "completa"}, headers=headers)
+    registro_id = conf.json()["registro_fitosanitario_id"]
+    assert await _stock(db_session, insumo) == 96.0
+
+    resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"] == "Esta aplicación viene de una orden: deshacela desde la válvula."
+
+    assert await _stock(db_session, insumo) == 96.0
+    db_session.expire_all()
+    assert (await db_session.execute(select(func.count(RegistroFitosanitario.id)))).scalar_one() == 1
+    assert (await db_session.execute(select(func.count(MovimientoStock.id)))).scalar_one() == 1
+    fila = await db_session.get(OrdenAplicacionValvula, filas["22"])
+    assert fila.registro_fitosanitario_id == registro_id

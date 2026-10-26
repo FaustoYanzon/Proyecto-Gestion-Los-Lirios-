@@ -1102,12 +1102,21 @@ async def delete_fitosanitario(
             .selectinload(OrdenAplicacionParcela.orden)
             .selectinload(OrdenAplicacion.parcelas),
             selectinload(RegistroFitosanitario.fotos),
+            selectinload(RegistroFitosanitario.orden_valvula),
         )
         .where(RegistroFitosanitario.id == fitosanitario_id)
     )
     fito = result.scalar_one_or_none()
     if fito is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    # Valve-born records must go through "deshacer": deleting here would leave the
+    # valve row applied with a NULL record and the parcel/order states stale.
+    # Checked before touching stock so nothing is partially reverted.
+    if fito.orden_valvula is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta aplicación viene de una orden: deshacela desde la válvula.",
+        )
     await _revertir_movimiento_stock(db, fito)
 
     # Si vino de confirmar una orden (el operario marcó mal la parcela, por
