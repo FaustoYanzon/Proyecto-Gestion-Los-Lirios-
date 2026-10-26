@@ -186,14 +186,17 @@ export interface RegistroRiego {
   id: string
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  // null for manto-by-area riegos (whole parcel, no cabezal/valves).
+  cabezal: string | null
+  valvula: string | null
   tipo: TipoRiego
   inicio: string
   fin: string
   duracion_horas: number
   mm_aplicados: number | null
   n_valvulas: number
+  // 1.0 goteo, 0.25 manto by area, 0.4 historical manto with valves.
+  factor_aplicado: number
   litros_aplicados: number
   fertilizante_nombre: string | null
   fertilizante_dosis_lt_ha: number | null
@@ -205,8 +208,9 @@ export interface RegistroRiego {
 export interface RiegoPayload {
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  // Required for goteo; omitted for manto (whole parcel, no valves).
+  cabezal?: string
+  valvula?: string
   tipo?: TipoRiego
   inicio: string
   fin: string
@@ -220,8 +224,9 @@ export interface RiegoPayload {
 // Riego "en curso": arrancó (inicio) pero todavía no se cerró (sin fin).
 export interface RiegoIniciarPayload {
   parcela_id: string
-  cabezal: string
-  valvula: string
+  // Required for goteo; omitted for manto.
+  cabezal?: string
+  valvula?: string
   tipo?: TipoRiego
   responsable: string
   responsable_id?: string
@@ -234,11 +239,12 @@ export interface RiegoEnCurso {
   id: string
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  cabezal: string | null
+  valvula: string | null
   tipo: TipoRiego
   inicio: string
   n_valvulas: number
+  factor_aplicado: number
   responsable: string
   responsable_id: string | null
   fertilizante_nombre: string | null
@@ -443,14 +449,24 @@ export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 // de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
 export const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
-// Riego a manto: las válvulas marcan hasta qué parte del parral llega el
-// agua, y el caudal se estima en el 40% del de goteo (litros y mm). Mismo
-// factor que RegistroRiego.FACTOR_MANTO en el backend.
+// Riego a manto por superficie: se riega la parcela completa (parral o
+// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas al 25% del
+// caudal de goteo (litros y mm). Mismo criterio que el backend. Los manto
+// históricos (con válvulas) usan factor 0.4 y vienen en `factor_aplicado`.
 export type TipoRiego = 'goteo' | 'manto'
-export const FACTOR_MANTO = 0.4
+export const FACTOR_MANTO_SUPERFICIE = 0.25
 
-export function factorCaudal(tipo: TipoRiego | null | undefined): number {
-  return tipo === 'manto' ? FACTOR_MANTO : 1
+// Rounding to 4 decimals avoids ceil() bumping 1.00000001 ha to 2 valves.
+export function valvulasManto(superficieHa: number): number {
+  return Math.max(1, Math.ceil(Math.round(superficieHa * 10_000) / 10_000))
+}
+
+// Parcels eligible for a manto riego: parral/potrero with a positive area.
+// superficie_ha may arrive as a string (Decimal), hence the Number().
+export function superficieManto(p: Parcela): number | null {
+  if (p.tipo !== 'parral' && p.tipo !== 'potrero') return null
+  const ha = Number(p.superficie_ha)
+  return p.superficie_ha != null && Number.isFinite(ha) && ha > 0 ? ha : null
 }
 
 export function calcMmRiego(inicioISO: string, finISO: string): number | null {
@@ -462,14 +478,15 @@ export function calcMmRiego(inicioISO: string, finISO: string): number | null {
 }
 
 export function calcRiegoTotales(
-  inicioISO: string, finISO: string, nValvulas: number, tipo: TipoRiego = 'goteo',
+  inicioISO: string, finISO: string, nValvulas: number, factor: number,
 ): { horas: number; mm: number; litros: number } | null {
   const start = new Date(inicioISO)
   const end = new Date(finISO)
   const horas = (end.getTime() - start.getTime()) / 3600000
   if (horas <= 0) return null
   const n = nValvulas > 0 ? nValvulas : 1
-  const f = factorCaudal(tipo)
+  // Guard against a missing/NaN factor (e.g. stale cached data): goteo = 1.
+  const f = Number.isFinite(factor) && factor > 0 ? factor : 1
   return {
     horas: Math.round(horas * 100) / 100,
     mm: Math.round(horas * MM_POR_HORA * f * 100) / 100,

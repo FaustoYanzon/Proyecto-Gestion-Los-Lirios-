@@ -853,7 +853,9 @@ export default function MapaScreen() {
     const ids = riegosEnCurso.map((r) => r.parcela_id)
     // Nombres reales de válvula (riegos viejos con índice posicional no
     // matchean ningún cuadrante — sin efecto, no rompen nada).
-    const nombresValvula = riegosEnCurso.flatMap((r) => r.valvula.split(',').map((v) => v.trim()))
+    // Manto riegos have no valves (valvula null): the parcel id above covers them.
+    const nombresValvula = riegosEnCurso.flatMap((r) =>
+      (r.valvula ?? '').split(',').map((v) => v.trim()).filter(Boolean))
     webviewRef.current?.injectJavaScript(
       `window.setParcelasEnRiego && window.setParcelasEnRiego(${JSON.stringify(ids)}); ` +
       `window.setValvulasEnRiego && window.setValvulasEnRiego(${JSON.stringify(nombresValvula)}); true;`

@@ -117,9 +117,15 @@ export async function deleteCosecha(id: string): Promise<void> {
 
 import type { RiegoEnCurso, RiegoIniciarPayload, ValvulaReal } from './types'
 
+// Decimal fields can arrive as strings in JSON: coerce factor_aplicado once
+// here so the on-screen chronometer can multiply with it safely.
+export function withFactor<T extends { factor_aplicado: number }>(r: T): T {
+  return { ...r, factor_aplicado: Number(r.factor_aplicado) }
+}
+
 export async function getRiegosEnCurso(): Promise<RiegoEnCurso[]> {
   const { data } = await api.get<RiegoEnCurso[]>('/produccion/riego/en-curso')
-  return data
+  return data.map(withFactor)
 }
 
 // Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1") —
@@ -133,7 +139,7 @@ export async function getValvulasReales(): Promise<ValvulaReal[]> {
 
 export async function iniciarRiego(payload: RiegoIniciarPayload): Promise<RiegoEnCurso> {
   const { data } = await api.post<RiegoEnCurso>('/produccion/riego/iniciar', payload)
-  return data
+  return withFactor(data)
 }
 
 export async function terminarRiego(id: string): Promise<void> {

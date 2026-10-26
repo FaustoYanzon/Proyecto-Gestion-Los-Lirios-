@@ -20,8 +20,12 @@ import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { useAuthStore } from '../../store/authStore'
 import { colors, fonts } from '../../lib/theme'
-import type { Parcela, RegistroRiego, RiegoEnCurso, Trabajador as TrabajadorDb, ValvulaReal } from '../../lib/types'
-import { calcRiegoTotales, FACTOR_MANTO, type TipoRiego } from '../../lib/types'
+import type {
+  Parcela, RegistroRiego, RiegoEnCurso, RiegoIniciarPayload, RiegoPayload, Trabajador as TrabajadorDb, ValvulaReal,
+} from '../../lib/types'
+import {
+  calcRiegoTotales, FACTOR_MANTO_SUPERFICIE, superficieManto, valvulasManto, type TipoRiego,
+} from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
 // al usuario se ancla explícitamente a America/Argentina/San_Juan: no hay que
@@ -45,6 +49,12 @@ function formatDateDisplay(iso: string) {
   const [y, mo, d] = iso.split('-')
   return `${d}/${mo}/${y}`
 }
+function formatHa(ha: number) {
+  return ha.toLocaleString('es-AR', { maximumFractionDigits: 2 })
+}
+function plural(n: number, singular: string, pluralForm: string) {
+  return `${n} ${n === 1 ? singular : pluralForm}`
+}
 function formatDatetime(iso: string) {
   try {
     return new Date(iso).toLocaleString('es-AR', {
@@ -56,7 +66,8 @@ function formatDatetime(iso: string) {
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-const STEP_LABELS = ['Parral', 'Horario', 'Detalle', 'Confirmar']
+// Step 0 is the parral (goteo) or the whole parcel (manto): "Parcela" fits both.
+const STEP_LABELS = ['Parcela', 'Horario', 'Detalle', 'Confirmar']
 
 function StepIndicator({
   current, onCancel, disabled,
@@ -352,24 +363,144 @@ const tp = StyleSheet.create({
   nowBtnText: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
 })
 
-// ─── Step 1: cabezal + parral + válvulas ──────────────────────────────────────
+// ─── Step 0: goteo vs. manto ──────────────────────────────────────────────────
+
+function StepTipo({
+  onElegir, onCancelar,
+}: {
+  onElegir: (tipo: TipoRiego) => void
+  onCancelar: () => void
+}) {
+  return (
+    <View style={styles.stepContainer}>
+      <View style={si.row}>
+        <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>¿Qué tipo de riego?</Text>
+        <TouchableOpacity
+          style={si.cancelBtn}
+          onPress={onCancelar}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ padding: 16, gap: 12 }}>
+        <TouchableOpacity style={styles.modoCard} onPress={() => onElegir('goteo')} activeOpacity={0.8}>
+          <ICONS.riego size={26} color={colors.cielo} strokeWidth={ICON_STROKE} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modoCardTitle}>Goteo</Text>
+            <Text style={styles.modoCardSub}>Elegís cabezal, parral y las válvulas abiertas.</Text>
+          </View>
+          <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.modoCard} onPress={() => onElegir('manto')} activeOpacity={0.8}>
+          <ICONS.riego size={26} color={colors.cielo} strokeWidth={ICON_STROKE} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modoCardTitle}>Manto</Text>
+            <Text style={styles.modoCardSub}>Se riega el parral o potrero completo, sin elegir válvulas.</Text>
+          </View>
+          <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
+// ─── Step 1 (manto): parcela completa ─────────────────────────────────────────
+
+function StepParcelaManto({
+  parcelas, initialParcelaId, onNext, onBack, onCancelar,
+}: {
+  parcelas: Parcela[]
+  initialParcelaId: string | null
+  onNext: (parcela: Parcela) => void
+  onBack: () => void
+  onCancelar: () => void
+}) {
+  const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
+
+  // Only parrales/potreros with a known area: the backend rejects the rest
+  // (the valve count for manto is derived from superficie_ha).
+  const elegibles = parcelas.filter((p) => p.is_active && superficieManto(p) != null)
+  const grupos = [
+    { label: 'PARRALES', items: elegibles.filter((p) => p.tipo === 'parral') },
+    { label: 'POTREROS', items: elegibles.filter((p) => p.tipo === 'potrero') },
+  ].filter((g) => g.items.length > 0)
+
+  const parcelaSel = elegibles.find((p) => p.id === parcelaId) ?? null
+  const haSel = parcelaSel ? superficieManto(parcelaSel) : null
+
+  function handleContinue() {
+    if (!parcelaSel) { Alert.alert('Falta la parcela', 'Seleccioná el parral o potrero a regar.'); return }
+    onNext(parcelaSel)
+  }
+
+  return (
+    <View style={styles.stepContainer}>
+      <StepIndicator current={0} onCancel={onCancelar} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <Text style={styles.stepTitle}>¿Qué parcela se riega a manto?</Text>
+
+        {grupos.length === 0 && (
+          <Text style={styles.emptyText}>Sin parrales ni potreros con superficie cargada</Text>
+        )}
+
+        {grupos.map((g, idx) => (
+          <View key={g.label}>
+            <Text style={[styles.fieldLabel, idx > 0 && { marginTop: 22 }]}>{g.label}</Text>
+            <View style={styles.chipGridWrap}>
+              {g.items.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.parcelaChip, parcelaId === p.id && styles.parcelaChipActive]}
+                  onPress={() => setParcelaId(p.id)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.parcelaChipText, parcelaId === p.id && styles.parcelaChipTextActive]}>
+                    {p.nombre}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+
+        {haSel != null && (
+          <Text style={styles.hintText}>
+            {plural(valvulasManto(haSel), 'válvula', 'válvulas')} · {formatHa(haSel)} ha
+            {` · litros al ${FACTOR_MANTO_SUPERFICIE * 100}% del caudal`}
+          </Text>
+        )}
+
+        <View style={[styles.actionRow, { marginTop: 28 }]}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleContinue}>
+            <Text style={styles.primaryBtnText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Step 1 (goteo): cabezal + parral + válvulas ──────────────────────────────
 
 function StepUbicacion({
-  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, initialTipo, onNext, onCancelar,
+  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, onNext, onBack, onCancelar,
 }: {
   parcelas: Parcela[]
   valvulasReales: ValvulaReal[]
   initialCabezal: string | null
   initialParcelaId: string | null
   initialValvulas: string[]
-  initialTipo: TipoRiego
-  onNext: (cabezal: string, parcela: Parcela, valvulas: string[], tipo: TipoRiego) => void
+  onNext: (cabezal: string, parcela: Parcela, valvulas: string[]) => void
+  onBack: () => void
   onCancelar: () => void
 }) {
   const [cabezal, setCabezal] = useState<string | null>(initialCabezal)
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
   const [valvulas, setValvulas] = useState<Set<string>>(new Set(initialValvulas))
-  const [tipo, setTipo] = useState<TipoRiego>(initialTipo)
 
   // Cabezales reales derivados del catálogo — no hardcodeados (hoy son 4,
   // pero se ajusta solo si cambia la infraestructura de riego).
@@ -399,8 +530,6 @@ function StepUbicacion({
   function selectParcela(p: Parcela) {
     setParcelaId(p.id)
     setValvulas(new Set())
-    // Arranca con el tipo de la parcela, pero se puede cambiar por riego.
-    setTipo(p.tipo_riego === 'manto' ? 'manto' : 'goteo')
   }
 
   function toggleValvula(v: string) {
@@ -420,7 +549,7 @@ function StepUbicacion({
     const valvulasOrdenadas = Array.from(valvulas).sort(
       (a, b) => (ordenPorNombre.get(a) ?? 0) - (ordenPorNombre.get(b) ?? 0)
     )
-    onNext(cabezal, parcelaSel, valvulasOrdenadas, tipo)
+    onNext(cabezal, parcelaSel, valvulasOrdenadas)
   }
 
   return (
@@ -470,25 +599,7 @@ function StepUbicacion({
 
         {parcelaSel && (
           <>
-            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>3. TIPO DE RIEGO</Text>
-            <View style={styles.chipGridWrap}>
-              {(['goteo', 'manto'] as const).map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.cabezalChip, tipo === t && styles.cabezalChipActive]}
-                  onPress={() => setTipo(t)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.cabezalChipText, tipo === t && styles.cabezalChipTextActive]}>
-                    {t === 'goteo' ? 'Goteo' : 'Manto'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>
-              {tipo === 'manto' ? '4. HASTA QUÉ VÁLVULA LLEGA EL AGUA' : '4. VÁLVULAS ABIERTAS'}
-            </Text>
+            <Text style={[styles.fieldLabel, { marginTop: 22 }]}>3. VÁLVULAS ABIERTAS</Text>
             <View style={styles.chipGridWrap}>
               {valvulasDisponibles.map((v) => (
                 <TouchableOpacity
@@ -508,15 +619,19 @@ function StepUbicacion({
             {valvulas.size > 0 && (
               <Text style={styles.hintText}>
                 {valvulas.size} válvula{valvulas.size > 1 ? 's' : ''} × 1 ha c/u ≈ {valvulas.size} ha regadas
-                {tipo === 'manto' ? ` · litros al ${FACTOR_MANTO * 100}% del caudal` : ''}
               </Text>
             )}
           </>
         )}
 
-        <TouchableOpacity style={[styles.primaryBtn, { marginTop: 28 }]} onPress={handleContinue}>
-          <Text style={styles.primaryBtnText}>Continuar</Text>
-        </TouchableOpacity>
+        <View style={[styles.actionRow, { marginTop: 28 }]}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onBack}>
+            <Text style={styles.secondaryBtnText}>Atrás</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryBtn, { flex: 2 }]} onPress={handleContinue}>
+            <Text style={styles.primaryBtnText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   )
@@ -525,10 +640,11 @@ function StepUbicacion({
 // ─── Bifurcación: cargar ya hecho vs. iniciar ahora ───────────────────────────
 
 function StepModo({
-  onElegirRetroactivo, onElegirIniciar, onCancelar,
+  onElegirRetroactivo, onElegirIniciar, onBack, onCancelar,
 }: {
   onElegirRetroactivo: () => void
   onElegirIniciar: () => void
+  onBack: () => void
   onCancelar: () => void
 }) {
   return (
@@ -560,6 +676,9 @@ function StepModo({
           </View>
           <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.secondaryBtn, { flex: 0, marginTop: 4 }]} onPress={onBack}>
+          <Text style={styles.secondaryBtnText}>Atrás</Text>
+        </TouchableOpacity>
       </View>
     </View>
   )
@@ -587,7 +706,8 @@ function StepHorario({
   const [timeModal, setTimeModal] = useState<'inicio' | 'fin' | null>(null)
 
   const preview = (horaInicio && horaFin)
-    ? calcRiegoTotales(`${fechaInicio}T${horaInicio}:00`, `${fechaFin}T${horaFin}:00`, 1)
+    // Only the duration is shown here, so valve count and factor don't matter.
+    ? calcRiegoTotales(`${fechaInicio}T${horaInicio}:00`, `${fechaFin}T${horaFin}:00`, 1, 1)
     : null
 
   function handleContinue() {
@@ -668,18 +788,22 @@ function StepHorario({
 // ─── Step 3: fertirriego + responsable ────────────────────────────────────────
 
 function StepDetalle({
-  initialConFertirriego, initialProducto, initialDosis, initialResponsable, trabajadoresDb, onNext, onBack, onCancelar,
+  initialConFertirriego, initialProducto, initialDosis, initialResponsable, permitirFertirriego, trabajadoresDb,
+  onNext, onBack, onCancelar,
 }: {
   initialConFertirriego: boolean
   initialProducto: string
   initialDosis: string
   initialResponsable: string
+  // false for manto: the manto payload carries no fertilizante_* fields.
+  permitirFertirriego: boolean
   trabajadoresDb: TrabajadorDb[]
   onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string, responsableId?: string) => void
   onBack: () => void
   onCancelar: () => void
 }) {
-  const [conFertirriego, setConFertirriego] = useState(initialConFertirriego)
+  const [conFertirriegoState, setConFertirriego] = useState(initialConFertirriego)
+  const conFertirriego = permitirFertirriego && conFertirriegoState
   const [producto, setProducto] = useState(initialProducto)
   const [dosis, setDosis] = useState(initialDosis)
   const [responsable, setResponsable] = useState(initialResponsable)
@@ -701,47 +825,51 @@ function StepDetalle({
     <View style={styles.stepContainer}>
       <StepIndicator current={2} onCancel={onCancelar} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={styles.stepTitle}>Fertiriego y responsable</Text>
+        <Text style={styles.stepTitle}>{permitirFertirriego ? 'Fertiriego y responsable' : 'Responsable'}</Text>
 
-        <Text style={styles.fieldLabel}>¿ES CON FERTIRIEGO?</Text>
-        <View style={styles.toggleRow}>
-          <TouchableOpacity
-            style={[styles.toggleBtn, !conFertirriego && styles.toggleBtnActive]}
-            onPress={() => setConFertirriego(false)}
-          >
-            <Text style={[styles.toggleBtnText, !conFertirriego && styles.toggleBtnTextActive]}>Solo agua</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleBtn, conFertirriego && styles.toggleBtnActive]}
-            onPress={() => setConFertirriego(true)}
-          >
-            <Text style={[styles.toggleBtnText, conFertirriego && styles.toggleBtnTextActive]}>Con fertiriego</Text>
-          </TouchableOpacity>
-        </View>
-
-        {conFertirriego && (
-          <View style={{ marginTop: 16 }}>
-            <Text style={styles.fieldLabel}>PRODUCTO</Text>
-            <TextInput
-              style={styles.input}
-              value={producto}
-              onChangeText={setProducto}
-              placeholder="Nombre del fertilizante..."
-              placeholderTextColor={colors.niebla}
-            />
-            <Text style={styles.fieldLabel}>DOSIS (L/HA)</Text>
-            <TextInput
-              style={styles.input}
-              value={dosis}
-              onChangeText={setDosis}
-              placeholder="0.0"
-              placeholderTextColor={colors.niebla}
-              keyboardType="decimal-pad"
-            />
+        {permitirFertirriego && (
+          <>
+          <Text style={styles.fieldLabel}>¿ES CON FERTIRIEGO?</Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[styles.toggleBtn, !conFertirriego && styles.toggleBtnActive]}
+              onPress={() => setConFertirriego(false)}
+            >
+              <Text style={[styles.toggleBtnText, !conFertirriego && styles.toggleBtnTextActive]}>Solo agua</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, conFertirriego && styles.toggleBtnActive]}
+              onPress={() => setConFertirriego(true)}
+            >
+              <Text style={[styles.toggleBtnText, conFertirriego && styles.toggleBtnTextActive]}>Con fertiriego</Text>
+            </TouchableOpacity>
           </View>
+
+          {conFertirriego && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.fieldLabel}>PRODUCTO</Text>
+              <TextInput
+                style={styles.input}
+                value={producto}
+                onChangeText={setProducto}
+                placeholder="Nombre del fertilizante..."
+                placeholderTextColor={colors.niebla}
+              />
+              <Text style={styles.fieldLabel}>DOSIS (L/HA)</Text>
+              <TextInput
+                style={styles.input}
+                value={dosis}
+                onChangeText={setDosis}
+                placeholder="0.0"
+                placeholderTextColor={colors.niebla}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          )}
+          </>
         )}
 
-        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RESPONSABLE</Text>
+        <Text style={[styles.fieldLabel, permitirFertirriego && { marginTop: 16 }]}>RESPONSABLE</Text>
         <TrabajadorPicker
           value={responsable}
           trabajadorId={responsableId}
@@ -766,6 +894,7 @@ function StepDetalle({
 // ─── Step 4: confirmar ────────────────────────────────────────────────────────
 
 interface RiegoDraft {
+  // Empty ('' / []) for manto: the whole parcel is irrigated, no valves.
   cabezal: string
   parcela: Parcela
   valvulas: string[]
@@ -779,6 +908,58 @@ interface RiegoDraft {
   dosis: string
   responsable: string
   responsable_id?: string
+}
+
+// Fields shared by RiegoDraft and IniciarDraft that decide goteo vs. manto.
+type DraftUbicacion = Pick<
+  RiegoDraft, 'tipo' | 'cabezal' | 'parcela' | 'valvulas' | 'conFertirriego' | 'producto' | 'dosis'
+>
+
+// Manto counts as ceil(ha) valves at 25% of the drip flow; goteo counts the
+// valves actually opened at full flow. Mirrors the backend calculation.
+function caudalDraft(d: DraftUbicacion): { nValvulas: number; factor: number } {
+  if (d.tipo === 'manto') {
+    return { nValvulas: valvulasManto(superficieManto(d.parcela) ?? 0), factor: FACTOR_MANTO_SUPERFICIE }
+  }
+  return { nValvulas: d.valvulas.length, factor: 1 }
+}
+
+// Location part of the POST payload. Manto sends no cabezal/valvula/
+// fertilizante_* at all: the manto contract is parcel + tipo + responsable.
+function ubicacionPayload(d: DraftUbicacion): Pick<
+  RiegoPayload, 'cabezal' | 'valvula' | 'tipo' | 'fertilizante_nombre' | 'fertilizante_dosis_lt_ha'
+> {
+  if (d.tipo === 'manto') return { tipo: 'manto' }
+  return {
+    cabezal: d.cabezal,
+    valvula: d.valvulas.join(','),
+    tipo: 'goteo',
+    fertilizante_nombre: d.conFertirriego && d.producto ? d.producto : undefined,
+    fertilizante_dosis_lt_ha: d.conFertirriego && d.dosis ? Number(d.dosis) : undefined,
+  }
+}
+
+function ubicacionRows(d: DraftUbicacion): { label: string; value: string }[] {
+  if (d.tipo === 'manto') {
+    return [
+      { label: 'Parcela', value: d.parcela.nombre },
+      { label: 'Tipo de riego', value: `Manto · ${plural(caudalDraft(d).nValvulas, 'válvula', 'válvulas')}` },
+    ]
+  }
+  return [
+    { label: 'Cabezal', value: `Cabezal ${d.cabezal}` },
+    { label: 'Parral', value: d.parcela.nombre },
+    { label: 'Válvulas', value: d.valvulas.map((v) => `V${v}`).join(', ') },
+    { label: 'Tipo de riego', value: 'Goteo' },
+  ]
+}
+
+function fertirriegoRows(d: DraftUbicacion): { label: string; value: string }[] {
+  if (d.tipo === 'manto') return []
+  return [{
+    label: 'Fertiriego',
+    value: d.conFertirriego && d.producto ? `${d.producto} (${d.dosis || '0'} L/ha)` : 'Sin fertiriego',
+  }]
 }
 
 function StepConfirmar({
@@ -795,24 +976,23 @@ function StepConfirmar({
 
   const inicioISO = `${draft.fechaInicio}T${draft.horaInicio}:00-03:00`
   const finISO = `${draft.fechaFin}T${draft.horaFin}:00-03:00`
-  const totales = calcRiegoTotales(inicioISO, finISO, draft.valvulas.length, draft.tipo)
+  const { nValvulas, factor } = caudalDraft(draft)
+  const totales = calcRiegoTotales(inicioISO, finISO, nValvulas, factor)
 
   async function handleSubmit() {
     if (submittingRef.current) return
     if (!totales) { Alert.alert('Error', 'El horario cargado no es válido.'); return }
     submittingRef.current = true
-    const payload = {
+    // The offline queue enqueues this exact payload, so manto must already be
+    // free of cabezal/valvula/fertilizante_* here.
+    const payload: RiegoPayload & { idempotency_key: string } = {
       fecha: draft.fechaInicio,
       parcela_id: draft.parcela.id,
-      cabezal: draft.cabezal,
-      valvula: draft.valvulas.join(','),
-      tipo: draft.tipo,
+      ...ubicacionPayload(draft),
       inicio: inicioISO,
       fin: finISO,
       responsable: draft.responsable,
       responsable_id: draft.responsable_id,
-      fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
-      fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
       idempotency_key: idempotencyKeyRef.current,
     }
     try {
@@ -839,18 +1019,12 @@ function StepConfirmar({
   }
 
   const rows: { label: string; value: string; highlight?: boolean }[] = [
-    { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
-    { label: 'Parral', value: draft.parcela.nombre },
-    { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
-    { label: 'Tipo de riego', value: draft.tipo === 'manto' ? `Manto (${FACTOR_MANTO * 100}% del caudal)` : 'Goteo' },
+    ...ubicacionRows(draft),
     { label: 'Inicio', value: formatDatetime(inicioISO) },
     { label: 'Fin', value: formatDatetime(finISO) },
     { label: 'Duración', value: totales ? `${totales.horas} h` : '—' },
     { label: 'Litros totales', value: totales ? `${totales.litros.toLocaleString('es-AR')} L` : '—', highlight: true },
-    {
-      label: 'Fertiriego',
-      value: draft.conFertirriego && draft.producto ? `${draft.producto} (${draft.dosis || '0'} L/ha)` : 'Sin fertiriego',
-    },
+    ...fertirriegoRows(draft),
     { label: 'Responsable', value: draft.responsable },
   ]
 
@@ -908,6 +1082,7 @@ function StepConfirmar({
 // ─── Confirmar "iniciar ahora" (sin fin todavía) ──────────────────────────────
 
 interface IniciarDraft {
+  // Empty ('' / []) for manto, same as RiegoDraft.
   cabezal: string
   parcela: Parcela
   valvulas: string[]
@@ -936,17 +1111,14 @@ function StepIniciarConfirmar({
     submittingRef.current = true
     try {
       setLoading(true)
-      await iniciarRiego({
+      const payload: RiegoIniciarPayload = {
         parcela_id: draft.parcela.id,
-        cabezal: draft.cabezal,
-        valvula: draft.valvulas.join(','),
-        tipo: draft.tipo,
+        ...ubicacionPayload(draft),
         responsable: draft.responsable,
         responsable_id: draft.responsable_id,
-        fertilizante_nombre: draft.conFertirriego && draft.producto ? draft.producto : undefined,
-        fertilizante_dosis_lt_ha: draft.conFertirriego && draft.dosis ? Number(draft.dosis) : undefined,
         idempotency_key: idempotencyKeyRef.current,
-      })
+      }
+      await iniciarRiego(payload)
       onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -958,14 +1130,8 @@ function StepIniciarConfirmar({
   }
 
   const rows: { label: string; value: string }[] = [
-    { label: 'Cabezal', value: `Cabezal ${draft.cabezal}` },
-    { label: 'Parral', value: draft.parcela.nombre },
-    { label: 'Válvulas', value: draft.valvulas.map((v) => `V${v}`).join(', ') },
-    { label: 'Tipo de riego', value: draft.tipo === 'manto' ? `Manto (${FACTOR_MANTO * 100}% del caudal)` : 'Goteo' },
-    {
-      label: 'Fertiriego',
-      value: draft.conFertirriego && draft.producto ? `${draft.producto} (${draft.dosis || '0'} L/ha)` : 'Sin fertiriego',
-    },
+    ...ubicacionRows(draft),
+    ...fertirriegoRows(draft),
     { label: 'Responsable', value: draft.responsable },
   ]
 
@@ -1035,6 +1201,15 @@ function formatTranscurrido(horas: number): string {
   return `${h}h ${m.toString().padStart(2, '0')}m`
 }
 
+function mantoLabel(nValvulas: number): string {
+  return `Manto · ${nValvulas} válv.`
+}
+
+// valvula is null for manto; defensive for any goteo row missing it too.
+function valvulasLabel(valvula: string | null): string {
+  return valvula ? `V${valvula.split(',').join('+')}` : '—'
+}
+
 function RecentRiegos({
   riegos, parcelas, refreshing, onRefresh, riegosEnCurso, onTerminar, terminandoId,
 }: {
@@ -1086,13 +1261,17 @@ function RecentRiegos({
       {tab === 'curso' && riegosEnCurso.length > 0 && (
         <>
           {riegosEnCurso.map((r) => {
-            const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.tipo) ?? { horas: 0, litros: 0 }
+            // factor_aplicado comes from the server (0.25 / 0.4 / 1), so the
+            // chronometer matches what the backend will store on "Terminar".
+            const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.factor_aplicado)
+              ?? { horas: 0, litros: 0 }
             return (
               <View key={r.id} style={styles.enCursoCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.riegoNombre}>
-                    Cabezal {r.cabezal} - {parcelaNombre(r.parcela_id)} - V{r.valvula.split(',').join('+')}
-                    {r.tipo === 'manto' ? ' · Manto' : ''}
+                    {r.tipo === 'manto'
+                      ? `${parcelaNombre(r.parcela_id)} · ${mantoLabel(r.n_valvulas)}`
+                      : `Cabezal ${r.cabezal ?? '—'} - ${parcelaNombre(r.parcela_id)} - ${valvulasLabel(r.valvula)}`}
                   </Text>
                   <Text style={styles.enCursoStats}>
                     {formatTranscurrido(totales.horas)}
@@ -1126,9 +1305,15 @@ function RecentRiegos({
                 <Text style={styles.riegoDate}>{r.fecha}</Text>
               </View>
               <View style={styles.riegoBadges}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Cab. {r.cabezal} · V{r.valvula.split(',').join('+')}</Text>
-                </View>
+                {r.tipo === 'manto' ? (
+                  <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={[styles.badgeText, { color: '#92400e' }]}>{mantoLabel(r.n_valvulas)}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Cab. {r.cabezal ?? '—'} · {valvulasLabel(r.valvula)}</Text>
+                  </View>
+                )}
                 <View style={[styles.badge, { backgroundColor: '#e0f2fe' }]}>
                   <Text style={[styles.badgeText, { color: colors.cielo }]}>
                     {r.duracion_horas.toFixed(1)} h
@@ -1139,11 +1324,6 @@ function RecentRiegos({
                     {r.litros_aplicados.toLocaleString('es-AR')} L
                   </Text>
                 </View>
-                {r.tipo === 'manto' && (
-                  <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
-                    <Text style={[styles.badgeText, { color: '#92400e' }]}>Manto</Text>
-                  </View>
-                )}
                 {r.fertilizante_nombre && (
                   <View style={[styles.badge, { backgroundColor: '#fef3c7' }]}>
                     <Text style={[styles.badgeText, { color: '#92400e' }]}>Fertiriego</Text>
@@ -1161,7 +1341,8 @@ function RecentRiegos({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-type Step = 'list' | 'ubicacion' | 'modo' | 'horario' | 'detalle' | 'confirmar' | 'iniciar_confirmar'
+type Step =
+  | 'list' | 'tipo' | 'ubicacion' | 'parcela_manto' | 'modo' | 'horario' | 'detalle' | 'confirmar' | 'iniciar_confirmar'
 type Modo = 'retroactivo' | 'iniciar'
 
 const emptyDraft: RiegoDraft = {
@@ -1306,7 +1487,21 @@ export default function RiegoScreen() {
   function startWizard() {
     setDraft({ ...emptyDraft, responsable: user?.full_name ?? '' })
     setModo('retroactivo')
-    setStep('ubicacion')
+    setStep('tipo')
+  }
+
+  // Location step for the current type (goteo: cabezal/parral/valves; manto: whole parcel).
+  const stepUbicacion: Step = draft.tipo === 'manto' ? 'parcela_manto' : 'ubicacion'
+
+  function elegirTipo(tipo: TipoRiego) {
+    // Switching type discards the previous location/fertirriego choices: a
+    // goteo parral + valves makes no sense for manto and vice versa.
+    setDraft((d) => (d.tipo === tipo ? d : {
+      ...d, tipo,
+      cabezal: '', parcela: emptyDraft.parcela, valvulas: [],
+      conFertirriego: false, producto: '', dosis: '',
+    }))
+    setStep(tipo === 'manto' ? 'parcela_manto' : 'ubicacion')
   }
 
   // Primero se cambia de pantalla y despues se vacia el borrador: si algun render
@@ -1329,6 +1524,10 @@ export default function RiegoScreen() {
     )
   }
 
+  if (step === 'tipo') {
+    return <StepTipo onElegir={elegirTipo} onCancelar={handleCancelar} />
+  }
+
   if (step === 'ubicacion') {
     return (
       <StepUbicacion
@@ -1337,11 +1536,29 @@ export default function RiegoScreen() {
         initialCabezal={draft.cabezal || null}
         initialParcelaId={draft.parcela?.id ?? null}
         initialValvulas={draft.valvulas}
-        initialTipo={draft.tipo}
-        onNext={(cabezal, parcela, valvulas, tipo) => {
-          setDraft((d) => ({ ...d, cabezal, parcela, valvulas, tipo }))
+        onNext={(cabezal, parcela, valvulas) => {
+          setDraft((d) => ({ ...d, cabezal, parcela, valvulas, tipo: 'goteo' }))
           setStep('modo')
         }}
+        onBack={() => setStep('tipo')}
+        onCancelar={handleCancelar}
+      />
+    )
+  }
+
+  if (step === 'parcela_manto') {
+    return (
+      <StepParcelaManto
+        parcelas={parcelas}
+        initialParcelaId={draft.parcela?.id ?? null}
+        onNext={(parcela) => {
+          setDraft((d) => ({
+            ...d, parcela, tipo: 'manto', cabezal: '', valvulas: [],
+            conFertirriego: false, producto: '', dosis: '',
+          }))
+          setStep('modo')
+        }}
+        onBack={() => setStep('tipo')}
         onCancelar={handleCancelar}
       />
     )
@@ -1352,6 +1569,7 @@ export default function RiegoScreen() {
       <StepModo
         onElegirRetroactivo={() => { setModo('retroactivo'); setStep('horario') }}
         onElegirIniciar={() => { setModo('iniciar'); setStep('detalle') }}
+        onBack={() => setStep(stepUbicacion)}
         onCancelar={handleCancelar}
       />
     )
@@ -1368,7 +1586,7 @@ export default function RiegoScreen() {
           setDraft((d) => ({ ...d, fechaInicio, horaInicio, fechaFin, horaFin }))
           setStep('detalle')
         }}
-        onBack={() => setStep('ubicacion')}
+        onBack={() => setStep('modo')}
         onCancelar={handleCancelar}
       />
     )
@@ -1381,6 +1599,7 @@ export default function RiegoScreen() {
         initialProducto={draft.producto}
         initialDosis={draft.dosis}
         initialResponsable={draft.responsable}
+        permitirFertirriego={draft.tipo !== 'manto'}
         trabajadoresDb={trabajadoresDb}
         onNext={(conFertirriego, producto, dosis, responsable, responsable_id) => {
           setDraft((d) => ({ ...d, conFertirriego, producto, dosis, responsable, responsable_id }))
