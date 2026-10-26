@@ -157,10 +157,13 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   const cabezalDerivado = cabezalesSeleccionados.size === 1 ? [...cabezalesSeleccionados][0] : null
 
   // Manto: active parral/potrero with a surface (the backend enforces the same).
+  // Editing a new-style manto always keeps its own parcela selectable: the
+  // backend accepts the edit even if that parcela lost its surface since.
   const parcelasManto = parcelas
     .filter((p) =>
-      (p.id === riego?.parcela_id || p.is_active) &&
-      (p.tipo === 'parral' || p.tipo === 'potrero') && Number(p.superficie_ha) > 0)
+      (isEdit && modoManto && p.id === riego.parcela_id) ||
+      ((p.id === riego?.parcela_id || p.is_active) &&
+        (p.tipo === 'parral' || p.tipo === 'potrero') && Number(p.superficie_ha) > 0))
     .sort((a, b) => a.nombre.localeCompare(b.nombre))
   const parcelaManto = modoManto ? parcelasManto.find((p) => p.id === parcelaIdW) : undefined
   const nValvulasPreview = modoManto
@@ -230,8 +233,13 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       fecha: data.fecha_inicio,
       // Historical manto: parcela/cabezal/valvula are untouched (backend keeps them).
       ...(historico ? {} : { parcela_id: data.parcela_id }),
-      // Manto (new style) carries no cabezal, valves or fertirriego.
-      ...(modoManto || historico ? {} : { cabezal: data.cabezal, valvula }),
+      // Manto (new style) carries no cabezal, valves or fertirriego. A legacy
+      // goteo whose stored valves are positional ("1,2") matches no catalog
+      // valve: omit both so the backend keeps the stored values instead of 422
+      // (only on the same parcela; a new parcela must pick real valves).
+      ...(modoManto || historico || (isEdit && valvula === '' && data.parcela_id === riego.parcela_id)
+        ? {}
+        : { cabezal: data.cabezal, valvula }),
       tipo,
       inicio,
       fin,
