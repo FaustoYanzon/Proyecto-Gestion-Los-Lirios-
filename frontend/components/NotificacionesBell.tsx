@@ -98,6 +98,8 @@ function derivarAlertas(
   // Cabezales con >7 días sin riego
   const ultimoPorCabezal: Record<string, Date> = {}
   for (const r of riegos) {
+    // Manto records have no cabezal; they don't count toward any cabezal.
+    if (r.cabezal == null) continue
     const fecha = new Date(r.fecha)
     if (!ultimoPorCabezal[r.cabezal] || fecha > ultimoPorCabezal[r.cabezal]) {
       ultimoPorCabezal[r.cabezal] = fecha

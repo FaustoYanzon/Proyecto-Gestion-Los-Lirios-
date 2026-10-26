@@ -33,15 +33,17 @@ export const LITROS_POR_HORA_VALVULA = 16_000
 // Referencia agronómica para el suelo de Media Agua: 6.000.000 L/ha/año.
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
-// Riego a manto: las válvulas marcan hasta qué parte del parral llega el
-// agua, y el caudal se estima en el 40% del de goteo (litros y mm). Mismo
-// factor que RegistroRiego.FACTOR_MANTO en el backend.
+// Riego a manto por superficie: se riega la parcela completa (parral o
+// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas al 25% del
+// caudal de goteo (litros y mm). Mismo criterio que el backend. Los manto
+// históricos (con válvulas) usan factor 0.4 y vienen en `factor_aplicado`.
 export type TipoRiego = 'goteo' | 'manto'
-export const FACTOR_MANTO = 0.4
+export const FACTOR_MANTO_SUPERFICIE = 0.25
 export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = { goteo: 'Goteo', manto: 'Manto' }
 
-export function factorCaudal(tipo: TipoRiego | null | undefined): number {
-  return tipo === 'manto' ? FACTOR_MANTO : 1
+// Rounding to 4 decimals avoids ceil() bumping 1.00000001 ha to 2 valves.
+export function valvulasManto(superficieHa: number): number {
+  return Math.max(1, Math.ceil(Math.round(superficieHa * 10_000) / 10_000))
 }
 
 // Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1"),
@@ -59,6 +61,12 @@ export interface ValvulaReal {
   lon: number
 }
 
+// Backend `detail` string when present (e.g. 409/422 manto rules), else fallback.
+export function riegoErrorDetail(e: unknown, fallback: string): string {
+  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  return typeof detail === 'string' && detail ? detail : fallback
+}
+
 export async function getValvulasReales(params?: { parcela_id?: string; cabezal?: number }): Promise<ValvulaReal[]> {
   const { data } = await api.get('/produccion/valvulas', { params })
   return data
@@ -68,7 +76,7 @@ export function calcMm(
   fechaInicio: string, horaInicio: string,
   fechaFin: string, horaFin: string,
   nValvulas: number = 1,
-  tipo: TipoRiego = 'goteo',
+  factor: number = 1,
 ): { horas: number; mm: number; litros: number } | null {
   if (!fechaInicio || !horaInicio || !fechaFin || !horaFin) return null
   const start = new Date(`${fechaInicio}T${horaInicio}:00`)
@@ -76,7 +84,7 @@ export function calcMm(
   const horas = (end.getTime() - start.getTime()) / 3600000
   if (horas <= 0) return null
   const n = nValvulas > 0 ? nValvulas : 1
-  const f = factorCaudal(tipo)
+  const f = factor
   return {
     horas: Math.round(horas * 100) / 100,
     // mm es la lámina aplicada por válvula (uniforme, no escala con la cantidad de válvulas)
@@ -90,11 +98,11 @@ export function calcMm(
 // todavía) — mismo cálculo que calcMm pero contra el reloj, se llama en cada
 // tick del cronómetro en pantalla, no contra el servidor.
 export function calcEnCurso(
-  inicioISO: string, nValvulas: number, tipo: TipoRiego = 'goteo',
+  inicioISO: string, nValvulas: number, factor: number,
 ): { horas: number; mm: number; litros: number } {
   const horas = Math.max(0, (Date.now() - new Date(inicioISO).getTime()) / 3600000)
   const n = nValvulas > 0 ? nValvulas : 1
-  const f = factorCaudal(tipo)
+  const f = factor
   return {
     horas: Math.round(horas * 100) / 100,
     mm: Math.round(horas * MM_POR_HORA * f * 100) / 100,
@@ -107,8 +115,8 @@ export function calcEnCurso(
 export interface RiegoCreate {
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  cabezal?: string
+  valvula?: string
   tipo?: TipoRiego
   inicio: string
   fin: string
@@ -139,14 +147,15 @@ export interface RiegoResponse {
   id: string
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  cabezal: string | null
+  valvula: string | null
   tipo: TipoRiego
   inicio: string
   fin: string
   duracion_horas: number
   mm_aplicados: number | null
   n_valvulas: number
+  factor_aplicado: number
   litros_aplicados: number
   fertilizante_nombre: string | null
   fertilizante_dosis_lt_ha: number | null
@@ -169,8 +178,8 @@ export interface RiegoFilter {
 // Riego "en curso": arrancó (inicio) pero todavía no se cerró (sin fin).
 export interface RiegoIniciarInput {
   parcela_id: string
-  cabezal: string
-  valvula: string
+  cabezal?: string
+  valvula?: string
   tipo?: TipoRiego
   responsable: string
   responsable_id?: string
@@ -183,11 +192,12 @@ export interface RiegoEnCurso {
   id: string
   fecha: string
   parcela_id: string
-  cabezal: string
-  valvula: string
+  cabezal: string | null
+  valvula: string | null
   tipo: TipoRiego
   inicio: string
   n_valvulas: number
+  factor_aplicado: number
   responsable: string
   responsable_id: string | null
   fertilizante_nombre: string | null
@@ -195,19 +205,24 @@ export interface RiegoEnCurso {
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 
+// Decimal fields can arrive as strings in JSON: coerce once here.
+function withFactor<T extends { factor_aplicado: number }>(r: T): T {
+  return { ...r, factor_aplicado: Number(r.factor_aplicado) }
+}
+
 export async function getRiegos(params: RiegoFilter): Promise<RiegoResponse[]> {
   const { data } = await api.get('/produccion/riego/', { params })
-  return data
+  return (data as RiegoResponse[]).map(withFactor)
 }
 
 export async function createRiego(data: RiegoCreate): Promise<RiegoResponse> {
   const { data: res } = await api.post('/produccion/riego/', data)
-  return res
+  return withFactor(res)
 }
 
 export async function updateRiego(id: string, data: RiegoUpdate): Promise<RiegoResponse> {
   const { data: res } = await api.put(`/produccion/riego/${id}`, data)
-  return res
+  return withFactor(res)
 }
 
 export async function deleteRiego(id: string): Promise<void> {
@@ -216,15 +231,15 @@ export async function deleteRiego(id: string): Promise<void> {
 
 export async function getRiegosEnCurso(): Promise<RiegoEnCurso[]> {
   const { data } = await api.get('/produccion/riego/en-curso')
-  return data
+  return (data as RiegoEnCurso[]).map(withFactor)
 }
 
 export async function iniciarRiego(data: RiegoIniciarInput): Promise<RiegoEnCurso> {
   const { data: res } = await api.post('/produccion/riego/iniciar', data)
-  return res
+  return withFactor(res)
 }
 
 export async function terminarRiego(id: string, fin?: string): Promise<RiegoResponse> {
   const { data: res } = await api.post(`/produccion/riego/${id}/terminar`, fin ? { fin } : {})
-  return res
+  return withFactor(res)
 }

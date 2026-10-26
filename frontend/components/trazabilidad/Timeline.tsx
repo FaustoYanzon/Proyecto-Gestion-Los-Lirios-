@@ -32,7 +32,9 @@ function construirEventos(h: HistorialParcelaResponse): EventoItem[] {
       id: `riego-${r.id}`,
       tipo: 'riego',
       fecha: r.fecha,
-      titulo: `Riego${r.tipo === 'manto' ? ' a manto' : ''} — cabezal ${r.cabezal}, válvula ${r.valvula}`,
+      titulo: r.cabezal == null
+        ? `Riego — Manto · ${r.n_valvulas} válv.`
+        : `Riego${r.tipo === 'manto' ? ' a manto' : ''} — cabezal ${r.cabezal}, válvula ${r.valvula}`,
       detalle: `${r.mm_aplicados ?? 0} mm · ${Math.round(r.litros_aplicados).toLocaleString('es-AR')} L · ${r.responsable}`,
     })
   }

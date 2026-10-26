@@ -6,16 +6,17 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getValvulasReales, iniciarRiego, type TipoRiego } from '@/lib/api/riego'
+import { getValvulasReales, iniciarRiego, riegoErrorDetail, type TipoRiego } from '@/lib/api/riego'
 import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import TrabajadorSelect from './TrabajadorSelect'
-import TipoRiegoSelector from './TipoRiegoSelector'
+import TipoRiegoSelector, { MantoResumen } from './TipoRiegoSelector'
 
 const schema = z.object({
   parcela_id: z.string().min(1, 'Requerido'),
-  cabezal: z.string().min(1, 'Requerido'),
+  // Required only for goteo (checked in onSubmit); manto has no cabezal.
+  cabezal: z.string().optional(),
   responsable: z.string().min(1, 'Requerido'),
   responsable_id: z.string().min(1, 'Elegí un trabajador de la lista'),
   fertilizante_nombre: z.string().optional(),
@@ -86,11 +87,21 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
     setValue('cabezal', cabezalDerivado != null ? String(cabezalDerivado) : '')
   }, [cabezalDerivado, setValue])
 
-  // El tipo arranca con el de la parcela, pero se puede cambiar por riego.
-  function onParcelaChange(id: string) {
-    const p = parcelas.find((x) => x.id === id)
-    setTipo(p?.tipo_riego === 'manto' ? 'manto' : 'goteo')
+  // The parcel lists differ per type, so switching resets the selection.
+  function handleTipoChange(next: TipoRiego) {
+    if (next === tipo) return
+    setTipo(next)
+    setValue('parcela_id', '')
+    setSelectedValvulas(new Set())
+    setValvulasError(null)
+    setSubmitError(null)
   }
+
+  // Manto: active parral/potrero with a surface (the backend enforces the same).
+  const parcelasManto = parcelas
+    .filter((p) => p.is_active && (p.tipo === 'parral' || p.tipo === 'potrero') && Number(p.superficie_ha) > 0)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+  const parcelaManto = tipo === 'manto' ? parcelasManto.find((p) => p.id === parcelaIdW) : undefined
 
   // Solo parcelas con al menos una válvula cargada en el catálogo real.
   const parcelaIdsConValvulas = useMemo(() => new Set(valvulasReales.map((v) => v.parcela_id)), [valvulasReales])
@@ -108,18 +119,32 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
   }
 
   async function onSubmit(data: FormData) {
-    if (selectedValvulas.size === 0) {
-      setValvulasError('Seleccioná al menos una válvula')
-      return
-    }
-    if (cabezalMixto) {
-      setValvulasError('Estas válvulas pertenecen a cabezales distintos — cargalas en riegos separados')
-      return
+    if (tipo === 'goteo') {
+      if (selectedValvulas.size === 0) {
+        setValvulasError('Seleccioná al menos una válvula')
+        return
+      }
+      if (cabezalMixto) {
+        setValvulasError('Estas válvulas pertenecen a cabezales distintos — cargalas en riegos separados')
+        return
+      }
     }
     if (submittingRef.current) return
     submittingRef.current = true
     try {
       setSubmitError(null)
+      if (tipo === 'manto') {
+        await iniciarRiego({
+          parcela_id: data.parcela_id,
+          tipo: 'manto',
+          responsable: data.responsable,
+          responsable_id: data.responsable_id,
+          idempotency_key: idempotencyKeyRef.current,
+        })
+        queryClient.invalidateQueries({ queryKey: ['riegos-en-curso'] })
+        onSuccess()
+        return
+      }
       // Nombres reales en orden oeste->este (mismo orden que valvulasDisponibles).
       const valvulaOrdenada = valvulasDisponibles
         .filter((v) => selectedValvulas.has(v.nombre))
@@ -129,7 +154,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         parcela_id: data.parcela_id,
         cabezal: data.cabezal,
         valvula: valvulaOrdenada,
-        tipo,
+        tipo: 'goteo',
         responsable: data.responsable,
         responsable_id: data.responsable_id,
         fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
@@ -138,8 +163,8 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
       })
       queryClient.invalidateQueries({ queryKey: ['riegos-en-curso'] })
       onSuccess()
-    } catch {
-      setSubmitError('Error al iniciar el riego. Intente nuevamente.')
+    } catch (e: unknown) {
+      setSubmitError(riegoErrorDetail(e, 'Error al iniciar el riego. Intente nuevamente.'))
     } finally {
       submittingRef.current = false
     }
@@ -147,6 +172,8 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <TipoRiegoSelector value={tipo} onChange={handleTipoChange} />
+
       <p className="text-sm text-gray-500">
         Arranca el riego ahora mismo, sin hora de fin — lo vas a poder cerrar después desde &quot;Riegos en curso&quot;.
       </p>
@@ -154,11 +181,11 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
       <div>
         <label className={label}>Parcela</label>
         <select
-          {...register('parcela_id', { onChange: (e) => onParcelaChange(e.target.value) })}
+          {...register('parcela_id')}
           className={field}
         >
           <option value="">Seleccionar parcela...</option>
-          {parralesConRiego.map((p) => (
+          {(tipo === 'manto' ? parcelasManto : parralesConRiego).map((p) => (
             <option key={p.id} value={p.id}>
               {formatParcelaLabel(p.nombre)}{p.superficie_ha ? ` (${p.superficie_ha} ha)` : ''}
             </option>
@@ -167,10 +194,10 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         {errors.parcela_id && <p className={err}>{errors.parcela_id.message}</p>}
       </div>
 
-      <TipoRiegoSelector value={tipo} onChange={setTipo} />
+      {parcelaManto && <MantoResumen superficieHa={Number(parcelaManto.superficie_ha)} />}
 
       <input type="hidden" {...register('cabezal')} />
-      {cabezalDerivado != null && !cabezalMixto && (
+      {tipo === 'goteo' && cabezalDerivado != null && !cabezalMixto && (
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span className="font-medium text-gray-700">Cabezal:</span>
           <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
@@ -178,12 +205,13 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
           </span>
         </div>
       )}
-      {cabezalMixto && (
+      {tipo === 'goteo' && cabezalMixto && (
         <p className="text-xs text-red-600">
           Estas válvulas pertenecen a cabezales distintos ({[...cabezalesSeleccionados].sort().join(', ')}) — cargalas en riegos separados.
         </p>
       )}
 
+      {tipo === 'goteo' && (
       <div>
         <label className={label}>Válvulas abiertas</label>
         <div className="flex gap-3 flex-wrap">
@@ -212,6 +240,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         </div>
         {valvulasError && <p className={err}>{valvulasError}</p>}
       </div>
+      )}
 
       <div>
         <label className={label}>Responsable</label>
@@ -227,6 +256,7 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
         />
       </div>
 
+      {tipo === 'goteo' && (
       <div>
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
@@ -238,8 +268,9 @@ export default function IniciarRiegoForm({ parcelas, onSuccess, onCancel }: Prop
           <span className="text-sm font-medium text-gray-700">Con fertiriego</span>
         </label>
       </div>
+      )}
 
-      {conFertilizante && (
+      {tipo === 'goteo' && conFertilizante && (
         <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-blue-100">
           <div>
             <label className={label}>Fertilizante</label>

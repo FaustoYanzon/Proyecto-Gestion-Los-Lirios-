@@ -15,7 +15,9 @@ import {
   formatHoraLocal,
   hoyArgentina,
   LITROS_POR_HORA_VALVULA,
-  factorCaudal,
+  FACTOR_MANTO_SUPERFICIE,
+  valvulasManto,
+  riegoErrorDetail,
   type RiegoResponse,
   type TipoRiego,
 } from '@/lib/api/riego'
@@ -23,7 +25,7 @@ import { formatParcelaLabel } from '@/lib/api/produccion'
 import type { ParcelaItem } from '@/lib/api/produccion'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import TrabajadorSelect from './TrabajadorSelect'
-import TipoRiegoSelector from './TipoRiegoSelector'
+import TipoRiegoSelector, { MantoResumen } from './TipoRiegoSelector'
 
 const schema = z.object({
   fecha_inicio: z.string().min(1, 'Requerido'),
@@ -31,7 +33,8 @@ const schema = z.object({
   fecha_fin: z.string().min(1, 'Requerido'),
   hora_fin: z.string().min(1, 'Requerido'),
   parcela_id: z.string().min(1, 'Requerido'),
-  cabezal: z.string().min(1, 'Requerido'),
+  // Required only for goteo / historical manto (checked in onSubmit).
+  cabezal: z.string().optional(),
   responsable: z.string().min(1, 'Requerido'),
   responsable_id: z.string().min(1, 'Elegí un trabajador de la lista'),
   fertilizante_nombre: z.string().optional(),
@@ -80,11 +83,15 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   // Válvulas — managed separately as Set since checkboxes need custom handling
   const [selectedValvulas, setSelectedValvulas] = useState<Set<string>>(
     isEdit
-      ? new Set(riego.valvula.split(',').map((v) => v.trim()).filter(Boolean))
+      ? new Set((riego.valvula ?? '').split(',').map((v) => v.trim()).filter(Boolean))
       : new Set()
   )
   const [valvulasError, setValvulasError] = useState<string | null>(null)
   const [tipo, setTipo] = useState<TipoRiego>(riego?.tipo ?? 'goteo')
+  // Historical manto (valves + cabezal, factor 0.4) keeps today's form and is
+  // never re-converted; new-style manto is whole-parcel with no valves.
+  const historico = isEdit && riego.tipo === 'manto' && riego.cabezal != null
+  const modoManto = tipo === 'manto' && !historico
 
   const {
     register,
@@ -101,7 +108,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           fecha_fin: extractDate(riego.fin),
           hora_fin: extractTime(riego.fin),
           parcela_id: riego.parcela_id,
-          cabezal: riego.cabezal,
+          cabezal: riego.cabezal ?? '',
           responsable: riego.responsable,
           responsable_id: riego.responsable_id ?? '',
           fertilizante_nombre: riego.fertilizante_nombre ?? '',
@@ -148,9 +155,21 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   )
   const cabezalMixto = cabezalesSeleccionados.size > 1
   const cabezalDerivado = cabezalesSeleccionados.size === 1 ? [...cabezalesSeleccionados][0] : null
+
+  // Manto: active parral/potrero with a surface (the backend enforces the same).
+  const parcelasManto = parcelas
+    .filter((p) =>
+      (p.id === riego?.parcela_id || p.is_active) &&
+      (p.tipo === 'parral' || p.tipo === 'potrero') && Number(p.superficie_ha) > 0)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+  const parcelaManto = modoManto ? parcelasManto.find((p) => p.id === parcelaIdW) : undefined
+  const nValvulasPreview = modoManto
+    ? (parcelaManto ? valvulasManto(Number(parcelaManto.superficie_ha)) : 1)
+    : selectedValvulas.size || 1
+  const factor = modoManto ? FACTOR_MANTO_SUPERFICIE : historico ? riego.factor_aplicado : 1
   const preview = calcMm(
     fechaInicioW, horaInicioW, fechaFinW, horaFinW,
-    selectedValvulas.size || 1, tipo,
+    nValvulasPreview, factor,
   )
 
   // Auto-populate cabezal from the selected válvulas (edit mode keeps the
@@ -159,10 +178,14 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
     if (cabezalDerivado != null) setValue('cabezal', String(cabezalDerivado))
   }, [cabezalDerivado, setValue])
 
-  // El tipo arranca con el de la parcela, pero se puede cambiar por riego.
-  function onParcelaChange(id: string) {
-    const p = parcelas.find((x) => x.id === id)
-    setTipo(p?.tipo_riego === 'manto' ? 'manto' : 'goteo')
+  // The parcel lists differ per type, so switching resets the selection.
+  function handleTipoChange(next: TipoRiego) {
+    if (next === tipo) return
+    setTipo(next)
+    setValue('parcela_id', '')
+    setSelectedValvulas(new Set())
+    setValvulasError(null)
+    setSubmitError(null)
   }
 
   // Solo parcelas con al menos una válvula cargada en el catálogo real.
@@ -181,20 +204,22 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   }
 
   async function onSubmit(data: FormData) {
-    if (selectedValvulas.size === 0) {
-      setValvulasError('Seleccioná al menos una válvula')
-      return
-    }
-    if (cabezalMixto) {
-      setValvulasError('Estas válvulas pertenecen a cabezales distintos — cargalas en riegos separados')
-      return
+    if (!modoManto) {
+      if (selectedValvulas.size === 0) {
+        setValvulasError('Seleccioná al menos una válvula')
+        return
+      }
+      if (cabezalMixto) {
+        setValvulasError('Estas válvulas pertenecen a cabezales distintos — cargalas en riegos separados')
+        return
+      }
     }
     if (submittingRef.current) return
     submittingRef.current = true
 
     const inicio = `${data.fecha_inicio}T${data.hora_inicio}:00-03:00`
     const fin = `${data.fecha_fin}T${data.hora_fin}:00-03:00`
-    const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin, 1, tipo)?.mm
+    const mm = calcMm(data.fecha_inicio, data.hora_inicio, data.fecha_fin, data.hora_fin, 1, factor)?.mm
     // Nombres reales en orden oeste->este (mismo orden que valvulasDisponibles).
     const valvula = valvulasDisponibles
       .filter((v) => selectedValvulas.has(v.nombre))
@@ -204,16 +229,18 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
     const payload = {
       fecha: data.fecha_inicio,
       parcela_id: data.parcela_id,
-      cabezal: data.cabezal,
-      valvula,
+      // Manto (new style) carries no cabezal, valves or fertirriego.
+      ...(modoManto ? {} : { cabezal: data.cabezal, valvula }),
       tipo,
       inicio,
       fin,
       mm_aplicados: mm,
       responsable: data.responsable,
       responsable_id: data.responsable_id,
-      fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
-      fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
+      ...(modoManto ? {} : {
+        fertilizante_nombre: conFertilizante && data.fertilizante_nombre ? data.fertilizante_nombre : undefined,
+        fertilizante_dosis_lt_ha: conFertilizante ? data.fertilizante_dosis_lt_ha : undefined,
+      }),
     }
 
     async function attempt() {
@@ -249,7 +276,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           // Sigue sin funcionar (o ahora sí es un error real) — cae al mensaje de abajo.
         }
       }
-      setSubmitError('Error al guardar. Intente nuevamente.')
+      setSubmitError(riegoErrorDetail(e, 'Error al guardar. Intente nuevamente.'))
     } finally {
       submittingRef.current = false
     }
@@ -257,6 +284,9 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+
+      {/* Goteo o manto — the type of an existing record is not editable */}
+      <TipoRiegoSelector value={tipo} onChange={handleTipoChange} disabled={isEdit} />
 
       {/* Inicio */}
       <div>
@@ -305,7 +335,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
               {preview.litros.toLocaleString('es-AR')} L totales
             </span>
             <span className="text-blue-400 text-xs ml-2">
-              ({selectedValvulas.size || 1} válvula{(selectedValvulas.size || 1) > 1 ? 's' : ''} × {(LITROS_POR_HORA_VALVULA * factorCaudal(tipo)).toLocaleString('es-AR')} L/ha/h)
+              ({nValvulasPreview} válvula{nValvulasPreview > 1 ? 's' : ''} × {(LITROS_POR_HORA_VALVULA * factor).toLocaleString('es-AR')} L/ha/h)
             </span>
           </div>
         </div>
@@ -317,11 +347,11 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       <div>
         <label className={label}>Parcela</label>
         <select
-          {...register('parcela_id', { onChange: (e) => onParcelaChange(e.target.value) })}
+          {...register('parcela_id')}
           className={field}
         >
           <option value="">Seleccionar parcela...</option>
-          {parralesConRiego.map((p) => (
+          {(modoManto ? parcelasManto : parralesConRiego).map((p) => (
             <option key={p.id} value={p.id}>
               {formatParcelaLabel(p.nombre)}{p.superficie_ha ? ` (${p.superficie_ha} ha)` : ''}
             </option>
@@ -330,11 +360,11 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         {errors.parcela_id && <p className={err}>{errors.parcela_id.message}</p>}
       </div>
 
-      <TipoRiegoSelector value={tipo} onChange={setTipo} />
+      {parcelaManto && <MantoResumen superficieHa={Number(parcelaManto.superficie_ha)} />}
 
       {/* Cabezal — read-only, derivado de las válvulas elegidas */}
       <input type="hidden" {...register('cabezal')} />
-      {cabezalDerivado != null && !cabezalMixto && (
+      {!modoManto && cabezalDerivado != null && !cabezalMixto && (
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span className="font-medium text-gray-700">Cabezal:</span>
           <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
@@ -342,13 +372,14 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           </span>
         </div>
       )}
-      {cabezalMixto && (
+      {!modoManto && cabezalMixto && (
         <p className="text-xs text-red-600">
           Estas válvulas pertenecen a cabezales distintos ({[...cabezalesSeleccionados].sort().join(', ')}) — cargalas en riegos separados.
         </p>
       )}
 
       {/* Válvulas — checkboxes múltiples */}
+      {!modoManto && (
       <div>
         <label className={label}>Válvulas abiertas</label>
         <div className="flex gap-3 flex-wrap">
@@ -377,6 +408,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         </div>
         {valvulasError && <p className={err}>{valvulasError}</p>}
       </div>
+      )}
 
       {/* Responsable */}
       <div>
@@ -394,6 +426,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       </div>
 
       {/* Fertilizante toggle */}
+      {!modoManto && (
       <div>
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
@@ -405,8 +438,9 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
           <span className="text-sm font-medium text-gray-700">Con fertiriego</span>
         </label>
       </div>
+      )}
 
-      {conFertilizante && (
+      {!modoManto && conFertilizante && (
         <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-blue-100">
           <div>
             <label className={label}>Fertilizante</label>

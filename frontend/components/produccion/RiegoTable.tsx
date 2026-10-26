@@ -83,12 +83,16 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
                   <td className="px-3 py-3 whitespace-nowrap text-gray-700">{formatDate(r.fecha)}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-900 font-medium">{parcelaNombre(r.parcela_id)}</td>
                   <td className="px-3 py-3 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                      C{r.cabezal} · V{r.valvula.split(',').join('+')}
-                    </span>
+                    {r.cabezal == null ? (
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                        C{r.cabezal} · V{(r.valvula ?? '').split(',').join('+')}
+                      </span>
+                    )}
                     {r.tipo === 'manto' && (
                       <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                        Manto
+                        {r.cabezal == null ? `Manto · ${r.n_valvulas} válv.` : 'Manto'}
                       </span>
                     )}
                   </td>

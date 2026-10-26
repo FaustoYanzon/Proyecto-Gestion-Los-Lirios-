@@ -22,8 +22,8 @@ function exportCSV(data: RiegoResponse[], parcelaNombre: (id: string) => string)
   const rows = data.map((r) => [
     r.fecha,
     parcelaNombre(r.parcela_id),
-    r.cabezal,
-    r.valvula,
+    r.cabezal ?? '',
+    r.valvula ?? '',
     r.inicio,
     r.fin,
     r.duracion_horas,

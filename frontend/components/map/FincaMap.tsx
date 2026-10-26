@@ -197,7 +197,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
   // matchear ningún cuadrante, así que simplemente no se resaltan a ese
   // nivel (el resaltado por parral de arriba sigue cubriéndolos igual).
   const valvulasEnRiego = useMemo(
-    () => (esTemporadaActual ? new Set(riegosEnCurso.flatMap((r) => r.valvula.split(',').map((v) => v.trim()))) : new Set<string>()),
+    () => (esTemporadaActual ? new Set(riegosEnCurso.flatMap((r) => (r.valvula ?? '').split(',').map((v) => v.trim()).filter(Boolean))) : new Set<string>()),
     [riegosEnCurso, esTemporadaActual],
   )
 
