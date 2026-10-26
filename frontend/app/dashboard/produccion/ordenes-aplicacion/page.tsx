@@ -727,6 +727,8 @@ function OrdenesAplicacion() {
     vistaParam === 'aplicadas' ? 'aplicadas' : vistaParam === 'arevisar' && puedeRevisar ? 'arevisar' : 'pendientes',
   )
   const [repaso, setRepaso] = useState<ValvulaARevisar | null>(null)
+  // Off by default and not persisted: completed orders only matter when undoing a valve.
+  const [mostrarCompletadas, setMostrarCompletadas] = useState(false)
   const [modal, setModal] = useState<'desde-plan' | 'extra' | null>(null)
   const [ordenEditar, setOrdenEditar] = useState<OrdenAplicacion | null>(null)
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
@@ -771,6 +773,7 @@ function OrdenesAplicacion() {
       // Stock and fito records changed too.
       queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
       queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       setValvulaDeshacer(null)
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -814,6 +817,19 @@ function OrdenesAplicacion() {
       .filter((o) => o.estado !== 'completada')
       .sort((a, b) => a.fecha_planificada.localeCompare(b.fecha_planificada)),
     [ordenes],
+  )
+
+  // Completed orders are listed after the open ones so the pending work stays on top.
+  const ordenesVisibles = useMemo(
+    () => (mostrarCompletadas
+      ? [
+          ...ordenesPendientes,
+          ...ordenes
+            .filter((o) => o.estado === 'completada')
+            .sort((a, b) => b.fecha_planificada.localeCompare(a.fecha_planificada)),
+        ]
+      : ordenesPendientes),
+    [ordenes, ordenesPendientes, mostrarCompletadas],
   )
 
   const TABS: { value: 'pendientes' | 'aplicadas' | 'arevisar'; label: string }[] = [
@@ -899,16 +915,27 @@ function OrdenesAplicacion() {
         <AplicacionesRealizadas />
       ) : (
       <div className="space-y-2">
+        {puedeRevisar && (
+          <label className="flex items-center gap-2 text-sm text-gray-600 w-fit cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mostrarCompletadas}
+              onChange={(e) => setMostrarCompletadas(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Mostrar completadas
+          </label>
+        )}
         {isLoading ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
             Cargando…
           </div>
-        ) : ordenesPendientes.length === 0 ? (
+        ) : ordenesVisibles.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
             Sin órdenes pendientes para esta temporada.
           </div>
         ) : (
-          ordenesPendientes.map((o) => (
+          ordenesVisibles.map((o) => (
             <OrdenCard
               key={o.id}
               orden={o}
