@@ -154,7 +154,10 @@ def generar_pdf_carta(
             "fitos_incumplidos": fitos_incumplidos,
         },
         "riegos": [{
-            "fecha": _fmt_fecha(r.fecha), "cabezal": r.cabezal, "valvula": r.valvula,
+            "fecha": _fmt_fecha(r.fecha),
+            # New-style manto records have no cabezal/valvula; show the surface-based count instead of "None"
+            "cabezal": r.cabezal or "—",
+            "valvula": r.valvula or f"Manto · {r.n_valvulas} válv.",
             "mm_aplicados": r.mm_aplicados, "litros_aplicados": round(r.litros_aplicados),
             "responsable": None if publico else r.responsable,
         } for r in riegos],

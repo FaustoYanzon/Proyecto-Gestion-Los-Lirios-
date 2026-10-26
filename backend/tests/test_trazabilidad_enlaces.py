@@ -277,3 +277,39 @@ async def test_carta_interna_ignora_enlace_de_otro_rango(client, create_user, cr
     assert carta.status_code == 200
     texto = "".join(p.extract_text() for p in PdfReader(BytesIO(carta.content)).pages)
     assert "trazabilidad/publica" not in texto.lower()
+
+
+# ── Riego a manto (sin cabezal/valvula) en la carta ─────────────────────────
+
+async def test_carta_muestra_manto_nuevo_y_goteo(client, create_user, create_parcela):
+    parcela = await create_parcela(nombre="Parral Manto", superficie_ha=2.3)
+    headers = await _login(client, create_user, email="admin@test.com", role=UserRole.super_admin)
+    base = {
+        "parcela_id": parcela.id,
+        "inicio": "2026-06-15T08:00:00",
+        "fin": "2026-06-15T11:00:00",
+        "responsable": REGADOR_SECRETO,
+    }
+    manto = await client.post(
+        "/produccion/riego/",
+        json={**base, "fecha": "2026-06-15", "tipo": "manto"},
+        headers=headers,
+    )
+    assert manto.status_code == 201, manto.text
+    assert manto.json()["n_valvulas"] == 3
+    goteo = await client.post(
+        "/produccion/riego/",
+        json={**base, "fecha": "2026-06-16", "cabezal": "C7", "valvula": "V8,V9"},
+        headers=headers,
+    )
+    assert goteo.status_code == 201, goteo.text
+
+    resp = await client.get(
+        f"/trazabilidad/parcela/{parcela.id}/carta-pdf",
+        params={"desde": DESDE, "hasta": HASTA}, headers=headers,
+    )
+    assert resp.status_code == 200
+    texto = "".join(p.extract_text() for p in PdfReader(BytesIO(resp.content)).pages)
+    assert "Manto · 3 válv." in texto
+    assert "None" not in texto
+    assert "C7" in texto and "V8,V9" in texto
