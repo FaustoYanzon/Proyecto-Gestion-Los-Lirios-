@@ -5,7 +5,7 @@ tags: [sistema, bitacora, produccion, riego, manto, trazabilidad, fitosanitarios
 
 # Bitácora 2026-10-26: riego a manto por superficie
 
-El registro de riego ahora empieza preguntando goteo o manto. El manto se elige por parral o potrero completo y se calcula por superficie. Spec: `docs/superpowers/specs/2026-10-26-riego-manto-design.md`. Rama `feat/riego-manto` (sin push al cierre de esta nota).
+El registro de riego ahora empieza preguntando goteo o manto. El manto se elige por parral o potrero completo y se calcula por superficie. Spec: `docs/superpowers/specs/2026-10-26-riego-manto-design.md`. Rama `feat/riego-manto`, pendiente de merge y deploy a la fecha de esta nota.
 
 ## Decisiones
 
@@ -26,24 +26,34 @@ El registro de riego ahora empieza preguntando goteo o manto. El manto se elige 
 - **Web:** `frontend/lib/api/riego.ts`, componentes `produccion/` (`RiegoForm`, `IniciarRiegoForm`, `TipoRiegoSelector`, `RiegoTable`, `RiegosEnCurso`), `Timeline.tsx`, `FincaMap.tsx`, `NotificacionesBell.tsx`, página de riego. El manto histórico solo permite editar horario y responsable.
 - **Mobile:** `mobile/app/(tabs)/riego.tsx` (paso 0 goteo/manto), `mapa.tsx`, `lib/api.ts`, `lib/types.ts`. Sin cambios en `app.json`/`eas.json`/`package.json`: el fingerprint no cambia por esto.
 
+## Revisión final de la rama: cambios
+
+- **Nueva migración `c3f1a8d27e54`** (sobre `b92967a1486b`): recrea la vista `vw_kpi_produccion_parcela` para que los KPIs del dashboard usen la misma regla que el registro: manto histórico 0.4 × cantidad de válvulas del CSV; manto nuevo 0.25 × `n_valvulas_manto`; goteo 1 × cantidad del CSV. Prod debe correr `alembic upgrade head` pasando por **ambas** migraciones en el deploy del backend. El downgrade restaura la vista anterior. Tras el deploy hay que regenerar `Modelo de Datos.md`.
+- **Compatibilidad con clientes viejos:** la API serializa `valvula` NULL como `""` en `RegistroRiegoResponse` y `RegistroRiegoEnCursoResponse` (la BD conserva NULL), porque el código web/mobile previo a la rama hace `valvula.split(',')` sin guarda y el backend se despliega primero. `cabezal` sigue null en las respuestas: la web nueva detecta manto nuevo por `cabezal == null` y el mobile nuevo por `tipo`. Si un cliente viejo crea un manto con cabezal/válvula, se ignoran y se aplica el cálculo nuevo; el backend también ignora un `mm_aplicados` enviado por el cliente en un manto nuevo.
+- **Fixes web:** `RiegoForm` al editar un goteo con válvulas posicionales ya no deja `valvula` en blanco (omite `cabezal`/`valvula` del PUT cuando ninguna válvula elegida coincide con el catálogo y la parcela no cambió). La parcela propia de un manto nuevo sigue seleccionable en edición.
+
 ## Aparte: pedidos "completadas vuelven a pendientes"
 
 El reporte de órdenes completadas que volvían a pendientes se explicó: los registros fitosanitarios se habían borrado desde "Aplicaciones realizadas" el 2026-10-25 ~12:28 (hora AR), y borrar un registro que vino de una orden baja la parcela y la orden a pendiente por diseño. El commit `6f14493` (misma rama, sesión anterior) agrega un log de auditoría y confirmación escribiendo `ELIMINAR` al borrar ese tipo de registro.
 
 ## Pendientes y riesgos antes de desplegar
 
-- **Chequeo previo en prod:** filas de goteo en `registros_riego` con `cabezal=''` o `valvula=''` darían 422 en cualquier `PUT` (goteo exige ambos). Contarlas antes del push.
-- **Sin índice único en BD** para "un manto en curso por parcela": queda una ventana de carrera entre dos requests simultáneos.
-- **Sin prueba con click real** en web ni en dispositivo. Hay que probar en local (uvicorn + `npm run dev`: goteo, manto retroactivo, "iniciar ahora" y terminar, segundo manto en la misma parcela = 409, editar un riego viejo) y en un teléfono antes de publicar.
-- **Mobile "Iniciar ahora" sin cola offline** (preexistente).
-- **Historial mobile** ya no muestra cabezal/válvula en los manto históricos.
-- El filtro `cabezal` de `GET /riego/` no devuelve los manto nuevos (esperado).
+- (a) **Chequeo previo en prod:** filas de goteo en `registros_riego` con `cabezal=''` o `valvula=''` darían 422 en cualquier `PUT` (goteo exige ambos). Contarlas antes del push.
+- **El orden de despliegue importa menos** gracias al serializador de `valvula`, pero el recomendado se mantiene (ver abajo).
+- (b) **Sin prueba con click real** en web ni en dispositivo. Hay que probar en local (uvicorn + `npm run dev`: goteo, manto retroactivo, "iniciar ahora" y terminar, segundo manto en la misma parcela = 409, editar un riego viejo) y en un teléfono antes de publicar.
+- (c) **Mobile "Iniciar ahora" sin cola offline** (preexistente).
+- (d) **Historial mobile** ya no muestra cabezal/válvula en los manto históricos.
+- (e) El filtro `cabezal` de `GET /riego/` no devuelve los manto nuevos (esperado).
+- (f) Sin índice único en BD para "un manto en curso por parcela": ventana de carrera entre dos `iniciar` concurrentes.
+- (g) Estado residual `conFertilizante`/`fertilizante_*` al pasar de goteo a manto en los forms web puede ocultar un error de zod (menor, diferido).
+- (h) La vista SQL cuenta segmentos vacíos del CSV (`"1,,2"` → 3) mientras Python los filtra (deriva preexistente).
 
 ## Orden de despliegue
 
 1. Backup de prod.
 2. `scripts/corregir_superficie_potrero_23.py --db prod`: primero dry-run, luego `--aplicar`.
-3. Push a `main` (Railway corre la migración `b92967a1486b`).
-4. **Regenerar `docs/sistema/Modelo de Datos.md`** (`python scripts/generate_modelo_datos.py`). No se regeneró hoy: el generador lee el esquema de prod y la migración todavía no está aplicada, el doc saldría desactualizado. `PROJECT_MAP.md` sí se regeneró.
+3. Push a `main` (Railway corre ambas migraciones: `b92967a1486b` y `c3f1a8d27e54`).
+4. **Regenerar `docs/sistema/Modelo de Datos.md`** (`python scripts/generate_modelo_datos.py`). No se regeneró: el generador lee el esquema de prod y las migraciones todavía no están aplicadas. `PROJECT_MAP.md` sí se regeneró.
 5. `vercel --prod`.
 6. `fingerprint:compare` y `eas update` para Android e iOS.
+7. Click-through en web y teléfono.

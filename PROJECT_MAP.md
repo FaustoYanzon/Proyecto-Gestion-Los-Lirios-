@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 55 (head: `b92967a1486b_riego_manto_por_superficie.py`)
+**Migraciones de Alembic:** 56 (head: `c3f1a8d27e54_vw_kpi_produccion_manto_por_superficie.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
