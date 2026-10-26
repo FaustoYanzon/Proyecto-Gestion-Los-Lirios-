@@ -37,7 +37,7 @@ PARCELAS: list[dict] = [
     {"nombre": "Potrero 3",  "tipo": "potrero", "variedad": None,      "superficie_ha": 2.2,  "cabezal_riego": "MANTO"},
     {"nombre": "Potrero 17", "tipo": "potrero", "variedad": None,      "superficie_ha": 3.37, "cabezal_riego": "MANTO"},
     {"nombre": "Potrero 22", "tipo": "potrero", "variedad": "alfalfa", "superficie_ha": 5.1,  "cabezal_riego": "MANTO"},
-    {"nombre": "Potrero 23", "tipo": "potrero", "variedad": None,      "superficie_ha": 23.0, "cabezal_riego": "MANTO"},
+    {"nombre": "Potrero 23", "tipo": "potrero", "variedad": None,      "superficie_ha": 2.3, "cabezal_riego": "MANTO"},
     {"nombre": "Potrero 24", "tipo": "potrero", "variedad": None,      "superficie_ha": 7.0,  "cabezal_riego": "MANTO"},
     {"nombre": "Potrero 25", "tipo": "potrero", "variedad": "alfalfa", "superficie_ha": 5.2,  "cabezal_riego": "MANTO"},
     {"nombre": "Potrero 26", "tipo": "potrero", "variedad": None,      "superficie_ha": 3.0,  "cabezal_riego": "MANTO"},
