@@ -492,3 +492,128 @@ async def test_manto_nuevo_ignora_mm_de_cliente_viejo(client, create_user, creat
 
     assert resp.status_code == 201
     assert resp.json()["mm_aplicados"] == 4.0
+
+
+# --- Mixed goteo / historical manto / new manto ---
+
+
+def _manto_historico(parcela_id: str, user_id: str, fin: datetime | None) -> RegistroRiego:
+    return RegistroRiego(
+        fecha=datetime(2026, 10, 5).date(),
+        parcela_id=parcela_id,
+        cabezal="1",
+        valvula="1,2",
+        tipo=TipoRiego.manto,
+        n_valvulas_manto=None,
+        inicio=datetime(2026, 10, 5, 8, tzinfo=timezone.utc),
+        fin=fin,
+        responsable="Juan Perez",
+        created_by=user_id,
+    )
+
+
+async def test_eficiencia_hidrica_suma_goteo_manto_historico_y_nuevo(
+    client, create_user, create_parcela, db_session
+):
+    headers, user = await _login(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    goteo = await client.post("/produccion/riego/", json=_goteo(parcela.id), headers=headers)
+    nuevo = await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )
+    historico = _manto_historico(parcela.id, user.id, datetime(2026, 10, 5, 18, tzinfo=timezone.utc))
+    db_session.add(historico)
+    await db_session.commit()
+    assert goteo.status_code == 201
+    assert nuevo.status_code == 201
+
+    resp = await client.get("/produccion/dashboard/eficiencia-hidrica?anio=2026", headers=headers)
+
+    assert resp.status_code == 200
+    fila = next(r for r in resp.json() if r["parcela_id"] == parcela.id)
+    litros_registros = [
+        goteo.json()["litros_aplicados"],
+        historico.litros_aplicados,
+        nuevo.json()["litros_aplicados"],
+    ]
+    assert litros_registros == [320_000, 128_000, 120_000]
+    assert fila["litros_totales"] == sum(litros_registros) == 568_000
+    assert fila["mm_aplicados_total"] == 16.0 + 6.4 + 4.0
+
+
+async def test_iniciar_manto_desde_cliente_viejo_con_cabezal_y_valvula(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    resp = await client.post(
+        "/produccion/riego/iniciar",
+        json=_iniciar(parcela.id, cabezal="1", valvula="1,2"),
+        headers=headers,
+    )
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["cabezal"] is None
+    assert data["valvula"] == ""
+    assert data["n_valvulas"] == 3
+    assert data["factor_aplicado"] == 0.25
+
+
+async def test_en_curso_expone_factor_aplicado(client, create_user, create_parcela, db_session):
+    headers, user = await _login(client, create_user)
+    a = await create_parcela(nombre="A", superficie_ha=2.3)
+    b = await create_parcela(nombre="B", superficie_ha=2.3)
+    c = await create_parcela(nombre="C", superficie_ha=2.3)
+    goteo = await client.post(
+        "/produccion/riego/iniciar",
+        json=_iniciar(a.id, tipo="goteo", cabezal="1", valvula="1,2"),
+        headers=headers,
+    )
+    nuevo = await client.post("/produccion/riego/iniciar", json=_iniciar(b.id), headers=headers)
+    historico = _manto_historico(c.id, user.id, fin=None)
+    db_session.add(historico)
+    await db_session.commit()
+
+    resp = await client.get("/produccion/riego/en-curso", headers=headers)
+
+    assert resp.status_code == 200
+    por_id = {r["id"]: r for r in resp.json()}
+    assert por_id[goteo.json()["id"]]["factor_aplicado"] == 1.0
+    assert por_id[nuevo.json()["id"]]["factor_aplicado"] == 0.25
+    assert por_id[historico.id]["factor_aplicado"] == 0.4
+    assert por_id[historico.id]["n_valvulas"] == 2
+    assert por_id[historico.id]["valvula"] == "1,2"
+
+
+async def test_put_manto_historico_con_payload_de_la_web(client, create_user, create_parcela, db_session):
+    headers, user = await _login(client, create_user, role=UserRole.gerencial)
+    parcela = await create_parcela(superficie_ha=2.3)
+    historico = _manto_historico(parcela.id, user.id, datetime(2026, 10, 5, 18, tzinfo=timezone.utc))
+    db_session.add(historico)
+    await db_session.commit()
+
+    # Exactly what the new web RiegoForm sends for a historical manto.
+    resp = await client.put(
+        f"/produccion/riego/{historico.id}",
+        json={
+            "fecha": "2026-10-05",
+            "tipo": "manto",
+            "inicio": "2026-10-05T05:00:00-03:00",
+            "fin": "2026-10-05T17:00:00-03:00",
+            "responsable": "Pedro Gomez",
+            "responsable_id": None,
+        },
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["litros_aplicados"] == 12 * 16_000 * 0.4 * 2 == 153_600.0
+    assert data["mm_aplicados"] == 7.68
+    assert data["factor_aplicado"] == 0.4
+    assert data["n_valvulas"] == 2
+    assert data["cabezal"] == "1"
+    assert data["valvula"] == "1,2"
+    assert data["responsable"] == "Pedro Gomez"
+    await db_session.refresh(historico)
+    assert historico.n_valvulas_manto is None
+    assert historico.valvula == "1,2"
