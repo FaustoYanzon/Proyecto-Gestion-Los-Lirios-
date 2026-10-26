@@ -314,7 +314,10 @@ async def dashboard_eficiencia_hidrica(
     # (campo `valvula` como CSV, ej "1,2,3"), algo que no se puede sumar con
     # func.sum directo en SQL. Se trae duracion+valvula y se calcula en Python.
     litros_rows = (await db.execute(
-        select(RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula, RegistroRiego.tipo)
+        select(
+            RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula,
+            RegistroRiego.tipo, RegistroRiego.n_valvulas_manto,
+        )
         .where(
             RegistroRiego.parcela_id.in_(parcela_ids),
             RegistroRiego.fecha >= start,
@@ -324,10 +327,10 @@ async def dashboard_eficiencia_hidrica(
     )).all()
     litros_por_parcela: dict[str, float] = defaultdict(float)
     for row in litros_rows:
-        n_valvulas = len([v for v in (row.valvula or "").split(",") if v.strip()]) or 1
         litros_por_parcela[row.parcela_id] += (
             row.duracion_horas * RegistroRiego.LITROS_POR_HORA_VALVULA
-            * RegistroRiego.factor_caudal(row.tipo) * n_valvulas
+            * RegistroRiego.factor_caudal(row.tipo, row.n_valvulas_manto)
+            * RegistroRiego.contar_valvulas(row.valvula, row.n_valvulas_manto)
         )
 
     ciclos = list(

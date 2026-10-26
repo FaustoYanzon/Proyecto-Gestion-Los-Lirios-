@@ -89,3 +89,52 @@ async def test_iniciar_y_terminar_manto(client, create_user, create_parcela):
     assert terminado.status_code == 200
     assert terminado.json()["mm_aplicados"] == 3.2
     assert terminado.json()["litros_aplicados"] == 5 * 6_400
+
+
+# --- Model rules: manto by surface (no DB) ---
+
+from datetime import datetime, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+
+from app.models.parcela import TipoRiego  # noqa: E402
+from app.models.produccion import RegistroRiego  # noqa: E402
+
+
+def _registro(**extra) -> RegistroRiego:
+    return RegistroRiego(
+        inicio=datetime(2026, 10, 5, 8, tzinfo=timezone.utc),
+        fin=datetime(2026, 10, 5, 18, tzinfo=timezone.utc),
+        **extra,
+    )
+
+
+def test_manto_nuevo_usa_factor_025_y_n_guardado() -> None:
+    r = _registro(tipo=TipoRiego.manto, n_valvulas_manto=3, cabezal=None, valvula=None)
+    assert r.litros_aplicados == 120_000.0
+    assert r.mm_aplicados == 4.0
+    assert r.n_valvulas == 3
+    assert r.factor_aplicado == 0.25
+
+
+def test_manto_historico_conserva_factor_04() -> None:
+    r = _registro(tipo=TipoRiego.manto, valvula="1,2", n_valvulas_manto=None)
+    assert r.litros_aplicados == 128_000.0
+    assert r.mm_aplicados == 6.4
+    assert r.n_valvulas == 2
+    assert r.factor_aplicado == 0.4
+
+
+def test_goteo_no_cambia() -> None:
+    r = _registro(tipo=TipoRiego.goteo, valvula="1,2")
+    assert r.litros_aplicados == 320_000.0
+    assert r.mm_aplicados == 16.0
+    assert r.factor_aplicado == 1.0
+
+
+@pytest.mark.parametrize(
+    "ha,esperado",
+    [(3.0, 3), (2.3, 3), (2.85, 3), (1.0, 1), (0.4, 1), (3.0000000000000004, 3)],
+)
+def test_valvulas_manto_de(ha: float, esperado: int) -> None:
+    assert RegistroRiego.valvulas_manto_de(ha) == esperado

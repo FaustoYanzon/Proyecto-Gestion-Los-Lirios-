@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import math
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -219,10 +220,14 @@ class RegistroRiego(Base):
     parcela_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("parcelas.id"), nullable=False
     )
-    cabezal: Mapped[str] = mapped_column(String(20), nullable=False)
-    valvula: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Goteo o manto. En manto las valvulas marcan hasta que parte del parral
-    # llega el agua, y el caudal se estima en FACTOR_MANTO del de goteo.
+    # NULL en riego a manto nuevo: se riega la parcela entera, sin cabezal/valvula.
+    cabezal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    valvula: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Cantidad de valvulas equivalentes (ceil de la superficie) en manto nuevo.
+    # NULL = registro historico (goteo, o manto viejo que usa FACTOR_MANTO_LEGACY).
+    n_valvulas_manto: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Goteo o manto. En manto el caudal se estima por superficie (FACTOR_MANTO);
+    # los manto historicos (n_valvulas_manto NULL) conservan FACTOR_MANTO_LEGACY.
     tipo: Mapped[TipoRiego] = mapped_column(
         SAEnum(TipoRiego), default=TipoRiego.goteo, server_default=TipoRiego.goteo.value, nullable=False
     )
@@ -270,12 +275,32 @@ class RegistroRiego(Base):
     LITROS_POR_HORA_VALVULA: float = 16_000.0
     # Referencia agronomica para el suelo de Media Agua: 6,000,000 L/ha/anio.
     LITROS_OBJETIVO_ANUAL_POR_HA: float = 6_000_000.0
-    # Riego a manto: se estima el 40% del caudal de la valvula (litros y mm).
-    FACTOR_MANTO: float = 0.4
+    # Manto historico (sin n_valvulas_manto): 40% del caudal. Nunca se recalcula.
+    FACTOR_MANTO_LEGACY: float = 0.4
+    # Manto por superficie: 25% del caudal de las valvulas equivalentes.
+    FACTOR_MANTO: float = 0.25
 
     @classmethod
-    def factor_caudal(cls, tipo: TipoRiego | str | None) -> float:
-        return cls.FACTOR_MANTO if tipo in (TipoRiego.manto, TipoRiego.manto.value) else 1.0
+    def factor_caudal(cls, tipo: TipoRiego | str | None, n_valvulas_manto: int | None = None) -> float:
+        if tipo not in (TipoRiego.manto, TipoRiego.manto.value):
+            return 1.0
+        # n_valvulas_manto marks the new surface-based rule; NULL keeps old records stable.
+        return cls.FACTOR_MANTO_LEGACY if n_valvulas_manto is None else cls.FACTOR_MANTO
+
+    @staticmethod
+    def valvulas_manto_de(superficie_ha: float) -> int:
+        """Valvulas equivalentes de una parcela: ceil de la superficie, minimo 1."""
+        # round() first so float noise (3.0000000000000004) does not bump to 4.
+        return max(1, math.ceil(round(superficie_ha, 4)))
+
+    @staticmethod
+    def contar_valvulas(valvula: str | None, n_valvulas_manto: int | None) -> int:
+        """Valvulas del riego: el n guardado (manto nuevo) o el CSV de `valvula`."""
+        if n_valvulas_manto is not None:
+            return n_valvulas_manto
+        if not valvula:
+            return 1
+        return len([v for v in valvula.split(",") if v.strip()]) or 1
 
     def __init__(self, **kwargs: Any) -> None:
         inicio = kwargs.get("inicio")
@@ -284,34 +309,35 @@ class RegistroRiego(Base):
             kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
         if kwargs.get("mm_aplicados") is None and kwargs.get("duracion_horas") is not None:
             kwargs["mm_aplicados"] = round(
-                kwargs["duracion_horas"] * self.MM_POR_HORA * self.factor_caudal(kwargs.get("tipo")), 2
+                kwargs["duracion_horas"] * self.MM_POR_HORA
+                * self.factor_caudal(kwargs.get("tipo"), kwargs.get("n_valvulas_manto")),
+                2,
             )
         super().__init__(**kwargs)
 
     def recalcular_mm(self) -> None:
         """Recalcula mm_aplicados desde duracion_horas y el tipo de riego."""
-        self.mm_aplicados = round(self.duracion_horas * self.MM_POR_HORA * self.factor_caudal(self.tipo), 2)
+        self.mm_aplicados = round(self.duracion_horas * self.MM_POR_HORA * self.factor_aplicado, 2)
 
     @property
     def n_valvulas(self) -> int:
         """Cantidad de valvulas abiertas en este riego.
 
-        El campo `valvula` guarda una lista separada por comas (ej: "1,2,3")
-        cuando se abrieron varias valvulas a la vez sobre el mismo parral.
+        En goteo / manto historico el campo `valvula` guarda una lista separada
+        por comas (ej: "1,2,3"); en manto nuevo se usa `n_valvulas_manto`.
         """
-        if not self.valvula:
-            return 1
-        valvulas = [v for v in self.valvula.split(",") if v.strip()]
-        return len(valvulas) or 1
+        return self.contar_valvulas(self.valvula, self.n_valvulas_manto)
+
+    @property
+    def factor_aplicado(self) -> float:
+        """Factor de caudal que corresponde a este registro (tipo + regla vigente)."""
+        return self.factor_caudal(self.tipo, self.n_valvulas_manto)
 
     @property
     def litros_aplicados(self) -> float:
-        """Litros totales entregados al parral en este registro.
+        """Litros totales entregados en este registro.
 
-        Cada valvula cubre 1 ha y entrega LITROS_POR_HORA_VALVULA L/h, por lo
-        que el total es horas * litros/h/valvula * cantidad de valvulas
-        abiertas (no solo la duracion, como se calculaba antes). En manto se
-        aplica FACTOR_MANTO sobre ese caudal.
+        horas * litros/h/valvula * factor de caudal * cantidad de valvulas.
 
         0.0 mientras el riego está en curso (duracion_horas todavía None) —
         se completa recién al terminar.
@@ -319,7 +345,7 @@ class RegistroRiego(Base):
         if self.duracion_horas is None:
             return 0.0
         return round(
-            self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.factor_caudal(self.tipo) * self.n_valvulas, 2
+            self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.factor_aplicado * self.n_valvulas, 2
         )
 
     parcela: Mapped[Parcela] = relationship(
