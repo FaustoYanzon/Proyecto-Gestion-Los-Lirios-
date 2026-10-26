@@ -199,6 +199,11 @@ export async function confirmarValvulaOrden(
   return data
 }
 
+// Reverts a confirmed valve to pendiente; backend returns stock and deletes the fito record.
+export async function deshacerValvulaOrden(ordenId: string, ordenValvulaId: string): Promise<void> {
+  await api.post(`/ordenes-aplicacion/${ordenId}/valvulas/${ordenValvulaId}/deshacer`)
+}
+
 export async function subirFotoValvula(ordenValvulaId: string, uri: string): Promise<void> {
   const formData = new FormData()
   // Mismo shape de React Native que subirFotoAplicacion (no es un File del DOM).

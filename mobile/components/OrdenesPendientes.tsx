@@ -11,7 +11,7 @@ import {
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import api, {
   getOrdenesPendientes, confirmarAplicacionOrden, subirFotoAplicacion,
-  confirmarValvulaOrden, subirFotoValvula,
+  confirmarValvulaOrden, subirFotoValvula, deshacerValvulaOrden,
 } from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import TrabajadorPicker from './TrabajadorPicker'
@@ -340,11 +340,14 @@ function ConfirmarValvulaModal({
 // ─── Tarjeta de orden ───────────────────────────────────────────────────────
 
 function OrdenCard({
-  orden, onSelectItem, onSelectValvula,
+  orden, onSelectItem, onSelectValvula, puedeDeshacer, deshaciendoId, onDeshacerValvula,
 }: {
   orden: OrdenAplicacion
   onSelectItem: (item: OrdenAplicacionParcelaItem) => void
   onSelectValvula: (item: OrdenAplicacionParcelaItem, valvula: OrdenAplicacionValvulaItem) => void
+  puedeDeshacer: boolean
+  deshaciendoId: string | null
+  onDeshacerValvula: (valvula: OrdenAplicacionValvulaItem) => void
 }) {
   const pendientes = orden.parcelas.filter((p) => p.estado === 'pendiente')
   const aplicadas = orden.parcelas.filter((p) => p.estado === 'aplicada')
@@ -425,6 +428,21 @@ function OrdenCard({
                         <Text style={[styles.parcelaChipAplicadaText, v.resultado === 'no_aplicada' && { color: colors.blanco, textDecorationLine: 'none' }]}>
                           {v.resultado === 'no_aplicada' ? '✕ ' : '✓ '}Válvula {v.valvula_nombre}
                         </Text>
+                        {puedeDeshacer && (
+                          <TouchableOpacity
+                            onPress={() => onDeshacerValvula(v)}
+                            disabled={deshaciendoId !== null}
+                            activeOpacity={0.75}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            style={[styles.deshacerBtn, deshaciendoId !== null && { opacity: 0.5 }]}
+                          >
+                            {deshaciendoId === v.id ? (
+                              <ActivityIndicator size="small" color={colors.tierra} />
+                            ) : (
+                              <Text style={styles.deshacerBtnText}>Deshacer</Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
                       </View>
                     ),
                   )}
@@ -453,6 +471,11 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
   const [modalItem, setModalItem] = useState<OrdenAplicacionParcelaItem | null>(null)
   const [modalValvula, setModalValvula] = useState<OrdenAplicacionValvulaItem | null>(null)
   const [trabajadoresDb, setTrabajadoresDb] = useState<TrabajadorDb[]>([])
+  const role = useAuthStore((s) => s.user?.role)
+  // Same roles the backend allows to undo; regador/obrero never see the button.
+  const puedeDeshacer = role === 'super_admin' || role === 'gerencial' || role === 'encargado'
+  const [deshaciendoId, setDeshaciendoId] = useState<string | null>(null)
+  const deshaciendoRef = useRef(false)
 
   const loadTrabajadoresDb = useCallback(async () => {
     const cached = await getCache<TrabajadorDb[]>('trabajadores', CACHE_TTL.trabajadores)
@@ -488,6 +511,41 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
     setModalValvula(valvula)
   }
 
+  function handleDeshacerValvula(orden: OrdenAplicacion, valvula: OrdenAplicacionValvulaItem) {
+    if (deshaciendoRef.current) return
+    Alert.alert(
+      'Deshacer válvula',
+      `Se va a deshacer la confirmación de la válvula ${valvula.valvula_nombre}. Se devuelve el stock del insumo y se borra el registro fitosanitario. ¿Continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Deshacer',
+          style: 'destructive',
+          onPress: async () => {
+            // Ref guards against a double tap before state re-renders.
+            if (deshaciendoRef.current) return
+            deshaciendoRef.current = true
+            setDeshaciendoId(valvula.id)
+            try {
+              await deshacerValvulaOrden(orden.id, valvula.id)
+              await load()
+              onConfirmado() // refreshes the fito records list (the record was deleted)
+            } catch (e: unknown) {
+              const err = e as { response?: { data?: { detail?: string } } }
+              const detail = err.response?.data?.detail
+              Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo deshacer la válvula.')
+              // State may have changed server-side (409): resync the list.
+              load()
+            } finally {
+              deshaciendoRef.current = false
+              setDeshaciendoId(null)
+            }
+          },
+        },
+      ],
+    )
+  }
+
   function handleConfirmed() {
     setModalOrden(null)
     setModalItem(null)
@@ -517,6 +575,9 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
           orden={orden}
           onSelectItem={(item) => handleSelectItem(orden, item)}
           onSelectValvula={(item, valvula) => handleSelectValvula(orden, item, valvula)}
+          puedeDeshacer={puedeDeshacer}
+          deshaciendoId={deshaciendoId}
+          onDeshacerValvula={(valvula) => handleDeshacerValvula(orden, valvula)}
         />
       ))}
       <ConfirmarValvulaModal
@@ -580,6 +641,11 @@ const styles = StyleSheet.create({
   valvulaChipHecha: {
     backgroundColor: colors.hueso, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
   },
+  deshacerBtn: {
+    marginTop: 6, backgroundColor: colors.blanco, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center',
+  },
+  deshacerBtnText: { fontSize: 11, fontWeight: '700', color: colors.tierra },
   valvulaChipMal: { backgroundColor: colors.ink60 },
   resultadoRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
   resultadoBtn: {
