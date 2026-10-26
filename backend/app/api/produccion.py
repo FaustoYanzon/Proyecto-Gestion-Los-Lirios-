@@ -310,9 +310,10 @@ async def dashboard_eficiencia_hidrica(
     )).all()
     mm_por_parcela: dict[str, float] = {row.parcela_id: float(row.mm_total) for row in riego_rows}
 
-    # litros_aplicados depende de la cantidad de valvulas abiertas por registro
-    # (campo `valvula` como CSV, ej "1,2,3"), algo que no se puede sumar con
-    # func.sum directo en SQL. Se trae duracion+valvula y se calcula en Python.
+    # litros_aplicados depends on each record's valve count, which comes from
+    # RegistroRiego.contar_valvulas (n_valvulas_manto when present, else the
+    # `valvula` CSV) and its caudal factor; neither can be summed with func.sum
+    # in SQL, so the raw columns are fetched and the sum is done in Python.
     litros_rows = (await db.execute(
         select(
             RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula,
@@ -872,6 +873,10 @@ async def _normalizar_riego(
     data["cabezal"] = None
     data["valvula"] = None
     data["n_valvulas_manto"] = RegistroRiego.valvulas_manto_de(parcela.superficie_ha)
+    if riego is None:
+        # Pre-manto web clients send mm computed with the legacy 40% rate; drop
+        # it so RegistroRiego.__init__ recalculates it with the current factor.
+        data["mm_aplicados"] = None
     return data
 
 

@@ -480,3 +480,15 @@ async def test_manto_nuevo_responde_valvula_vacia_no_null(client, create_user, c
     guardado = await db_session.get(RegistroRiego, creado.json()["id"])
     assert guardado.valvula is None
 
+
+async def test_manto_nuevo_ignora_mm_de_cliente_viejo(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    resp = await client.post(
+        "/produccion/riego/",
+        json=_payload(parcela.id, tipo="manto", mm_aplicados=6.4),
+        headers=headers,
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["mm_aplicados"] == 4.0
