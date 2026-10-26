@@ -1,3 +1,5 @@
+Estado al 2026-10-26: DESPLEGADO (ver Bitácora/2026-10-26-fito-por-valvula-deploy.md)
+
 # Fito por válvula — runbook de despliegue
 
 Rama: `feat/fito-por-valvula` (código completo, 274 tests backend, probado en local con click real).
