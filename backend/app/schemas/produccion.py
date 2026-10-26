@@ -128,8 +128,10 @@ class ResumenTrabajoPorParcela(BaseModel):
 class RegistroRiegoBase(BaseModel):
     fecha: date
     parcela_id: str
-    cabezal: str
-    valvula: str
+    # Required for goteo, NULL for manto (whole parcel); enforced in the router
+    # because the rule depends on `tipo`.
+    cabezal: str | None = None
+    valvula: str | None = None
     tipo: TipoRiego = TipoRiego.goteo
     inicio: datetime
     fin: datetime
@@ -163,6 +165,8 @@ class RegistroRiegoResponse(RegistroRiegoBase):
     id: str
     duracion_horas: float
     n_valvulas: int
+    # Caudal factor of this record (1.0 goteo, 0.25 manto, 0.4 historical manto).
+    factor_aplicado: float
     litros_aplicados: float
     created_by: str
     created_at: datetime
@@ -174,8 +178,8 @@ class RegistroRiegoResponse(RegistroRiegoBase):
 
 class RegistroRiegoIniciar(BaseModel):
     parcela_id: str
-    cabezal: str
-    valvula: str
+    cabezal: str | None = None
+    valvula: str | None = None
     tipo: TipoRiego = TipoRiego.goteo
     responsable: str
     responsable_id: str | None = None
@@ -188,11 +192,13 @@ class RegistroRiegoEnCursoResponse(BaseModel):
     id: str
     fecha: date
     parcela_id: str
-    cabezal: str
-    valvula: str
+    cabezal: str | None = None
+    valvula: str | None = None
     tipo: TipoRiego
     inicio: datetime
     n_valvulas: int
+    # Lets clients compute live litros/mm without knowing the manto rule.
+    factor_aplicado: float
     responsable: str
     responsable_id: str | None = None
     fertilizante_nombre: str | None = None

@@ -31,7 +31,7 @@ from app.models.finanzas import (
     TipoEgreso,
 )
 from app.models.insumo import Insumo, MovimientoStock, TipoMovimientoStock
-from app.models.parcela import Parcela, TipoParcela, VariedadUva
+from app.models.parcela import Parcela, TipoParcela, TipoRiego, VariedadUva
 from app.models.produccion import (
     CLASIFICACION_POR_TAREA,
     CicloCampana,
@@ -807,6 +807,70 @@ async def list_valvulas(
     return list((await db.execute(stmt)).scalars().all())
 
 
+_PARCELAS_CON_MANTO = (TipoParcela.parral, TipoParcela.potrero)
+
+
+async def _normalizar_riego(
+    db: AsyncSession, data: dict, riego: RegistroRiego | None = None
+) -> dict:
+    """Apply the goteo/manto rules to the merged riego state and return what to persist.
+
+    `data` is the full resulting state (create payload, or current values merged
+    with the PUT body). `riego` is the stored record on PUT, None on create.
+    """
+    tipo = data.get("tipo") or TipoRiego.goteo
+    if riego is not None and riego.tipo == TipoRiego.manto and riego.n_valvulas_manto is None:
+        # Historical manto keeps its stored valves and the legacy 40% factor:
+        # only a change of tipo or parcela moves it onto the current rules.
+        if tipo == riego.tipo and data.get("parcela_id") == riego.parcela_id:
+            return data
+
+    if tipo == TipoRiego.goteo:
+        if not data.get("cabezal") or not data.get("valvula"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="El riego por goteo necesita cabezal y válvulas.",
+            )
+        data["n_valvulas_manto"] = None
+        return data
+
+    if data.get("fertilizante_nombre") or data.get("fertilizante_dosis_lt_ha"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El riego a manto no lleva fertirriego.",
+        )
+    parcela = await db.get(Parcela, data.get("parcela_id"))
+    # valvulas_manto_de has no None guard: superficie must be checked here first.
+    if (
+        parcela is None
+        or parcela.tipo not in _PARCELAS_CON_MANTO
+        or parcela.superficie_ha is None
+        or parcela.superficie_ha <= 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El riego a manto necesita un parral o potrero con superficie cargada.",
+        )
+    # Manto waters the whole parcel: valves sent by older clients are dropped.
+    data["cabezal"] = None
+    data["valvula"] = None
+    data["n_valvulas_manto"] = RegistroRiego.valvulas_manto_de(parcela.superficie_ha)
+    return data
+
+
+def _horas_entre(inicio: datetime, fin: datetime) -> float:
+    """Hours between two datetimes, treating naive values as UTC.
+
+    Stored values and request values may differ in tz-awareness (naive client
+    payloads, SQLite in tests); mixing them would raise TypeError.
+    """
+    if inicio.tzinfo is None:
+        inicio = inicio.replace(tzinfo=timezone.utc)
+    if fin.tzinfo is None:
+        fin = fin.replace(tzinfo=timezone.utc)
+    return (fin - inicio).total_seconds() / 3600
+
+
 # Static sub-routes must be defined before /{riego_id} to avoid shadowing
 @router.get("/riego/en-curso", response_model=list[RegistroRiegoEnCursoResponse])
 async def list_riego_en_curso(
@@ -834,6 +898,22 @@ async def iniciar_riego(
     data = riego_data.model_dump()
     if data.get("responsable_id"):
         data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
+    data = await _normalizar_riego(db, data)
+
+    if data["tipo"] == TipoRiego.manto:
+        # Checked after the idempotency block so a retried request returns its record.
+        en_curso = await db.execute(
+            select(RegistroRiego.id).where(
+                RegistroRiego.parcela_id == data["parcela_id"],
+                RegistroRiego.tipo == TipoRiego.manto,
+                RegistroRiego.fin.is_(None),
+            )
+        )
+        if en_curso.first() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya hay un riego a manto en curso en esta parcela.",
+            )
 
     now = datetime.now(timezone.utc)
     riego = RegistroRiego(
@@ -879,6 +959,7 @@ async def create_riego(
     data = riego_data.model_dump()
     if data.get("responsable_id"):
         data["responsable"] = await _resolve_responsable_nombre(db, data["responsable_id"])
+    data = await _normalizar_riego(db, data)
     data["created_by"] = current_user.id
     # duracion_horas computed by RegistroRiego.__init__
     riego = RegistroRiego(**data)
@@ -901,11 +982,21 @@ async def update_riego(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Riego not found")
 
     update_data = riego_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
+    # Validate the resulting state, not just the patch: a goteo<->manto switch
+    # depends on fields the client may not have re-sent.
+    merged = {
+        field: getattr(riego, field) for field in RegistroRiegoUpdate.model_fields
+    }
+    merged["n_valvulas_manto"] = riego.n_valvulas_manto
+    merged.update(update_data)
+    merged = await _normalizar_riego(db, merged, riego)
+    for field, value in merged.items():
         setattr(riego, field, value)
-    if "inicio" in update_data or "fin" in update_data:
-        riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
-    if ({"inicio", "fin", "tipo"} & update_data.keys()) and riego.duracion_horas is not None:
+    if ("inicio" in update_data or "fin" in update_data) and riego.fin is not None:
+        riego.duracion_horas = _horas_entre(riego.inicio, riego.fin)
+    # parcela_id matters too: it changes n_valvulas_manto and may move a
+    # historical manto onto the current factor.
+    if ({"inicio", "fin", "tipo", "parcela_id"} & update_data.keys()) and riego.duracion_horas is not None:
         riego.recalcular_mm()
 
     await db.flush()

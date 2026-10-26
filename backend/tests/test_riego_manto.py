@@ -1,27 +1,36 @@
-"""Riego a manto (2026-10-05): mismas valvulas como referencia de hasta donde
-llega el agua, pero litros y mm al 40% del caudal de goteo.
+"""Riego a manto por superficie (2026-10-26): la parcela entera, sin cabezal ni
+valvulas; caudal = ceil(superficie_ha) valvulas equivalentes al 25%. Los manto
+historicos (n_valvulas_manto NULL) conservan el 40% sobre sus valvulas.
 Run with: pytest
 """
 from __future__ import annotations
 
-from app.models.user import UserRole
+from datetime import datetime, timedelta, timezone
+
+from app.models.parcela import TipoParcela, TipoRiego
+from app.models.produccion import RegistroRiego
+from app.models.user import User, UserRole
 
 
-async def _auth(client, create_user, role: UserRole = UserRole.encargado):
-    await create_user(email="encargado@test.com", password="Password123!", role=role)
+async def _login(client, create_user, role: UserRole = UserRole.encargado) -> tuple[dict, User]:
+    user = await create_user(email="encargado@test.com", password="Password123!", role=role)
     resp = await client.post(
         "/auth/login",
         data={"username": "encargado@test.com", "password": "Password123!"},
     )
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}, user
+
+
+async def _auth(client, create_user, role: UserRole = UserRole.encargado) -> dict:
+    headers, _ = await _login(client, create_user, role)
+    return headers
 
 
 def _payload(parcela_id: str, **extra) -> dict:
+    """Manto-shaped payload by default (no cabezal/valvula); goteo tests add them."""
     return {
         "fecha": "2026-10-05",
         "parcela_id": parcela_id,
-        "cabezal": "1",
-        "valvula": "1,2",
         "inicio": "2026-10-05T08:00:00",
         "fin": "2026-10-05T18:00:00",
         "responsable": "Juan Perez",
@@ -29,21 +38,30 @@ def _payload(parcela_id: str, **extra) -> dict:
     }
 
 
+def _goteo(parcela_id: str, **extra) -> dict:
+    return _payload(parcela_id, cabezal="1", valvula="1,2", **extra)
+
+
+def _iniciar(parcela_id: str, **extra) -> dict:
+    return {"parcela_id": parcela_id, "tipo": "manto", "responsable": "Juan Perez", **extra}
+
+
 async def test_riego_sin_tipo_es_goteo(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
     parcela = await create_parcela()
-    resp = await client.post("/produccion/riego/", json=_payload(parcela.id), headers=headers)
+    resp = await client.post("/produccion/riego/", json=_goteo(parcela.id), headers=headers)
 
     assert resp.status_code == 201
     data = resp.json()
     assert data["tipo"] == "goteo"
     assert data["litros_aplicados"] == 10 * 16_000 * 2
     assert data["mm_aplicados"] == 16.0
+    assert data["factor_aplicado"] == 1.0
 
 
-async def test_riego_manto_aplica_40_por_ciento(client, create_user, create_parcela):
+async def test_manto_calcula_por_superficie(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
-    parcela = await create_parcela()
+    parcela = await create_parcela(superficie_ha=2.3)
     resp = await client.post(
         "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
     )
@@ -51,44 +69,272 @@ async def test_riego_manto_aplica_40_por_ciento(client, create_user, create_parc
     assert resp.status_code == 201
     data = resp.json()
     assert data["tipo"] == "manto"
-    assert data["litros_aplicados"] == 10 * 6_400 * 2
-    assert data["mm_aplicados"] == 6.4
+    assert data["n_valvulas"] == 3
+    assert data["litros_aplicados"] == 120_000
+    assert data["mm_aplicados"] == 4.0
+    assert data["cabezal"] is None
+    assert data["valvula"] is None
+    assert data["factor_aplicado"] == 0.25
 
 
-async def test_cambiar_tipo_recalcula_mm(client, create_user, create_parcela):
-    headers = await _auth(client, create_user, role=UserRole.gerencial)
+async def test_manto_parcela_menor_a_una_ha(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=0.4)
+    resp = await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["n_valvulas"] == 1
+    assert resp.json()["litros_aplicados"] == 40_000
+
+
+async def test_manto_ignora_cabezal_y_valvula_de_cliente_viejo(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    resp = await client.post(
+        "/produccion/riego/",
+        json=_payload(parcela.id, tipo="manto", cabezal="1", valvula="1,2"),
+        headers=headers,
+    )
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["cabezal"] is None
+    assert data["valvula"] is None
+    assert data["n_valvulas"] == 3
+    assert data["litros_aplicados"] == 120_000
+
+
+async def test_manto_rechaza_fertirriego(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    resp = await client.post(
+        "/produccion/riego/",
+        json=_payload(parcela.id, tipo="manto", fertilizante_nombre="Urea"),
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El riego a manto no lleva fertirriego."
+
+    resp = await client.post(
+        "/produccion/riego/iniciar",
+        json=_iniciar(parcela.id, fertilizante_dosis_lt_ha=2.0),
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+async def test_manto_sin_superficie_422(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    for superficie in (None, 0):
+        parcela = await create_parcela(nombre=f"P {superficie}", superficie_ha=superficie)
+        resp = await client.post(
+            "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+        )
+        assert resp.status_code == 422, superficie
+        assert resp.json()["detail"] == (
+            "El riego a manto necesita un parral o potrero con superficie cargada."
+        )
+        resp = await client.post(
+            "/produccion/riego/iniciar", json=_iniciar(parcela.id), headers=headers
+        )
+        assert resp.status_code == 422, superficie
+
+
+async def test_manto_en_cabezal_o_pasero_422(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    for tipo in (TipoParcela.cabezal, TipoParcela.pasero):
+        parcela = await create_parcela(nombre=f"P {tipo.value}", tipo=tipo, superficie_ha=2.0)
+        resp = await client.post(
+            "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+        )
+        assert resp.status_code == 422, tipo
+
+
+async def test_manto_en_potrero_ok(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(tipo=TipoParcela.potrero, superficie_ha=3.0)
+    resp = await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )
+    assert resp.status_code == 201
+    assert resp.json()["n_valvulas"] == 3
+
+
+async def test_goteo_sin_cabezal_o_valvula_422(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
     parcela = await create_parcela()
-    creado = (await client.post("/produccion/riego/", json=_payload(parcela.id), headers=headers)).json()
-
-    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"tipo": "manto"}, headers=headers)
-
-    assert resp.status_code == 200
-    assert resp.json()["mm_aplicados"] == 6.4
-    assert resp.json()["litros_aplicados"] == 10 * 6_400 * 2
+    for extra in ({}, {"cabezal": "1"}, {"valvula": "1,2"}, {"cabezal": "", "valvula": "1"}):
+        resp = await client.post("/produccion/riego/", json=_payload(parcela.id, **extra), headers=headers)
+        assert resp.status_code == 422, extra
+        resp = await client.post(
+            "/produccion/riego/iniciar", json=_iniciar(parcela.id, tipo="goteo", **extra), headers=headers
+        )
+        assert resp.status_code == 422, extra
+    resp = await client.post("/produccion/riego/", json=_payload(parcela.id), headers=headers)
+    assert resp.json()["detail"] == "El riego por goteo necesita cabezal y válvulas."
 
 
 async def test_iniciar_y_terminar_manto(client, create_user, create_parcela):
     headers = await _auth(client, create_user)
-    parcela = await create_parcela()
-    iniciado = await client.post(
-        "/produccion/riego/iniciar",
-        json={"parcela_id": parcela.id, "cabezal": "1", "valvula": "3", "tipo": "manto",
-              "responsable": "Juan Perez"},
-        headers=headers,
-    )
+    parcela = await create_parcela(superficie_ha=2.3)
+    iniciado = await client.post("/produccion/riego/iniciar", json=_iniciar(parcela.id), headers=headers)
     assert iniciado.status_code == 201
     assert iniciado.json()["tipo"] == "manto"
+    assert iniciado.json()["n_valvulas"] == 3
+    assert iniciado.json()["factor_aplicado"] == 0.25
+    assert iniciado.json()["cabezal"] is None
+
+    en_curso = await client.get("/produccion/riego/en-curso", headers=headers)
+    assert en_curso.status_code == 200
+    assert en_curso.json()[0]["n_valvulas"] == 3
 
     inicio = iniciado.json()["inicio"].replace("Z", "+00:00")
-    from datetime import datetime, timedelta
     fin = (datetime.fromisoformat(inicio) + timedelta(hours=5)).isoformat()
     terminado = await client.post(
         f"/produccion/riego/{iniciado.json()['id']}/terminar", json={"fin": fin}, headers=headers
     )
 
     assert terminado.status_code == 200
-    assert terminado.json()["mm_aplicados"] == 3.2
-    assert terminado.json()["litros_aplicados"] == 5 * 6_400
+    assert terminado.json()["mm_aplicados"] == 2.0
+    assert terminado.json()["litros_aplicados"] == 60_000
+
+
+async def test_segundo_manto_en_curso_misma_parcela_409(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    primero = await client.post("/produccion/riego/iniciar", json=_iniciar(parcela.id), headers=headers)
+    assert primero.status_code == 201
+
+    segundo = await client.post("/produccion/riego/iniciar", json=_iniciar(parcela.id), headers=headers)
+    assert segundo.status_code == 409
+    assert segundo.json()["detail"] == "Ya hay un riego a manto en curso en esta parcela."
+
+
+async def test_reintento_idempotente_de_iniciar_manto_no_da_409(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    key = "11111111-1111-1111-1111-111111111111"
+    primero = await client.post(
+        "/produccion/riego/iniciar", json=_iniciar(parcela.id, idempotency_key=key), headers=headers
+    )
+    segundo = await client.post(
+        "/produccion/riego/iniciar", json=_iniciar(parcela.id, idempotency_key=key), headers=headers
+    )
+
+    assert primero.status_code == 201
+    assert segundo.status_code == 201
+    assert segundo.json()["id"] == primero.json()["id"]
+
+
+async def test_manto_en_curso_en_otra_parcela_ok(client, create_user, create_parcela):
+    headers = await _auth(client, create_user)
+    a = await create_parcela(nombre="A", superficie_ha=2.3)
+    b = await create_parcela(nombre="B", superficie_ha=1.0)
+    assert (await client.post("/produccion/riego/iniciar", json=_iniciar(a.id), headers=headers)).status_code == 201
+    assert (await client.post("/produccion/riego/iniciar", json=_iniciar(b.id), headers=headers)).status_code == 201
+
+
+async def test_put_manto_historico_conserva_factor_04(client, create_user, create_parcela, db_session):
+    headers, user = await _login(client, create_user, role=UserRole.gerencial)
+    parcela = await create_parcela(superficie_ha=2.3)
+    historico = RegistroRiego(
+        fecha=datetime(2026, 10, 5).date(),
+        parcela_id=parcela.id,
+        cabezal="1",
+        valvula="1,2",
+        tipo=TipoRiego.manto,
+        n_valvulas_manto=None,
+        inicio=datetime(2026, 10, 5, 8, tzinfo=timezone.utc),
+        fin=datetime(2026, 10, 5, 18, tzinfo=timezone.utc),
+        responsable="Juan Perez",
+        created_by=user.id,
+    )
+    db_session.add(historico)
+    await db_session.commit()
+
+    resp = await client.put(
+        f"/produccion/riego/{historico.id}", json={"fin": "2026-10-05T20:00:00Z"}, headers=headers
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["litros_aplicados"] == 12 * 16_000 * 0.4 * 2 == 153_600.0
+    assert data["mm_aplicados"] == 7.68
+    assert data["n_valvulas"] == 2
+    assert data["factor_aplicado"] == 0.4
+    assert data["valvula"] == "1,2"
+    await db_session.refresh(historico)
+    assert historico.n_valvulas_manto is None
+
+
+async def test_put_goteo_a_manto_fija_n_valvulas(client, create_user, create_parcela):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    parcela = await create_parcela(superficie_ha=2.3)
+    creado = (await client.post("/produccion/riego/", json=_goteo(parcela.id), headers=headers)).json()
+
+    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"tipo": "manto"}, headers=headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["n_valvulas"] == 3
+    assert data["mm_aplicados"] == 4.0
+    assert data["litros_aplicados"] == 120_000
+    assert data["cabezal"] is None
+    assert data["valvula"] is None
+    assert data["factor_aplicado"] == 0.25
+
+
+async def test_put_manto_a_goteo_sin_cabezal_422(client, create_user, create_parcela):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    parcela = await create_parcela(superficie_ha=2.3)
+    creado = (await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )).json()
+
+    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"tipo": "goteo"}, headers=headers)
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El riego por goteo necesita cabezal y válvulas."
+
+
+async def test_put_manto_a_goteo_con_cabezal_y_valvula_ok(client, create_user, create_parcela, db_session):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    parcela = await create_parcela(superficie_ha=2.3)
+    creado = (await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )).json()
+
+    resp = await client.put(
+        f"/produccion/riego/{creado['id']}",
+        json={"tipo": "goteo", "cabezal": "1", "valvula": "1,2"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["factor_aplicado"] == 1.0
+    assert data["n_valvulas"] == 2
+    assert data["mm_aplicados"] == 16.0
+    assert data["litros_aplicados"] == 320_000
+    guardado = await db_session.get(RegistroRiego, creado["id"])
+    assert guardado.n_valvulas_manto is None
+
+
+async def test_put_manto_nuevo_cambia_parcela_recalcula_n(client, create_user, create_parcela):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    a = await create_parcela(nombre="A", superficie_ha=2.3)
+    b = await create_parcela(nombre="B", superficie_ha=0.4)
+    creado = (await client.post(
+        "/produccion/riego/", json=_payload(a.id, tipo="manto"), headers=headers
+    )).json()
+
+    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"parcela_id": b.id}, headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["n_valvulas"] == 1
+    assert resp.json()["litros_aplicados"] == 40_000
 
 
 # --- Model rules: manto by surface (no DB) ---
