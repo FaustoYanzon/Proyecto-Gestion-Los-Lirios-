@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, AlertTriangle, ClipboardCheck, RefreshCcw } from 'lucide-react'
+import { Loader2, AlertTriangle, ClipboardCheck, RefreshCcw, Undo2 } from 'lucide-react'
 import {
   getValvulasARevisar, revisarValvula, type ValvulaARevisar,
 } from '@/lib/api/ordenesAplicacion'
@@ -23,8 +23,10 @@ function formatFecha(iso: string | null) {
 // resultado "parcial"). Desde acá se decide si hace falta una orden de repaso.
 export default function ARevisarPanel({
   onCrearRepaso,
+  onDeshacer,
 }: {
   onCrearRepaso: (valvula: ValvulaARevisar) => void
+  onDeshacer: (valvula: ValvulaARevisar) => void
 }) {
   const queryClient = useQueryClient()
   const [marcando, setMarcando] = useState<string | null>(null)
@@ -126,6 +128,15 @@ export default function ARevisarPanel({
                 >
                   {marcando === v.id && <Loader2 size={13} className="animate-spin" />}
                   Marcar revisada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeshacer(v)}
+                  aria-label={`Deshacer válvula ${v.valvula_nombre} de ${v.parcela_nombre}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                >
+                  <Undo2 size={13} />
+                  Deshacer
                 </button>
               </div>
             </div>

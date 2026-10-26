@@ -561,6 +561,14 @@ function progresoOrden(orden: OrdenAplicacion) {
   return { total, hechas }
 }
 
+interface DeshacerTarget {
+  ordenId: string
+  ordenValvulaId: string
+  valvulaNombre: string
+  parcelaNombre: string
+  insumoNombre: string
+}
+
 function OrdenCard({
   orden, puedeGestionar, onEditar, onEliminar, onDeshacer,
 }: {
@@ -645,6 +653,8 @@ function OrdenCard({
                         {v.observaciones && <span className="italic text-gray-500"> · “{v.observaciones}”</span>}
                         {onDeshacer && v.estado !== 'pendiente' && (
                           <button
+                            type="button"
+                            aria-label={`Deshacer válvula ${v.valvula_nombre} de ${p.parcela_nombre}`}
                             onClick={() => onDeshacer(orden, v, p.parcela_nombre)}
                             className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium text-red-600 bg-white border border-red-200 rounded hover:bg-red-50 transition-colors"
                           >
@@ -722,11 +732,8 @@ function OrdenesAplicacion() {
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [eliminarError, setEliminarError] = useState<string | null>(null)
-  const [valvulaDeshacer, setValvulaDeshacer] = useState<{
-    orden: OrdenAplicacion
-    valvula: OrdenAplicacionValvula
-    parcelaNombre: string
-  } | null>(null)
+  // Shared by OrdenCard and the "A revisar" panel, so keep it a flat target.
+  const [valvulaDeshacer, setValvulaDeshacer] = useState<DeshacerTarget | null>(null)
   const [deshaciendo, setDeshaciendo] = useState(false)
   const [deshacerError, setDeshacerError] = useState<string | null>(null)
   const queryClient = useQueryClient()
@@ -747,13 +754,18 @@ function OrdenesAplicacion() {
     }
   }
 
+  function abrirDeshacer(target: DeshacerTarget) {
+    setDeshacerError(null)
+    setValvulaDeshacer(target)
+  }
+
   async function confirmarDeshacer() {
     // Guard against double taps while the request is in flight.
     if (!valvulaDeshacer || deshaciendo) return
     setDeshaciendo(true)
     setDeshacerError(null)
     try {
-      await deshacerValvula(valvulaDeshacer.orden.id, valvulaDeshacer.valvula.id)
+      await deshacerValvula(valvulaDeshacer.ordenId, valvulaDeshacer.ordenValvulaId)
       queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion'] })
       queryClient.invalidateQueries({ queryKey: A_REVISAR_QUERY_KEY })
       // Stock and fito records changed too.
@@ -873,7 +885,16 @@ function OrdenesAplicacion() {
       </div>
 
       {vista === 'arevisar' ? (
-        <ARevisarPanel onCrearRepaso={setRepaso} />
+        <ARevisarPanel
+          onCrearRepaso={setRepaso}
+          onDeshacer={(v) => abrirDeshacer({
+            ordenId: v.orden_id,
+            ordenValvulaId: v.id,
+            valvulaNombre: v.valvula_nombre,
+            parcelaNombre: v.parcela_nombre,
+            insumoNombre: v.insumo_nombre,
+          })}
+        />
       ) : vista === 'aplicadas' ? (
         <AplicacionesRealizadas />
       ) : (
@@ -893,10 +914,13 @@ function OrdenesAplicacion() {
               orden={o}
               puedeGestionar={puedeCrear}
               onDeshacer={puedeRevisar
-                ? (orden, valvula, parcelaNombre) => {
-                    setDeshacerError(null)
-                    setValvulaDeshacer({ orden, valvula, parcelaNombre })
-                  }
+                ? (orden, valvula, parcelaNombre) => abrirDeshacer({
+                    ordenId: orden.id,
+                    ordenValvulaId: valvula.id,
+                    valvulaNombre: valvula.valvula_nombre,
+                    parcelaNombre,
+                    insumoNombre: orden.insumo_nombre,
+                  })
                 : undefined}
               onEditar={setOrdenEditar}
               onEliminar={(orden) => { setEliminarError(null); setOrdenEliminar(orden) }}
@@ -971,8 +995,8 @@ function OrdenesAplicacion() {
       {valvulaDeshacer && (
         <Modal title="Deshacer válvula" onClose={() => { if (!deshaciendo) setValvulaDeshacer(null) }}>
           <p className="text-sm text-gray-700">
-            ¿Deshacer la confirmación de la válvula <strong>{valvulaDeshacer.valvula.valvula_nombre}</strong> de{' '}
-            {valvulaDeshacer.parcelaNombre} ({valvulaDeshacer.orden.insumo_nombre})? Se devuelve el stock del insumo y
+            ¿Deshacer la confirmación de la válvula <strong>{valvulaDeshacer.valvulaNombre}</strong> de{' '}
+            {valvulaDeshacer.parcelaNombre} ({valvulaDeshacer.insumoNombre})? Se devuelve el stock del insumo y
             se borra el registro fitosanitario. La válvula vuelve a quedar pendiente.
           </p>
           {deshacerError && <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{deshacerError}</p>}
