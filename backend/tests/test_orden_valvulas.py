@@ -599,3 +599,200 @@ async def test_operario_de_otra_finca_no_puede_subir_foto_a_una_valvula(
         files={"file": ("a.jpg", b"\xff\xd8\xff", "image/jpeg")}, headers=ajeno,
     )
     assert r.status_code == 403, r.text
+
+
+# ── Deshacer la confirmación de una válvula ──────────────────────────────────
+
+
+def _url_deshacer(orden, fila_id):
+    return f"/ordenes-aplicacion/{orden['id']}/valvulas/{fila_id}/deshacer"
+
+
+async def test_deshacer_valvula_completa_devuelve_stock_y_borra_registro(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    from app.models.insumo import MovimientoStock
+
+    headers, _ = await _auth(client, create_user)
+    orden, filas, insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(_url(orden, filas["22"]), json={"resultado": "completa"}, headers=headers)
+    assert await _stock(db_session, insumo) == 96.0
+
+    resp = await client.post(_url_deshacer(orden, filas["22"]), headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["estado"] == "pendiente"
+    assert body["resultado"] is None
+    assert body["confirmada_at"] is None
+    assert body["registro_fitosanitario_id"] is None
+    assert await _stock(db_session, insumo) == 100.0
+    db_session.expire_all()
+    assert (await db_session.execute(select(RegistroFitosanitario))).first() is None
+    assert (await db_session.execute(select(MovimientoStock))).first() is None
+
+
+async def test_deshacer_valvula_no_aplicada_no_toca_stock(
+    client, db_session, monkeypatch, create_user, create_insumo, create_parcela, create_valvula,
+):
+    async def _fake_upload(raw, content_type, ident):
+        return f"https://fotos.test/{ident}.jpg"
+
+    monkeypatch.setattr("app.api.ordenes_aplicacion.upload_foto_orden_aplicacion", _fake_upload)
+    headers, _ = await _auth(client, create_user)
+    orden, filas, insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(
+        _url(orden, filas["21"]),
+        json={"resultado": "no_aplicada", "observaciones": "Caño roto"}, headers=headers,
+    )
+    foto = await client.post(
+        f"/ordenes-aplicacion/valvulas/{filas['21']}/fotos",
+        files={"file": ("a.jpg", b"\xff\xd8\xff", "image/jpeg")}, headers=headers,
+    )
+    assert foto.status_code == 201, foto.text
+
+    resp = await client.post(_url_deshacer(orden, filas["21"]), headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["estado"] == "pendiente"
+    assert resp.json()["observaciones"] is None
+    assert await _stock(db_session, insumo) == 100.0
+    db_session.expire_all()
+    assert (await db_session.execute(select(FotoRegistroFitosanitario))).first() is None
+
+
+async def test_deshacer_valvula_completa_borra_sus_fotos(
+    client, db_session, monkeypatch, create_user, create_insumo, create_parcela, create_valvula,
+):
+    async def _fake_upload(raw, content_type, ident):
+        return f"https://fotos.test/{ident}.jpg"
+
+    monkeypatch.setattr("app.api.ordenes_aplicacion.upload_foto_orden_aplicacion", _fake_upload)
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(_url(orden, filas["21"]), json={"resultado": "completa"}, headers=headers)
+    await client.post(
+        f"/ordenes-aplicacion/valvulas/{filas['21']}/fotos",
+        files={"file": ("a.jpg", b"\xff\xd8\xff", "image/jpeg")}, headers=headers,
+    )
+
+    resp = await client.post(_url_deshacer(orden, filas["21"]), headers=headers)
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    assert (await db_session.execute(select(FotoRegistroFitosanitario))).first() is None
+    assert (await db_session.execute(select(RegistroFitosanitario))).first() is None
+
+
+async def test_deshacer_ultima_valvula_baja_parcela_y_orden(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    for nombre in ("21", "22", "23"):
+        await client.post(_url(orden, filas[nombre]), json={"resultado": "completa"}, headers=headers)
+    body = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert (body["estado"], body["parcelas"][0]["estado"]) == ("completada", "aplicada")
+
+    r = await client.post(_url_deshacer(orden, filas["23"]), headers=headers)
+    assert r.status_code == 200, r.text
+    body = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert (body["estado"], body["parcelas"][0]["estado"]) == ("en_curso", "pendiente")
+
+
+async def test_deshacer_unica_valvula_deja_orden_pendiente(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(_url(orden, filas["21"]), json={"resultado": "completa"}, headers=headers)
+    body = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert body["estado"] == "en_curso"
+
+    r = await client.post(_url_deshacer(orden, filas["21"]), headers=headers)
+    assert r.status_code == 200, r.text
+    body = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
+    assert body["estado"] == "pendiente"
+
+
+async def test_deshacer_valvula_pendiente_da_409(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+
+    r = await client.post(_url_deshacer(orden, filas["21"]), headers=headers)
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"] == "Esta válvula todavía no fue confirmada"
+
+
+async def test_deshacer_dos_veces_da_409_y_stock_se_devuelve_una_vez(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(_url(orden, filas["22"]), json={"resultado": "completa"}, headers=headers)
+
+    assert (await client.post(_url_deshacer(orden, filas["22"]), headers=headers)).status_code == 200
+    assert (await client.post(_url_deshacer(orden, filas["22"]), headers=headers)).status_code == 409
+    assert await _stock(db_session, insumo) == 100.0
+
+
+async def test_deshacer_limpia_revision(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    await client.post(
+        _url(orden, filas["23"]),
+        json={"resultado": "no_aplicada", "observaciones": "Se cortó el agua"}, headers=headers,
+    )
+    revisar = await client.post(f"/ordenes-aplicacion/valvulas/{filas['23']}/revisar", headers=headers)
+    assert revisar.status_code == 204
+
+    r = await client.post(_url_deshacer(orden, filas["23"]), headers=headers)
+    assert r.status_code == 200, r.text
+    db_session.expire_all()
+    fila = await db_session.get(OrdenAplicacionValvula, filas["23"])
+    assert fila.revisada_at is None
+    assert fila.revisada_por is None
+    assert (await client.get("/ordenes-aplicacion/a-revisar", headers=headers)).json() == []
+
+
+async def test_deshacer_roles(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    for nombre in ("21", "22", "23"):
+        await client.post(_url(orden, filas[nombre]), json={"resultado": "completa"}, headers=headers)
+
+    regador, _u = await _auth(
+        client, create_user, email="reg@test.com", role=UserRole.regador, finca=Finca.media_agua,
+    )
+    obrero, _u = await _auth(
+        client, create_user, email="obr@test.com", role=UserRole.obrero, finca=Finca.media_agua,
+    )
+    ajeno, _u = await _auth(
+        client, create_user, email="enc2@test.com", role=UserRole.encargado, finca=Finca.caucete,
+    )
+    propio, _u = await _auth(
+        client, create_user, email="enc1@test.com", role=UserRole.encargado, finca=Finca.media_agua,
+    )
+
+    assert (await client.post(_url_deshacer(orden, filas["21"]), headers=regador)).status_code == 403
+    assert (await client.post(_url_deshacer(orden, filas["21"]), headers=obrero)).status_code == 403
+    assert (await client.post(_url_deshacer(orden, filas["21"]), headers=ajeno)).status_code == 403
+    assert (await client.post(_url_deshacer(orden, filas["21"]), headers=propio)).status_code == 200
+    assert (await client.post(_url_deshacer(orden, filas["22"]), headers=headers)).status_code == 200
+
+
+async def test_deshacer_valvula_o_orden_inexistente_es_404(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden, filas, _i = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+
+    r = await client.post(_url_deshacer(orden, "no-existe"), headers=headers)
+    assert r.status_code == 404, r.text
+    r = await client.post(
+        f"/ordenes-aplicacion/no-existe/valvulas/{filas['21']}/deshacer", headers=headers,
+    )
+    assert r.status_code == 404, r.text
