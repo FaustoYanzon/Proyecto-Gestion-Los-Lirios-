@@ -23,7 +23,7 @@ interface Props {
   parcelaNombre: (id: string) => string
   // Sin handlers la tabla queda de solo lectura (roles sin permiso de corrección).
   onEdit?: (r: FitosanitarioResponse) => void
-  onDelete?: (id: string) => void
+  onDelete?: (id: string) => void | Promise<void>
 }
 
 function SkeletonRow() {
@@ -42,7 +42,8 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
   const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
   function handleDelete(id: string) {
-    if (onDelete && window.confirm('¿Eliminar este registro? Si vino de una orden de aplicación, esa parcela vuelve a quedar pendiente y se devuelve el stock.')) onDelete(id)
+    // Parent handles errors (409 for valvula-born records); nothing to await here
+    if (onDelete && window.confirm('¿Eliminar este registro? Si vino de una orden por parcela entera, esa parcela vuelve a quedar pendiente y se devuelve el stock. Los registros que vinieron de una válvula no se pueden borrar desde acá: se deshacen desde la válvula (Órdenes de aplicación → Deshacer).')) void onDelete(id)
   }
 
   return (

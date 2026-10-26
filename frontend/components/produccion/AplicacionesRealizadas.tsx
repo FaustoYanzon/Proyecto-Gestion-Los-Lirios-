@@ -83,6 +83,7 @@ export default function AplicacionesRealizadas() {
   const [filtros, setFiltros] = useState<FitosanitarioFilter>(EMPTY_FILTERS)
   const [modalOpen, setModalOpen] = useState(false)
   const [registroEditar, setRegistroEditar] = useState<FitosanitarioResponse | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const { data: registros = [], isLoading } = useQuery({
     queryKey: ['fitosanitarios', filtros],
@@ -110,9 +111,16 @@ export default function AplicacionesRealizadas() {
   function closeModal() { setModalOpen(false); setRegistroEditar(null) }
 
   async function handleDelete(id: string) {
-    await deleteFitosanitario(id)
-    queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
-    queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+    setDeleteError(null)
+    try {
+      await deleteFitosanitario(id)
+      queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
+      queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+    } catch (e) {
+      // Backend answers 409 for records born from a valvula; surface its detail
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setDeleteError(typeof detail === 'string' ? detail : 'No se pudo eliminar el registro.')
+    }
   }
 
   function setFiltro(key: keyof FitosanitarioFilter, value: string) {
@@ -180,6 +188,13 @@ export default function AplicacionesRealizadas() {
           )}
         </div>
       </div>
+
+      {deleteError && (
+        <div role="alert" className="flex items-start justify-between gap-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          <span>{deleteError}</span>
+          <button onClick={() => setDeleteError(null)} aria-label="Cerrar" className="text-red-500 hover:text-red-700"><X size={15} /></button>
+        </div>
+      )}
 
       <FitosanitariosTable
         registros={registros}
