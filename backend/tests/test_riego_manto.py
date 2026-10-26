@@ -384,3 +384,66 @@ def test_goteo_no_cambia() -> None:
 )
 def test_valvulas_manto_de(ha: float, esperado: int) -> None:
     assert RegistroRiego.valvulas_manto_de(ha) == esperado
+
+
+async def _crear_manto_y_cambiar_superficie(
+    client, create_parcela, db_session, headers, nueva, nombre: str = "Parcela Test"
+) -> tuple[dict, str]:
+    from app.models.parcela import Parcela
+
+    parcela = await create_parcela(nombre=nombre, superficie_ha=2.3)
+    creado = (await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )).json()
+    guardada = await db_session.get(Parcela, parcela.id)
+    guardada.superficie_ha = nueva
+    await db_session.commit()
+    return creado, parcela.id
+
+
+async def test_put_manto_nuevo_no_recalcula_n_si_cambia_superficie(
+    client, create_user, create_parcela, db_session
+):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    creado, _ = await _crear_manto_y_cambiar_superficie(client, create_parcela, db_session, headers, 3.2)
+
+    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"responsable": "X"}, headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["n_valvulas"] == 3
+    assert resp.json()["litros_aplicados"] == creado["litros_aplicados"] == 120_000
+    assert resp.json()["responsable"] == "X"
+
+
+async def test_put_manto_nuevo_editable_si_se_borra_superficie(
+    client, create_user, create_parcela, db_session
+):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    for nueva in (None, 0):
+        creado, _ = await _crear_manto_y_cambiar_superficie(
+            client, create_parcela, db_session, headers, nueva, nombre=f"P {nueva}"
+        )
+
+        resp = await client.put(
+            f"/produccion/riego/{creado['id']}", json={"responsable": "X"}, headers=headers
+        )
+
+        assert resp.status_code == 200, nueva
+        assert resp.json()["n_valvulas"] == 3
+        assert resp.json()["litros_aplicados"] == 120_000
+
+
+async def test_put_manto_nuevo_sigue_rechazando_fertirriego(client, create_user, create_parcela, db_session):
+    headers = await _auth(client, create_user, role=UserRole.gerencial)
+    creado, _ = await _crear_manto_y_cambiar_superficie(client, create_parcela, db_session, headers, 2.3)
+
+    resp = await client.put(
+        f"/produccion/riego/{creado['id']}", json={"fertilizante_nombre": "Urea"}, headers=headers
+    )
+    assert resp.status_code == 422
+    resp = await client.put(
+        f"/produccion/riego/{creado['id']}", json={"cabezal": "1", "valvula": "1,2"}, headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["cabezal"] is None
+    assert resp.json()["valvula"] is None

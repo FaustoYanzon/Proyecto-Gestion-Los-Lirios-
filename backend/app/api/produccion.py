@@ -810,6 +810,14 @@ async def list_valvulas(
 _PARCELAS_CON_MANTO = (TipoParcela.parral, TipoParcela.potrero)
 
 
+def _validar_manto_sin_fertirriego(data: dict) -> None:
+    if data.get("fertilizante_nombre") or data.get("fertilizante_dosis_lt_ha"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El riego a manto no lleva fertirriego.",
+        )
+
+
 async def _normalizar_riego(
     db: AsyncSession, data: dict, riego: RegistroRiego | None = None
 ) -> dict:
@@ -819,11 +827,24 @@ async def _normalizar_riego(
     with the PUT body). `riego` is the stored record on PUT, None on create.
     """
     tipo = data.get("tipo") or TipoRiego.goteo
-    if riego is not None and riego.tipo == TipoRiego.manto and riego.n_valvulas_manto is None:
-        # Historical manto keeps its stored valves and the legacy 40% factor:
-        # only a change of tipo or parcela moves it onto the current rules.
-        if tipo == riego.tipo and data.get("parcela_id") == riego.parcela_id:
+    if (
+        riego is not None
+        and riego.tipo == TipoRiego.manto
+        and tipo == riego.tipo
+        and data.get("parcela_id") == riego.parcela_id
+    ):
+        if riego.n_valvulas_manto is None:
+            # Historical manto keeps its stored valves and the legacy 40% factor:
+            # only a change of tipo or parcela moves it onto the current rules.
             return data
+        # n_valvulas_manto is frozen at creation so later superficie edits (or a
+        # cleared superficie) never rewrite past litros nor block unrelated edits.
+        # Only the cheap invariants are re-applied; no parcela lookup.
+        _validar_manto_sin_fertirriego(data)
+        data["cabezal"] = None
+        data["valvula"] = None
+        data["n_valvulas_manto"] = riego.n_valvulas_manto
+        return data
 
     if tipo == TipoRiego.goteo:
         if not data.get("cabezal") or not data.get("valvula"):
@@ -834,11 +855,7 @@ async def _normalizar_riego(
         data["n_valvulas_manto"] = None
         return data
 
-    if data.get("fertilizante_nombre") or data.get("fertilizante_dosis_lt_ha"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="El riego a manto no lleva fertirriego.",
-        )
+    _validar_manto_sin_fertirriego(data)
     parcela = await db.get(Parcela, data.get("parcela_id"))
     # valvulas_manto_de has no None guard: superficie must be checked here first.
     if (
