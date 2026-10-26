@@ -73,7 +73,7 @@ async def test_manto_calcula_por_superficie(client, create_user, create_parcela)
     assert data["litros_aplicados"] == 120_000
     assert data["mm_aplicados"] == 4.0
     assert data["cabezal"] is None
-    assert data["valvula"] is None
+    assert data["valvula"] == ""
     assert data["factor_aplicado"] == 0.25
 
 
@@ -101,7 +101,7 @@ async def test_manto_ignora_cabezal_y_valvula_de_cliente_viejo(client, create_us
     assert resp.status_code == 201
     data = resp.json()
     assert data["cabezal"] is None
-    assert data["valvula"] is None
+    assert data["valvula"] == ""
     assert data["n_valvulas"] == 3
     assert data["litros_aplicados"] == 120_000
 
@@ -282,7 +282,7 @@ async def test_put_goteo_a_manto_fija_n_valvulas(client, create_user, create_par
     assert data["mm_aplicados"] == 4.0
     assert data["litros_aplicados"] == 120_000
     assert data["cabezal"] is None
-    assert data["valvula"] is None
+    assert data["valvula"] == ""
     assert data["factor_aplicado"] == 0.25
 
 
@@ -446,4 +446,37 @@ async def test_put_manto_nuevo_sigue_rechazando_fertirriego(client, create_user,
     )
     assert resp.status_code == 200
     assert resp.json()["cabezal"] is None
-    assert resp.json()["valvula"] is None
+    assert resp.json()["valvula"] == ""
+
+
+# --- API compatibility: pre-manto clients call valvula.split(',') ---
+
+
+async def test_manto_nuevo_responde_valvula_vacia_no_null(client, create_user, create_parcela, db_session):
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    creado = await client.post(
+        "/produccion/riego/", json=_payload(parcela.id, tipo="manto"), headers=headers
+    )
+    iniciado = await client.post("/produccion/riego/iniciar", json=_iniciar(parcela.id), headers=headers)
+    assert creado.status_code == 201
+    assert iniciado.status_code == 201
+
+    listado = await client.get("/produccion/riego/", headers=headers)
+    uno = await client.get(f"/produccion/riego/{creado.json()['id']}", headers=headers)
+    en_curso = await client.get("/produccion/riego/en-curso", headers=headers)
+
+    items = [
+        creado.json(),
+        iniciado.json(),
+        next(r for r in listado.json() if r["id"] == creado.json()["id"]),
+        uno.json(),
+        next(r for r in en_curso.json() if r["id"] == iniciado.json()["id"]),
+    ]
+    for item in items:
+        assert item["valvula"] == ""
+        assert item["cabezal"] is None
+    # The database keeps NULL; only the API output changes.
+    guardado = await db_session.get(RegistroRiego, creado.json()["id"])
+    assert guardado.valvula is None
+

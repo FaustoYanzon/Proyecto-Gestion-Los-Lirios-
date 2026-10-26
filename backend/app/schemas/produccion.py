@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.models.finanzas import Finca
 from app.models.insumo import UnidadInsumo
@@ -173,6 +173,12 @@ class RegistroRiegoResponse(RegistroRiegoBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+    # Pre-manto web/mobile clients call valvula.split(',') without a guard and
+    # the backend deploys before them: never send null. The DB keeps NULL.
+    @field_serializer("valvula")
+    def _valvula_never_null(self, v: str | None) -> str:
+        return v or ""
+
 
 # ── Riego en curso (inicio sin fin todavía) ───────────────────────────────────
 
@@ -204,6 +210,12 @@ class RegistroRiegoEnCursoResponse(BaseModel):
     fertilizante_nombre: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    # Pre-manto web/mobile clients call valvula.split(',') without a guard and
+    # the backend deploys before them: never send null. The DB keeps NULL.
+    @field_serializer("valvula")
+    def _valvula_never_null(self, v: str | None) -> str:
+        return v or ""
 
 
 class RegistroRiegoTerminar(BaseModel):
