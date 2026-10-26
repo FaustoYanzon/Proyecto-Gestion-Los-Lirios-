@@ -9,8 +9,8 @@ El registro de riego ahora empieza preguntando goteo o manto. El manto se elige 
 
 ## Decisiones
 
-- **Válvulas = `ceil(superficie_ha)`.** La parcela se divide en cuadrantes de 1 ha con una válvula cada uno; la fracción cuenta como un cuadrante más.
-- **Factor 0.25 por válvula** (`FACTOR_MANTO_SUPERFICIE`): `litros = horas × 16 000 × 0.25 × n_valvulas`; `mm = horas × 1.6 × 0.25` (0.4 mm/h, no depende del tamaño). Ejemplo: 2 h en Parral 2 (3 ha) = 24 000 L y 0.8 mm.
+- **Válvulas = `max(1, ceil(round(superficie_ha, 4)))`** (superficie redondeada a 4 decimales, mínimo 1; por ejemplo 0.4 ha → 1 válvula). La parcela se divide en cuadrantes de 1 ha con una válvula cada uno; la fracción cuenta como un cuadrante más.
+- **Factor 0.25 por válvula** (`FACTOR_MANTO_SUPERFICIE`): `litros = horas × 16 000 × 0.25 × n_valvulas`; `mm = horas × 1.6 × 0.25` (0.4 mm/h, no depende del tamaño). Ejemplos con 2 h: Parral 2 (3 ha, 3 válvulas) = 24 000 L y 0.8 mm; Potrero 23 (2.3 ha, 3 válvulas) = 24 000 L y 0.8 mm.
 - **El histórico no se toca.** El manto viejo (`n_valvulas_manto IS NULL`) conserva factor 0.4 y sus válvulas salen del CSV del campo `valvula`. No se recalcula ningún registro viejo.
 - **`n_valvulas_manto` congela el cálculo** del momento: si la superficie cambia después, el historial no se mueve. Solo se llena en manto nuevo.
 - **Manto sin cabezal, sin válvulas y sin fertirriego.** `cabezal` y `valvula` pasan a nullable; el schema rechaza fertilizante en manto (422) y exige cabezal/válvula en goteo (422). Si un cliente viejo manda cabezal/válvula en manto, se ignoran.
