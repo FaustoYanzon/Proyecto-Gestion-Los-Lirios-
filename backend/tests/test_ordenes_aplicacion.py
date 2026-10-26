@@ -348,3 +348,28 @@ async def test_borrar_registro_de_orden_vuelve_la_parcela_a_pendiente(
     assert detalle["parcelas"][0]["registro_fitosanitario_id"] is None
     insumo_actual = await client.get(f"/insumos/{insumo.id}", headers=headers)
     assert float(insumo_actual.json()["stock_actual"]) == 50.0
+
+
+async def test_borrar_registro_de_orden_deja_auditoria(
+    client, create_user, create_insumo, create_parcela, caplog,
+):
+    headers, user = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
+    insumo = await create_insumo(stock_actual=50.0)
+    parcela = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua, superficie_ha=1.0)
+    orden = await _crear_orden_extra(client, headers, insumo.id, parcela.id)
+    item_id = orden["parcelas"][0]["id"]
+    conf = await client.post(
+        f"/ordenes-aplicacion/{orden['id']}/parcelas/{item_id}/confirmar", json={}, headers=headers,
+    )
+    registro_id = conf.json()["registro_fitosanitario_id"]
+
+    with caplog.at_level("INFO", logger="app"):
+        resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
+    assert resp.status_code == 204, resp.text
+
+    # Who deleted what, and which order went back to pendiente: the DB keeps no trace.
+    mensajes = [r.getMessage() for r in caplog.records if "fitosanitario eliminado" in r.getMessage()]
+    assert len(mensajes) == 1
+    assert registro_id in mensajes[0]
+    assert orden["id"] in mensajes[0]
+    assert user.id in mensajes[0]

@@ -41,9 +41,17 @@ const PAGE_SIZE = 10
 export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
   const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
-  function handleDelete(id: string) {
-    // Parent handles errors (409 for valvula-born records); nothing to await here
-    if (onDelete && window.confirm('¿Eliminar este registro? Si vino de una orden por parcela entera, esa parcela vuelve a quedar pendiente y se devuelve el stock. Los registros que vinieron de una válvula no se pueden borrar desde acá: se deshacen desde la válvula (Órdenes de aplicación → Deshacer).')) void onDelete(id)
+  function handleDelete(r: FitosanitarioResponse) {
+    if (!onDelete) return
+    // Typed confirmation: a stray click on the trash icon once reopened two
+    // completed orders. Parent handles errors (409 for valvula-born records).
+    const respuesta = window.prompt(
+      `Vas a eliminar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n` +
+      'Se devuelve el stock. Si vino de una orden por parcela entera, esa parcela y la orden vuelven a quedar pendientes.\n' +
+      'Los registros que vinieron de una válvula no se borran desde acá: se deshacen desde Órdenes de aplicación → Deshacer.\n\n' +
+      'Para confirmar escribí ELIMINAR.',
+    )
+    if (respuesta?.trim().toUpperCase() === 'ELIMINAR') void onDelete(r.id)
   }
 
   return (
@@ -115,7 +123,7 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                           </button>
                         )}
                         {onDelete && (
-                          <button onClick={() => handleDelete(r.id)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <button onClick={() => handleDelete(r)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                             <Trash2 size={15} />
                           </button>
                         )}

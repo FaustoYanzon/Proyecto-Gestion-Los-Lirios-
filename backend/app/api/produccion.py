@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -97,6 +98,8 @@ from app.schemas.produccion import (
     ResumenTrabajoPorParcela,
     ResumenTrabajoTotal,
 )
+
+logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/produccion", tags=["Produccion"])
 
@@ -1093,7 +1096,7 @@ async def update_fitosanitario(
 async def delete_fitosanitario(
     fitosanitario_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_gerencial_up),
+    current_user: User = Depends(require_gerencial_up),
 ) -> None:
     result = await db.execute(
         select(RegistroFitosanitario)
@@ -1135,6 +1138,17 @@ async def delete_fitosanitario(
         )
         await db.flush()
 
+    # The DB keeps no trace of a delete: log who removed what and which order
+    # went back to pendiente, so a "my orders reverted" report can be traced.
+    logger.info(
+        "fitosanitario eliminado registro=%s producto=%s parcela=%s fecha=%s orden=%s user=%s",
+        fito.id,
+        fito.producto_nombre,
+        fito.parcela_id,
+        fito.fecha,
+        item.orden_id if item is not None else None,
+        current_user.id,
+    )
     for foto in fito.fotos:
         await db.delete(foto)
     await db.delete(fito)
