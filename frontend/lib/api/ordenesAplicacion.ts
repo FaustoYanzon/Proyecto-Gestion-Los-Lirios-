@@ -146,3 +146,9 @@ export async function getValvulasARevisar(): Promise<ValvulaARevisar[]> {
 export async function revisarValvula(ordenValvulaId: string): Promise<void> {
   await api.post(`/ordenes-aplicacion/valvulas/${ordenValvulaId}/revisar`)
 }
+
+// Reverts a confirmed válvula back to pendiente: the backend returns the
+// stock and deletes the registro fitosanitario. 409 if not confirmed yet.
+export async function deshacerValvula(ordenId: string, ordenValvulaId: string): Promise<void> {
+  await api.post(`/ordenes-aplicacion/${ordenId}/valvulas/${ordenValvulaId}/deshacer`)
+}

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2 } from 'lucide-react'
+import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -15,9 +15,11 @@ import {
   eliminarOrdenExtra,
   getValvulasARevisar,
   revisarValvula,
+  deshacerValvula,
   type OrdenAplicacion,
   type EstadoOrdenAplicacion,
   type ValvulaARevisar,
+  type OrdenAplicacionValvula,
 } from '@/lib/api/ordenesAplicacion'
 import { getPlanFitosanitario, type PlanFitosanitario } from '@/lib/api/planFitosanitario'
 import { getParcelas, VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
@@ -560,10 +562,12 @@ function progresoOrden(orden: OrdenAplicacion) {
 }
 
 function OrdenCard({
-  orden, puedeGestionar, onEditar, onEliminar,
+  orden, puedeGestionar, onEditar, onEliminar, onDeshacer,
 }: {
   orden: OrdenAplicacion
   puedeGestionar: boolean
+  // Undefined when the user cannot undo (role below encargado).
+  onDeshacer?: (orden: OrdenAplicacion, valvula: OrdenAplicacionValvula, parcelaNombre: string) => void
   onEditar: (orden: OrdenAplicacion) => void
   onEliminar: (orden: OrdenAplicacion) => void
 }) {
@@ -639,6 +643,15 @@ function OrdenCard({
                         )}
                         {v.responsable && <span className="text-gray-500"> · {v.responsable}</span>}
                         {v.observaciones && <span className="italic text-gray-500"> · “{v.observaciones}”</span>}
+                        {onDeshacer && v.estado !== 'pendiente' && (
+                          <button
+                            onClick={() => onDeshacer(orden, v, p.parcela_nombre)}
+                            className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium text-red-600 bg-white border border-red-200 rounded hover:bg-red-50 transition-colors"
+                          >
+                            <Undo2 size={11} />
+                            Deshacer
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -709,6 +722,13 @@ function OrdenesAplicacion() {
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [eliminarError, setEliminarError] = useState<string | null>(null)
+  const [valvulaDeshacer, setValvulaDeshacer] = useState<{
+    orden: OrdenAplicacion
+    valvula: OrdenAplicacionValvula
+    parcelaNombre: string
+  } | null>(null)
+  const [deshaciendo, setDeshaciendo] = useState(false)
+  const [deshacerError, setDeshacerError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   async function confirmarEliminar() {
@@ -724,6 +744,27 @@ function OrdenesAplicacion() {
       setEliminarError(typeof detail === 'string' ? detail : 'No se pudo eliminar la orden.')
     } finally {
       setEliminando(false)
+    }
+  }
+
+  async function confirmarDeshacer() {
+    // Guard against double taps while the request is in flight.
+    if (!valvulaDeshacer || deshaciendo) return
+    setDeshaciendo(true)
+    setDeshacerError(null)
+    try {
+      await deshacerValvula(valvulaDeshacer.orden.id, valvulaDeshacer.valvula.id)
+      queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion'] })
+      queryClient.invalidateQueries({ queryKey: A_REVISAR_QUERY_KEY })
+      // Stock and fito records changed too.
+      queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
+      queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+      setValvulaDeshacer(null)
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setDeshacerError(typeof detail === 'string' ? detail : 'No se pudo deshacer la válvula.')
+    } finally {
+      setDeshaciendo(false)
     }
   }
 
@@ -851,6 +892,12 @@ function OrdenesAplicacion() {
               key={o.id}
               orden={o}
               puedeGestionar={puedeCrear}
+              onDeshacer={puedeRevisar
+                ? (orden, valvula, parcelaNombre) => {
+                    setDeshacerError(null)
+                    setValvulaDeshacer({ orden, valvula, parcelaNombre })
+                  }
+                : undefined}
               onEditar={setOrdenEditar}
               onEliminar={(orden) => { setEliminarError(null); setOrdenEliminar(orden) }}
             />
@@ -916,6 +963,34 @@ function OrdenesAplicacion() {
             >
               {eliminando && <Loader2 size={14} className="animate-spin" />}
               Eliminar
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {valvulaDeshacer && (
+        <Modal title="Deshacer válvula" onClose={() => { if (!deshaciendo) setValvulaDeshacer(null) }}>
+          <p className="text-sm text-gray-700">
+            ¿Deshacer la confirmación de la válvula <strong>{valvulaDeshacer.valvula.valvula_nombre}</strong> de{' '}
+            {valvulaDeshacer.parcelaNombre} ({valvulaDeshacer.orden.insumo_nombre})? Se devuelve el stock del insumo y
+            se borra el registro fitosanitario. La válvula vuelve a quedar pendiente.
+          </p>
+          {deshacerError && <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{deshacerError}</p>}
+          <div className="flex items-center justify-end gap-3 mt-5 pt-3 border-t border-gray-100">
+            <button
+              onClick={() => setValvulaDeshacer(null)}
+              disabled={deshaciendo}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirmarDeshacer}
+              disabled={deshaciendo}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-60 transition-colors"
+            >
+              {deshaciendo && <Loader2 size={14} className="animate-spin" />}
+              Deshacer
             </button>
           </div>
         </Modal>
