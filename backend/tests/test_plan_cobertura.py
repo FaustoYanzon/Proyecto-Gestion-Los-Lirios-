@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.models.parcela import VariedadUva
+from app.models.valvula import Valvula
 from app.services.plan_cobertura import cobertura_por_parcela
 from tests.helpers_plan import aplicar, auth, crear_plan, linea, registro_parcela_entera
 
@@ -235,3 +236,100 @@ async def test_necesidad_stock_usa_hectareas_pendientes(
     # The application consumed 1.5 * 4 = 6 of the 10 in stock -> 4 left, 2 short.
     assert Decimal(item["stock_actual"]) == Decimal("4")
     assert item["faltante"] == 2.0
+
+
+async def test_todas_las_valvulas_activas_cubiertas_cubre_la_parcela_entera(
+    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
+):
+    """Valve surfaces summing slightly below the parcel's (5.99 vs 6.0) must not
+    leave a residual pending area that keeps the round's card alive forever."""
+    headers, _ = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 5", variedad=VariedadUva.flame, superficie_ha=6.0)
+    for i, ha in enumerate((1.0, 2.0, 2.99), start=1):
+        await create_valvula(parcela_id=parcela.id, nombre=f"5{i}", orden=i, superficie_ha=ha)
+    insumo = await create_insumo()
+    await crear_plan(client, headers, insumo.id, ["flame"])
+
+    await aplicar(client, headers, [linea(insumo.id)], [parcela.id])
+
+    (cob,) = await cobertura_por_parcela(db_session, 2026)
+    assert cob.ha_cubiertas == Decimal("6")
+    fila = (await _cumplimiento(client, headers))[0]
+    assert fila["estado"] == "completo"
+    assert fila["pendiente_ha"] == 0.0
+
+    rondas = await client.get(
+        "/plan-fitosanitario/rondas-pendientes", params={"temporada": 2026}, headers=headers,
+    )
+    assert rondas.status_code == 200, rondas.text
+    assert rondas.json() == []
+
+
+async def test_valvula_inactiva_no_impide_cubrir_la_parcela(
+    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
+):
+    headers, _ = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 6", variedad=VariedadUva.flame, superficie_ha=6.0)
+    activa_1 = await create_valvula(parcela_id=parcela.id, nombre="61", orden=1, superficie_ha=2.5)
+    activa_2 = await create_valvula(parcela_id=parcela.id, nombre="62", orden=2, superficie_ha=3.0)
+    inactiva = await create_valvula(parcela_id=parcela.id, nombre="63", orden=3, superficie_ha=0.5)
+    insumo = await create_insumo()
+    await crear_plan(client, headers, insumo.id, ["flame"])
+
+    await aplicar(client, headers, [linea(insumo.id)], [parcela.id], valvula_ids=[activa_1.id, activa_2.id])
+    valvula = await db_session.get(Valvula, inactiva.id)
+    valvula.is_active = False
+    await db_session.commit()
+
+    (cob,) = await cobertura_por_parcela(db_session, 2026)
+    assert cob.ha_cubiertas == Decimal("6")
+
+
+async def test_valvulas_parciales_siguen_sumando_hectareas(
+    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
+):
+    """Not every active valve covered -> the plain valve sum still applies."""
+    headers, _ = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 7", variedad=VariedadUva.flame, superficie_ha=6.0)
+    v1 = await create_valvula(parcela_id=parcela.id, nombre="71", orden=1, superficie_ha=1.0)
+    v2 = await create_valvula(parcela_id=parcela.id, nombre="72", orden=2, superficie_ha=2.0)
+    await create_valvula(parcela_id=parcela.id, nombre="73", orden=3, superficie_ha=2.99)
+    insumo = await create_insumo()
+    await crear_plan(client, headers, insumo.id, ["flame"])
+
+    await aplicar(client, headers, [linea(insumo.id)], [parcela.id], valvula_ids=[v1.id, v2.id])
+
+    (cob,) = await cobertura_por_parcela(db_session, 2026)
+    assert cob.ha_cubiertas == Decimal("3")
+
+
+async def test_porcentaje_no_redondea_a_100_si_falta(
+    client, create_user, create_parcela, create_insumo,
+):
+    headers, _ = await auth(client, create_user)
+    grande = await create_parcela(nombre="Grande", variedad=VariedadUva.flame, superficie_ha=999.6)
+    await create_parcela(nombre="Chica", variedad=VariedadUva.flame, superficie_ha=0.4)
+    insumo = await create_insumo(stock_actual=100000.0)
+    await crear_plan(client, headers, insumo.id, ["flame"])
+
+    await aplicar(client, headers, [linea(insumo.id)], [grande.id])
+
+    fila = (await _cumplimiento(client, headers))[0]
+    assert fila["estado"] == "parcial"
+    assert fila["porcentaje"] == 99
+
+
+async def test_porcentaje_no_redondea_a_0_si_hay_algo(
+    client, create_user, create_parcela, create_insumo,
+):
+    headers, _ = await auth(client, create_user)
+    await create_parcela(nombre="Grande", variedad=VariedadUva.flame, superficie_ha=999.6)
+    chica = await create_parcela(nombre="Chica", variedad=VariedadUva.flame, superficie_ha=0.4)
+    insumo = await create_insumo()
+    await crear_plan(client, headers, insumo.id, ["flame"])
+
+    await aplicar(client, headers, [linea(insumo.id)], [chica.id])
+
+    fila = (await _cumplimiento(client, headers))[0]
+    assert fila["estado"] == "parcial"
+    assert fila["porcentaje"] == 1

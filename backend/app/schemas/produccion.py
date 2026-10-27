@@ -365,6 +365,40 @@ class NecesidadInsumoItem(BaseModel):
     faltante: float
 
 
+
+class RondaPendienteLinea(BaseModel):
+    insumo_id: str
+    insumo_nombre: str
+    unidad: UnidadInsumo
+    dosis_por_ha: float
+
+
+class RondaPendienteParcela(BaseModel):
+    id: str
+    nombre: str
+    # Area still missing at least one of the card's lines (max over lines).
+    ha_pendientes: float
+    # Some line of the card is already (partly) applied here: the UI leaves it
+    # unticked, since an order sprays every line on every parcel it lists.
+    parcial: bool
+
+
+class RondaPendienteVariedad(BaseModel):
+    variedad: VariedadUva
+    ha_pendientes: float
+    parcelas: list[RondaPendienteParcela]
+
+
+class RondaPendiente(BaseModel):
+    """A pending plan round across varieties sharing the same products/doses:
+    one tap in the order form preloads all of it."""
+    numero_aplicacion: int
+    objetivo: str
+    mes: int
+    # Only the products still pending on at least one parcel.
+    lineas: list[RondaPendienteLinea]
+    variedades: list[RondaPendienteVariedad]
+
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────
 
 class OrdenAplicacionValvulaResponse(BaseModel):

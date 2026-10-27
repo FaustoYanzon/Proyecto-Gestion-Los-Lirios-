@@ -6,6 +6,11 @@ Unit of coverage: a valve (covers Valvula.superficie_ha) or the whole parcel
 (record with orden_valvula_id NULL covers Parcela.superficie_ha). Per plan row
 and parcel:
 - any linked whole-parcel record -> the parcel is fully covered;
+- when every ACTIVE valve of the parcel has a linked record -> the parcel is
+  fully covered too, even if the valve surfaces add up slightly below the
+  parcel's (5.99 vs 6.0): otherwise a residual pending area would keep the
+  round's card alive forever. A parcel without active valves never takes this
+  path;
 - otherwise the sum over DISTINCT valves with a linked record, so a touch-up
   order on the same valve does not count twice;
 - always capped at the parcel surface (whole parcel + valves, or valve
@@ -124,11 +129,24 @@ async def analizar_plan(
         )
     ).all()
 
+    valvulas_activas: dict[str, set[str]] = defaultdict(set)
+    for valvula_id, parcela_id in (
+        await db.execute(
+            select(Valvula.id, Valvula.parcela_id).where(
+                Valvula.is_active.is_(True),
+                Valvula.parcela_id.in_([p.id for p in parcelas]),
+            )
+        )
+    ).all():
+        valvulas_activas[parcela_id].add(valvula_id)
+
     superficie_parcela = {p.id: _ha(p.superficie_ha) for p in parcelas}
     acumulado: dict[tuple[str, str], _Acumulado] = defaultdict(_Acumulado)
     for plan_id, parcela_id, orden_valvula_id, dosis, valvula_id, sup_valvula in filas:
         if parcela_id not in superficie_parcela:
-            # Inactive parcel, or a variety the plan row does not cover.
+            # Inactive parcel, or of a variety no plan row of the season has. A
+            # parcel of another variety than its record's plan row is skipped
+            # later: the per-plan loop only reads parcels of the row's variety.
             continue
         acc = acumulado[(plan_id, parcela_id)]
         if orden_valvula_id is None:
@@ -138,6 +156,8 @@ async def analizar_plan(
             peso = _ha(sup_valvula)
             if valvula_id is not None:
                 acc.valvulas[valvula_id] = peso
+        # Touch-up records weigh in fully on purpose: the average describes
+        # every dose actually sprayed, not the (deduplicated) coverage.
         acc.dosis.append((peso, Decimal(str(dosis))))
 
     coberturas: list[CoberturaParcela] = []
@@ -149,7 +169,7 @@ async def analizar_plan(
             acc = acumulado.get((plan.id, parcela.id))
             if acc is None:
                 cubiertas = _ZERO
-            elif acc.parcela_entera:
+            elif acc.parcela_entera or _todas_las_valvulas(acc, valvulas_activas[parcela.id]):
                 cubiertas = ha_parcela
             else:
                 cubiertas = min(sum(acc.valvulas.values(), _ZERO), ha_parcela)
@@ -168,6 +188,12 @@ async def analizar_plan(
             dosis_real[plan.id] = _promedio_ponderado(pares)
 
     return AnalisisPlan(planes=planes, coberturas=coberturas, dosis_real_promedio=dosis_real)
+
+
+def _todas_las_valvulas(acc: _Acumulado, activas: set[str]) -> bool:
+    """Every active valve of the parcel has a linked record (False when the
+    parcel has no active valves, so those keep the plain rules)."""
+    return bool(activas) and activas <= acc.valvulas.keys()
 
 
 def _promedio_ponderado(pares: list[tuple[Decimal, Decimal]]) -> Decimal:

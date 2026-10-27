@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up, require_gerencial_up
 from app.models.insumo import Insumo
-from app.models.parcela import VariedadUva
+from app.models.parcela import Parcela, VariedadUva
 from app.models.produccion import PlanFitosanitario
 from app.models.user import User
 from app.schemas.produccion import (
@@ -17,6 +17,10 @@ from app.schemas.produccion import (
     PlanFitosanitarioCreate,
     PlanFitosanitarioResponse,
     PlanFitosanitarioUpdate,
+    RondaPendiente,
+    RondaPendienteLinea,
+    RondaPendienteParcela,
+    RondaPendienteVariedad,
 )
 from app.services.plan_cobertura import CoberturaParcela, analizar_plan
 
@@ -71,6 +75,17 @@ def _estado(cubiertas: Decimal, total: Decimal, aplicadas: int, parcelas: int) -
     return "completo" if aplicadas == parcelas else "parcial"
 
 
+def _porcentaje(cubiertas: Decimal, total: Decimal) -> int:
+    """Rounded percentage that never reads 100 while something is missing nor
+    0 once something was applied (999.6 of 1000 ha is not "complete")."""
+    porcentaje = int(round(100 * cubiertas / total))
+    if cubiertas < total:
+        porcentaje = min(porcentaje, 99)
+    if cubiertas > 0:
+        porcentaje = max(porcentaje, 1)
+    return porcentaje
+
+
 async def _calcular_cumplimiento(
     db: AsyncSession, temporada: int, variedad: VariedadUva | None = None,
 ) -> tuple[list[CumplimientoPlanItem], dict[str, Decimal]]:
@@ -101,9 +116,11 @@ async def _calcular_cumplimiento(
             if (c.ha_cubiertas >= c.ha_parcela if c.ha_parcela > 0 else c.tiene_registros)
         )
         if ha_total > 0:
-            porcentaje = round(100 * ha_cubiertas / ha_total)
+            porcentaje = _porcentaje(ha_cubiertas, ha_total)
+        elif parcelas_total:
+            porcentaje = _porcentaje(Decimal(parcelas_aplicadas), Decimal(parcelas_total))
         else:
-            porcentaje = round(100 * parcelas_aplicadas / parcelas_total) if parcelas_total else 0
+            porcentaje = 0
         dosis_real = analisis.dosis_real_promedio.get(plan.id)
 
         resultado.append(
@@ -117,7 +134,7 @@ async def _calcular_cumplimiento(
                 dosis_por_ha=plan.dosis_por_ha,
                 parcelas_total=parcelas_total,
                 parcelas_aplicadas=parcelas_aplicadas,
-                porcentaje=int(porcentaje),
+                porcentaje=porcentaje,
                 estado=_estado(ha_cubiertas, ha_total, parcelas_aplicadas, parcelas_total),
                 ha_total=float(round(ha_total, 4)),
                 ha_cubiertas=float(round(ha_cubiertas, 4)),
@@ -177,6 +194,142 @@ async def necesidad_stock(
         )
     items.sort(key=lambda x: x.faltante, reverse=True)
     return items
+
+
+def _linea_pendiente(cob: CoberturaParcela) -> bool:
+    """The plan row still needs this parcel (same rule as parcelas_aplicadas:
+    a parcel without surface is pending until it has a linked record)."""
+    if cob.ha_parcela > 0:
+        return cob.ha_cubiertas < cob.ha_parcela
+    return not cob.tiene_registros
+
+
+def _ha_float(value: Decimal) -> float:
+    return float(round(value, 4))
+
+
+_TarjetaKey = tuple[int, str, frozenset[tuple[str, Decimal]]]
+
+
+@router.get("/rondas-pendientes", response_model=list[RondaPendiente])
+async def rondas_pendientes(
+    temporada: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[RondaPendiente]:
+    """Pending plan rounds as cards for the order form.
+
+    Plan rows are grouped per variety by (numero_aplicacion, objetivo); the
+    varieties whose set of (insumo, dosis) is identical share one card, a
+    different dose means a separate card. A card lists only the lines still
+    pending on some parcel, so a round applied with 3 of its 4 products comes
+    back with the missing one alone; fully covered parcels, varieties and
+    cards are left out.
+    """
+    analisis = await analizar_plan(db, temporada)
+    coberturas_por_plan: dict[str, list[CoberturaParcela]] = defaultdict(list)
+    for cob in analisis.coberturas:
+        coberturas_por_plan[cob.plan_id].append(cob)
+
+    filas_por_ronda: dict[tuple[int, str, VariedadUva], list[PlanFitosanitario]] = defaultdict(list)
+    for plan in analisis.planes:
+        filas_por_ronda[(plan.numero_aplicacion, plan.objetivo, plan.variedad)].append(plan)
+
+    # Card key -> [(variety, its rows of that round)].
+    tarjetas: dict[_TarjetaKey, list[tuple[VariedadUva, list[PlanFitosanitario]]]] = defaultdict(list)
+    for (numero, objetivo, variedad), filas in filas_por_ronda.items():
+        # str() so a float dose (1.5) keys equal however it was loaded.
+        productos = frozenset((f.insumo_id, Decimal(str(f.dosis_por_ha))) for f in filas)
+        tarjetas[(numero, objetivo, productos)].append((variedad, filas))
+
+    parcela_ids = {c.parcela_id for c in analisis.coberturas}
+    nombres: dict[str, str] = {}
+    if parcela_ids:
+        nombres = {
+            pid: nombre
+            for pid, nombre in (
+                await db.execute(select(Parcela.id, Parcela.nombre).where(Parcela.id.in_(parcela_ids)))
+            ).all()
+        }
+
+    resultado: list[RondaPendiente] = []
+    for (numero, objetivo, _productos), grupo in tarjetas.items():
+        # Insumos still pending on at least one parcel of any variety.
+        pendientes = {
+            fila.insumo_id
+            for _variedad, filas in grupo
+            for fila in filas
+            if any(_linea_pendiente(c) for c in coberturas_por_plan.get(fila.id, []))
+        }
+        if not pendientes:
+            continue
+
+        variedades: list[RondaPendienteVariedad] = []
+        for variedad, filas in sorted(grupo, key=lambda g: g[0].value):
+            # parcel id -> coverage of each still-pending line, in parcel order.
+            por_parcela: dict[str, list[CoberturaParcela]] = {}
+            for fila in filas:
+                if fila.insumo_id not in pendientes:
+                    continue
+                for cob in coberturas_por_plan.get(fila.id, []):
+                    por_parcela.setdefault(cob.parcela_id, []).append(cob)
+
+            parcelas: list[RondaPendienteParcela] = []
+            ha_variedad = Decimal("0")
+            for parcela_id, coberturas in por_parcela.items():
+                faltantes = [c for c in coberturas if _linea_pendiente(c)]
+                if not faltantes:
+                    continue
+                ha_pendientes = max(
+                    max(c.ha_parcela - c.ha_cubiertas, Decimal("0")) for c in faltantes
+                )
+                ha_variedad += ha_pendientes
+                parcelas.append(
+                    RondaPendienteParcela(
+                        id=parcela_id,
+                        nombre=nombres.get(parcela_id, ""),
+                        ha_pendientes=_ha_float(ha_pendientes),
+                        parcial=any(c.ha_cubiertas > 0 or c.tiene_registros for c in coberturas),
+                    )
+                )
+            if parcelas:
+                variedades.append(
+                    RondaPendienteVariedad(
+                        variedad=variedad, ha_pendientes=_ha_float(ha_variedad), parcelas=parcelas,
+                    )
+                )
+        if not variedades:
+            continue
+
+        # Every variety of the card has the same (insumo, dosis) set: the rows
+        # of the first one describe the lines.
+        lineas_por_insumo = {
+            fila.insumo_id: fila for fila in grupo[0][1] if fila.insumo_id in pendientes
+        }
+        lineas = [
+            RondaPendienteLinea(
+                insumo_id=fila.insumo_id,
+                insumo_nombre=fila.insumo.nombre,
+                unidad=fila.insumo.unidad,
+                dosis_por_ha=fila.dosis_por_ha,
+            )
+            for fila in sorted(lineas_por_insumo.values(), key=lambda f: (f.insumo.nombre, f.insumo_id))
+        ]
+        resultado.append(
+            RondaPendiente(
+                numero_aplicacion=numero,
+                objetivo=objetivo,
+                # Varieties may plan the same round in different months.
+                mes=min(f.mes for _v, filas in grupo for f in filas),
+                lineas=lineas,
+                variedades=variedades,
+            )
+        )
+
+    resultado.sort(
+        key=lambda t: (t.numero_aplicacion, t.mes, t.objetivo, t.variedades[0].variedad.value)
+    )
+    return resultado
 
 
 @router.post("/", response_model=list[PlanFitosanitarioResponse], status_code=status.HTTP_201_CREATED)

@@ -19,7 +19,7 @@ async def auth(client, create_user, email: str = "ger@test.com") -> tuple[dict[s
 
 async def crear_plan(
     client, headers, insumo_id, variedades, numero_aplicacion=1, dosis_por_ha=1.5,
-    mes=10, temporada=2026,
+    mes=10, temporada=2026, objetivo="Oidio",
 ) -> dict[str, str]:
     """Create one plan row per variety; returns {variedad: plan_id}."""
     resp = await client.post(
@@ -27,7 +27,7 @@ async def crear_plan(
         json={
             "temporada": temporada, "variedades": variedades,
             "numero_aplicacion": numero_aplicacion, "mes": mes, "insumo_id": insumo_id,
-            "objetivo": "Oidio", "dosis_por_ha": dosis_por_ha,
+            "objetivo": objetivo, "dosis_por_ha": dosis_por_ha,
         },
         headers=headers,
     )
