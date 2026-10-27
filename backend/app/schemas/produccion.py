@@ -6,6 +6,8 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
+    ValidatorFunctionWrapHandler,
     field_serializer,
     field_validator,
     model_validator,
@@ -369,6 +371,13 @@ class OrdenAplicacionValvulaResponse(BaseModel):
     confirmada_at: datetime | None = None
 
 
+class ProductoAplicadoResponse(BaseModel):
+    """One product line of an order, as shown next to a confirmed valve."""
+    insumo_id: str
+    insumo_nombre: str
+    dosis_por_ha: float
+
+
 class ValvulaARevisarResponse(BaseModel):
     """Una válvula confirmada que pide una segunda mirada: no se aplicó, o se
     aplicó con observaciones (así se señalan las aplicaciones incompletas)."""
@@ -378,10 +387,14 @@ class ValvulaARevisarResponse(BaseModel):
     parcela_nombre: str
     valvula_id: str
     valvula_nombre: str
+    # Variety of the valve's parcel (falls back to the order's shim variety
+    # when the parcel has none).
     variedad: VariedadUva
+    # Deprecated single-product shim (first line), kept for old clients.
     insumo_id: str
     insumo_nombre: str
     dosis_por_ha: float
+    productos: list[ProductoAplicadoResponse] = Field(default_factory=list)
     objetivo: str
     resultado: ResultadoValvula
     responsable: str | None = None
@@ -462,11 +475,16 @@ class OrdenAplicacionLineaCreate(BaseModel):
     numero_aplicacion: int | None = None
 
 
+def _es_body_viejo(data: Any) -> bool:
+    """Old single-product body: insumo_id/dosis_por_ha/dias_* at top level and
+    no `lineas`."""
+    return isinstance(data, dict) and data.get("lineas") is None and "insumo_id" in data
+
+
 def _linea_desde_body_viejo(data: Any) -> Any:
-    """Old single-product body (insumo_id/dosis_por_ha/dias_* at top level,
-    no `lineas`): wrap those fields into a one-line `lineas` list so old
-    web/mobile clients keep working."""
-    if isinstance(data, dict) and data.get("lineas") is None and "insumo_id" in data:
+    """Old single-product body: wrap the top-level product fields into a
+    one-line `lineas` list so old web/mobile clients keep working."""
+    if _es_body_viejo(data):
         data = dict(data)
         data["lineas"] = [
             {
@@ -494,10 +512,23 @@ class OrdenAplicacionUpdate(BaseModel):
     variedad: VariedadUva | None = None
     notas: str | None = None
 
-    @model_validator(mode="before")
+    # Not part of the payload: remembers that the request came in the old
+    # single-product shape, so PUT can refuse to collapse a multi-line order.
+    _from_legacy_body: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="wrap")
     @classmethod
-    def _body_viejo(cls, data: Any) -> Any:
-        return _linea_desde_body_viejo(data)
+    def _body_viejo(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+        es_viejo = _es_body_viejo(data)
+        model = handler(_linea_desde_body_viejo(data))
+        # Only ever set, never reset: re-validating an instance keeps its flag.
+        if es_viejo:
+            model._from_legacy_body = True
+        return model
+
+    @property
+    def es_body_viejo(self) -> bool:
+        return self._from_legacy_body
 
     @field_validator("lineas")
     @classmethod

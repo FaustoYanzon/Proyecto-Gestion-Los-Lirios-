@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,6 +45,7 @@ from app.schemas.produccion import (
     OrdenAplicacionResponse,
     OrdenAplicacionUpdate,
     OrdenAplicacionValvulaResponse,
+    ProductoAplicadoResponse,
     ValvulaARevisarResponse,
 )
 from app.services.aplicaciones import (
@@ -599,6 +600,10 @@ async def list_valvulas_a_revisar(
             selectinload(OrdenAplicacionValvula.orden_parcela)
             .selectinload(OrdenAplicacionParcela.orden)
             .selectinload(OrdenAplicacion.insumo),
+            selectinload(OrdenAplicacionValvula.orden_parcela)
+            .selectinload(OrdenAplicacionParcela.orden)
+            .selectinload(OrdenAplicacion.lineas)
+            .selectinload(OrdenAplicacionInsumo.insumo),
         )
         .where(
             OrdenAplicacionValvula.estado == EstadoOrdenAplicacionParcela.aplicada,
@@ -616,6 +621,21 @@ async def list_valvulas_a_revisar(
         if not ve_todo and parcela.finca != current_user.finca:
             continue
         orden = fila.orden_parcela.orden
+        productos = [
+            ProductoAplicadoResponse(
+                insumo_id=linea.insumo_id,
+                insumo_nombre=linea.insumo.nombre,
+                dosis_por_ha=linea.dosis_por_ha,
+            )
+            for linea in orden.lineas
+        ]
+        # Shim = first line; the order columns only back up a line-less order
+        # (should not exist after the backfill) instead of failing with a 500.
+        principal = productos[0] if productos else ProductoAplicadoResponse(
+            insumo_id=orden.insumo_id,
+            insumo_nombre=orden.insumo.nombre,
+            dosis_por_ha=orden.dosis_por_ha,
+        )
         resultado.append(
             ValvulaARevisarResponse(
                 id=fila.id,
@@ -624,10 +644,12 @@ async def list_valvulas_a_revisar(
                 parcela_nombre=parcela.nombre,
                 valvula_id=fila.valvula_id,
                 valvula_nombre=fila.valvula.nombre,
-                variedad=orden.variedad,
-                insumo_id=orden.insumo_id,
-                insumo_nombre=orden.insumo.nombre,
-                dosis_por_ha=orden.dosis_por_ha,
+                # A multi-variety order: the row shows its own parcel's variety.
+                variedad=parcela.variedad or orden.variedad,
+                insumo_id=principal.insumo_id,
+                insumo_nombre=principal.insumo_nombre,
+                dosis_por_ha=principal.dosis_por_ha,
+                productos=productos,
                 objetivo=orden.objetivo,
                 resultado=fila.resultado,
                 responsable=fila.responsable,
@@ -656,7 +678,19 @@ async def list_ordenes(
     if estado is not None:
         stmt = stmt.where(OrdenAplicacion.estado == estado)
     if variedad is not None:
-        stmt = stmt.where(OrdenAplicacion.variedad == variedad)
+        # Any of the order's parcels, so a multi-variety order matches each of
+        # its varieties (EXISTS: no duplicate rows). The shim column is kept in
+        # the OR so legacy orders whose parcel later changed variety still match.
+        tiene_variedad = (
+            select(OrdenAplicacionParcela.id)
+            .join(Parcela, Parcela.id == OrdenAplicacionParcela.parcela_id)
+            .where(
+                OrdenAplicacionParcela.orden_id == OrdenAplicacion.id,
+                Parcela.variedad == variedad,
+            )
+            .exists()
+        )
+        stmt = stmt.where(or_(OrdenAplicacion.variedad == variedad, tiene_variedad))
     ordenes = (await db.execute(stmt)).scalars().all()
     return [_to_response(o) for o in ordenes]
 
@@ -700,6 +734,12 @@ async def actualizar_orden(
     _: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
     orden = await _get_orden_editable(db, orden_id)
+    if data.es_body_viejo and len(orden.lineas) > 1:
+        # An old single-product client would silently drop lines 2..N.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta orden tiene varios productos; actualizá la app/la web para editarla.",
+        )
     insumos = await _resolver_insumos(db, data.lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
     valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)

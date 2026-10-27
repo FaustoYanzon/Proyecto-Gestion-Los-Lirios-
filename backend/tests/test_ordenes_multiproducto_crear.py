@@ -339,13 +339,15 @@ async def test_put_cambia_insumo_y_dosis_reemplaza_lineas(
 
 
 async def test_put_body_viejo_un_producto(client, create_user, create_insumo, create_parcela):
+    # On a one-line order; on a multi-line order the old body is a 409
+    # (tests/test_ordenes_multiproducto_compat.py).
     headers, _ = await _auth(client, create_user)
     insumos = await _cuatro_insumos(create_insumo)
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
     orden = (
         await client.post(
             "/ordenes-aplicacion/",
-            json=_payload([_linea(insumos[0].id), _linea(insumos[1].id)], [parcela.id]),
+            json=_payload([_linea(insumos[0].id)], [parcela.id]),
             headers=headers,
         )
     ).json()
