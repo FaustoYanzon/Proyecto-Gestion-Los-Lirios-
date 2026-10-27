@@ -7,8 +7,21 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, Numeric, String, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum as SAEnum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    func,
+    select,
+    text,
+)
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.insumo import UnidadInsumo
@@ -760,6 +773,30 @@ class FotoRegistroFitosanitario(Base):
     registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
         "RegistroFitosanitario", back_populates="fotos"
     )
+
+
+# Order a record came from: through its parcel row (whole-parcel confirmation)
+# or through its valve row -> parcel row. NULL for manual records. A
+# column_property (correlated subquery in the same SELECT, both lookups hit the
+# unique registro_fitosanitario_id indexes) instead of a relationship chain so
+# RegistroFitosanitarioResponse can read it in async code without lazy loads.
+# Defined here because it needs both order tables declared.
+RegistroFitosanitario.orden_id = column_property(
+    func.coalesce(
+        select(OrdenAplicacionParcela.orden_id)
+        .where(OrdenAplicacionParcela.registro_fitosanitario_id == RegistroFitosanitario.id)
+        .correlate_except(OrdenAplicacionParcela)
+        .scalar_subquery(),
+        select(OrdenAplicacionParcela.orden_id)
+        .join(
+            OrdenAplicacionValvula,
+            OrdenAplicacionValvula.orden_parcela_id == OrdenAplicacionParcela.id,
+        )
+        .where(OrdenAplicacionValvula.registro_fitosanitario_id == RegistroFitosanitario.id)
+        .correlate_except(OrdenAplicacionParcela, OrdenAplicacionValvula)
+        .scalar_subquery(),
+    )
+)
 
 
 class CicloCampana(Base):

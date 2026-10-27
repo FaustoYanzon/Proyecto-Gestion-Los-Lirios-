@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, outerjoin, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     get_current_user,
@@ -20,6 +19,12 @@ from app.core import ciclo_campana, fenologia
 from app.api.remitos import remito_response_completo
 from app.models.alta_produccion import Comprador, IngresoPasero, Productor, RemitoLinea
 from app.services.alta_produccion import remitos_por_cosecha, saldo_cosecha, saldos_cosecha
+from app.services.aplicaciones import (
+    cargar_registro_con_orden_bloqueada,
+    eliminar_registro,
+    reactivar_registro,
+    revertir_movimiento_stock,
+)
 from app.services.despacho_cosecha import registrar_despacho
 from app.models.finanzas import (
     ClasificacionEgreso,
@@ -40,11 +45,7 @@ from app.models.produccion import (
     DestinoCosecha,
     EstadoCampana,
     EstadoFenologico,
-    EstadoOrdenAplicacion,
-    EstadoOrdenAplicacionParcela,
     EstadoVariedadCampana,
-    OrdenAplicacion,
-    OrdenAplicacionParcela,
     OrigenCosecha,
     RegistroCosecha,
     RegistroFitosanitario,
@@ -54,7 +55,7 @@ from app.models.produccion import (
     UnidadMedida,
 )
 from app.models.trabajador import Trabajador
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.valvula import Valvula
 from app.schemas.valvula import ValvulaResponse
 from app.schemas.alta_produccion import DespachoCosechaCreate, DespachoCosechaResponse, IngresoPaseroResponse
@@ -144,23 +145,6 @@ def _calcular_cantidad_total(dosis_por_ha: float, parcela: Parcela) -> Decimal:
             detail="La parcela no tiene hectáreas cargadas — no se puede calcular la cantidad total aplicada.",
         )
     return (Decimal(str(dosis_por_ha)) * Decimal(str(parcela.superficie_ha))).quantize(Decimal("0.01"))
-
-
-async def _revertir_movimiento_stock(db: AsyncSession, fito: RegistroFitosanitario) -> None:
-    """Deshace el egreso de stock asociado a un RegistroFitosanitario (si existe):
-    devuelve la cantidad al insumo y borra el movimiento. Usado antes de recalcular
-    en un update, y siempre antes de un delete."""
-    result = await db.execute(
-        select(MovimientoStock).where(MovimientoStock.registro_fitosanitario_id == fito.id)
-    )
-    movimiento = result.scalar_one_or_none()
-    if movimiento is None:
-        return
-    insumo = await db.get(Insumo, movimiento.insumo_id)
-    if insumo is not None:
-        insumo.stock_actual = insumo.stock_actual + movimiento.cantidad
-    await db.delete(movimiento)
-    await db.flush()
 
 
 async def _aplicar_movimiento_stock(
@@ -1190,7 +1174,7 @@ async def update_fitosanitario(
         fito.fecha_habilitacion_reingreso = fito.fecha + timedelta(days=fito.dias_reingreso)
 
     if recalcular_stock:
-        await _revertir_movimiento_stock(db, fito)
+        await revertir_movimiento_stock(db, fito)
         if fito.insumo_id:
             insumo = await _resolve_insumo(db, fito.insumo_id)
             parcela = await db.get(Parcela, fito.parcela_id)
@@ -1208,67 +1192,77 @@ async def update_fitosanitario(
     return fito
 
 
+async def _registro_con_orden_bloqueada(db: AsyncSession, registro_id: str) -> RegistroFitosanitario:
+    fito = await cargar_registro_con_orden_bloqueada(db, registro_id)
+    if fito is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
+    return fito
+
+
 @router.delete("/fitosanitarios/{fitosanitario_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_fitosanitario(
     fitosanitario_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_gerencial_up),
 ) -> None:
-    result = await db.execute(
-        select(RegistroFitosanitario)
-        .options(
-            selectinload(RegistroFitosanitario.orden_parcela)
-            .selectinload(OrdenAplicacionParcela.orden)
-            .selectinload(OrdenAplicacion.parcelas),
-            selectinload(RegistroFitosanitario.fotos),
-            selectinload(RegistroFitosanitario.orden_valvula),
-        )
-        .where(RegistroFitosanitario.id == fitosanitario_id)
-    )
-    fito = result.scalar_one_or_none()
-    if fito is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
-    # Valve-born records must go through "deshacer": deleting here would leave the
-    # valve row applied with a NULL record and the parcel/order states stale.
-    # Checked before touching stock so nothing is partially reverted.
-    if fito.orden_valvula is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Esta aplicación viene de una orden: deshacela desde la válvula.",
-        )
-    await _revertir_movimiento_stock(db, fito)
+    """Eliminar: la aplicación sale del sistema. Devuelve el stock, borra el
+    registro y sus fotos y, si vino de una orden, también la saca de la orden
+    (su válvula, la parcela si se queda sin válvulas, la orden si se queda sin
+    parcelas). Para volverla a pendiente está POST .../reactivar."""
+    fito = await _registro_con_orden_bloqueada(db, fitosanitario_id)
+    # Captured before the delete: the instance is gone after the flush.
+    registro_id, producto = fito.id, fito.producto_nombre
+    parcela_id, fecha = fito.parcela_id, fito.fecha
+    eliminado = await eliminar_registro(db, fito)
 
-    # Si vino de confirmar una orden (el operario marcó mal la parcela, por
-    # ejemplo), esa parcela vuelve a quedar pendiente en la orden en vez de
-    # romper la FK.
-    item = fito.orden_parcela
-    if item is not None:
-        item.estado = EstadoOrdenAplicacionParcela.pendiente
-        item.registro_fitosanitario_id = None
-        orden = item.orden
-        estados = {p.estado for p in orden.parcelas}
-        orden.estado = (
-            EstadoOrdenAplicacion.en_curso
-            if EstadoOrdenAplicacionParcela.aplicada in estados
-            else EstadoOrdenAplicacion.pendiente
-        )
-        await db.flush()
-
-    # The DB keeps no trace of a delete: log who removed what and which order
-    # went back to pendiente, so a "my orders reverted" report can be traced.
+    # The DB keeps no trace of a delete: log who removed what and what left the
+    # order, so a "my order lost a parcel" report can be traced.
     logger.info(
-        "fitosanitario eliminado registro=%s producto=%s parcela=%s fecha=%s orden=%s user=%s",
-        fito.id,
-        fito.producto_nombre,
-        fito.parcela_id,
-        fito.fecha,
-        item.orden_id if item is not None else None,
+        "fitosanitario eliminado registro=%s producto=%s parcela=%s fecha=%s orden=%s "
+        "orden_valvula_quitada=%s orden_parcela_quitada=%s orden_eliminada=%s user=%s",
+        registro_id,
+        producto,
+        parcela_id,
+        fecha,
+        eliminado.orden_id,
+        eliminado.orden_valvula_quitada,
+        eliminado.orden_parcela_quitada,
+        eliminado.orden_eliminada,
         current_user.id,
     )
-    for foto in fito.fotos:
-        await db.delete(foto)
-    await db.delete(fito)
-    await db.flush()
+
+
+@router.post("/fitosanitarios/{fitosanitario_id}/reactivar", status_code=status.HTTP_204_NO_CONTENT)
+async def reactivar_fitosanitario(
+    fitosanitario_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_encargado_estricto),
+) -> None:
+    """Reactivar: una aplicación que vino de una orden vuelve a pendiente en
+    esa orden (se devuelve el stock y se borra el registro y sus fotos) para
+    confirmarla de nuevo. Para una válvula es lo mismo que "deshacer"."""
+    fito = await _registro_con_orden_bloqueada(db, fitosanitario_id)
+    # Finca check before the 409 so an encargado can't probe other fincas' records.
+    if current_user.role not in (UserRole.super_admin, UserRole.gerencial):
+        parcela = await db.get(Parcela, fito.parcela_id)
+        if parcela is None or parcela.finca != current_user.finca:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No podés reactivar aplicaciones fuera de tu finca.",
+            )
+    if fito.orden_parcela is None and fito.orden_valvula is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta aplicación no viene de una orden: no hay nada que reactivar.",
+        )
+    registro_id = fito.id
+    orden_id = await reactivar_registro(db, fito)
+
+    # The action deletes data (registro, photos, stock movement): leave an audit trail.
+    logger.info(
+        "fitosanitario reactivado registro=%s orden=%s user=%s",
+        registro_id, orden_id, current_user.id,
+    )
 
 
 # ── Ciclo Campaña ──────────────────────────────────────────────────────────────

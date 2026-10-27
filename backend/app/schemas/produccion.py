@@ -273,6 +273,9 @@ class RegistroFitosanitarioResponse(BaseModel):
     fecha_habilitacion_reingreso: date
     created_by: str
     created_at: datetime
+    # Order the record came from (parcel or valve confirmation); None for manual
+    # records. Lets the web offer "Reactivar" only where it applies.
+    orden_id: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,7 +13,6 @@ from app.api.produccion import (
     _calcular_cantidad_total,
     _resolve_insumo,
     _resolve_responsable_nombre,
-    _revertir_movimiento_stock,
 )
 from app.core.cloudinary_client import upload_foto_orden_aplicacion
 from app.core.push import lanzar_aviso, notificar_tokens
@@ -43,6 +42,11 @@ from app.schemas.produccion import (
     OrdenAplicacionUpdateExtra,
     OrdenAplicacionValvulaResponse,
     ValvulaARevisarResponse,
+)
+from app.services.aplicaciones import (
+    bloquear_orden,
+    deshacer_fila_valvula,
+    recalcular_estado_orden,
 )
 
 logger = logging.getLogger("app")
@@ -550,48 +554,6 @@ async def eliminar_orden_extra(
     await db.flush()
 
 
-async def _bloquear_orden(db: AsyncSession, orden_id: str) -> None:
-    """Toma el lock (FOR UPDATE) de la fila de la orden antes de confirmar nada.
-
-    Serializa las confirmaciones de una misma orden: un doble toque o un
-    reintento de red no confirma (ni descuenta stock) dos veces, y dos operarios
-    cerrando a la vez las últimas válvulas de un parral no dejan la parcela o la
-    orden trabadas en pendiente (en READ COMMITTED cada uno contaría como
-    pendiente la válvula que el otro todavía no commiteó). El commit de `get_db`
-    libera el lock. SQLite (tests) ignora el FOR UPDATE.
-    """
-    await db.execute(
-        select(OrdenAplicacion.id).where(OrdenAplicacion.id == orden_id).with_for_update()
-    )
-
-
-async def _recalcular_estado_orden(db: AsyncSession, orden: OrdenAplicacion) -> None:
-    """completada si todas las parcelas están aplicadas; en_curso si alguna
-    parcela o alguna válvula ya se confirmó; pendiente si no hay nada aplicado
-    (baja de estado al deshacer una válvula)."""
-    await db.refresh(orden, attribute_names=["parcelas"])
-    estados = {p.estado for p in orden.parcelas}
-    if estados == {EstadoOrdenAplicacionParcela.aplicada}:
-        orden.estado = EstadoOrdenAplicacion.completada
-        await db.flush()
-        return
-    valvulas_aplicadas = (
-        await db.execute(
-            select(func.count(OrdenAplicacionValvula.id))
-            .join(OrdenAplicacionParcela)
-            .where(
-                OrdenAplicacionParcela.orden_id == orden.id,
-                OrdenAplicacionValvula.estado == EstadoOrdenAplicacionParcela.aplicada,
-            )
-        )
-    ).scalar_one()
-    if EstadoOrdenAplicacionParcela.aplicada in estados or valvulas_aplicadas:
-        orden.estado = EstadoOrdenAplicacion.en_curso
-    else:
-        orden.estado = EstadoOrdenAplicacion.pendiente
-    await db.flush()
-
-
 def _calcular_cantidad_valvula(dosis_por_ha: float, valvula: Valvula) -> Decimal:
     if valvula.superficie_ha is None:
         raise HTTPException(
@@ -616,7 +578,7 @@ async def confirmar_valvula(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
-    await _bloquear_orden(db, orden_id)
+    await bloquear_orden(db, orden_id)
     fila = await db.get(
         OrdenAplicacionValvula,
         orden_valvula_id,
@@ -700,7 +662,7 @@ async def confirmar_valvula(
     if pendientes == 0:
         item.estado = EstadoOrdenAplicacionParcela.aplicada
         await db.flush()
-    await _recalcular_estado_orden(db, orden)
+    await recalcular_estado_orden(db, orden)
 
     if requiere_revision(fila):
         await _avisar_revision(db, fila, parcela)
@@ -725,7 +687,7 @@ async def deshacer_valvula(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
-    await _bloquear_orden(db, orden_id)
+    await bloquear_orden(db, orden_id)
     fila = await db.get(
         OrdenAplicacionValvula,
         orden_valvula_id,
@@ -757,41 +719,8 @@ async def deshacer_valvula(
             status_code=status.HTTP_409_CONFLICT, detail="Esta válvula todavía no fue confirmada"
         )
 
-    registro = fila.registro_fitosanitario
-    registro_id = registro.id if registro is not None else None
-    # Photos hang from the registro (completa) or only from the row (no_aplicada).
-    condiciones = [FotoRegistroFitosanitario.orden_valvula_id == fila.id]
-    if registro_id is not None:
-        condiciones.append(FotoRegistroFitosanitario.registro_fitosanitario_id == registro_id)
-    fotos = (
-        await db.execute(select(FotoRegistroFitosanitario).where(or_(*condiciones)))
-    ).scalars().all()
-
-    if registro is not None:
-        await _revertir_movimiento_stock(db, registro)
-        for foto in fotos:
-            await db.delete(foto)
-        # Unique FK from the row to the registro: detach it before deleting the registro.
-        fila.registro_fitosanitario = None
-        fila.registro_fitosanitario_id = None
-        await db.flush()
-        await db.delete(registro)
-    else:
-        for foto in fotos:
-            await db.delete(foto)
-
-    fila.estado = EstadoOrdenAplicacionParcela.pendiente
-    fila.resultado = None
-    fila.responsable_id = None
-    fila.responsable = None
-    fila.observaciones = None
-    fila.confirmada_at = None
-    fila.revisada_at = None
-    fila.revisada_por = None
-    if item.estado == EstadoOrdenAplicacionParcela.aplicada:
-        item.estado = EstadoOrdenAplicacionParcela.pendiente
-    await db.flush()
-    await _recalcular_estado_orden(db, orden)
+    # Shared with POST /produccion/fitosanitarios/{id}/reactivar.
+    registro_id = await deshacer_fila_valvula(db, fila, orden)
 
     # The action deletes data (registro, photos, stock movement): leave an audit trail.
     logger.info(
@@ -816,7 +745,7 @@ async def confirmar_aplicacion(
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
-    await _bloquear_orden(db, orden_id)
+    await bloquear_orden(db, orden_id)
     item = await db.get(
         OrdenAplicacionParcela,
         orden_parcela_id,
@@ -879,7 +808,7 @@ async def confirmar_aplicacion(
     item.registro_fitosanitario_id = fito.id
     await db.flush()
 
-    await _recalcular_estado_orden(db, orden)
+    await recalcular_estado_orden(db, orden)
 
     return OrdenAplicacionParcelaResponse(
         id=item.id,

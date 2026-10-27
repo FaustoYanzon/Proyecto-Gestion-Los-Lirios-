@@ -326,9 +326,10 @@ async def test_orden_del_plan_no_se_elimina(client, create_user, create_insumo, 
     assert resp.status_code == 409
 
 
-async def test_borrar_registro_de_orden_vuelve_la_parcela_a_pendiente(
+async def test_reactivar_registro_de_orden_vuelve_la_parcela_a_pendiente(
     client, create_user, create_insumo, create_parcela,
 ):
+    # Before the Eliminar/Reactivar split, DELETE did this; now it is Reactivar's job.
     headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
     insumo = await create_insumo(stock_actual=50.0)
     parcela = await create_parcela(nombre="Parral A", variedad="syrah", finca=Finca.media_agua, superficie_ha=1.0)
@@ -339,7 +340,7 @@ async def test_borrar_registro_de_orden_vuelve_la_parcela_a_pendiente(
     )
     registro_id = conf.json()["registro_fitosanitario_id"]
 
-    resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
+    resp = await client.post(f"/produccion/fitosanitarios/{registro_id}/reactivar", headers=headers)
     assert resp.status_code == 204, resp.text
 
     detalle = (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).json()
@@ -367,9 +368,13 @@ async def test_borrar_registro_de_orden_deja_auditoria(
         resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
     assert resp.status_code == 204, resp.text
 
-    # Who deleted what, and which order went back to pendiente: the DB keeps no trace.
+    # Who deleted what, and what left the order (here the whole order: it had one
+    # parcela): the DB keeps no trace.
     mensajes = [r.getMessage() for r in caplog.records if "fitosanitario eliminado" in r.getMessage()]
     assert len(mensajes) == 1
     assert registro_id in mensajes[0]
     assert orden["id"] in mensajes[0]
     assert user.id in mensajes[0]
+    assert f"orden_parcela_quitada={item_id}" in mensajes[0]
+    assert "orden_eliminada=True" in mensajes[0]
+    assert (await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)).status_code == 404

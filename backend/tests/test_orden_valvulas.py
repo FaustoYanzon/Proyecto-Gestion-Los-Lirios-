@@ -873,9 +873,11 @@ async def _otra_parcela(create_parcela, create_valvula):
     return parcela
 
 
-async def test_borrar_registro_de_valvula_es_409_y_no_toca_nada(
+async def test_borrar_registro_de_valvula_lo_saca_de_la_orden(
     client, db_session, create_user, create_insumo, create_parcela, create_valvula,
 ):
+    # Used to be a 409 ("deshacela desde la válvula"); Eliminar now removes the
+    # application and its valve row from the order. Reactivar is the "undo".
     from app.models.insumo import MovimientoStock
     from sqlalchemy import func
 
@@ -886,12 +888,10 @@ async def test_borrar_registro_de_valvula_es_409_y_no_toca_nada(
     assert await _stock(db_session, insumo) == 96.0
 
     resp = await client.delete(f"/produccion/fitosanitarios/{registro_id}", headers=headers)
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["detail"] == "Esta aplicación viene de una orden: deshacela desde la válvula."
+    assert resp.status_code == 204, resp.text
 
-    assert await _stock(db_session, insumo) == 96.0
+    assert await _stock(db_session, insumo) == 100.0
     db_session.expire_all()
-    assert (await db_session.execute(select(func.count(RegistroFitosanitario.id)))).scalar_one() == 1
-    assert (await db_session.execute(select(func.count(MovimientoStock.id)))).scalar_one() == 1
-    fila = await db_session.get(OrdenAplicacionValvula, filas["22"])
-    assert fila.registro_fitosanitario_id == registro_id
+    assert (await db_session.execute(select(func.count(RegistroFitosanitario.id)))).scalar_one() == 0
+    assert (await db_session.execute(select(func.count(MovimientoStock.id)))).scalar_one() == 0
+    assert await db_session.get(OrdenAplicacionValvula, filas["22"]) is None
