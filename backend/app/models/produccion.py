@@ -405,6 +405,43 @@ class RegistroFitosanitario(Base):
     valvula_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("valvulas.id"), nullable=True
     )
+    # Explicit links to where the record came from. They replace the 1-1
+    # `registro_fitosanitario_id` columns on the order rows, which cannot hold
+    # N records (one per product) per valve. All null for manual records.
+    # Plan row this application counts against (null = extra, outside the plan).
+    plan_fitosanitario_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("planes_fitosanitarios.id", name="fk_registros_plan_fitosanitario"),
+        nullable=True,
+    )
+    # Order line (product) that produced this record.
+    orden_insumo_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("ordenes_aplicacion_insumos.id", name="fk_registros_orden_insumo"),
+        nullable=True,
+    )
+    # Parcel row of the order; also set for valve confirmations (the valve's
+    # parent row), so `orden_id` resolves with a single lookup.
+    # use_alter: the order rows still point back here via the legacy
+    # registro_fitosanitario_id FK, so the two tables form a cycle.
+    orden_parcela_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "ordenes_aplicacion_parcelas.id",
+            use_alter=True,
+            name="fk_registros_orden_parcela",
+        ),
+        nullable=True,
+    )
+    orden_valvula_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "ordenes_aplicacion_valvulas.id",
+            use_alter=True,
+            name="fk_registros_orden_valvula",
+        ),
+        nullable=True,
+    )
     # Ver nota en RegistroTrabajo.idempotency_key.
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(
@@ -423,6 +460,10 @@ class RegistroFitosanitario(Base):
     __table_args__ = (
         Index("ix_registros_fitosanitarios_fecha", "fecha"),
         Index("ix_registros_fitosanitarios_parcela_fecha", "parcela_id", "fecha"),
+        Index("ix_registros_fitosanitarios_plan", "plan_fitosanitario_id"),
+        Index("ix_registros_fitosanitarios_orden_insumo", "orden_insumo_id"),
+        Index("ix_registros_fitosanitarios_orden_parcela", "orden_parcela_id"),
+        Index("ix_registros_fitosanitarios_orden_valvula", "orden_valvula_id"),
         Index(
             "uq_registros_fitosanitarios_idempotency",
             "idempotency_key",
@@ -456,10 +497,17 @@ class RegistroFitosanitario(Base):
         "MovimientoStock", back_populates="registro_fitosanitario", uselist=False
     )
     orden_parcela: Mapped[OrdenAplicacionParcela | None] = relationship(
-        "OrdenAplicacionParcela", back_populates="registro_fitosanitario", uselist=False
+        "OrdenAplicacionParcela",
+        back_populates="registros",
+        foreign_keys=lambda: [RegistroFitosanitario.orden_parcela_id],
     )
     orden_valvula: Mapped[OrdenAplicacionValvula | None] = relationship(
-        "OrdenAplicacionValvula", back_populates="registro_fitosanitario", uselist=False
+        "OrdenAplicacionValvula",
+        back_populates="registros",
+        foreign_keys=lambda: [RegistroFitosanitario.orden_valvula_id],
+    )
+    orden_insumo: Mapped[OrdenAplicacionInsumo | None] = relationship(
+        "OrdenAplicacionInsumo"
     )
     fotos: Mapped[list[FotoRegistroFitosanitario]] = relationship(
         "FotoRegistroFitosanitario", back_populates="registro_fitosanitario"
@@ -594,14 +642,66 @@ class OrdenAplicacion(Base):
     parcelas: Mapped[list[OrdenAplicacionParcela]] = relationship(
         "OrdenAplicacionParcela", back_populates="orden", cascade="all, delete-orphan"
     )
+    lineas: Mapped[list[OrdenAplicacionInsumo]] = relationship(
+        "OrdenAplicacionInsumo",
+        back_populates="orden",
+        cascade="all, delete-orphan",
+        order_by="OrdenAplicacionInsumo.posicion",
+    )
+
+
+class OrdenAplicacionInsumo(Base):
+    """Una línea (producto) de una orden de aplicación. Una orden aplica todas
+    sus líneas a todas sus parcelas/válvulas; al confirmar se crea un
+    RegistroFitosanitario por línea. `numero_aplicacion` es la ronda del plan
+    que la línea descuenta (null = producto fuera del plan). Congela
+    dosis/carencia al crearse, igual que la orden."""
+
+    __tablename__ = "ordenes_aplicacion_insumos"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    orden_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ordenes_aplicacion.id"), nullable=False
+    )
+    insumo_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("insumos.id"), nullable=False
+    )
+    dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
+    dias_carencia: Mapped[int] = mapped_column(Integer, nullable=False)
+    dias_reingreso: Mapped[int] = mapped_column(Integer, nullable=False)
+    numero_aplicacion: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Display order of the line inside the order (0 = first = legacy shim).
+    posicion: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_ordenes_aplicacion_insumos_orden_insumo",
+            "orden_id", "insumo_id",
+            unique=True,
+        ),
+        Index("ix_ordenes_aplicacion_insumos_insumo", "insumo_id"),
+    )
+
+    orden: Mapped[OrdenAplicacion] = relationship(
+        "OrdenAplicacion", back_populates="lineas"
+    )
+    insumo: Mapped[Insumo] = relationship("Insumo")
 
 
 class OrdenAplicacionParcela(Base):
     """Una fila por cada parcela incluida en la orden. `estado` pasa a
     `aplicada` cuando un operario confirma -- eso crea el
-    RegistroFitosanitario correspondiente (vinculado acá vía
-    registro_fitosanitario_id), reusando el descuento de stock y el cálculo
-    de fechas de carencia/reingreso que ya tiene ese modelo, en vez de
+    RegistroFitosanitario correspondiente (vinculado vía
+    RegistroFitosanitario.orden_parcela_id; registro_fitosanitario_id queda
+    como vínculo legacy hasta el cleanup), reusando el descuento de stock y el
+    cálculo de fechas de carencia/reingreso que ya tiene ese modelo, en vez de
     duplicar esa lógica."""
 
     __tablename__ = "ordenes_aplicacion_parcelas"
@@ -648,8 +748,16 @@ class OrdenAplicacionParcela(Base):
         "OrdenAplicacion", back_populates="parcelas"
     )
     parcela: Mapped[Parcela] = relationship("Parcela")
-    registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
-        "RegistroFitosanitario", back_populates="orden_parcela"
+    # Every record of this parcel row, including those of its valves (they
+    # carry the parent row in orden_parcela_id). The legacy
+    # registro_fitosanitario_id column has no relationship on purpose.
+    registros: Mapped[list[RegistroFitosanitario]] = relationship(
+        "RegistroFitosanitario",
+        back_populates="orden_parcela",
+        foreign_keys=lambda: [RegistroFitosanitario.orden_parcela_id],
+        # Rows are only deleted once their records are gone; never lazy-load
+        # the collection (async) just to null FKs that are already null.
+        passive_deletes=True,
     )
     valvulas: Mapped[list[OrdenAplicacionValvula]] = relationship(
         "OrdenAplicacionValvula",
@@ -731,8 +839,13 @@ class OrdenAplicacionValvula(Base):
         "OrdenAplicacionParcela", back_populates="valvulas"
     )
     valvula: Mapped[Valvula] = relationship("Valvula")
-    registro_fitosanitario: Mapped[RegistroFitosanitario | None] = relationship(
-        "RegistroFitosanitario", back_populates="orden_valvula"
+    registros: Mapped[list[RegistroFitosanitario]] = relationship(
+        "RegistroFitosanitario",
+        back_populates="orden_valvula",
+        foreign_keys=lambda: [RegistroFitosanitario.orden_valvula_id],
+        # Rows are only deleted once their records are gone; never lazy-load
+        # the collection (async) just to null FKs that are already null.
+        passive_deletes=True,
     )
     fotos: Mapped[list[FotoRegistroFitosanitario]] = relationship(
         "FotoRegistroFitosanitario"
@@ -775,14 +888,20 @@ class FotoRegistroFitosanitario(Base):
     )
 
 
-# Order a record came from: through its parcel row (whole-parcel confirmation)
-# or through its valve row -> parcel row. NULL for manual records. A
-# column_property (correlated subquery in the same SELECT, both lookups hit the
-# unique registro_fitosanitario_id indexes) instead of a relationship chain so
+# Order a record came from, via its parcel row (set for whole-parcel and valve
+# confirmations alike). NULL for manual records. A column_property (correlated
+# subqueries in the same SELECT) instead of a relationship chain so
 # RegistroFitosanitarioResponse can read it in async code without lazy loads.
-# Defined here because it needs both order tables declared.
+# Defined here because it needs the order tables declared.
+# Falls back to the legacy `registro_fitosanitario_id` links: during a deploy
+# the old backend keeps confirming on the new schema and writes only those
+# (both are unique partial indexes, so the fallback lookups are cheap).
 RegistroFitosanitario.orden_id = column_property(
     func.coalesce(
+        select(OrdenAplicacionParcela.orden_id)
+        .where(OrdenAplicacionParcela.id == RegistroFitosanitario.orden_parcela_id)
+        .correlate_except(OrdenAplicacionParcela)
+        .scalar_subquery(),
         select(OrdenAplicacionParcela.orden_id)
         .where(OrdenAplicacionParcela.registro_fitosanitario_id == RegistroFitosanitario.id)
         .correlate_except(OrdenAplicacionParcela)

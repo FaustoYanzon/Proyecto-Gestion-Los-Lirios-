@@ -578,3 +578,29 @@ exacto contra el Flujo Anual en el navegador.
 ya tiene Egreso agregado cargado a mano solo porque "es reciente" o "debería
 estar" — verificar con una consulta antes de decidir `crea_egreso=False`, no
 después.
+
+---
+
+## Vínculo registro-plan fitosanitario (histórico manual) — `backfill_plan_registros.py`
+
+Una sola vez por temporada (spec `2026-10-27-ordenes-multiproducto-plan`, "Migración +
+backfill", paso 4). El cumplimiento del plan se mide ahora por hectáreas desde
+`registros_fitosanitarios.plan_fitosanitario_id`; los registros cargados a mano antes de
+eso no tienen el vínculo. El script les aplica la heurística vieja (N-ésima aplicación de
+un insumo en una parcela -> N-ésima ronda del plan de su variedad). Lógica pura y reglas
+en `backend/app/services/plan_backfill.py` (tests: `backend/tests/test_backfill_plan_registros.py`).
+
+- Solo registros de la ventana de campaña, con insumo, sin orden y sin plan. Los ya
+  vinculados marcan rondas tomadas; nunca se tocan. Idempotente (2da corrida = 0).
+- Mismo día + parcela + insumo = una aplicación. `valvula_id` sin orden = parcela entera.
+- Sin columna `fuente` en la tabla: los vinculados por el backfill son exactamente
+  `orden_parcela_id IS NULL AND plan_fitosanitario_id IS NOT NULL` (la app nunca vincula
+  registros manuales), así que se revierte con ese filtro.
+- `--local` ignora `.env.prod` y exige base en localhost (dry-runs de desarrollo).
+- `--apply` escribe todo en UNA transacción (no en chunks: un corte entre chunks podía dejar
+  partido un grupo del mismo día y el reintento le daba la ronda siguiente). Sin `--local`
+  muestra el host y pide escribir `SI`. Un candidato del mismo día/parcela/insumo que un
+  registro ya vinculado reusa su ronda si el vinculado es manual; si viene de una orden se
+  omite como `duplicado_de_vinculado` (no infla la cobertura).
+
+Estado: dry-run local OK (2026-10-27). **Producción pendiente** (dry-run + `--apply` solo con OK de Fausto).

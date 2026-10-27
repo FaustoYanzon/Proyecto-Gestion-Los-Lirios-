@@ -1219,7 +1219,8 @@ async def delete_fitosanitario(
     # order, so a "my order lost a parcel" report can be traced.
     logger.info(
         "fitosanitario eliminado registro=%s producto=%s parcela=%s fecha=%s orden=%s "
-        "orden_valvula_quitada=%s orden_parcela_quitada=%s orden_eliminada=%s user=%s",
+        "orden_valvula_quitada=%s orden_parcela_quitada=%s orden_eliminada=%s "
+        "registros_eliminados=%s user=%s",
         registro_id,
         producto,
         parcela_id,
@@ -1228,6 +1229,7 @@ async def delete_fitosanitario(
         eliminado.orden_valvula_quitada,
         eliminado.orden_parcela_quitada,
         eliminado.orden_eliminada,
+        eliminado.registros_eliminados,
         current_user.id,
     )
 

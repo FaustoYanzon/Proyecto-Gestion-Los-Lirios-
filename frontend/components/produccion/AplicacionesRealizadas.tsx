@@ -8,6 +8,8 @@ import {
   type FitosanitarioFilter, type FitosanitarioResponse,
 } from '@/lib/api/fitosanitarios'
 import { getParcelas } from '@/lib/api/produccion'
+import { getOrdenAplicacion, type OrdenAplicacion } from '@/lib/api/ordenesAplicacion'
+import { formatNum } from '@/components/produccion/RondaCard'
 import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
 import { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
@@ -122,6 +124,50 @@ export default function AplicacionesRealizadas() {
     queryClient.invalidateQueries({ queryKey: ['insumos'] })
   }
 
+  // Eliminar/Reactivar on an order registro revert the whole valve (or whole
+  // parcel) application: every product confirmed with it. The list rows only
+  // carry orden_id, so the order itself tells which products and which valve.
+  async function alcanceAplicacion(r: FitosanitarioResponse): Promise<string> {
+    const nombre = parcelaNombre(r.parcela_id)
+    const generico =
+      `Esto afecta a toda la aplicación de la válvula (o parcela) en ${nombre}: se revierten todos los productos de esta válvula, no solo ${r.producto_nombre}.`
+    if (!r.orden_id) return ''
+    const ordenId = r.orden_id
+    let orden: OrdenAplicacion
+    try {
+      orden = await queryClient.fetchQuery({
+        queryKey: ['ordenes-aplicacion', 'detalle', ordenId],
+        queryFn: () => getOrdenAplicacion(ordenId),
+        staleTime: 10_000,
+      })
+    } catch {
+      return generico
+    }
+
+    const item = orden.parcelas.find((p) => p.parcela_id === r.parcela_id)
+    let unidad: string
+    if (item && (item.valvulas ?? []).length === 0) {
+      unidad = `toda la parcela ${nombre}`
+    } else {
+      const aplicadas = (item?.valvulas ?? []).filter((v) => v.estado === 'aplicada' && v.resultado !== 'no_aplicada')
+      // The legacy link points at the first-line registro of each valve; with a
+      // single applied valve in the parcel there is no ambiguity either.
+      const valvula = aplicadas.find((v) => v.registro_fitosanitario_id === r.id)
+        ?? (aplicadas.length === 1 ? aplicadas[0] : undefined)
+      unidad = valvula ? `la válvula ${valvula.valvula_nombre} de ${nombre}` : `su válvula de ${nombre}`
+    }
+
+    // Each confirmation creates one registro per order line, so the lines are
+    // exactly the sibling products of this registro.
+    const productos = (orden.lineas ?? []).map(
+      (l) => `  • ${l.insumo_nombre} (${formatNum(l.dosis_por_ha)} ${l.insumo_unidad}/ha)`,
+    )
+    if (productos.length <= 1) {
+      return `Esto afecta a toda la aplicación de ${unidad}.`
+    }
+    return `Esto afecta a toda la aplicación de ${unidad}: se revierten sus ${productos.length} productos, no solo ${r.producto_nombre}:\n${productos.join('\n')}`
+  }
+
   async function handleDelete(id: string) {
     setDeleteError(null)
     try {
@@ -230,6 +276,7 @@ export default function AplicacionesRealizadas() {
         onEdit={puedeCorregir ? openEdit : undefined}
         onDelete={puedeCorregir ? handleDelete : undefined}
         onReactivar={puedeReactivar ? handleReactivar : undefined}
+        alcanceAplicacion={alcanceAplicacion}
       />
 
       <Sheet open={modalOpen} onClose={closeModal} title="Corregir aplicación">

@@ -4,11 +4,18 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, AlertTriangle, ClipboardCheck, RefreshCcw, Undo2 } from 'lucide-react'
 import {
-  getValvulasARevisar, revisarValvula, type ValvulaARevisar,
+  getValvulasARevisar, revisarValvula, type ProductoAplicado, type ValvulaARevisar,
 } from '@/lib/api/ordenesAplicacion'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
+import { formatNum } from '@/components/produccion/RondaCard'
 
 export const A_REVISAR_QUERY_KEY = ['valvulas-a-revisar']
+
+// Every product of the valve; older backends only sent the first-line shim.
+export function productosDe(v: ValvulaARevisar): ProductoAplicado[] {
+  if (v.productos?.length) return v.productos
+  return [{ insumo_id: v.insumo_id, insumo_nombre: v.insumo_nombre, dosis_por_ha: v.dosis_por_ha }]
+}
 
 function formatFecha(iso: string | null) {
   if (!iso) return ''
@@ -90,9 +97,19 @@ export default function ARevisarPanel({
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {v.insumo_nombre} · {v.dosis_por_ha}/ha · {v.objetivo} ·{' '}
-                  {VARIEDAD_LABELS[v.variedad] ?? v.variedad}
+                  {v.objetivo} · {VARIEDAD_LABELS[v.variedad] ?? v.variedad}
                 </p>
+                <div className="flex flex-wrap gap-1.5 mt-1" data-testid="productos-valvula">
+                  {productosDe(v).map((p) => (
+                    <span
+                      key={p.insumo_id}
+                      className="inline-flex items-baseline gap-1 text-[11px] font-medium text-gray-700 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-md"
+                    >
+                      {p.insumo_nombre}
+                      <span className="font-mono font-normal text-gray-500">{formatNum(p.dosis_por_ha)}/ha</span>
+                    </span>
+                  ))}
+                </div>
                 <p className="text-xs text-gray-500">
                   {v.responsable ?? 'Sin responsable'} · {formatFecha(v.confirmada_at)}
                 </p>

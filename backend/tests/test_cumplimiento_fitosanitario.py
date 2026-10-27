@@ -1,148 +1,131 @@
-"""Cumplimiento del Plan Fitosanitario (matching automático real vs. plan,
-por orden cronológico cuando el mismo insumo tiene varias rondas) y
-necesidad de insumos vs. stock. Ver plan `flickering-percolating-raven.md`.
+"""Cumplimiento del Plan Fitosanitario (plan vs. aplicado por vínculo explícito
+`plan_fitosanitario_id`, medido en hectáreas) y necesidad de insumos vs. stock.
+
+Replaces the old N-th-application heuristic: each test keeps its original
+intent but builds the applications through linked orders.
 """
 from __future__ import annotations
 
 from app.models.parcela import VariedadUva
-from app.models.user import UserRole
+from tests.helpers_plan import aplicar, auth, crear_plan, linea
 
 
-async def _auth(client, create_user, role: UserRole = UserRole.gerencial, email: str = "ger@test.com"):
-    await create_user(email=email, password="Password123!", role=role)
-    resp = await client.post("/auth/login", data={"username": email, "password": "Password123!"})
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
-
-
-async def _crear_plan(client, headers, insumo_id, variedades, numero_aplicacion, mes, dosis_por_ha, temporada=2026):
-    resp = await client.post(
-        "/plan-fitosanitario/",
-        json={
-            "temporada": temporada,
-            "variedades": variedades,
-            "numero_aplicacion": numero_aplicacion,
-            "mes": mes,
-            "insumo_id": insumo_id,
-            "objetivo": "Oidio",
-            "dosis_por_ha": dosis_por_ha,
-        },
-        headers=headers,
+async def _cumplimiento(client, headers, **params) -> list[dict]:
+    resp = await client.get(
+        "/plan-fitosanitario/cumplimiento", params={"temporada": 2026, **params}, headers=headers,
     )
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-async def _crear_fito(client, headers, parcela_id, insumo_id, fecha, dosis_por_ha=2.0):
-    resp = await client.post(
-        "/produccion/fitosanitarios/",
-        json={
-            "fecha": fecha,
-            "parcela_id": parcela_id,
-            "insumo_id": insumo_id,
-            "dosis_por_ha": dosis_por_ha,
-            "motivo": "Preventivo",
-            "dias_carencia": 7,
-            "dias_reingreso": 2,
-            "responsable": "Juan Perez",
-        },
-        headers=headers,
+async def _necesidad(client, headers) -> dict[str, dict]:
+    resp = await client.get(
+        "/plan-fitosanitario/necesidad-stock", params={"temporada": 2026}, headers=headers,
     )
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    assert resp.status_code == 200, resp.text
+    return {i["insumo_id"]: i for i in resp.json()}
 
 
 async def test_fila_sin_aplicacion_real_queda_pendiente(client, create_user, create_parcela, create_insumo):
-    headers = await _auth(client, create_user)
+    headers, _ = await auth(client, create_user)
     await create_parcela(variedad=VariedadUva.flame, superficie_ha=5.0)
     insumo = await create_insumo()
-    await _crear_plan(client, headers, insumo.id, ["flame"], 1, 10, 2.0)
+    await crear_plan(client, headers, insumo.id, ["flame"], dosis_por_ha=2.0)
 
-    resp = await client.get("/plan-fitosanitario/cumplimiento", params={"temporada": 2026}, headers=headers)
-    assert resp.status_code == 200, resp.text
-    fila = resp.json()[0]
+    fila = (await _cumplimiento(client, headers))[0]
     assert fila["estado"] == "pendiente"
     assert fila["porcentaje"] == 0
     assert fila["parcelas_aplicadas"] == 0
     assert fila["parcelas_total"] == 1
+    assert fila["ha_total"] == 5.0
+    assert fila["pendiente_cantidad"] == 10.0
 
 
 async def test_todas_las_parcelas_aplicadas_queda_completo(client, create_user, create_parcela, create_insumo):
-    headers = await _auth(client, create_user)
+    headers, _ = await auth(client, create_user)
     p1 = await create_parcela(nombre="P1", variedad=VariedadUva.flame, superficie_ha=5.0)
     p2 = await create_parcela(nombre="P2", variedad=VariedadUva.flame, superficie_ha=5.0)
     insumo = await create_insumo()
-    await _crear_plan(client, headers, insumo.id, ["flame"], 1, 10, 2.0)
+    await crear_plan(client, headers, insumo.id, ["flame"], dosis_por_ha=2.0)
 
-    await _crear_fito(client, headers, p1.id, insumo.id, "2026-10-05")
-    await _crear_fito(client, headers, p2.id, insumo.id, "2026-10-06")
+    await aplicar(client, headers, [linea(insumo.id, dosis=2.0)], [p1.id, p2.id])
 
-    resp = await client.get("/plan-fitosanitario/cumplimiento", params={"temporada": 2026}, headers=headers)
-    fila = resp.json()[0]
+    fila = (await _cumplimiento(client, headers))[0]
     assert fila["estado"] == "completo"
     assert fila["porcentaje"] == 100
     assert fila["parcelas_aplicadas"] == 2
     assert fila["parcelas_total"] == 2
+    assert fila["ha_cubiertas"] == 10.0
 
 
-async def test_rondas_repetidas_se_cubren_por_orden_cronologico(client, create_user, create_parcela, create_insumo):
-    headers = await _auth(client, create_user)
+async def test_rondas_repetidas_se_cubren_por_su_vinculo(client, create_user, create_parcela, create_insumo):
+    headers, _ = await auth(client, create_user)
     p1 = await create_parcela(nombre="P1", variedad=VariedadUva.bonarda, superficie_ha=5.0)
-    p2 = await create_parcela(nombre="P2", variedad=VariedadUva.bonarda, superficie_ha=5.0)
+    await create_parcela(nombre="P2", variedad=VariedadUva.bonarda, superficie_ha=5.0)
     insumo = await create_insumo(nombre="Azufre Micro")
 
-    await _crear_plan(client, headers, insumo.id, ["bonarda"], 1, 10, 2.0)  # ronda 1
-    await _crear_plan(client, headers, insumo.id, ["bonarda"], 2, 12, 3.0)  # ronda 2
+    await crear_plan(client, headers, insumo.id, ["bonarda"], numero_aplicacion=1, dosis_por_ha=2.0)
+    await crear_plan(client, headers, insumo.id, ["bonarda"], numero_aplicacion=2, mes=12, dosis_por_ha=3.0)
 
-    # P1 tiene las dos aplicaciones reales (cubre ronda 1 y 2); P2 no tiene ninguna.
-    await _crear_fito(client, headers, p1.id, insumo.id, "2026-10-05")
-    await _crear_fito(client, headers, p1.id, insumo.id, "2026-12-05")
+    # P1 gets both rounds (each order points at its own round); P2 none.
+    await aplicar(client, headers, [linea(insumo.id, dosis=2.0, numero_aplicacion=1)], [p1.id])
+    await aplicar(client, headers, [linea(insumo.id, dosis=3.0, numero_aplicacion=2)], [p1.id])
 
-    resp = await client.get(
-        "/plan-fitosanitario/cumplimiento", params={"temporada": 2026, "variedad": "bonarda"}, headers=headers,
+    filas = sorted(
+        await _cumplimiento(client, headers, variedad="bonarda"), key=lambda f: f["numero_aplicacion"],
     )
-    filas = sorted(resp.json(), key=lambda f: f["numero_aplicacion"])
     assert len(filas) == 2
-
     ronda1, ronda2 = filas
-    # La 2da aplicación real de P1 no debe contarse dos veces para la ronda 1.
-    assert ronda1["parcelas_aplicadas"] == 1
-    assert ronda1["parcelas_total"] == 2
-    assert ronda1["estado"] == "parcial"
-    assert ronda2["parcelas_aplicadas"] == 1
-    assert ronda2["parcelas_total"] == 2
-    assert ronda2["estado"] == "parcial"
+    # The round-2 record must not count for round 1 too.
+    for ronda in (ronda1, ronda2):
+        assert ronda["parcelas_aplicadas"] == 1
+        assert ronda["parcelas_total"] == 2
+        assert ronda["estado"] == "parcial"
+        assert ronda["porcentaje"] == 50
 
-    # Necesidad pendiente: P2 no aplicó ninguna ronda -> 2.0*5 + 3.0*5 = 25.0 ha-dosis pendientes
-    necesidad = await client.get("/plan-fitosanitario/necesidad-stock", params={"temporada": 2026}, headers=headers)
-    item = next(i for i in necesidad.json() if i["insumo_id"] == insumo.id)
-    assert item["cantidad_pendiente"] == 25.0
+    # Pending: P2 missed both rounds -> 2.0*5 + 3.0*5 = 25.0
+    assert (await _necesidad(client, headers))[insumo.id]["cantidad_pendiente"] == 25.0
+
+
+async def test_ronda_aplicada_fuera_de_orden_cubre_su_propia_ronda(
+    client, create_user, create_parcela, create_insumo,
+):
+    """What the heuristic got wrong: applying round 2 first used to fill round 1."""
+    headers, _ = await auth(client, create_user)
+    p1 = await create_parcela(nombre="P1", variedad=VariedadUva.bonarda, superficie_ha=5.0)
+    insumo = await create_insumo()
+    await crear_plan(client, headers, insumo.id, ["bonarda"], numero_aplicacion=1)
+    await crear_plan(client, headers, insumo.id, ["bonarda"], numero_aplicacion=2, mes=12)
+
+    await aplicar(client, headers, [linea(insumo.id, numero_aplicacion=2)], [p1.id])
+
+    filas = {f["numero_aplicacion"]: f for f in await _cumplimiento(client, headers)}
+    assert filas[1]["estado"] == "pendiente"
+    assert filas[2]["estado"] == "completo"
 
 
 async def test_necesidad_baja_a_cero_cuando_todo_aplicado(client, create_user, create_parcela, create_insumo):
-    headers = await _auth(client, create_user)
+    headers, _ = await auth(client, create_user)
     p1 = await create_parcela(nombre="P1", variedad=VariedadUva.syrah, superficie_ha=4.0)
     insumo = await create_insumo()
-    await _crear_plan(client, headers, insumo.id, ["syrah"], 1, 10, 2.0)
-    await _crear_fito(client, headers, p1.id, insumo.id, "2026-10-05")
+    await crear_plan(client, headers, insumo.id, ["syrah"], dosis_por_ha=2.0)
+    await aplicar(client, headers, [linea(insumo.id, dosis=2.0)], [p1.id])
 
-    resp = await client.get("/plan-fitosanitario/necesidad-stock", params={"temporada": 2026}, headers=headers)
-    assert all(i["insumo_id"] != insumo.id for i in resp.json())
+    assert insumo.id not in await _necesidad(client, headers)
 
 
 async def test_faltante_se_calcula_contra_stock_actual(client, create_user, create_parcela, create_insumo):
-    headers = await _auth(client, create_user)
+    headers, _ = await auth(client, create_user)
     await create_parcela(variedad=VariedadUva.fiesta, superficie_ha=10.0)
     insumo_bajo_stock = await create_insumo(nombre="Vivando", stock_actual=5.0)
     insumo_stock_sobra = await create_insumo(nombre="Karathane", stock_actual=1000.0)
 
-    # 3.0 lt/ha * 10 ha = 30 pendientes -- contra stock 5 -> falta 25
-    await _crear_plan(client, headers, insumo_bajo_stock.id, ["fiesta"], 1, 10, 3.0)
-    # 1.0 lt/ha * 10 ha = 10 pendientes -- contra stock 1000 -> no falta nada
-    await _crear_plan(client, headers, insumo_stock_sobra.id, ["fiesta"], 1, 10, 1.0)
+    # 3.0 lt/ha * 10 ha = 30 pending -- against stock 5 -> 25 short
+    await crear_plan(client, headers, insumo_bajo_stock.id, ["fiesta"], dosis_por_ha=3.0)
+    # 1.0 lt/ha * 10 ha = 10 pending -- against stock 1000 -> nothing short
+    await crear_plan(client, headers, insumo_stock_sobra.id, ["fiesta"], dosis_por_ha=1.0)
 
-    resp = await client.get("/plan-fitosanitario/necesidad-stock", params={"temporada": 2026}, headers=headers)
-    items = {i["insumo_id"]: i for i in resp.json()}
-
+    items = await _necesidad(client, headers)
     assert items[insumo_bajo_stock.id]["cantidad_pendiente"] == 30.0
     assert items[insumo_bajo_stock.id]["faltante"] == 25.0
     assert items[insumo_stock_sobra.id]["cantidad_pendiente"] == 10.0

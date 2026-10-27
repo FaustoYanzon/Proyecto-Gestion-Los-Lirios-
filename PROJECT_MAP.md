@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-26
+> Última generación: 2026-10-27
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,7 +26,7 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 43 clases ORM
+**Modelos:** 16 archivos, 44 clases ORM
 
 | Archivo | Clases |
 |---|---|
@@ -38,7 +38,7 @@ repo/
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
 | `presupuesto.py` | Presupuesto, MetaProduccion |
-| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionParcela, OrdenAplicacionValvula, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
+| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionInsumo, OrdenAplicacionParcela, OrdenAplicacionValvula, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
 | `push_token.py` | PushToken |
 | `termografo.py` | LoteImportacionTermografo, LecturaTermografo |
 | `trabajador.py` | Trabajador |
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 56 (head: `c3f1a8d27e54_vw_kpi_produccion_manto_por_superficie.py`)
+**Migraciones de Alembic:** 57 (head: `71e969f8521f_ordenes_multiproducto.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -150,7 +150,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `produccion/`: ARevisarPanel.tsx · AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
+- `produccion/`: ARevisarPanel.tsx · AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · NuevaOrdenAplicacion.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · RondaCard.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 
@@ -186,6 +186,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `_audit_jornales_historicos.py`
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`
+- `backfill_plan_registros.py`
 - `cleanup_contaminacion_jornales_hist.py`
 - `migrate_bd_cobros.py`
 - `migrate_cosecha_2024_2026.py`

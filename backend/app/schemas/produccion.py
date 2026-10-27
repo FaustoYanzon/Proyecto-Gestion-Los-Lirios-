@@ -1,8 +1,17 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    ValidatorFunctionWrapHandler,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.models.finanzas import Finca
 from app.models.insumo import UnidadInsumo
@@ -333,9 +342,18 @@ class CumplimientoPlanItem(BaseModel):
     objetivo: str
     dosis_por_ha: float
     parcelas_total: int
+    # Parcels fully covered (ha_cubiertas >= ha_parcela; a parcel without
+    # surface counts once it has a linked record).
     parcelas_aplicadas: int
+    # By hectares (was by parcel count before the explicit plan link).
     porcentaje: int
     estado: Literal["pendiente", "parcial", "completo"]
+    ha_total: float
+    ha_cubiertas: float
+    pendiente_ha: float
+    pendiente_cantidad: float
+    # Hectare-weighted actual dose over the linked records; None = nothing applied.
+    dosis_real_promedio: float | None = None
 
 
 class NecesidadInsumoItem(BaseModel):
@@ -345,6 +363,40 @@ class NecesidadInsumoItem(BaseModel):
     cantidad_pendiente: float
     stock_actual: Decimal
     faltante: float
+
+
+class RondaPendienteLinea(BaseModel):
+    insumo_id: str
+    insumo_nombre: str
+    unidad: UnidadInsumo
+    dosis_por_ha: float
+
+
+class RondaPendienteParcela(BaseModel):
+    id: str
+    nombre: str
+    # Area still missing at least one of the card's lines (max over lines).
+    ha_pendientes: float
+    # Some line of the card is already (partly) applied here: the UI leaves it
+    # unticked, since an order sprays every line on every parcel it lists.
+    parcial: bool
+
+
+class RondaPendienteVariedad(BaseModel):
+    variedad: VariedadUva
+    ha_pendientes: float
+    parcelas: list[RondaPendienteParcela]
+
+
+class RondaPendiente(BaseModel):
+    """A pending plan round across varieties sharing the same products/doses:
+    one tap in the order form preloads all of it."""
+    numero_aplicacion: int
+    objetivo: str
+    mes: int
+    # Only the products still pending on at least one parcel.
+    lineas: list[RondaPendienteLinea]
+    variedades: list[RondaPendienteVariedad]
 
 
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────
@@ -362,6 +414,13 @@ class OrdenAplicacionValvulaResponse(BaseModel):
     confirmada_at: datetime | None = None
 
 
+class ProductoAplicadoResponse(BaseModel):
+    """One product line of an order, as shown next to a confirmed valve."""
+    insumo_id: str
+    insumo_nombre: str
+    dosis_por_ha: float
+
+
 class ValvulaARevisarResponse(BaseModel):
     """Una válvula confirmada que pide una segunda mirada: no se aplicó, o se
     aplicó con observaciones (así se señalan las aplicaciones incompletas)."""
@@ -371,10 +430,14 @@ class ValvulaARevisarResponse(BaseModel):
     parcela_nombre: str
     valvula_id: str
     valvula_nombre: str
+    # Variety of the valve's parcel (falls back to the order's shim variety
+    # when the parcel has none).
     variedad: VariedadUva
+    # Deprecated single-product shim (first line), kept for old clients.
     insumo_id: str
     insumo_nombre: str
     dosis_por_ha: float
+    productos: list[ProductoAplicadoResponse] = Field(default_factory=list)
     objetivo: str
     resultado: ResultadoValvula
     responsable: str | None = None
@@ -396,10 +459,24 @@ class OrdenAplicacionParcelaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrdenAplicacionLineaResponse(BaseModel):
+    id: str
+    insumo_id: str
+    insumo_nombre: str
+    insumo_unidad: UnidadInsumo
+    dosis_por_ha: float
+    dias_carencia: int
+    dias_reingreso: int
+    # Plan round this product counts against; None = off-plan product.
+    numero_aplicacion: int | None = None
+
+
 class OrdenAplicacionResponse(BaseModel):
     id: str
     temporada: int
     origen: OrigenOrdenAplicacion
+    # Deprecated single-product shim (first line / variety of the largest
+    # parcel), kept for old web/mobile clients until the cleanup migration.
     plan_fitosanitario_id: str | None = None
     variedad: VariedadUva
     insumo_id: str
@@ -414,6 +491,8 @@ class OrdenAplicacionResponse(BaseModel):
     notas: str | None = None
     created_by: str
     created_at: datetime
+    lineas: list[OrdenAplicacionLineaResponse] = Field(default_factory=list)
+    variedades: list[VariedadUva] = Field(default_factory=list)
     parcelas: list[OrdenAplicacionParcelaResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
@@ -429,36 +508,86 @@ class OrdenAplicacionCreateDesdePlan(BaseModel):
     notas: str | None = None
 
 
-class OrdenAplicacionCreateExtra(BaseModel):
-    temporada: int
-    variedad: VariedadUva
+class OrdenAplicacionLineaCreate(BaseModel):
     insumo_id: str
-    dosis_por_ha: float
-    objetivo: str
+    dosis_por_ha: float = Field(gt=0)
     dias_carencia: int = Field(ge=0)
     dias_reingreso: int = Field(ge=0)
+    # Plan round the product counts against (must exist in the plan for at
+    # least one variety of the chosen parcels). None = off-plan product.
+    numero_aplicacion: int | None = None
+
+
+def _es_body_viejo(data: Any) -> bool:
+    """Old single-product body: insumo_id/dosis_por_ha/dias_* at top level and
+    no `lineas`."""
+    return isinstance(data, dict) and data.get("lineas") is None and "insumo_id" in data
+
+
+def _linea_desde_body_viejo(data: Any) -> Any:
+    """Old single-product body: wrap the top-level product fields into a
+    one-line `lineas` list so old web/mobile clients keep working."""
+    if _es_body_viejo(data):
+        data = dict(data)
+        data["lineas"] = [
+            {
+                key: data[key]
+                for key in ("insumo_id", "dosis_por_ha", "dias_carencia", "dias_reingreso")
+                if key in data
+            }
+        ]
+    return data
+
+
+class OrdenAplicacionUpdate(BaseModel):
+    """Reemplazo completo de una orden (del plan o extra) mientras nada esté
+    confirmado. Las líneas se reemplazan completas. La temporada no se edita
+    -- la orden queda en la campaña en que se creó."""
+    objetivo: str
     fecha_planificada: date
-    # None = todas las parcelas activas de la variedad.
+    lineas: list[OrdenAplicacionLineaCreate] = Field(min_length=1)
+    # Explicit parcels (several varieties allowed). None = every active
+    # parcel of `variedad`; with neither the request is rejected.
     parcela_ids: list[str] | None = None
     # None = todas las válvulas de cada parcela. Con valores (orden de
     # repaso) restringe la orden a esas válvulas puntuales.
     valvula_ids: list[str] | None = None
+    variedad: VariedadUva | None = None
     notas: str | None = None
 
+    # Not part of the payload: remembers that the request came in the old
+    # single-product shape, so PUT can refuse to collapse a multi-line order.
+    _from_legacy_body: bool = PrivateAttr(default=False)
 
-class OrdenAplicacionUpdateExtra(BaseModel):
-    """Reemplazo completo de una orden extra (fuera de plan). La temporada no
-    se edita -- la orden queda en la campaña en que se creó."""
-    variedad: VariedadUva
-    insumo_id: str
-    dosis_por_ha: float = Field(gt=0)
-    objetivo: str
-    dias_carencia: int = Field(ge=0)
-    dias_reingreso: int = Field(ge=0)
-    fecha_planificada: date
-    # None = todas las parcelas activas de la variedad.
-    parcela_ids: list[str] | None = None
-    notas: str | None = None
+    @model_validator(mode="wrap")
+    @classmethod
+    def _body_viejo(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+        es_viejo = _es_body_viejo(data)
+        model = handler(_linea_desde_body_viejo(data))
+        # Only ever set, never reset: re-validating an instance keeps its flag.
+        if es_viejo:
+            model._from_legacy_body = True
+        return model
+
+    @property
+    def es_body_viejo(self) -> bool:
+        return self._from_legacy_body
+
+    @field_validator("lineas")
+    @classmethod
+    def _insumos_distintos(
+        cls, lineas: list[OrdenAplicacionLineaCreate]
+    ) -> list[OrdenAplicacionLineaCreate]:
+        vistos: set[str] = set()
+        for linea in lineas:
+            if linea.insumo_id in vistos:
+                raise ValueError("Hay un producto repetido en la orden: cargalo una sola vez.")
+            vistos.add(linea.insumo_id)
+        return lineas
+
+
+class OrdenAplicacionCreate(OrdenAplicacionUpdate):
+    temporada: int
 
 
 class ConfirmarAplicacionRequest(BaseModel):
