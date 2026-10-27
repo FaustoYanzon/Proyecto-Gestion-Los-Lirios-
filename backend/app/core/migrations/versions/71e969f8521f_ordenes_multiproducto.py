@@ -156,8 +156,12 @@ def _backfill() -> None:
 
 
 def downgrade() -> None:
-    # Data in the new columns/table is derived (legacy columns are still
-    # written), so dropping it loses nothing the previous revision used.
+    # Only lossless for single-line data: for an order with several lines,
+    # dropping ordenes_aplicacion_insumos LOSES products 2..N, and their
+    # registros (only the first line's one is on the legacy
+    # registro_fitosanitario_id) are left unlinked from any order. Take a
+    # backup and prefer a forward fix; see the Rollback section of
+    # docs/sistema/Bitácora/2026-10-27-ordenes-multiproducto.md.
     op.drop_constraint('fk_registros_orden_parcela', 'registros_fitosanitarios', type_='foreignkey')
     op.drop_constraint('fk_registros_orden_insumo', 'registros_fitosanitarios', type_='foreignkey')
     op.drop_constraint('fk_registros_orden_valvula', 'registros_fitosanitarios', type_='foreignkey')
