@@ -30,25 +30,68 @@ export interface OrdenAplicacionParcela {
   valvulas: OrdenAplicacionValvula[]
 }
 
+export interface OrdenAplicacionLinea {
+  id: string
+  insumo_id: string
+  insumo_nombre: string
+  insumo_unidad: 'kg' | 'lt'
+  dosis_por_ha: number
+  dias_carencia: number
+  dias_reingreso: number
+  // Plan round this product counts against; null = off-plan product.
+  numero_aplicacion: number | null
+}
+
 export interface OrdenAplicacion {
   id: string
   temporada: number
   origen: OrigenOrdenAplicacion
+  // @deprecated Single-product shim (first line / variety of the largest
+  // parcel): read `lineas` and `variedades` instead.
   plan_fitosanitario_id: string | null
   variedad: string
   insumo_id: string
   insumo_nombre: string
   insumo_unidad: 'kg' | 'lt'
   dosis_por_ha: number
-  objetivo: string
   dias_carencia: number
   dias_reingreso: number
+  objetivo: string
   fecha_planificada: string
   estado: EstadoOrdenAplicacion
   notas: string | null
   created_by: string
   created_at: string
+  lineas: OrdenAplicacionLinea[]
+  variedades: string[]
   parcelas: OrdenAplicacionParcela[]
+}
+
+export interface OrdenAplicacionLineaCreate {
+  insumo_id: string
+  dosis_por_ha: number
+  dias_carencia: number
+  dias_reingreso: number
+  // Plan round the product counts against; null/omitted = off-plan product.
+  numero_aplicacion?: number | null
+}
+
+// Mirrors the backend OrdenAplicacionUpdate (full replacement of an order).
+export interface OrdenAplicacionUpdate {
+  objetivo: string
+  fecha_planificada: string
+  lineas: OrdenAplicacionLineaCreate[]
+  // Explicit parcels (several varieties allowed). Without it, `variedad`
+  // selects every active parcel of that variety.
+  parcela_ids?: string[] | null
+  // Rework order: restricts the order to these valves.
+  valvula_ids?: string[] | null
+  variedad?: string | null
+  notas?: string | null
+}
+
+export interface OrdenAplicacionCreate extends OrdenAplicacionUpdate {
+  temporada: number
 }
 
 export interface OrdenAplicacionCreateDesdePlan {
@@ -60,6 +103,7 @@ export interface OrdenAplicacionCreateDesdePlan {
   notas?: string | null
 }
 
+/** @deprecated Single-product body; use OrdenAplicacionCreate with `lineas`. */
 export interface OrdenAplicacionCreateExtra {
   temporada: number
   variedad: string
@@ -96,6 +140,32 @@ export async function crearOrdenDesdePlan(
   return data
 }
 
+// The backend requires every parcel to be of `variedad` when both are sent, so
+// multi-variety bodies must carry only the explicit parcels.
+function normalizeBody<T extends OrdenAplicacionUpdate>(body: T): T {
+  if (body.parcela_ids && body.parcela_ids.length > 0) {
+    const rest = { ...body }
+    delete rest.variedad
+    return rest
+  }
+  return body
+}
+
+export async function crearOrden(body: OrdenAplicacionCreate): Promise<OrdenAplicacion> {
+  const { data } = await api.post('/ordenes-aplicacion/', normalizeBody(body))
+  return data
+}
+
+// Only orders without confirmed applications; the backend answers 409 otherwise.
+export async function actualizarOrden(
+  id: string,
+  body: OrdenAplicacionUpdate,
+): Promise<OrdenAplicacion> {
+  const { data } = await api.put(`/ordenes-aplicacion/${id}`, normalizeBody(body))
+  return data
+}
+
+/** @deprecated Use crearOrden. */
 export async function crearOrdenExtra(payload: OrdenAplicacionCreateExtra): Promise<OrdenAplicacion> {
   const { data } = await api.post('/ordenes-aplicacion/', payload)
   return data
@@ -103,8 +173,10 @@ export async function crearOrdenExtra(payload: OrdenAplicacionCreateExtra): Prom
 
 // Solo órdenes extra (fuera de plan) y sin aplicaciones confirmadas -- el
 // backend responde 409 en cualquier otro caso.
+/** @deprecated Use OrdenAplicacionUpdate. */
 export type OrdenAplicacionUpdateExtra = Omit<OrdenAplicacionCreateExtra, 'temporada'>
 
+/** @deprecated Use actualizarOrden. */
 export async function actualizarOrdenExtra(
   id: string,
   payload: OrdenAplicacionUpdateExtra,
@@ -117,6 +189,12 @@ export async function eliminarOrdenExtra(id: string): Promise<void> {
   await api.delete(`/ordenes-aplicacion/${id}`)
 }
 
+export interface ProductoAplicado {
+  insumo_id: string
+  insumo_nombre: string
+  dosis_por_ha: number
+}
+
 // Válvula confirmada que no se aplicó, o que se aplicó con observaciones, y
 // que nadie revisó todavía (GET /ordenes-aplicacion/a-revisar).
 export interface ValvulaARevisar {
@@ -127,9 +205,11 @@ export interface ValvulaARevisar {
   valvula_id: string
   valvula_nombre: string
   variedad: string
+  // @deprecated Single-product shim (first line): read `productos`.
   insumo_id: string
   insumo_nombre: string
   dosis_por_ha: number
+  productos: ProductoAplicado[]
   objetivo: string
   resultado: ResultadoValvula
   responsable: string | null
