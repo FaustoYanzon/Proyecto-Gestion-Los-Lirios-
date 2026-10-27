@@ -22,11 +22,31 @@ import type {
   OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem,
   ResultadoValvula, Trabajador as TrabajadorDb,
 } from '../lib/types'
-import { VARIEDAD_LABELS } from '../lib/types'
+import {
+  ProductosCantidades, ProductosLista, formatDosis, labelVariedades, productosDeOrden,
+} from './OrdenProductos'
 
 function formatDateDisplay(iso: string) {
   const [y, mo, d] = iso.split('-')
   return `${d}/${mo}/${y}`
+}
+
+// Server message verbatim (e.g. the 422 for a valve without hectares);
+// FastAPI validation errors come as a list of {msg}.
+function apiErrorMessage(e: unknown, fallback: string): string {
+  const detail = (e as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : ''))
+      .filter(Boolean)
+    if (msgs.length > 0) return msgs.join('\n')
+  }
+  return fallback
+}
+
+function productosLabel(n: number) {
+  return n === 1 ? 'PRODUCTO' : `PRODUCTOS (${n})`
 }
 
 const ORIGEN_LABELS: Record<string, string> = { plan: 'Del plan', extra: 'Fuera de plan' }
@@ -74,9 +94,7 @@ function ConfirmarModal({
       }
       onConfirmed()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      const detail = err.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo confirmar la aplicación.')
+      Alert.alert('Error', apiErrorMessage(e, 'No se pudo confirmar la aplicación.'))
     } finally {
       submittingRef.current = false
       setLoading(false)
@@ -84,6 +102,7 @@ function ConfirmarModal({
   }
 
   if (!orden || !item) return null
+  const productos = productosDeOrden(orden)
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -98,8 +117,6 @@ function ConfirmarModal({
           <View style={styles.summaryCard}>
             {[
               { label: 'Parral', value: item.parcela_nombre },
-              { label: 'Producto', value: orden.insumo_nombre },
-              { label: 'Dosis', value: `${orden.dosis_por_ha} ${orden.insumo_unidad}/ha` },
               { label: 'Objetivo', value: orden.objetivo },
             ].map(({ label, value }, idx, arr) => (
               <View key={label} style={[styles.summaryRow, idx < arr.length - 1 && styles.summaryRowBorder]}>
@@ -108,6 +125,11 @@ function ConfirmarModal({
               </View>
             ))}
           </View>
+
+          {/* The parcel surface is not in this payload: only doses are shown;
+              the server computes each quantity from the parcel's hectares. */}
+          <Text style={[styles.fieldLabel, { marginTop: 20 }]}>{productosLabel(productos.length)}</Text>
+          <ProductosCantidades productos={productos} />
 
           <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
             OBSERVACIONES <Text style={{ textTransform: 'none', fontWeight: '400' }}>(opcional)</Text>
@@ -218,9 +240,7 @@ function ConfirmarValvulaModal({
       }
       onConfirmed()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      const detail = err.response?.data?.detail
-      Alert.alert('Error', typeof detail === 'string' ? detail : 'No se pudo confirmar la válvula.')
+      Alert.alert('Error', apiErrorMessage(e, 'No se pudo confirmar la válvula.'))
     } finally {
       submittingRef.current = false
       setLoading(false)
@@ -228,6 +248,8 @@ function ConfirmarValvulaModal({
   }
 
   if (!orden || !item || !valvula) return null
+  const productos = productosDeOrden(orden)
+  const sinSuperficie = valvula.superficie_ha === null || valvula.superficie_ha === ''
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -244,8 +266,6 @@ function ConfirmarValvulaModal({
               { label: 'Parral', value: item.parcela_nombre },
               { label: 'Válvula', value: valvula.valvula_nombre },
               { label: 'Superficie', value: valvula.superficie_ha ? `${Number(valvula.superficie_ha).toFixed(2)} ha` : '—' },
-              { label: 'Producto', value: orden.insumo_nombre },
-              { label: 'Dosis', value: `${orden.dosis_por_ha} ${orden.insumo_unidad}/ha` },
               { label: 'Objetivo', value: orden.objetivo },
             ].map(({ label, value }, idx, arr) => (
               <View key={label} style={[styles.summaryRow, idx < arr.length - 1 && styles.summaryRowBorder]}>
@@ -254,6 +274,18 @@ function ConfirmarValvulaModal({
               </View>
             ))}
           </View>
+
+          {/* One tap confirms every product: the server creates one record per line. */}
+          <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
+            {productosLabel(productos.length)}{' '}
+            <Text style={{ textTransform: 'none', fontWeight: '400' }}>(cantidad para esta válvula)</Text>
+          </Text>
+          <ProductosCantidades productos={productos} superficieHa={valvula.superficie_ha} />
+          {sinSuperficie && resultado === 'completa' && (
+            <Text style={styles.avisoText}>
+              Esta válvula no tiene hectáreas cargadas: no se puede calcular la cantidad.
+            </Text>
+          )}
 
           <Text style={[styles.fieldLabel, { marginTop: 20 }]}>RESPONSABLE</Text>
           <TrabajadorPicker
@@ -363,21 +395,33 @@ function OrdenCard({
     })
   }
 
+  const productos = productosDeOrden(orden)
+  const unProducto = productos.length === 1
+
   return (
     <View style={styles.ordenCard}>
       <View style={styles.ordenHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.ordenProducto}>{orden.insumo_nombre}</Text>
-          <Text style={styles.ordenSub}>
-            {orden.dosis_por_ha} {orden.insumo_unidad}/ha · {orden.objetivo}
-          </Text>
+          {unProducto ? (
+            // Single product: same layout as before multi-product orders.
+            <>
+              <Text style={styles.ordenProducto}>{productos[0].nombre}</Text>
+              <Text style={styles.ordenSub}>{formatDosis(productos[0])} · {orden.objetivo}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.ordenProducto}>{orden.objetivo}</Text>
+              <Text style={styles.ordenSub}>{productos.length} productos</Text>
+            </>
+          )}
         </View>
         <View style={styles.origenBadge}>
           <Text style={styles.origenBadgeText}>{ORIGEN_LABELS[orden.origen] ?? orden.origen}</Text>
         </View>
       </View>
+      {!unProducto && <ProductosLista productos={productos} />}
       <Text style={styles.ordenMeta}>
-        {VARIEDAD_LABELS[orden.variedad] ?? orden.variedad} · Planificada {formatDateDisplay(orden.fecha_planificada)}
+        {labelVariedades(orden)} · Planificada {formatDateDisplay(orden.fecha_planificada)}
       </Text>
 
       <View style={styles.parcelasWrap}>
@@ -679,6 +723,7 @@ const styles = StyleSheet.create({
   summaryRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.hueso },
   summaryLabel: { fontSize: 13, color: colors.ink60, fontWeight: '600' },
   summaryValue: { fontSize: 13, color: colors.ink, fontWeight: '700' },
+  avisoText: { fontSize: 12, color: colors.tierra, fontWeight: '600', marginTop: 8 },
   fieldLabel: {
     fontSize: 11, fontWeight: '700', color: colors.ink60,
     letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8,
