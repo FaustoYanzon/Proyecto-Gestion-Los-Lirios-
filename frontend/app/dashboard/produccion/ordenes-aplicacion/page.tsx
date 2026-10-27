@@ -1,49 +1,29 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2, Undo2 } from 'lucide-react'
-import { useForm, type Resolver } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import {
   getOrdenesAplicacion,
-  crearOrdenDesdePlan,
-  crearOrdenExtra,
-  actualizarOrdenExtra,
   eliminarOrdenExtra,
   getValvulasARevisar,
-  revisarValvula,
   deshacerValvula,
   type OrdenAplicacion,
   type EstadoOrdenAplicacion,
   type ValvulaARevisar,
   type OrdenAplicacionValvula,
 } from '@/lib/api/ordenesAplicacion'
-import { getPlanFitosanitario, type PlanFitosanitario } from '@/lib/api/planFitosanitario'
-import { getParcelas, VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
-import InsumoSelect from '@/components/produccion/InsumoSelect'
+import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
 import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
 import ARevisarPanel, { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
-import type { InsumoResponse } from '@/lib/api/insumos'
+import NuevaOrdenAplicacion from '@/components/produccion/NuevaOrdenAplicacion'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-]
-
-const now = new Date()
 // aniosAdelante=1: permite cargar órdenes de la próxima campaña antes de
 // que empiece.
 const AVAILABLE_YEARS = buildCampanas(1).map(campanaToAnio)
-const TODAY = now.toISOString().split('T')[0]
-
-const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
-const label = 'block text-sm font-medium text-gray-700 mb-1'
-const err = 'mt-1 text-xs text-red-600'
 
 const ESTADO_LABELS: Record<EstadoOrdenAplicacion, string> = {
   pendiente: 'Pendiente', en_curso: 'En curso', completada: 'Completada',
@@ -60,11 +40,13 @@ const ORIGEN_LABELS: Record<string, string> = { plan: 'Del plan', extra: 'Fuera 
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({
+  title, onClose, children, wide = false,
+}: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className={`bg-white rounded-xl shadow-xl w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
@@ -76,468 +58,6 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         <div className="px-5 py-4">{children}</div>
       </div>
     </div>
-  )
-}
-
-// ── Selector de parcelas (toda la variedad, o restringido) ─────────────────────
-
-function ParcelaPicker({
-  parcelasVariedad, restringir, setRestringir, seleccionadas, setSeleccionadas,
-}: {
-  parcelasVariedad: ParcelaItem[]
-  restringir: boolean
-  setRestringir: (v: boolean) => void
-  seleccionadas: string[]
-  setSeleccionadas: (v: string[]) => void
-}) {
-  return (
-    <div>
-      <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
-        <input
-          type="checkbox"
-          checked={restringir}
-          onChange={(e) => { setRestringir(e.target.checked); if (!e.target.checked) setSeleccionadas([]) }}
-        />
-        Restringir a parcelas específicas (si no, incluye toda la variedad)
-      </label>
-      {restringir && (
-        <div className="grid grid-cols-2 gap-1.5 border border-gray-200 rounded-md p-3 max-h-40 overflow-y-auto">
-          {parcelasVariedad.length === 0 && (
-            <p className="col-span-2 text-xs text-gray-400">Sin parcelas activas para esta variedad.</p>
-          )}
-          {parcelasVariedad.map((p) => (
-            <label key={p.id} className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={seleccionadas.includes(p.id)}
-                onChange={(e) => {
-                  setSeleccionadas(
-                    e.target.checked ? [...seleccionadas, p.id] : seleccionadas.filter((id) => id !== p.id),
-                  )
-                }}
-              />
-              {p.nombre}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Combobox de línea del plan (se puede escribir para filtrar) ──────────────
-
-const DIACRITICS_RE = new RegExp(
-  `[${String.fromCharCode(0x0300)}-${String.fromCharCode(0x036f)}]`, 'g'
-)
-function normalizar(t: string): string {
-  return t.normalize('NFD').replace(DIACRITICS_RE, '').trim().toLowerCase()
-}
-
-function planLabel(p: PlanFitosanitario): string {
-  return `${VARIEDAD_LABELS[p.variedad] ?? p.variedad} · Nº${p.numero_aplicacion} · ${MESES[p.mes - 1]} · ${p.insumo_nombre} (${p.dosis_por_ha} ${p.insumo_unidad}/ha)`
-}
-
-function PlanLineaCombobox({
-  planes, value, onChange, error,
-}: {
-  planes: PlanFitosanitario[]
-  value: string
-  onChange: (planId: string) => void
-  error?: string
-}) {
-  const elegido = planes.find((p) => p.id === value)
-  const [texto, setTexto] = useState(elegido ? planLabel(elegido) : '')
-  const [open, setOpen] = useState(false)
-  const [activo, setActivo] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Cada palabra tipeada tiene que aparecer en la etiqueta, en cualquier
-  // orden: "syrah oidio", "azufre nov", "flame 3".
-  const palabras = normalizar(texto).split(/\s+/).filter(Boolean)
-  const filtrados = elegido && texto === planLabel(elegido)
-    ? planes
-    : planes.filter((p) => {
-        const l = normalizar(`${planLabel(p)} ${p.objetivo}`)
-        return palabras.every((w) => l.includes(w))
-      })
-
-  function elegir(p: PlanFitosanitario) {
-    setTexto(planLabel(p))
-    onChange(p.id)
-    setOpen(false)
-  }
-
-  return (
-    <div ref={containerRef} className="relative">
-      <input
-        type="text"
-        value={texto}
-        placeholder="Escribí variedad, producto, mes o Nº…"
-        onChange={(e) => { setTexto(e.target.value); setOpen(true); setActivo(0); if (value) onChange('') }}
-        onFocus={(e) => { setOpen(true); e.target.select() }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActivo((i) => Math.min(i + 1, filtrados.length - 1)) }
-          else if (e.key === 'ArrowUp') { e.preventDefault(); setActivo((i) => Math.max(i - 1, 0)) }
-          else if (e.key === 'Enter' && open && filtrados[activo]) { e.preventDefault(); elegir(filtrados[activo]) }
-          else if (e.key === 'Escape') setOpen(false)
-        }}
-        className={field}
-        role="combobox"
-        aria-expanded={open}
-        aria-autocomplete="list"
-      />
-      {open && (
-        <ul className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg">
-          {filtrados.length === 0 && (
-            <li className="px-3 py-2 text-sm text-gray-400">Ninguna línea del plan coincide.</li>
-          )}
-          {filtrados.map((p, i) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => elegir(p)}
-                onMouseEnter={() => setActivo(i)}
-                className={`w-full text-left px-3 py-2 text-sm ${i === activo ? 'bg-[#fbfaf6] text-[#7a1f2c]' : 'text-gray-700'}`}
-              >
-                <span className="block">{planLabel(p)}</span>
-                <span className="block text-xs text-gray-400">{p.objetivo}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {error && <p className={err}>{error}</p>}
-    </div>
-  )
-}
-
-// ── Form: generar orden desde una línea del plan ────────────────────────────
-
-const schemaDesdePlan = z.object({
-  plan_fitosanitario_id: z.string().min(1, 'Elegí una línea del plan'),
-  dias_carencia: z.coerce.number().int().min(0),
-  dias_reingreso: z.coerce.number().int().min(0),
-  fecha_planificada: z.string().min(1, 'Requerido'),
-  notas: z.string().optional(),
-})
-type FormDesdePlan = z.infer<typeof schemaDesdePlan>
-
-function FormOrdenDesdePlan({
-  planes, parcelas, temporada, onSuccess, onCancel,
-}: {
-  planes: PlanFitosanitario[]
-  parcelas: ParcelaItem[]
-  temporada: number
-  onSuccess: () => void
-  onCancel: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [restringir, setRestringir] = useState(false)
-  const [seleccionadas, setSeleccionadas] = useState<string[]>([])
-
-  const {
-    register, handleSubmit, watch, setValue, formState: { errors, isSubmitting },
-  } = useForm<FormDesdePlan>({
-    resolver: zodResolver(schemaDesdePlan) as Resolver<FormDesdePlan>,
-    defaultValues: { dias_carencia: 7, dias_reingreso: 2, fecha_planificada: TODAY, notas: '' },
-  })
-
-  const planIdW = watch('plan_fitosanitario_id')
-  const planElegido = planes.find((p) => p.id === planIdW)
-  const parcelasVariedad = useMemo(
-    () => (planElegido ? parcelas.filter((p) => p.is_active && p.variedad === planElegido.variedad) : []),
-    [parcelas, planElegido],
-  )
-
-  async function onSubmit(data: FormDesdePlan) {
-    try {
-      setSubmitError(null)
-      if (restringir && seleccionadas.length === 0) {
-        setSubmitError('Elegí al menos una parcela, o desmarcá la restricción.')
-        return
-      }
-      await crearOrdenDesdePlan({
-        ...data,
-        notas: data.notas || undefined,
-        parcela_ids: restringir ? seleccionadas : undefined,
-      })
-      queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
-      onSuccess()
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setSubmitError(typeof detail === 'string' ? detail : 'Error al generar la orden.')
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div>
-        <label className={label}>Línea del plan</label>
-        <PlanLineaCombobox
-          planes={planes}
-          value={planIdW ?? ''}
-          onChange={(id) => { setValue('plan_fitosanitario_id', id, { shouldValidate: !!id }); setSeleccionadas([]) }}
-          error={errors.plan_fitosanitario_id?.message}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={label}>Días carencia</label>
-          <input type="number" min="0" {...register('dias_carencia')} className={field} />
-        </div>
-        <div>
-          <label className={label}>Días reingreso</label>
-          <input type="number" min="0" {...register('dias_reingreso')} className={field} />
-        </div>
-      </div>
-
-      <div>
-        <label className={label}>Fecha planificada</label>
-        <input type="date" {...register('fecha_planificada')} className={field} />
-        {errors.fecha_planificada && <p className={err}>{errors.fecha_planificada.message}</p>}
-      </div>
-
-      {planElegido && (
-        <ParcelaPicker
-          parcelasVariedad={parcelasVariedad}
-          restringir={restringir}
-          setRestringir={setRestringir}
-          seleccionadas={seleccionadas}
-          setSeleccionadas={setSeleccionadas}
-        />
-      )}
-
-      <div>
-        <label className={label}>Notas (opcional)</label>
-        <textarea rows={2} {...register('notas')} className={field} />
-      </div>
-
-      {submitError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{submitError}</p>}
-
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-          Cancelar
-        </button>
-        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
-          {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-          Generar orden
-        </button>
-      </div>
-    </form>
-  )
-}
-
-// ── Form: orden extra (fuera de plan) ───────────────────────────────────────
-
-const schemaExtra = z.object({
-  variedad: z.string().min(1, 'Requerido'),
-  insumo_id: z.string().min(1, 'Elegí un insumo de la lista'),
-  dosis_por_ha: z.coerce.number().positive('Debe ser mayor a 0'),
-  objetivo: z.string().min(1, 'Requerido'),
-  dias_carencia: z.coerce.number().int().min(0),
-  dias_reingreso: z.coerce.number().int().min(0),
-  fecha_planificada: z.string().min(1, 'Requerido'),
-  notas: z.string().optional(),
-})
-type FormExtra = z.infer<typeof schemaExtra>
-
-function FormOrdenExtra({
-  parcelas, variedadesDisponibles, temporada, orden, repaso, onSuccess, onCancel,
-}: {
-  parcelas: ParcelaItem[]
-  variedadesDisponibles: string[]
-  temporada: number
-  // Si viene, el form edita esa orden en vez de crear una nueva.
-  orden?: OrdenAplicacion
-  // Si viene, crea una orden de repaso para esa válvula (precargada) y, al
-  // crearla, la marca como revisada.
-  repaso?: ValvulaARevisar
-  onSuccess: () => void
-  onCancel: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [insumoNombre, setInsumoNombre] = useState(orden?.insumo_nombre ?? repaso?.insumo_nombre ?? '')
-  const [insumoInfo, setInsumoInfo] = useState<InsumoResponse | null>(null)
-  // Una orden editada "restringe" si no cubre todas las parcelas activas de
-  // su variedad -- así el picker muestra exactamente lo que tiene hoy.
-  const [restringir, setRestringir] = useState(() => {
-    if (repaso) return true
-    if (!orden) return false
-    const total = parcelas.filter((p) => p.is_active && p.variedad === orden.variedad).length
-    return orden.parcelas.length !== total
-  })
-  const [seleccionadas, setSeleccionadas] = useState<string[]>(
-    () => (repaso ? [repaso.parcela_id] : orden?.parcelas.map((p) => p.parcela_id) ?? []),
-  )
-
-  const {
-    register, handleSubmit, watch, setValue, formState: { errors, isSubmitting },
-  } = useForm<FormExtra>({
-    resolver: zodResolver(schemaExtra) as Resolver<FormExtra>,
-    defaultValues: orden
-      ? {
-          variedad: orden.variedad, insumo_id: orden.insumo_id, dosis_por_ha: orden.dosis_por_ha,
-          objetivo: orden.objetivo, dias_carencia: orden.dias_carencia,
-          dias_reingreso: orden.dias_reingreso, fecha_planificada: orden.fecha_planificada,
-          notas: orden.notas ?? '',
-        }
-      : repaso
-        ? {
-            variedad: repaso.variedad, insumo_id: repaso.insumo_id, dosis_por_ha: repaso.dosis_por_ha,
-            objetivo: repaso.objetivo, dias_carencia: 7, dias_reingreso: 2,
-            fecha_planificada: TODAY,
-            notas: `Repaso: válvula ${repaso.valvula_nombre} de ${repaso.parcela_nombre}`,
-          }
-        : {
-          variedad: variedadesDisponibles[0] ?? '',
-          insumo_id: '', objetivo: '', dias_carencia: 7, dias_reingreso: 2,
-          fecha_planificada: TODAY, notas: '',
-        },
-  })
-
-  const variedadW = watch('variedad')
-  const insumoIdW = watch('insumo_id')
-  const parcelasVariedad = useMemo(
-    () => parcelas.filter((p) => p.is_active && p.variedad === variedadW),
-    [parcelas, variedadW],
-  )
-
-  async function onSubmit(data: FormExtra) {
-    try {
-      setSubmitError(null)
-      if (restringir && seleccionadas.length === 0) {
-        setSubmitError('Elegí al menos una parcela, o desmarcá la restricción.')
-        return
-      }
-      const payload = {
-        ...data,
-        notas: data.notas || undefined,
-        parcela_ids: restringir ? seleccionadas : undefined,
-      }
-      if (orden) await actualizarOrdenExtra(orden.id, payload)
-      else {
-        await crearOrdenExtra({
-          ...payload,
-          temporada,
-          valvula_ids: repaso ? [repaso.valvula_id] : undefined,
-        })
-        if (repaso) {
-          await revisarValvula(repaso.id)
-          queryClient.invalidateQueries({ queryKey: A_REVISAR_QUERY_KEY })
-        }
-      }
-      queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
-      onSuccess()
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setSubmitError(typeof detail === 'string' ? detail : orden ? 'Error al guardar la orden.' : 'Error al crear la orden.')
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div>
-        <label className={label}>Variedad</label>
-        <select
-          {...register('variedad', { onChange: () => setSeleccionadas([]) })}
-          className={field}
-        >
-          {variedadesDisponibles.map((v) => (
-            <option key={v} value={v}>{VARIEDAD_LABELS[v] ?? v}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={label}>Producto</label>
-        <InsumoSelect
-          value={insumoNombre}
-          insumoId={insumoIdW}
-          onChange={(nombre, insumoId, insumo) => {
-            setInsumoNombre(nombre)
-            setInsumoInfo(insumo ?? null)
-            setValue('insumo_id', insumoId ?? '', { shouldValidate: true })
-          }}
-          className={field}
-          error={errors.insumo_id?.message}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={label}>Objetivo / Plaga</label>
-          <input type="text" placeholder="Ej: Botritis" {...register('objetivo')} className={field} />
-          {errors.objetivo && <p className={err}>{errors.objetivo.message}</p>}
-        </div>
-        <div>
-          <label className={label}>Dosis {insumoInfo ? `(${insumoInfo.unidad}/ha)` : '/ha'}</label>
-          <input type="number" step="0.01" min="0" placeholder="0.00" {...register('dosis_por_ha')} className={field} />
-          {errors.dosis_por_ha && <p className={err}>{errors.dosis_por_ha.message}</p>}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={label}>Días carencia</label>
-          <input type="number" min="0" {...register('dias_carencia')} className={field} />
-        </div>
-        <div>
-          <label className={label}>Días reingreso</label>
-          <input type="number" min="0" {...register('dias_reingreso')} className={field} />
-        </div>
-      </div>
-
-      <div>
-        <label className={label}>Fecha planificada</label>
-        <input type="date" {...register('fecha_planificada')} className={field} />
-        {errors.fecha_planificada && <p className={err}>{errors.fecha_planificada.message}</p>}
-      </div>
-
-      {repaso ? (
-        <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-          Repaso de la válvula <strong>{repaso.valvula_nombre}</strong> de {repaso.parcela_nombre}. Al crear la orden,
-          queda marcada como revisada.
-        </p>
-      ) : (
-        <ParcelaPicker
-          parcelasVariedad={parcelasVariedad}
-          restringir={restringir}
-          setRestringir={setRestringir}
-          seleccionadas={seleccionadas}
-          setSeleccionadas={setSeleccionadas}
-        />
-      )}
-
-      <div>
-        <label className={label}>Notas (opcional)</label>
-        <textarea rows={2} {...register('notas')} className={field} />
-      </div>
-
-      {submitError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{submitError}</p>}
-
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-          Cancelar
-        </button>
-        <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
-          {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-          {orden ? 'Guardar cambios' : 'Crear orden'}
-        </button>
-      </div>
-    </form>
   )
 }
 
@@ -582,9 +102,9 @@ function OrdenCard({
   const [abierta, setAbierta] = useState(false)
   const { total, hechas: aplicadas } = progresoOrden(orden)
   const pct = total ? Math.round((100 * aplicadas) / total) : 0
-  // Mismo criterio que el backend (_get_orden_extra_editable): solo las
-  // extra, y mientras nadie haya confirmado ninguna parcela ni válvula.
-  const editable = puedeGestionar && orden.origen === 'extra' && aplicadas === 0
+  // Same rule as the backend (_get_orden_editable): any origin, while no
+  // parcel or valve has been confirmed yet.
+  const editable = puedeGestionar && aplicadas === 0
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -729,7 +249,7 @@ function OrdenesAplicacion() {
   const [repaso, setRepaso] = useState<ValvulaARevisar | null>(null)
   // Off by default and not persisted: completed orders only matter when undoing a valve.
   const [mostrarCompletadas, setMostrarCompletadas] = useState(false)
-  const [modal, setModal] = useState<'desde-plan' | 'extra' | null>(null)
+  const [nuevaAbierta, setNuevaAbierta] = useState(false)
   const [ordenEditar, setOrdenEditar] = useState<OrdenAplicacion | null>(null)
   const [ordenEliminar, setOrdenEliminar] = useState<OrdenAplicacion | null>(null)
   const [eliminando, setEliminando] = useState(false)
@@ -795,22 +315,11 @@ function OrdenesAplicacion() {
     staleTime: 30_000,
   })
 
-  const { data: planes = [] } = useQuery({
-    queryKey: ['plan-fitosanitario', temporada],
-    queryFn: () => getPlanFitosanitario(temporada),
-  })
-
   const { data: parcelas = [] } = useQuery({
     queryKey: ['parcelas'],
     queryFn: getParcelas,
     staleTime: 300_000,
   })
-
-  const variedadesDisponibles = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of parcelas) if (p.is_active && p.variedad) set.add(p.variedad)
-    return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
-  }, [parcelas])
 
   const ordenesPendientes = useMemo(
     () => ordenes
@@ -852,7 +361,7 @@ function OrdenesAplicacion() {
             El operario confirma en mobile qué aplicó y dónde -- producto, dosis y carencia ya vienen fijados acá
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={temporada}
             onChange={(e) => setTemporada(Number(e.target.value))}
@@ -861,25 +370,14 @@ function OrdenesAplicacion() {
             {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
           </select>
           {puedeCrear && (
-            <>
-              <button
-                onClick={() => setModal('desde-plan')}
-                disabled={planes.length === 0}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-40 transition-colors"
-                title={planes.length === 0 ? 'No hay plan cargado para esta temporada' : undefined}
-              >
-                <Plus size={16} />
-                Generar desde plan
-              </button>
-              <button
-                onClick={() => setModal('extra')}
-                disabled={variedadesDisponibles.length === 0}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#7a1f2c] bg-white border border-[#7a1f2c] rounded-md hover:bg-[#fbfaf6] disabled:opacity-40 transition-colors"
-              >
-                <Plus size={16} />
-                Orden extra
-              </button>
-            </>
+            <button
+              onClick={() => setNuevaAbierta(true)}
+              data-testid="nueva-orden"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+            >
+              <Plus size={16} />
+              Nueva orden
+            </button>
           )}
         </div>
       </div>
@@ -957,24 +455,22 @@ function OrdenesAplicacion() {
       </div>
       )}
 
-      {modal === 'desde-plan' && (
-        <Modal title="Generar orden desde el plan" onClose={() => setModal(null)}>
-          <FormOrdenDesdePlan
-            planes={planes}
+      {nuevaAbierta && (
+        <Modal title="Nueva orden de aplicación" wide onClose={() => setNuevaAbierta(false)}>
+          <NuevaOrdenAplicacion
             parcelas={parcelas}
             temporada={temporada}
-            onSuccess={() => setModal(null)}
-            onCancel={() => setModal(null)}
+            onSuccess={() => setNuevaAbierta(false)}
+            onCancel={() => setNuevaAbierta(false)}
           />
         </Modal>
       )}
 
       {ordenEditar && (
-        <Modal title="Editar orden fuera de plan" onClose={() => setOrdenEditar(null)}>
-          <FormOrdenExtra
+        <Modal title="Editar orden" wide onClose={() => setOrdenEditar(null)}>
+          <NuevaOrdenAplicacion
             parcelas={parcelas}
-            variedadesDisponibles={variedadesDisponibles}
-            temporada={temporada}
+            temporada={ordenEditar.temporada}
             orden={ordenEditar}
             onSuccess={() => setOrdenEditar(null)}
             onCancel={() => setOrdenEditar(null)}
@@ -983,10 +479,9 @@ function OrdenesAplicacion() {
       )}
 
       {repaso && (
-        <Modal title="Orden de repaso" onClose={() => setRepaso(null)}>
-          <FormOrdenExtra
+        <Modal title="Orden de repaso" wide onClose={() => setRepaso(null)}>
+          <NuevaOrdenAplicacion
             parcelas={parcelas}
-            variedadesDisponibles={variedadesDisponibles}
             temporada={temporada}
             repaso={repaso}
             onSuccess={() => setRepaso(null)}
@@ -1044,18 +539,6 @@ function OrdenesAplicacion() {
               Deshacer
             </button>
           </div>
-        </Modal>
-      )}
-
-      {modal === 'extra' && (
-        <Modal title="Nueva orden fuera de plan" onClose={() => setModal(null)}>
-          <FormOrdenExtra
-            parcelas={parcelas}
-            variedadesDisponibles={variedadesDisponibles}
-            temporada={temporada}
-            onSuccess={() => setModal(null)}
-            onCancel={() => setModal(null)}
-          />
         </Modal>
       )}
     </div>
