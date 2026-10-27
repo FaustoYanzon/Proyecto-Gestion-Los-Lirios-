@@ -1,8 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.models.finanzas import Finca
 from app.models.insumo import UnidadInsumo
@@ -396,10 +403,24 @@ class OrdenAplicacionParcelaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrdenAplicacionLineaResponse(BaseModel):
+    id: str
+    insumo_id: str
+    insumo_nombre: str
+    insumo_unidad: UnidadInsumo
+    dosis_por_ha: float
+    dias_carencia: int
+    dias_reingreso: int
+    # Plan round this product counts against; None = off-plan product.
+    numero_aplicacion: int | None = None
+
+
 class OrdenAplicacionResponse(BaseModel):
     id: str
     temporada: int
     origen: OrigenOrdenAplicacion
+    # Deprecated single-product shim (first line / variety of the largest
+    # parcel), kept for old web/mobile clients until the cleanup migration.
     plan_fitosanitario_id: str | None = None
     variedad: VariedadUva
     insumo_id: str
@@ -414,6 +435,8 @@ class OrdenAplicacionResponse(BaseModel):
     notas: str | None = None
     created_by: str
     created_at: datetime
+    lineas: list[OrdenAplicacionLineaResponse] = Field(default_factory=list)
+    variedades: list[VariedadUva] = Field(default_factory=list)
     parcelas: list[OrdenAplicacionParcelaResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
@@ -429,36 +452,68 @@ class OrdenAplicacionCreateDesdePlan(BaseModel):
     notas: str | None = None
 
 
-class OrdenAplicacionCreateExtra(BaseModel):
-    temporada: int
-    variedad: VariedadUva
+class OrdenAplicacionLineaCreate(BaseModel):
     insumo_id: str
-    dosis_por_ha: float
-    objetivo: str
+    dosis_por_ha: float = Field(gt=0)
     dias_carencia: int = Field(ge=0)
     dias_reingreso: int = Field(ge=0)
+    # Plan round the product counts against (must exist in the plan for at
+    # least one variety of the chosen parcels). None = off-plan product.
+    numero_aplicacion: int | None = None
+
+
+def _linea_desde_body_viejo(data: Any) -> Any:
+    """Old single-product body (insumo_id/dosis_por_ha/dias_* at top level,
+    no `lineas`): wrap those fields into a one-line `lineas` list so old
+    web/mobile clients keep working."""
+    if isinstance(data, dict) and data.get("lineas") is None and "insumo_id" in data:
+        data = dict(data)
+        data["lineas"] = [
+            {
+                key: data[key]
+                for key in ("insumo_id", "dosis_por_ha", "dias_carencia", "dias_reingreso")
+                if key in data
+            }
+        ]
+    return data
+
+
+class OrdenAplicacionUpdate(BaseModel):
+    """Reemplazo completo de una orden (del plan o extra) mientras nada esté
+    confirmado. Las líneas se reemplazan completas. La temporada no se edita
+    -- la orden queda en la campaña en que se creó."""
+    objetivo: str
     fecha_planificada: date
-    # None = todas las parcelas activas de la variedad.
+    lineas: list[OrdenAplicacionLineaCreate] = Field(min_length=1)
+    # Explicit parcels (several varieties allowed). None = every active
+    # parcel of `variedad`; with neither the request is rejected.
     parcela_ids: list[str] | None = None
     # None = todas las válvulas de cada parcela. Con valores (orden de
     # repaso) restringe la orden a esas válvulas puntuales.
     valvula_ids: list[str] | None = None
+    variedad: VariedadUva | None = None
     notas: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _body_viejo(cls, data: Any) -> Any:
+        return _linea_desde_body_viejo(data)
 
-class OrdenAplicacionUpdateExtra(BaseModel):
-    """Reemplazo completo de una orden extra (fuera de plan). La temporada no
-    se edita -- la orden queda en la campaña en que se creó."""
-    variedad: VariedadUva
-    insumo_id: str
-    dosis_por_ha: float = Field(gt=0)
-    objetivo: str
-    dias_carencia: int = Field(ge=0)
-    dias_reingreso: int = Field(ge=0)
-    fecha_planificada: date
-    # None = todas las parcelas activas de la variedad.
-    parcela_ids: list[str] | None = None
-    notas: str | None = None
+    @field_validator("lineas")
+    @classmethod
+    def _insumos_distintos(
+        cls, lineas: list[OrdenAplicacionLineaCreate]
+    ) -> list[OrdenAplicacionLineaCreate]:
+        vistos: set[str] = set()
+        for linea in lineas:
+            if linea.insumo_id in vistos:
+                raise ValueError("Hay un producto repetido en la orden: cargalo una sola vez.")
+            vistos.add(linea.insumo_id)
+        return lineas
+
+
+class OrdenAplicacionCreate(OrdenAplicacionUpdate):
+    temporada: int
 
 
 class ConfirmarAplicacionRequest(BaseModel):

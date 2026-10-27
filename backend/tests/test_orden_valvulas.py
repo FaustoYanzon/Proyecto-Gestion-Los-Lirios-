@@ -23,6 +23,7 @@ from app.models.produccion import (
 from app.models.trabajador import Trabajador
 from app.models.parcela import VariedadUva
 from app.models.user import UserRole
+from tests.helpers_ordenes import add_linea_desde_shim
 
 
 async def test_orden_valvula_unica_por_parcela_de_orden(
@@ -39,6 +40,7 @@ async def test_orden_valvula_unica_por_parcela_de_orden(
         insumo_id=insumo.id, dosis_por_ha=1.0, objetivo="Oidio", dias_carencia=7,
         dias_reingreso=2, fecha_planificada=date(2026, 10, 15), created_by=user.id,
     )
+    add_linea_desde_shim(orden)
     item = OrdenAplicacionParcela(parcela_id=parcela.id)
     orden.parcelas.append(item)
     session.add(orden)

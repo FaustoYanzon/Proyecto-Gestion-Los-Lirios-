@@ -302,7 +302,7 @@ async def test_orden_con_aplicaciones_no_se_edita_ni_elimina(client, create_user
     assert resp.status_code == 409
 
 
-async def test_orden_del_plan_no_se_elimina(client, create_user, create_insumo, create_parcela):
+async def test_orden_del_plan_sin_confirmaciones_se_elimina(client, create_user, create_insumo, create_parcela):
     headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
     insumo = await create_insumo()
     await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
@@ -323,7 +323,8 @@ async def test_orden_del_plan_no_se_elimina(client, create_user, create_insumo, 
         headers=headers,
     )
     resp = await client.delete(f"/ordenes-aplicacion/{orden.json()['id']}", headers=headers)
-    assert resp.status_code == 409
+    # Multiproduct orders: plan orders are editable/deletable too while nothing is confirmed.
+    assert resp.status_code == 204, resp.text
 
 
 async def test_reactivar_registro_de_orden_vuelve_la_parcela_a_pendiente(

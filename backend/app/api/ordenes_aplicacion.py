@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,7 @@ from app.api.produccion import (
 )
 from app.core.cloudinary_client import upload_foto_orden_aplicacion
 from app.core.push import lanzar_aviso, notificar_tokens
+from app.models.insumo import Insumo
 from app.models.parcela import Parcela, VariedadUva
 from app.models.valvula import Valvula
 from app.models.produccion import (
@@ -36,11 +38,13 @@ from app.schemas.produccion import (
     ConfirmarAplicacionRequest,
     ConfirmarValvulaRequest,
     FotoRegistroFitosanitarioResponse,
+    OrdenAplicacionCreate,
     OrdenAplicacionCreateDesdePlan,
-    OrdenAplicacionCreateExtra,
+    OrdenAplicacionLineaCreate,
+    OrdenAplicacionLineaResponse,
     OrdenAplicacionParcelaResponse,
     OrdenAplicacionResponse,
-    OrdenAplicacionUpdateExtra,
+    OrdenAplicacionUpdate,
     OrdenAplicacionValvulaResponse,
     ValvulaARevisarResponse,
 )
@@ -56,11 +60,15 @@ router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
 
 _ORDEN_LOAD_OPTS = (
     selectinload(OrdenAplicacion.insumo),
-    selectinload(OrdenAplicacion.lineas),
+    selectinload(OrdenAplicacion.lineas).selectinload(OrdenAplicacionInsumo.insumo),
     selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.parcela),
+    selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.registros),
     selectinload(OrdenAplicacion.parcelas)
     .selectinload(OrdenAplicacionParcela.valvulas)
     .selectinload(OrdenAplicacionValvula.valvula),
+    selectinload(OrdenAplicacion.parcelas)
+    .selectinload(OrdenAplicacionParcela.valvulas)
+    .selectinload(OrdenAplicacionValvula.registros),
 )
 
 
@@ -87,7 +95,41 @@ def _valvulas_ordenadas(item: OrdenAplicacionParcela) -> list[OrdenAplicacionVal
     )
 
 
+def _variedades_orden(orden: OrdenAplicacion) -> list[VariedadUva]:
+    """Distinct varieties of the order's parcels, sorted for a stable payload.
+    Requires `orden.parcelas[*].parcela` loaded."""
+    return sorted(
+        {item.parcela.variedad for item in orden.parcelas if item.parcela.variedad is not None},
+        key=lambda v: v.value,
+    )
+
+
+def _variedad_principal(parcelas: list[Parcela]) -> VariedadUva | None:
+    """Variety of the largest parcel (unknown area counts as zero; ties go to
+    the parcel name) -- the single `variedad` old clients still read."""
+    con_variedad = [p for p in parcelas if p.variedad is not None]
+    if not con_variedad:
+        return None
+    mayor = max(con_variedad, key=lambda p: (p.superficie_ha or 0.0, p.nombre))
+    return mayor.variedad
+
+
+def _linea_response(linea: OrdenAplicacionInsumo) -> OrdenAplicacionLineaResponse:
+    return OrdenAplicacionLineaResponse(
+        id=linea.id,
+        insumo_id=linea.insumo_id,
+        insumo_nombre=linea.insumo.nombre,
+        insumo_unidad=linea.insumo.unidad,
+        dosis_por_ha=linea.dosis_por_ha,
+        dias_carencia=linea.dias_carencia,
+        dias_reingreso=linea.dias_reingreso,
+        numero_aplicacion=linea.numero_aplicacion,
+    )
+
+
 def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
+    # Shim fields come from the order columns, which `_sincronizar_shim` keeps
+    # equal to the first line (and to the largest parcel's variety).
     return OrdenAplicacionResponse(
         id=orden.id,
         temporada=orden.temporada,
@@ -106,6 +148,8 @@ def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
         notas=orden.notas,
         created_by=orden.created_by,
         created_at=orden.created_at,
+        lineas=[_linea_response(linea) for linea in orden.lineas],
+        variedades=_variedades_orden(orden),
         parcelas=[
             OrdenAplicacionParcelaResponse(
                 id=item.id,
@@ -121,21 +165,22 @@ def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
 
 
 async def _resolve_parcelas_orden(
-    db: AsyncSession, variedad: VariedadUva, parcela_ids: list[str] | None
+    db: AsyncSession, variedad: VariedadUva | None, parcela_ids: list[str] | None
 ) -> list[Parcela]:
-    """Resuelve las parcelas que entran en una orden nueva. `parcela_ids=None`
-    significa "toda la variedad" (todas las parcelas activas de esa variedad);
-    una lista explícita restringe la orden a esas parcelas puntuales -- deben
-    ser de la misma variedad."""
+    """Resuelve las parcelas de una orden. Una lista explícita de
+    `parcela_ids` puede mezclar variedades (deben estar activas); si además
+    viene `variedad` (body viejo de un producto) todas deben ser de esa
+    variedad. `parcela_ids=None` + `variedad` = todas las parcelas activas de
+    esa variedad. Sin ninguno de los dos no hay orden posible."""
     if parcela_ids is not None:
         if not parcela_ids:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="parcela_ids no puede ser una lista vacía (omitila para incluir toda la variedad).",
             )
-        parcelas = (
-            await db.execute(select(Parcela).where(Parcela.id.in_(parcela_ids)))
-        ).scalars().all()
+        parcelas = list(
+            (await db.execute(select(Parcela).where(Parcela.id.in_(parcela_ids)))).scalars().all()
+        )
         encontrados = {p.id for p in parcelas}
         faltantes = set(parcela_ids) - encontrados
         if faltantes:
@@ -143,35 +188,59 @@ async def _resolve_parcelas_orden(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Parcelas no encontradas: {', '.join(sorted(faltantes))}",
             )
-        fuera_de_variedad = [p.nombre for p in parcelas if p.variedad != variedad]
-        if fuera_de_variedad:
+        inactivas = [p.nombre for p in parcelas if not p.is_active]
+        if inactivas:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Estas parcelas no son de la variedad {variedad.value}: {', '.join(fuera_de_variedad)}",
+                detail=f"Estas parcelas están inactivas: {', '.join(inactivas)}",
             )
-        return list(parcelas)
+        if variedad is not None:
+            fuera_de_variedad = [p.nombre for p in parcelas if p.variedad != variedad]
+            if fuera_de_variedad:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Estas parcelas no son de la variedad {variedad.value}: {', '.join(fuera_de_variedad)}",
+                )
+        # The legacy `variedad` column is NOT NULL: some parcel must carry one.
+        if _variedad_principal(parcelas) is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Ninguna de las parcelas elegidas tiene variedad cargada.",
+            )
+        return parcelas
 
-    parcelas = (
-        await db.execute(
-            select(Parcela).where(Parcela.is_active.is_(True), Parcela.variedad == variedad)
+    if variedad is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Elegí las parcelas de la orden (o una variedad para incluirla entera).",
         )
-    ).scalars().all()
+    parcelas = list(
+        (
+            await db.execute(
+                select(Parcela).where(Parcela.is_active.is_(True), Parcela.variedad == variedad)
+            )
+        ).scalars().all()
+    )
     if not parcelas:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"No hay parcelas activas para la variedad {variedad.value}.",
         )
-    return list(parcelas)
+    return parcelas
 
 
 def _avisar_orden_nueva(orden: OrdenAplicacion) -> None:
     """Push a todos los celulares: salió una orden de aplicación nueva."""
     nombres = [p.parcela.nombre for p in orden.parcelas]
     parcelas = ", ".join(nombres[:3]) + (f" y {len(nombres) - 3} más" if len(nombres) > 3 else "")
+    # One product keeps the pre-multiproduct text so existing users see no change.
+    productos = orden.lineas[0].insumo.nombre
+    if len(orden.lineas) > 1:
+        productos += f" +{len(orden.lineas) - 1} más"
     lanzar_aviso(
         notificar_tokens(
             "Nueva orden de aplicación",
-            f"{orden.insumo.nombre} · {parcelas}",
+            f"{productos} · {parcelas}",
             user_ids=None,
             data={"tipo": "orden_aplicacion", "orden_id": orden.id},
         )
@@ -264,24 +333,6 @@ async def _crear_filas_valvula(
         item.valvulas.append(fila)
 
 
-def _set_linea_unica(
-    orden: OrdenAplicacion, numero_aplicacion: int | None = None
-) -> None:
-    """Single-product orders (current create/update endpoints): the order
-    carries exactly one line mirroring its legacy shim columns. Multi-line
-    creation arrives with the unified POST."""
-    if orden.lineas:
-        linea = orden.lineas[0]
-    else:
-        linea = OrdenAplicacionInsumo(posicion=0)
-        orden.lineas.append(linea)
-    linea.insumo_id = orden.insumo_id
-    linea.dosis_por_ha = orden.dosis_por_ha
-    linea.dias_carencia = orden.dias_carencia
-    linea.dias_reingreso = orden.dias_reingreso
-    linea.numero_aplicacion = numero_aplicacion
-
-
 def _linea_unica(orden: OrdenAplicacion) -> OrdenAplicacionInsumo:
     """The order's (first) line, which a confirmation links its record to.
     Requires `orden.lineas` loaded."""
@@ -293,6 +344,150 @@ def _linea_unica(orden: OrdenAplicacion) -> OrdenAplicacionInsumo:
     return orden.lineas[0]
 
 
+async def _resolver_insumos(
+    db: AsyncSession, lineas: list[OrdenAplicacionLineaCreate]
+) -> dict[str, Insumo]:
+    """Insumo of every line (404 if one does not exist), keyed by id."""
+    return {linea.insumo_id: await _resolve_insumo(db, linea.insumo_id) for linea in lineas}
+
+
+PlanesPorRonda = dict[tuple[int, str], list[PlanFitosanitario]]
+
+
+async def _validar_rondas_plan(
+    db: AsyncSession,
+    temporada: int,
+    lineas: list[OrdenAplicacionLineaCreate],
+    parcelas: list[Parcela],
+    insumos: dict[str, Insumo],
+) -> PlanesPorRonda:
+    """A line with `numero_aplicacion` must match a plan row
+    (temporada, numero_aplicacion, insumo) for at least one variety of the
+    chosen parcels; otherwise it would count against a round that does not
+    exist. Returns the matching plan rows keyed by (numero_aplicacion, insumo_id)."""
+    con_ronda = [linea for linea in lineas if linea.numero_aplicacion is not None]
+    if not con_ronda:
+        return {}
+    variedades = {p.variedad for p in parcelas if p.variedad is not None}
+    filas = (
+        await db.execute(
+            select(PlanFitosanitario).where(
+                PlanFitosanitario.temporada == temporada,
+                PlanFitosanitario.numero_aplicacion.in_({l.numero_aplicacion for l in con_ronda}),
+                PlanFitosanitario.insumo_id.in_({l.insumo_id for l in con_ronda}),
+                PlanFitosanitario.variedad.in_(variedades),
+            )
+        )
+    ).scalars().all()
+    planes: PlanesPorRonda = {}
+    for fila in sorted(filas, key=lambda f: (f.variedad.value, f.id)):
+        planes.setdefault((fila.numero_aplicacion, fila.insumo_id), []).append(fila)
+    for linea in con_ronda:
+        if (linea.numero_aplicacion, linea.insumo_id) not in planes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"La ronda {linea.numero_aplicacion} del plan {temporada} no tiene "
+                    f"{insumos[linea.insumo_id].nombre} para las variedades de las parcelas elegidas."
+                ),
+            )
+    return planes
+
+
+def _aplicar_lineas(
+    orden: OrdenAplicacion,
+    lineas: list[OrdenAplicacionLineaCreate],
+    insumos: dict[str, Insumo],
+) -> None:
+    """Replace the order's lines with `lineas` (removed ones go via
+    delete-orphan). A product already on the order keeps its row, updated in
+    place: deleting and re-inserting the same (orden_id, insumo_id) in one
+    flush would hit the unique index, since the unit of work inserts first."""
+    existentes = {linea.insumo_id: linea for linea in orden.lineas}
+    nuevas: list[OrdenAplicacionInsumo] = []
+    for posicion, data in enumerate(lineas):
+        linea = existentes.get(data.insumo_id) or OrdenAplicacionInsumo(insumo_id=data.insumo_id)
+        linea.insumo = insumos[data.insumo_id]
+        linea.dosis_por_ha = data.dosis_por_ha
+        linea.dias_carencia = data.dias_carencia
+        linea.dias_reingreso = data.dias_reingreso
+        linea.numero_aplicacion = data.numero_aplicacion
+        linea.posicion = posicion
+        nuevas.append(linea)
+    orden.lineas = nuevas
+
+
+def _sincronizar_shim(orden: OrdenAplicacion) -> None:
+    """Write the deprecated single-product columns (still NOT NULL until the
+    cleanup migration) from the first line and the largest parcel's variety,
+    and derive `origen` from the lines. Requires `orden.lineas` (with
+    `insumo`) and `orden.parcelas[*].parcela` in memory. The legacy
+    `plan_fitosanitario_id` needs the plan rows: see `_plan_id_shim`."""
+    primera = orden.lineas[0]
+    orden.insumo_id = primera.insumo_id
+    orden.insumo = primera.insumo
+    orden.dosis_por_ha = primera.dosis_por_ha
+    orden.dias_carencia = primera.dias_carencia
+    orden.dias_reingreso = primera.dias_reingreso
+    variedad = _variedad_principal([item.parcela for item in orden.parcelas])
+    if variedad is not None:  # Guaranteed by _resolve_parcelas_orden.
+        orden.variedad = variedad
+    orden.origen = (
+        OrigenOrdenAplicacion.plan
+        if any(linea.numero_aplicacion is not None for linea in orden.lineas)
+        else OrigenOrdenAplicacion.extra
+    )
+
+
+def _plan_id_shim(orden: OrdenAplicacion, planes: PlanesPorRonda) -> str | None:
+    """Legacy `plan_fitosanitario_id`: the plan row of the first line,
+    preferring the shim variety. Keeps the current value while it still
+    matches, so an edit never swaps it for a twin row."""
+    primera = orden.lineas[0]
+    if primera.numero_aplicacion is None:
+        return None
+    candidatos = planes.get((primera.numero_aplicacion, primera.insumo_id), [])
+    if orden.plan_fitosanitario_id in {fila.id for fila in candidatos}:
+        return orden.plan_fitosanitario_id
+    for fila in candidatos:
+        if fila.variedad == orden.variedad:
+            return fila.id
+    return candidatos[0].id if candidatos else None
+
+
+async def _crear_orden(
+    db: AsyncSession, data: OrdenAplicacionCreate, user: User
+) -> OrdenAplicacion:
+    """Shared by POST / and POST /desde-plan: validate, build the order with
+    its lines, parcels and valve rows, and flush."""
+    insumos = await _resolver_insumos(db, data.lineas)
+    parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
+    valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
+    planes = await _validar_rondas_plan(db, data.temporada, data.lineas, parcelas, insumos)
+
+    orden = OrdenAplicacion(
+        temporada=data.temporada,
+        objetivo=data.objetivo,
+        fecha_planificada=data.fecha_planificada,
+        notas=data.notas,
+        created_by=user.id,
+    )
+    _aplicar_lineas(orden, data.lineas, insumos)
+    for parcela in parcelas:
+        item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
+        item.parcela = parcela
+        orden.parcelas.append(item)
+    # Shim columns are NOT NULL: set them before the valve queries autoflush.
+    _sincronizar_shim(orden)
+    orden.plan_fitosanitario_id = _plan_id_shim(orden, planes)
+    db.add(orden)
+    for item in orden.parcelas:
+        await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))
+
+    await db.flush()
+    return orden
+
+
 @router.post(
     "/desde-plan", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED
 )
@@ -301,78 +496,54 @@ async def crear_orden_desde_plan(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
-    plan = await db.get(
-        PlanFitosanitario,
-        data.plan_fitosanitario_id,
-        options=[selectinload(PlanFitosanitario.insumo)],
-    )
+    """Compatible shortcut: a one-line order from a single plan row."""
+    plan = await db.get(PlanFitosanitario, data.plan_fitosanitario_id)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
-    parcelas = await _resolve_parcelas_orden(db, plan.variedad, data.parcela_ids)
+    try:
+        orden_data = OrdenAplicacionCreate(
+            temporada=plan.temporada,
+            objetivo=plan.objetivo,
+            fecha_planificada=data.fecha_planificada,
+            lineas=[
+                OrdenAplicacionLineaCreate(
+                    insumo_id=plan.insumo_id,
+                    dosis_por_ha=plan.dosis_por_ha,
+                    dias_carencia=data.dias_carencia,
+                    dias_reingreso=data.dias_reingreso,
+                    numero_aplicacion=plan.numero_aplicacion,
+                )
+            ],
+            parcela_ids=data.parcela_ids,
+            # Restricts explicit parcels to the plan row's variety, as before.
+            variedad=plan.variedad,
+            notas=data.notas,
+        )
+    except ValidationError as exc:
+        # Only reachable with a bad plan row (e.g. dosis 0): a 422, not a 500.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La fila del plan tiene datos inválidos para armar una orden (revisá la dosis).",
+        ) from exc
 
-    orden = OrdenAplicacion(
-        temporada=plan.temporada,
-        origen=OrigenOrdenAplicacion.plan,
-        plan_fitosanitario_id=plan.id,
-        variedad=plan.variedad,
-        insumo_id=plan.insumo_id,
-        dosis_por_ha=plan.dosis_por_ha,
-        objetivo=plan.objetivo,
-        dias_carencia=data.dias_carencia,
-        dias_reingreso=data.dias_reingreso,
-        fecha_planificada=data.fecha_planificada,
-        notas=data.notas,
-        created_by=current_user.id,
-    )
-    orden.insumo = plan.insumo
-    _set_linea_unica(orden, plan.numero_aplicacion)
-    db.add(orden)
-    for parcela in parcelas:
-        item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
-        item.parcela = parcela
-        orden.parcelas.append(item)
-        await _crear_filas_valvula(db, item)
-
+    orden = await _crear_orden(db, orden_data, current_user)
+    # The exact row the user picked (the round lookup could match a twin row).
+    orden.plan_fitosanitario_id = plan.id
     await db.flush()
     _avisar_orden_nueva(orden)
     return _to_response(orden)
 
 
 @router.post("/", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED)
-async def crear_orden_extra(
-    data: OrdenAplicacionCreateExtra,
+async def crear_orden(
+    data: OrdenAplicacionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
-    insumo = await _resolve_insumo(db, data.insumo_id)
-    parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
-    valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
-
-    orden = OrdenAplicacion(
-        temporada=data.temporada,
-        origen=OrigenOrdenAplicacion.extra,
-        plan_fitosanitario_id=None,
-        variedad=data.variedad,
-        insumo_id=data.insumo_id,
-        dosis_por_ha=data.dosis_por_ha,
-        objetivo=data.objetivo,
-        dias_carencia=data.dias_carencia,
-        dias_reingreso=data.dias_reingreso,
-        fecha_planificada=data.fecha_planificada,
-        notas=data.notas,
-        created_by=current_user.id,
-    )
-    orden.insumo = insumo
-    _set_linea_unica(orden)
-    db.add(orden)
-    for parcela in parcelas:
-        item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
-        item.parcela = parcela
-        orden.parcelas.append(item)
-        await _crear_filas_valvula(db, item, valvulas_por_parcela.get(parcela.id))
-
-    await db.flush()
+    """Unified create: N product lines over parcels of one or more varieties.
+    Also accepts the old single-product body (see OrdenAplicacionCreate)."""
+    orden = await _crear_orden(db, data, current_user)
     _avisar_orden_nueva(orden)
     return _to_response(orden)
 
@@ -513,19 +684,13 @@ async def get_orden(
     return _to_response(orden)
 
 
-async def _get_orden_extra_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacion:
-    """Solo las órdenes extra (fuera de plan) se editan/eliminan -- las del
-    plan se regeneran desde el plan. Y solo mientras ningún operario haya
-    confirmado nada: una vez que hay RegistroFitosanitario real (con stock ya
-    descontado) la orden deja de ser un borrador."""
+async def _get_orden_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacion:
+    """Toda orden (del plan o extra) se edita/elimina mientras ningún operario
+    haya confirmado nada: una vez que hay RegistroFitosanitario real (con
+    stock ya descontado) la orden deja de ser un borrador."""
     orden = await db.get(OrdenAplicacion, orden_id, options=list(_ORDEN_LOAD_OPTS))
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
-    if orden.origen != OrigenOrdenAplicacion.extra:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Las órdenes del plan no se editan ni eliminan desde acá.",
-        )
     if any(
         p.estado == EstadoOrdenAplicacionParcela.aplicada
         or any(v.estado == EstadoOrdenAplicacionParcela.aplicada for v in p.valvulas)
@@ -539,51 +704,63 @@ async def _get_orden_extra_editable(db: AsyncSession, orden_id: str) -> OrdenApl
 
 
 @router.put("/{orden_id}", response_model=OrdenAplicacionResponse)
-async def actualizar_orden_extra(
+async def actualizar_orden(
     orden_id: str,
-    data: OrdenAplicacionUpdateExtra,
+    data: OrdenAplicacionUpdate,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> OrdenAplicacionResponse:
-    orden = await _get_orden_extra_editable(db, orden_id)
-    insumo = await _resolve_insumo(db, data.insumo_id)
+    orden = await _get_orden_editable(db, orden_id)
+    insumos = await _resolver_insumos(db, data.lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
+    valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
+    planes = await _validar_rondas_plan(db, orden.temporada, data.lineas, parcelas, insumos)
 
-    orden.variedad = data.variedad
-    orden.insumo_id = data.insumo_id
-    orden.insumo = insumo
-    orden.dosis_por_ha = data.dosis_por_ha
     orden.objetivo = data.objetivo
-    orden.dias_carencia = data.dias_carencia
-    orden.dias_reingreso = data.dias_reingreso
     orden.fecha_planificada = data.fecha_planificada
     orden.notas = data.notas
-    _set_linea_unica(orden)
+    _aplicar_lineas(orden, data.lineas, insumos)
 
-    # Todas las filas siguen pendientes (lo garantiza _get_orden_extra_editable):
+    # Todas las filas siguen pendientes (lo garantiza _get_orden_editable):
     # se conservan las parcelas que siguen, se agregan las nuevas y se
     # quitan las que salieron (delete-orphan).
     nuevas_ids = {p.id for p in parcelas}
     orden.parcelas = [item for item in orden.parcelas if item.parcela_id in nuevas_ids]
-    existentes = {item.parcela_id for item in orden.parcelas}
+    conservadas = list(orden.parcelas)
+    existentes = {item.parcela_id for item in conservadas}
+    agregadas: list[OrdenAplicacionParcela] = []
     for parcela in parcelas:
         if parcela.id not in existentes:
             item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
             item.parcela = parcela
             orden.parcelas.append(item)
-            await _crear_filas_valvula(db, item)
+            agregadas.append(item)
+    # Before any query below autoflushes the order.
+    _sincronizar_shim(orden)
+    orden.plan_fitosanitario_id = _plan_id_shim(orden, planes)
+
+    for item in agregadas:
+        await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))
+    if data.valvula_ids is not None:
+        # Explicit valves also reshape the parcels the order already had.
+        for item in conservadas:
+            elegidas = valvulas_por_parcela[item.parcela_id]
+            item.valvulas = [v for v in item.valvulas if v.valvula_id in elegidas]
+            faltantes = elegidas - {v.valvula_id for v in item.valvulas}
+            if faltantes:
+                await _crear_filas_valvula(db, item, faltantes)
 
     await db.flush()
     return _to_response(orden)
 
 
 @router.delete("/{orden_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def eliminar_orden_extra(
+async def eliminar_orden(
     orden_id: str,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> None:
-    orden = await _get_orden_extra_editable(db, orden_id)
+    orden = await _get_orden_editable(db, orden_id)
     await db.delete(orden)
     await db.flush()
 
