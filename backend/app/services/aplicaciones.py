@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.models.insumo import Insumo, MovimientoStock
 from app.models.produccion import (
@@ -34,9 +35,7 @@ _REGISTRO_CON_ORDEN_OPTS = (
     selectinload(RegistroFitosanitario.fotos),
     selectinload(RegistroFitosanitario.orden_parcela).selectinload(OrdenAplicacionParcela.valvulas),
     selectinload(RegistroFitosanitario.orden_valvula).selectinload(OrdenAplicacionValvula.orden_parcela),
-    selectinload(RegistroFitosanitario.orden_valvula).selectinload(
-        OrdenAplicacionValvula.registro_fitosanitario
-    ),
+    selectinload(RegistroFitosanitario.orden_valvula).selectinload(OrdenAplicacionValvula.registros),
 )
 
 
@@ -114,24 +113,27 @@ async def _fotos_de_valvula(
 async def _borrar_registro_de_valvula(
     db: AsyncSession, fila: OrdenAplicacionValvula
 ) -> str | None:
-    """Devuelve el stock y borra el registro de la válvula (si lo tiene) y
-    todas sus fotos. Requiere `fila.registro_fitosanitario` cargado."""
-    registro = fila.registro_fitosanitario
-    registro_id = registro.id if registro is not None else None
+    """Devuelve el stock y borra los registros de la válvula (si tiene) y
+    todas sus fotos. Requiere `fila.registros` cargado. Devuelve el id del
+    registro legacy de la fila (None si se confirmó como no_aplicada)."""
+    registros = list(fila.registros)
+    registro_id = fila.registro_fitosanitario_id
     fotos = await _fotos_de_valvula(db, fila, registro_id)
-
-    if registro is not None:
-        await revertir_movimiento_stock(db, registro)
-        for foto in fotos:
-            await db.delete(foto)
-        # Unique FK from the row to the registro: detach it before deleting the registro.
-        fila.registro_fitosanitario = None
+    for foto in fotos:
+        await db.delete(foto)
+    if registros:
+        for registro in registros:
+            await revertir_movimiento_stock(db, registro)
+        # Legacy unique FK from the row to the registro: detach it before deleting.
         fila.registro_fitosanitario_id = None
         await db.flush()
-        await db.delete(registro)
-    else:
-        for foto in fotos:
-            await db.delete(foto)
+        for registro in registros:
+            await db.delete(registro)
+        await db.flush()
+        # The rows are gone in the DB; keep the loaded collection consistent
+        # without emitting history (a later delete of `fila` must not try to
+        # null FKs on already deleted records).
+        set_committed_value(fila, "registros", [])
     return registro_id
 
 
@@ -143,7 +145,7 @@ async def deshacer_fila_valvula(
     pendiente para poder confirmarla de nuevo. Devuelve el id del registro
     borrado (None si la válvula se había confirmado como no_aplicada).
 
-    Requiere `fila.orden_parcela` y `fila.registro_fitosanitario` cargados, la
+    Requiere `fila.orden_parcela` y `fila.registros` cargados, la
     orden bloqueada (`bloquear_orden`) y los chequeos de permiso/estado hechos.
     """
     item = fila.orden_parcela
@@ -199,7 +201,8 @@ async def _quitar_parcela_vacia_u_orden(
 ) -> bool:
     """Tras sacar algo de la orden: si no le quedan parcelas la borra (devuelve
     True); si no, recalcula su estado."""
-    await db.refresh(orden, attribute_names=["parcelas"])
+    # `lineas` too: deleting the order cascades to them and async can't lazy-load.
+    await db.refresh(orden, attribute_names=["parcelas", "lineas"])
     if not orden.parcelas:
         await db.delete(orden)
         await db.flush()

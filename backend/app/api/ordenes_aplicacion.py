@@ -23,6 +23,7 @@ from app.models.produccion import (
     EstadoOrdenAplicacionParcela,
     FotoRegistroFitosanitario,
     OrdenAplicacion,
+    OrdenAplicacionInsumo,
     OrdenAplicacionParcela,
     OrdenAplicacionValvula,
     OrigenOrdenAplicacion,
@@ -55,6 +56,7 @@ router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
 
 _ORDEN_LOAD_OPTS = (
     selectinload(OrdenAplicacion.insumo),
+    selectinload(OrdenAplicacion.lineas),
     selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.parcela),
     selectinload(OrdenAplicacion.parcelas)
     .selectinload(OrdenAplicacionParcela.valvulas)
@@ -262,6 +264,35 @@ async def _crear_filas_valvula(
         item.valvulas.append(fila)
 
 
+def _set_linea_unica(
+    orden: OrdenAplicacion, numero_aplicacion: int | None = None
+) -> None:
+    """Single-product orders (current create/update endpoints): the order
+    carries exactly one line mirroring its legacy shim columns. Multi-line
+    creation arrives with the unified POST."""
+    if orden.lineas:
+        linea = orden.lineas[0]
+    else:
+        linea = OrdenAplicacionInsumo(posicion=0)
+        orden.lineas.append(linea)
+    linea.insumo_id = orden.insumo_id
+    linea.dosis_por_ha = orden.dosis_por_ha
+    linea.dias_carencia = orden.dias_carencia
+    linea.dias_reingreso = orden.dias_reingreso
+    linea.numero_aplicacion = numero_aplicacion
+
+
+def _linea_unica(orden: OrdenAplicacion) -> OrdenAplicacionInsumo:
+    """The order's (first) line, which a confirmation links its record to.
+    Requires `orden.lineas` loaded."""
+    if not orden.lineas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La orden no tiene productos cargados.",
+        )
+    return orden.lineas[0]
+
+
 @router.post(
     "/desde-plan", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED
 )
@@ -295,6 +326,7 @@ async def crear_orden_desde_plan(
         created_by=current_user.id,
     )
     orden.insumo = plan.insumo
+    _set_linea_unica(orden, plan.numero_aplicacion)
     db.add(orden)
     for parcela in parcelas:
         item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
@@ -332,6 +364,7 @@ async def crear_orden_extra(
         created_by=current_user.id,
     )
     orden.insumo = insumo
+    _set_linea_unica(orden)
     db.add(orden)
     for parcela in parcelas:
         item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
@@ -525,6 +558,7 @@ async def actualizar_orden_extra(
     orden.dias_reingreso = data.dias_reingreso
     orden.fecha_planificada = data.fecha_planificada
     orden.notas = data.notas
+    _set_linea_unica(orden)
 
     # Todas las filas siguen pendientes (lo garantiza _get_orden_extra_editable):
     # se conservan las parcelas que siguen, se agregan las nuevas y se
@@ -574,7 +608,11 @@ async def confirmar_valvula(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_any_role),
 ) -> OrdenAplicacionValvulaResponse:
-    orden = await db.get(OrdenAplicacion, orden_id, options=[selectinload(OrdenAplicacion.insumo)])
+    orden = await db.get(
+        OrdenAplicacion,
+        orden_id,
+        options=[selectinload(OrdenAplicacion.insumo), selectinload(OrdenAplicacion.lineas)],
+    )
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
@@ -620,6 +658,7 @@ async def confirmar_valvula(
         responsable_nombre = await _resolve_responsable_nombre(db, responsable_id)
 
     if data.resultado == ResultadoValvula.completa:
+        linea = _linea_unica(orden)
         cantidad_total = _calcular_cantidad_valvula(orden.dosis_por_ha, fila.valvula)
         fito = RegistroFitosanitario(
             fecha=date.today(),
@@ -636,6 +675,10 @@ async def confirmar_valvula(
             responsable=responsable_nombre,
             responsable_id=responsable_id,
             observaciones=observaciones,
+            plan_fitosanitario_id=orden.plan_fitosanitario_id,
+            orden_insumo_id=linea.id,
+            orden_parcela_id=item.id,
+            orden_valvula_id=fila.id,
             created_by=current_user.id,
         )
         db.add(fito)
@@ -696,7 +739,7 @@ async def deshacer_valvula(
             selectinload(OrdenAplicacionValvula.orden_parcela).selectinload(
                 OrdenAplicacionParcela.parcela
             ),
-            selectinload(OrdenAplicacionValvula.registro_fitosanitario),
+            selectinload(OrdenAplicacionValvula.registros),
         ],
     )
     if fila is None or fila.orden_parcela.orden_id != orden_id:
@@ -741,7 +784,11 @@ async def confirmar_aplicacion(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_any_role),
 ) -> OrdenAplicacionParcelaResponse:
-    orden = await db.get(OrdenAplicacion, orden_id, options=[selectinload(OrdenAplicacion.insumo)])
+    orden = await db.get(
+        OrdenAplicacion,
+        orden_id,
+        options=[selectinload(OrdenAplicacion.insumo), selectinload(OrdenAplicacion.lineas)],
+    )
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
 
@@ -781,6 +828,7 @@ async def confirmar_aplicacion(
     if responsable_id:
         responsable_nombre = await _resolve_responsable_nombre(db, responsable_id)
 
+    linea = _linea_unica(orden)
     cantidad_total = _calcular_cantidad_total(orden.dosis_por_ha, parcela)
 
     fito = RegistroFitosanitario(
@@ -797,6 +845,9 @@ async def confirmar_aplicacion(
         responsable=responsable_nombre,
         responsable_id=responsable_id,
         observaciones=data.observaciones,
+        plan_fitosanitario_id=orden.plan_fitosanitario_id,
+        orden_insumo_id=linea.id,
+        orden_parcela_id=item.id,
         created_by=current_user.id,
     )
     db.add(fito)

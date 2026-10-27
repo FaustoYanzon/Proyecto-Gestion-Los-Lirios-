@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-26
+> Última generación: 2026-10-27
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,7 +26,7 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 43 clases ORM
+**Modelos:** 16 archivos, 44 clases ORM
 
 | Archivo | Clases |
 |---|---|
@@ -38,7 +38,7 @@ repo/
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
 | `presupuesto.py` | Presupuesto, MetaProduccion |
-| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionParcela, OrdenAplicacionValvula, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
+| `produccion.py` | RegistroTrabajo, RegistroRiego, RegistroFitosanitario, PlanFitosanitario, OrdenAplicacion, OrdenAplicacionInsumo, OrdenAplicacionParcela, OrdenAplicacionValvula, FotoRegistroFitosanitario, CicloCampana, EstadoVariedadCampana, RegistroCosecha |
 | `push_token.py` | PushToken |
 | `termografo.py` | LoteImportacionTermografo, LecturaTermografo |
 | `trabajador.py` | Trabajador |
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 56 (head: `c3f1a8d27e54_vw_kpi_produccion_manto_por_superficie.py`)
+**Migraciones de Alembic:** 57 (head: `71e969f8521f_ordenes_multiproducto.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
