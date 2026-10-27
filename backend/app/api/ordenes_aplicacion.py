@@ -11,7 +11,6 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db, require_any_role, require_encargado_estricto, require_encargado_up
 from app.api.produccion import (
     _aplicar_movimiento_stock,
-    _calcular_cantidad_total,
     _resolve_insumo,
     _resolve_responsable_nombre,
 )
@@ -53,6 +52,7 @@ from app.services.aplicaciones import (
     deshacer_fila_valvula,
     recalcular_estado_orden,
 )
+from app.services.plan_vinculo import resolver_plan_id
 
 logger = logging.getLogger("app")
 
@@ -331,17 +331,6 @@ async def _crear_filas_valvula(
         fila = OrdenAplicacionValvula(valvula_id=valvula.id)
         fila.valvula = valvula
         item.valvulas.append(fila)
-
-
-def _linea_unica(orden: OrdenAplicacion) -> OrdenAplicacionInsumo:
-    """The order's (first) line, which a confirmation links its record to.
-    Requires `orden.lineas` loaded."""
-    if not orden.lineas:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="La orden no tiene productos cargados.",
-        )
-    return orden.lineas[0]
 
 
 async def _resolver_insumos(
@@ -765,13 +754,98 @@ async def eliminar_orden(
     await db.flush()
 
 
-def _calcular_cantidad_valvula(dosis_por_ha: float, valvula: Valvula) -> Decimal:
+def _superficie_valvula(valvula: Valvula) -> Decimal:
     if valvula.superficie_ha is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"La válvula {valvula.nombre} no tiene hectáreas cargadas — no se puede calcular la cantidad aplicada.",
         )
-    return (Decimal(str(dosis_por_ha)) * Decimal(str(valvula.superficie_ha))).quantize(Decimal("0.01"))
+    return Decimal(str(valvula.superficie_ha))
+
+
+def _superficie_parcela(parcela: Parcela) -> Decimal:
+    if parcela.superficie_ha is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La parcela no tiene hectáreas cargadas — no se puede calcular la cantidad total aplicada.",
+        )
+    return Decimal(str(parcela.superficie_ha))
+
+
+async def _crear_registros_orden(
+    db: AsyncSession,
+    *,
+    orden: OrdenAplicacion,
+    parcela: Parcela,
+    item: OrdenAplicacionParcela,
+    fila: OrdenAplicacionValvula | None,
+    superficie_ha: Decimal,
+    fecha: date,
+    responsable: str,
+    responsable_id: str | None,
+    observaciones: str | None,
+    user_id: str,
+) -> list[RegistroFitosanitario]:
+    """One RegistroFitosanitario (plus its stock movement) per order line, in
+    line order. Requires `orden.lineas[*].insumo` loaded and the order locked.
+
+    Quantities and plan links are all resolved before the first `db.add`, so
+    a validation failure leaves nothing pending in the session (get_db's
+    rollback is only the safety net). Returns the records; the first one is
+    the legacy link callers write on the parcel/valve row."""
+    if not orden.lineas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La orden no tiene productos cargados.",
+        )
+
+    preparadas: list[tuple[OrdenAplicacionInsumo, Decimal, str | None]] = []
+    for linea in orden.lineas:
+        cantidad = (Decimal(str(linea.dosis_por_ha)) * superficie_ha).quantize(Decimal("0.01"))
+        # A parcel without variety cannot match any plan row (variedad is NOT NULL there).
+        plan_id = (
+            await resolver_plan_id(
+                db,
+                temporada=orden.temporada,
+                variedad=parcela.variedad,
+                insumo_id=linea.insumo_id,
+                numero_aplicacion=linea.numero_aplicacion,
+            )
+            if parcela.variedad is not None
+            else None
+        )
+        preparadas.append((linea, cantidad, plan_id))
+
+    registros: list[RegistroFitosanitario] = []
+    for linea, cantidad, plan_id in preparadas:
+        fito = RegistroFitosanitario(
+            fecha=fecha,
+            parcela_id=parcela.id,
+            valvula_id=fila.valvula_id if fila is not None else None,
+            producto_nombre=linea.insumo.nombre,
+            dosis_por_ha=linea.dosis_por_ha,
+            insumo_id=linea.insumo_id,
+            unidad=linea.insumo.unidad,
+            cantidad_total=cantidad,
+            motivo=orden.objetivo,
+            dias_carencia=linea.dias_carencia,
+            dias_reingreso=linea.dias_reingreso,
+            responsable=responsable,
+            responsable_id=responsable_id,
+            observaciones=observaciones,
+            plan_fitosanitario_id=plan_id,
+            orden_insumo_id=linea.id,
+            orden_parcela_id=item.id,
+            orden_valvula_id=fila.id if fila is not None else None,
+            created_by=user_id,
+        )
+        db.add(fito)
+        registros.append(fito)
+    # Flush once so every record has its id before the movements reference it.
+    await db.flush()
+    for fito, (linea, cantidad, _plan_id) in zip(registros, preparadas):
+        await _aplicar_movimiento_stock(db, fito, linea.insumo, cantidad, user_id)
+    return registros
 
 
 @router.post(
@@ -788,7 +862,7 @@ async def confirmar_valvula(
     orden = await db.get(
         OrdenAplicacion,
         orden_id,
-        options=[selectinload(OrdenAplicacion.insumo), selectinload(OrdenAplicacion.lineas)],
+        options=[selectinload(OrdenAplicacion.lineas).selectinload(OrdenAplicacionInsumo.insumo)],
     )
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
@@ -835,33 +909,21 @@ async def confirmar_valvula(
         responsable_nombre = await _resolve_responsable_nombre(db, responsable_id)
 
     if data.resultado == ResultadoValvula.completa:
-        linea = _linea_unica(orden)
-        cantidad_total = _calcular_cantidad_valvula(orden.dosis_por_ha, fila.valvula)
-        fito = RegistroFitosanitario(
+        registros = await _crear_registros_orden(
+            db,
+            orden=orden,
+            parcela=parcela,
+            item=item,
+            fila=fila,
+            superficie_ha=_superficie_valvula(fila.valvula),
             fecha=date.today(),
-            parcela_id=parcela.id,
-            valvula_id=fila.valvula_id,
-            producto_nombre=orden.insumo.nombre,
-            dosis_por_ha=orden.dosis_por_ha,
-            insumo_id=orden.insumo_id,
-            unidad=orden.insumo.unidad,
-            cantidad_total=cantidad_total,
-            motivo=orden.objetivo,
-            dias_carencia=orden.dias_carencia,
-            dias_reingreso=orden.dias_reingreso,
             responsable=responsable_nombre,
             responsable_id=responsable_id,
             observaciones=observaciones,
-            plan_fitosanitario_id=orden.plan_fitosanitario_id,
-            orden_insumo_id=linea.id,
-            orden_parcela_id=item.id,
-            orden_valvula_id=fila.id,
-            created_by=current_user.id,
+            user_id=current_user.id,
         )
-        db.add(fito)
-        await db.flush()
-        await _aplicar_movimiento_stock(db, fito, orden.insumo, cantidad_total, current_user.id)
-        fila.registro_fitosanitario_id = fito.id
+        # Legacy 1-1 link (old clients, photos): the first line's record.
+        fila.registro_fitosanitario_id = registros[0].id
 
     fila.estado = EstadoOrdenAplicacionParcela.aplicada
     fila.resultado = data.resultado
@@ -964,7 +1026,7 @@ async def confirmar_aplicacion(
     orden = await db.get(
         OrdenAplicacion,
         orden_id,
-        options=[selectinload(OrdenAplicacion.insumo), selectinload(OrdenAplicacion.lineas)],
+        options=[selectinload(OrdenAplicacion.lineas).selectinload(OrdenAplicacionInsumo.insumo)],
     )
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
@@ -1005,35 +1067,23 @@ async def confirmar_aplicacion(
     if responsable_id:
         responsable_nombre = await _resolve_responsable_nombre(db, responsable_id)
 
-    linea = _linea_unica(orden)
-    cantidad_total = _calcular_cantidad_total(orden.dosis_por_ha, parcela)
-
-    fito = RegistroFitosanitario(
+    registros = await _crear_registros_orden(
+        db,
+        orden=orden,
+        parcela=parcela,
+        item=item,
+        fila=None,
+        superficie_ha=_superficie_parcela(parcela),
         fecha=date.today(),
-        parcela_id=parcela.id,
-        producto_nombre=orden.insumo.nombre,
-        dosis_por_ha=orden.dosis_por_ha,
-        insumo_id=orden.insumo_id,
-        unidad=orden.insumo.unidad,
-        cantidad_total=cantidad_total,
-        motivo=orden.objetivo,
-        dias_carencia=orden.dias_carencia,
-        dias_reingreso=orden.dias_reingreso,
         responsable=responsable_nombre,
         responsable_id=responsable_id,
         observaciones=data.observaciones,
-        plan_fitosanitario_id=orden.plan_fitosanitario_id,
-        orden_insumo_id=linea.id,
-        orden_parcela_id=item.id,
-        created_by=current_user.id,
+        user_id=current_user.id,
     )
-    db.add(fito)
-    await db.flush()
-
-    await _aplicar_movimiento_stock(db, fito, orden.insumo, cantidad_total, current_user.id)
 
     item.estado = EstadoOrdenAplicacionParcela.aplicada
-    item.registro_fitosanitario_id = fito.id
+    # Legacy 1-1 link (old clients, photos): the first line's record.
+    item.registro_fitosanitario_id = registros[0].id
     await db.flush()
 
     await recalcular_estado_orden(db, orden)
