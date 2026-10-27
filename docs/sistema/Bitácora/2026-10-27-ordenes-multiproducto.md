@@ -58,7 +58,7 @@ El orden importa: cada paso cierra una ventana en la que el sistema queda incons
    - Después `--apply`, escribiendo `SI`.
    - Hasta que corra, `/cumplimiento`, `/necesidad-stock` y `/rondas-pendientes` muestran todas las rondas como pendientes: la migración solo vincula los registros que vinieron de órdenes del plan.
    - Las aplicaciones cargadas en el formulario manual de Fitosanitarios (web `FitosanitarioForm`, mobile `app/fito.tsx`) nunca traen vínculo al plan, así que nunca cubren una ronda. El script es idempotente y se puede re-correr periódicamente. La alternativa a futuro es un vínculo opcional al plan en el formulario manual.
-4. **OTA de mobile ANTES del deploy web:** `eas update --branch preview --environment preview -m "..."`, según `mobile/AGENTS.md` (no tocar `eas.json`). Con la web viva, un encargado ya puede crear una orden de 3 productos. Un teléfono con el OTA viejo mostraría solo el primero y el operario no se enteraría de los otros. Esperar la adopción del OTA, o acordar que nadie cree órdenes multiproducto hasta entonces.
+4. **OTA de mobile ANTES del deploy web:** primero `npx eas-cli fingerprint:compare --build-id <id>` contra el build instalado de Android (versionCode 8, `b698e814-ef2c-4a0f-9dd3-344bcd074e69`) y de iOS (TestFlight build 6, `e0daee50-0343-4a79-b195-65369a77a53e`); si coinciden, `EXPO_PUBLIC_API_URL=https://proyecto-gestion-los-lirios-production.up.railway.app npx eas-cli update --branch production --environment production -m "..."` (la rama real es `production`, no `preview`; no tocar `eas.json`). Con la web viva, un encargado ya puede crear una orden de 3 productos. Un teléfono con el OTA viejo mostraría solo el primero y el operario no se enteraría de los otros. Esperar la adopción del OTA, o acordar que nadie cree órdenes multiproducto hasta entonces.
 5. **Web:** `npx vercel --prod` desde `frontend/` (no auto-despliega).
 6. Click-through en web y en dispositivo (con una lista larga de productos: revisar el teclado, no hay `KeyboardAvoidingView`).
 7. Regenerar `docs/sistema/Modelo de Datos.md` **solo después** de que prod esté migrada: el generador lee PROD vía `scripts/migracion/.env.prod`.
@@ -72,11 +72,26 @@ El orden importa: cada paso cierra una ventana en la que el sistema queda incons
   2. Preferir un fix hacia adelante (commit nuevo a `main`) antes que un downgrade.
   3. Un downgrade en prod necesita el OK explícito de Fausto y se corre vía `scripts/migracion/_alembic_prod.py`.
 
+## Deploy ejecutado (2026-10-27)
+
+Orden real, con OK explícito de Fausto en cada paso:
+
+1. Backup de prod: `C:\backups\los-lirios\los_lirios_prod_20261027_1803.dump` (más copia en OneDrive).
+2. Compuertas de solo lectura (`scripts/migracion/pregate_ordenes_multiproducto.py`): prod estaba en `c3f1a8d27e54`, **sin ninguna orden de aplicación** y con 57/57 válvulas con superficie. El gate (a) falló: **17 grupos de filas duplicadas en el plan 2026** (rondas 4 y 5; cargas dobles idénticas).
+3. Limpieza de duplicados (`scripts/migracion/limpiar_duplicados_plan.py`): dry-run revisado a ojo, después `--apply`: **17 filas borradas** (quedó la más vieja de cada grupo). El plan de prod pasó de 109 a 92 filas.
+4. Merge a `main` (`deb7504`) y push: CI en verde; Railway corrió `Running upgrade c3f1a8d27e54 -> 71e969f8521f` y arrancó sin errores. Como prod no tenía órdenes, el backfill de datos de la migración no tenía nada que mover.
+5. OTA mobile en la rama `production` para Android (fingerprint `1ccf455d…`, update group `2883fe28-7957-4b63-b70b-a030b43fd13a`) e iOS (`07054827…`, `6e2f2177-7a33-4c23-b10e-5de67b4e0403`), con `fingerprint:compare` coincidente en ambos. Bundle exportado verificado: apunta a la URL de producción y no trae IPs LAN.
+6. Web en Vercel, target `production`, estado Ready.
+7. Backfill de históricos, dry-run en prod: **0 registros en la ventana 2026-05-01..2027-04-30**, nada para asignar; no hizo falta `--apply`. Si más adelante se cargan aplicaciones manuales en la temporada, el script es idempotente y se puede re-correr.
+
+Verificación externa: `rondas-pendientes`, `cumplimiento` y `ordenes-aplicacion/pendientes` responden 401 sin token (existen).
+
 ## Pendiente post-deploy
 
-- **`Modelo de Datos.md` no se regeneró.** `scripts/generate_modelo_datos.py` lee el esquema de PRODUCCIÓN (vía `scripts/migracion/.env.prod`, solo lectura) y prod todavía no tiene la migración. `PROJECT_MAP.md` sí se regeneró.
-- Click-through web y prueba en dispositivo + OTA no hechos.
-- Memoria `project_ordenes_multiproducto` y su entrada en `MEMORY.md`: proponer a Fausto, no se tocó.
+- **`Modelo de Datos.md` sin regenerar**: ahora que prod está migrada, correr `backend/venv/Scripts/python.exe scripts/generate_modelo_datos.py` (lee PROD, solo lectura) y commitear el cambio.
+- Prueba en dispositivo (iOS y Android) de la lista de productos y del modal de la válvula, con una orden de 4 productos y una vieja de 1.
+- Click-through web: hecho en local el 2026-10-27 (tarjeta del plan, confirmar válvula y parcela, Reactivar, Eliminar, 409, "Fuera del plan", edición, A revisar y repaso). Falta repetir lo esencial en prod cuando exista la primera orden real.
+- Memoria `project_ordenes_multiproducto` creada en la memoria de Claude (no en este vault).
 
 ## Pendientes y limpieza futura
 
