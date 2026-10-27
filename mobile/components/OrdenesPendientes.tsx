@@ -560,7 +560,7 @@ export default function OrdenesPendientes({ onConfirmado }: { onConfirmado: () =
     if (deshaciendoRef.current) return
     Alert.alert(
       'Deshacer válvula',
-      `Se va a deshacer la confirmación de la válvula ${valvula.valvula_nombre}. Se devuelve el stock del insumo y se borra el registro fitosanitario. ¿Continuar?`,
+      `Se va a deshacer la confirmación de la válvula ${valvula.valvula_nombre}. Se devuelve el stock de todos los productos de la orden y se borran los registros fitosanitarios de esa válvula. ¿Continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
