@@ -75,6 +75,7 @@ repo/
 - **`User.trabajador_id`** (FK nullable única a `trabajadores.id`) resuelve `responsable_id` al confirmar sin pedírselo al operario. Los operarios de campo no tenían login propio antes de esto (solo una fila en el catálogo `Trabajador`) — **dar de alta sus cuentas `User` sigue pendiente**, es un paso de datos aparte, no bloqueante para el resto del sistema.
 - Fotos van a Cloudinary (`fotos_ordenes_aplicacion/{orden_parcela_id}/...`, mismo patrón REST firmado que avatares/fotos de parcela) — en la base solo queda el `secure_url`.
 - Detalle completo de la sesión: [[2026-09-17-ordenes-aplicacion-fitosanitaria]].
+- **Actualización 2026-10-27 (rama `feat/ordenes-multiproducto`, pendiente de deploy):** una orden puede llevar varios productos (`ordenes_aplicacion_insumos`) y varias variedades; confirmar crea un `RegistroFitosanitario` por línea, con vínculo explícito al plan (`plan_fitosanitario_id`). "Cantidad y producto fijos" y el registro único por confirmación valen ahora por línea. El cumplimiento por rondas se mide por hectáreas y las columnas de producto único quedan como shim. Ver [[2026-10-27-ordenes-multiproducto]].
 
 ## Mobile — wizards de carga
 

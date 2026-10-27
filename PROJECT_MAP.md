@@ -150,7 +150,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `produccion/`: ARevisarPanel.tsx · AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
+- `produccion/`: ARevisarPanel.tsx · AplicacionesRealizadas.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · FitosanitariosTable.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · NuevaOrdenAplicacion.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · RondaCard.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
 
@@ -186,6 +186,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `_audit_jornales_historicos.py`
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`
+- `backfill_plan_registros.py`
 - `cleanup_contaminacion_jornales_hist.py`
 - `migrate_bd_cobros.py`
 - `migrate_cosecha_2024_2026.py`
