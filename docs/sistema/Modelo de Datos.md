@@ -4,9 +4,9 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-26 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-27 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
-**46 tablas** · **9 vistas** · **36 enums** · **86 relaciones**
+**47 tablas** · **9 vistas** · **36 enums** · **92 relaciones**
 
 ## Panorama general
 
@@ -15,16 +15,16 @@ Todas las relaciones (FK), sin columnas -- para ver cómo se conecta todo de un 
 ```mermaid
 erDiagram
     users ||--o{ alertas_descartadas : ""
-    users ||--o{ analisis_calidad : ""
     parcelas ||--o{ analisis_calidad : ""
+    users ||--o{ analisis_calidad : ""
     parcelas ||--o{ bines_pasa : ""
     lotes_pasa ||--o{ bines_pasa : ""
     parcelas ||--o{ ciclos_campana : ""
     users ||--o{ ciclos_campana : ""
-    lotes_importacion_arca ||--o{ comprobantes_arca_importados : ""
-    users ||--o{ comprobantes_arca_importados : ""
     ingresos ||--o{ comprobantes_arca_importados : ""
+    users ||--o{ comprobantes_arca_importados : ""
     egresos ||--o{ comprobantes_arca_importados : ""
+    lotes_importacion_arca ||--o{ comprobantes_arca_importados : ""
     remitos ||--o{ comprobantes_bodega : ""
     users ||--o{ comprobantes_bodega : ""
     parcelas ||--o{ egresos : ""
@@ -34,66 +34,72 @@ erDiagram
     users ||--o{ estados_variedad_campana : ""
     parcelas ||--o{ fotos_parcela : ""
     users ||--o{ fotos_parcela : ""
-    users ||--o{ fotos_registros_fitosanitarios : ""
     registros_fitosanitarios ||--o{ fotos_registros_fitosanitarios : ""
+    users ||--o{ fotos_registros_fitosanitarios : ""
     ordenes_aplicacion_valvulas ||--o{ fotos_registros_fitosanitarios : ""
     users ||--o{ ingresos : ""
-    registros_cosecha ||--o{ ingresos_pasero : ""
     users ||--o{ ingresos_pasero : ""
+    registros_cosecha ||--o{ ingresos_pasero : ""
     parcelas ||--o{ ingresos_pasero : ""
-    productores ||--o{ ingresos_pasero : ""
     ubicaciones_pasero ||--o{ ingresos_pasero : ""
+    productores ||--o{ ingresos_pasero : ""
     lotes_importacion_termografo ||--o{ lecturas_termografo : ""
     users ||--o{ lotes_importacion_arca : ""
     users ||--o{ lotes_importacion_termografo : ""
-    depositos ||--o{ lotes_pasa : ""
     users ||--o{ lotes_pasa : ""
-    users ||--o{ mensajes_whatsapp_pendientes : ""
+    depositos ||--o{ lotes_pasa : ""
     egresos ||--o{ mensajes_whatsapp_pendientes : ""
+    users ||--o{ mensajes_whatsapp_pendientes : ""
     parcelas ||--o{ metas_produccion : ""
     users ||--o{ metas_produccion : ""
-    registros_fitosanitarios ||--o{ movimientos_stock : ""
     insumos ||--o{ movimientos_stock : ""
+    registros_fitosanitarios ||--o{ movimientos_stock : ""
     users ||--o{ movimientos_stock : ""
     users ||--o{ ordenes_aplicacion : ""
-    insumos ||--o{ ordenes_aplicacion : ""
     planes_fitosanitarios ||--o{ ordenes_aplicacion : ""
-    ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : ""
-    registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : ""
+    insumos ||--o{ ordenes_aplicacion : ""
+    insumos ||--o{ ordenes_aplicacion_insumos : ""
+    ordenes_aplicacion ||--o{ ordenes_aplicacion_insumos : ""
     parcelas ||--o{ ordenes_aplicacion_parcelas : ""
+    registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : ""
+    ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : ""
+    registros_fitosanitarios ||--o{ ordenes_aplicacion_valvulas : ""
     valvulas ||--o{ ordenes_aplicacion_valvulas : ""
     users ||--o{ ordenes_aplicacion_valvulas : ""
     trabajadores ||--o{ ordenes_aplicacion_valvulas : ""
-    registros_fitosanitarios ||--o{ ordenes_aplicacion_valvulas : ""
     ordenes_aplicacion_parcelas ||--o{ ordenes_aplicacion_valvulas : ""
     users ||--o{ planes_fitosanitarios : ""
     insumos ||--o{ planes_fitosanitarios : ""
-    users ||--o{ precios_tarea : ""
     parcelas ||--o{ precios_tarea : ""
+    users ||--o{ precios_tarea : ""
     users ||--o{ presupuestos : ""
     users ||--o{ push_tokens : ""
-    compradores ||--o{ registros_cosecha : ""
     productores ||--o{ registros_cosecha : ""
     parcelas ||--o{ registros_cosecha : ""
     users ||--o{ registros_cosecha : ""
+    compradores ||--o{ registros_cosecha : ""
+    ordenes_aplicacion_parcelas ||--o{ registros_fitosanitarios : ""
+    users ||--o{ registros_fitosanitarios : ""
+    parcelas ||--o{ registros_fitosanitarios : ""
     trabajadores ||--o{ registros_fitosanitarios : ""
     insumos ||--o{ registros_fitosanitarios : ""
-    users ||--o{ registros_fitosanitarios : ""
     valvulas ||--o{ registros_fitosanitarios : ""
-    parcelas ||--o{ registros_fitosanitarios : ""
-    users ||--o{ registros_riego : ""
+    planes_fitosanitarios ||--o{ registros_fitosanitarios : ""
+    ordenes_aplicacion_valvulas ||--o{ registros_fitosanitarios : ""
+    ordenes_aplicacion_insumos ||--o{ registros_fitosanitarios : ""
     trabajadores ||--o{ registros_riego : ""
     parcelas ||--o{ registros_riego : ""
+    users ||--o{ registros_riego : ""
     trabajadores ||--o{ registros_trabajo : ""
     parcelas ||--o{ registros_trabajo : ""
     users ||--o{ registros_trabajo : ""
+    bines_pasa ||--o{ remito_lineas : ""
     lotes_pasa ||--o{ remito_lineas : ""
     remitos ||--o{ remito_lineas : ""
     registros_cosecha ||--o{ remito_lineas : ""
-    bines_pasa ||--o{ remito_lineas : ""
+    users ||--o{ remitos : ""
     parcelas ||--o{ remitos : ""
     compradores ||--o{ remitos : ""
-    users ||--o{ remitos : ""
     users ||--o{ telefonos_usuarios_whatsapp : ""
     parcelas ||--o{ ubicaciones_pasero : ""
     trabajadores ||--o{ users : ""
@@ -240,22 +246,22 @@ erDiagram
 
 ```mermaid
 erDiagram
-    users ||--o{ analisis_calidad : "created_by"
     parcelas ||--o{ analisis_calidad : "parcela_id"
+    users ||--o{ analisis_calidad : "created_by"
     parcelas ||--o{ ciclos_campana : "parcela_id"
     users ||--o{ ciclos_campana : "created_by"
     users ||--o{ estados_variedad_campana : "created_by"
     parcelas ||--o{ metas_produccion : "parcela_id"
     users ||--o{ metas_produccion : "created_by"
-    users ||--o{ precios_tarea : "created_by"
     parcelas ||--o{ precios_tarea : "parcela_id"
-    compradores ||--o{ registros_cosecha : "comprador_id"
+    users ||--o{ precios_tarea : "created_by"
     productores ||--o{ registros_cosecha : "productor_id"
     parcelas ||--o{ registros_cosecha : "parcela_id"
     users ||--o{ registros_cosecha : "created_by"
-    users ||--o{ registros_riego : "created_by"
+    compradores ||--o{ registros_cosecha : "comprador_id"
     trabajadores ||--o{ registros_riego : "responsable_id"
     parcelas ||--o{ registros_riego : "parcela_id"
+    users ||--o{ registros_riego : "created_by"
     trabajadores ||--o{ registros_trabajo : "trabajador_id"
     parcelas ||--o{ registros_trabajo : "parcela_id"
     users ||--o{ registros_trabajo : "created_by"
@@ -553,20 +559,20 @@ erDiagram
     lotes_pasa ||--o{ bines_pasa : "lote_id"
     remitos ||--o{ comprobantes_bodega : "remito_id"
     users ||--o{ comprobantes_bodega : "created_by"
-    registros_cosecha ||--o{ ingresos_pasero : "cosecha_id"
     users ||--o{ ingresos_pasero : "created_by"
+    registros_cosecha ||--o{ ingresos_pasero : "cosecha_id"
     parcelas ||--o{ ingresos_pasero : "pasero_id"
-    productores ||--o{ ingresos_pasero : "productor_id"
     ubicaciones_pasero ||--o{ ingresos_pasero : "ubicacion_id"
-    depositos ||--o{ lotes_pasa : "deposito_id"
+    productores ||--o{ ingresos_pasero : "productor_id"
     users ||--o{ lotes_pasa : "created_by"
+    depositos ||--o{ lotes_pasa : "deposito_id"
+    bines_pasa ||--o{ remito_lineas : "bin_id"
     lotes_pasa ||--o{ remito_lineas : "lote_id"
     remitos ||--o{ remito_lineas : "remito_id"
     registros_cosecha ||--o{ remito_lineas : "cosecha_id"
-    bines_pasa ||--o{ remito_lineas : "bin_id"
+    users ||--o{ remitos : "created_by"
     parcelas ||--o{ remitos : "pasero_id"
     compradores ||--o{ remitos : "comprador_id"
-    users ||--o{ remitos : "created_by"
     parcelas ||--o{ ubicaciones_pasero : "pasero_id"
     productores {
         varchar(36) id PK
@@ -827,30 +833,36 @@ erDiagram
 
 ```mermaid
 erDiagram
-    users ||--o{ fotos_registros_fitosanitarios : "created_by"
     registros_fitosanitarios ||--o{ fotos_registros_fitosanitarios : "registro_fitosanitario_id"
+    users ||--o{ fotos_registros_fitosanitarios : "created_by"
     ordenes_aplicacion_valvulas ||--o{ fotos_registros_fitosanitarios : "orden_valvula_id"
-    registros_fitosanitarios ||--o{ movimientos_stock : "registro_fitosanitario_id"
     insumos ||--o{ movimientos_stock : "insumo_id"
+    registros_fitosanitarios ||--o{ movimientos_stock : "registro_fitosanitario_id"
     users ||--o{ movimientos_stock : "created_by"
     users ||--o{ ordenes_aplicacion : "created_by"
-    insumos ||--o{ ordenes_aplicacion : "insumo_id"
     planes_fitosanitarios ||--o{ ordenes_aplicacion : "plan_fitosanitario_id"
-    ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : "orden_id"
-    registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : "registro_fitosanitario_id"
+    insumos ||--o{ ordenes_aplicacion : "insumo_id"
+    insumos ||--o{ ordenes_aplicacion_insumos : "insumo_id"
+    ordenes_aplicacion ||--o{ ordenes_aplicacion_insumos : "orden_id"
     parcelas ||--o{ ordenes_aplicacion_parcelas : "parcela_id"
+    registros_fitosanitarios ||--o{ ordenes_aplicacion_parcelas : "registro_fitosanitario_id"
+    ordenes_aplicacion ||--o{ ordenes_aplicacion_parcelas : "orden_id"
+    registros_fitosanitarios ||--o{ ordenes_aplicacion_valvulas : "registro_fitosanitario_id"
     valvulas ||--o{ ordenes_aplicacion_valvulas : "valvula_id"
     users ||--o{ ordenes_aplicacion_valvulas : "revisada_por"
     trabajadores ||--o{ ordenes_aplicacion_valvulas : "responsable_id"
-    registros_fitosanitarios ||--o{ ordenes_aplicacion_valvulas : "registro_fitosanitario_id"
     ordenes_aplicacion_parcelas ||--o{ ordenes_aplicacion_valvulas : "orden_parcela_id"
     users ||--o{ planes_fitosanitarios : "created_by"
     insumos ||--o{ planes_fitosanitarios : "insumo_id"
+    ordenes_aplicacion_parcelas ||--o{ registros_fitosanitarios : "orden_parcela_id"
+    users ||--o{ registros_fitosanitarios : "created_by"
+    parcelas ||--o{ registros_fitosanitarios : "parcela_id"
     trabajadores ||--o{ registros_fitosanitarios : "responsable_id"
     insumos ||--o{ registros_fitosanitarios : "insumo_id"
-    users ||--o{ registros_fitosanitarios : "created_by"
     valvulas ||--o{ registros_fitosanitarios : "valvula_id"
-    parcelas ||--o{ registros_fitosanitarios : "parcela_id"
+    planes_fitosanitarios ||--o{ registros_fitosanitarios : "plan_fitosanitario_id"
+    ordenes_aplicacion_valvulas ||--o{ registros_fitosanitarios : "orden_valvula_id"
+    ordenes_aplicacion_insumos ||--o{ registros_fitosanitarios : "orden_insumo_id"
     insumos {
         varchar(36) id PK
         varchar(150) nombre
@@ -884,6 +896,10 @@ erDiagram
         numeric(10,2) cantidad_total
         varchar(1000) observaciones
         varchar(36) valvula_id FK
+        varchar(36) plan_fitosanitario_id FK
+        varchar(36) orden_insumo_id FK
+        varchar(36) orden_parcela_id FK
+        varchar(36) orden_valvula_id FK
     }
     planes_fitosanitarios {
         varchar(36) id PK
@@ -938,6 +954,17 @@ erDiagram
         timestamptz confirmada_at
         timestamptz revisada_at
         varchar(36) revisada_por FK
+        timestamptz created_at
+    }
+    ordenes_aplicacion_insumos {
+        varchar(36) id PK
+        varchar(36) orden_id FK
+        varchar(36) insumo_id FK
+        float8 dosis_por_ha
+        integer dias_carencia
+        integer dias_reingreso
+        integer numero_aplicacion
+        integer posicion
         timestamptz created_at
     }
     movimientos_stock {
@@ -1000,6 +1027,10 @@ erDiagram
 | `cantidad_total` | numeric(10,2) |  |  |
 | `observaciones` | varchar(1000) |  |  |
 | `valvula_id` | varchar(36) |  | FK → `valvulas.id` |
+| `plan_fitosanitario_id` | varchar(36) |  | FK → `planes_fitosanitarios.id` |
+| `orden_insumo_id` | varchar(36) |  | FK → `ordenes_aplicacion_insumos.id` |
+| `orden_parcela_id` | varchar(36) |  | FK → `ordenes_aplicacion_parcelas.id` |
+| `orden_valvula_id` | varchar(36) |  | FK → `ordenes_aplicacion_valvulas.id` |
 
 ### `planes_fitosanitarios`
 
@@ -1068,6 +1099,20 @@ erDiagram
 | `revisada_por` | varchar(36) |  | FK → `users.id` |
 | `created_at` | timestamptz | NOT NULL |  |
 
+### `ordenes_aplicacion_insumos`
+
+| Columna | Tipo | Null | Clave |
+|---|---|---|---|
+| `id` | varchar(36) | NOT NULL | PK |
+| `orden_id` | varchar(36) | NOT NULL | FK → `ordenes_aplicacion.id` |
+| `insumo_id` | varchar(36) | NOT NULL | FK → `insumos.id` |
+| `dosis_por_ha` | float8 | NOT NULL |  |
+| `dias_carencia` | integer | NOT NULL |  |
+| `dias_reingreso` | integer | NOT NULL |  |
+| `numero_aplicacion` | integer |  |  |
+| `posicion` | integer | NOT NULL |  |
+| `created_at` | timestamptz | NOT NULL |  |
+
 ### `movimientos_stock`
 
 | Columna | Tipo | Null | Clave |
@@ -1097,10 +1142,10 @@ erDiagram
 
 ```mermaid
 erDiagram
-    lotes_importacion_arca ||--o{ comprobantes_arca_importados : "lote_id"
-    users ||--o{ comprobantes_arca_importados : "clasificado_por"
     ingresos ||--o{ comprobantes_arca_importados : "ingreso_id"
+    users ||--o{ comprobantes_arca_importados : "clasificado_por"
     egresos ||--o{ comprobantes_arca_importados : "egreso_id"
+    lotes_importacion_arca ||--o{ comprobantes_arca_importados : "lote_id"
     parcelas ||--o{ egresos : "parcela_id"
     users ||--o{ egresos : "created_by"
     users ||--o{ ingresos : "created_by"
@@ -1328,12 +1373,12 @@ erDiagram
 ```mermaid
 erDiagram
     users ||--o{ alertas_descartadas : "descartada_por"
-    users ||--o{ mensajes_whatsapp_pendientes : "user_id"
     egresos ||--o{ mensajes_whatsapp_pendientes : "egreso_id"
+    users ||--o{ mensajes_whatsapp_pendientes : "user_id"
     users ||--o{ mensajes_whatsapp_pendientes : "clasificado_por"
     users ||--o{ push_tokens : "user_id"
-    users ||--o{ telefonos_usuarios_whatsapp : "user_id"
     users ||--o{ telefonos_usuarios_whatsapp : "created_by"
+    users ||--o{ telefonos_usuarios_whatsapp : "user_id"
     mensajes_whatsapp_pendientes {
         varchar(36) id PK
         varchar(100) wa_message_id

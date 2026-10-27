@@ -49,7 +49,8 @@ DOMINIOS: dict[str, list[str]] = {
     "Fitosanitarios, insumos y órdenes de aplicación": [
         "insumos", "registros_fitosanitarios", "planes_fitosanitarios",
         "ordenes_aplicacion", "ordenes_aplicacion_parcelas",
-        "ordenes_aplicacion_valvulas", "movimientos_stock", "fotos_registros_fitosanitarios",
+        "ordenes_aplicacion_valvulas", "ordenes_aplicacion_insumos", "movimientos_stock",
+        "fotos_registros_fitosanitarios",
     ],
     "Finanzas": [
         "ingresos", "egresos", "presupuestos",
