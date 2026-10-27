@@ -296,6 +296,7 @@ erDiagram
         varchar(36) idempotency_key
         varchar(36) responsable_id FK
         tiporiego tipo
+        integer n_valvulas_manto
     }
     registros_cosecha {
         varchar(36) id PK
@@ -418,8 +419,8 @@ erDiagram
 | `id` | varchar(36) | NOT NULL | PK |
 | `fecha` | date | NOT NULL |  |
 | `parcela_id` | varchar(36) | NOT NULL | FK → `parcelas.id` |
-| `cabezal` | varchar(20) | NOT NULL |  |
-| `valvula` | varchar(20) | NOT NULL |  |
+| `cabezal` | varchar(20) |  |  |
+| `valvula` | varchar(20) |  |  |
 | `inicio` | timestamptz | NOT NULL |  |
 | `fin` | timestamptz |  |  |
 | `duracion_horas` | float8 |  |  |
@@ -433,6 +434,7 @@ erDiagram
 | `idempotency_key` | varchar(36) |  |  |
 | `responsable_id` | varchar(36) |  | FK → `trabajadores.id` |
 | `tipo` | tiporiego | NOT NULL |  |
+| `n_valvulas_manto` | integer |  |  |
 
 ### `registros_cosecha`
 
