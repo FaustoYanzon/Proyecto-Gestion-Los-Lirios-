@@ -1,6 +1,6 @@
 'use client'
 
-import { Pencil, Trash2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pencil, Trash2, RotateCcw, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 
@@ -24,6 +24,8 @@ interface Props {
   // Sin handlers la tabla queda de solo lectura (roles sin permiso de corrección).
   onEdit?: (r: FitosanitarioResponse) => void
   onDelete?: (id: string) => void | Promise<void>
+  // Only offered for rows that came from an order (orden_id set).
+  onReactivar?: (id: string) => void | Promise<void>
 }
 
 function SkeletonRow() {
@@ -38,20 +40,29 @@ function SkeletonRow() {
 
 const PAGE_SIZE = 10
 
-export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete }: Props) {
+export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete, onReactivar }: Props) {
   const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
 
   function handleDelete(r: FitosanitarioResponse) {
     if (!onDelete) return
     // Typed confirmation: a stray click on the trash icon once reopened two
-    // completed orders. Parent handles errors (409 for valvula-born records).
+    // completed orders. Parent handles errors.
     const respuesta = window.prompt(
       `Vas a eliminar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n` +
-      'Se devuelve el stock. Si vino de una orden por parcela entera, esa parcela y la orden vuelven a quedar pendientes.\n' +
-      'Los registros que vinieron de una válvula no se borran desde acá: se deshacen desde Órdenes de aplicación → Deshacer.\n\n' +
+      'Se quita del sistema y se devuelve el stock. Si vino de una orden, la parcela (o válvula) también sale de la orden, y si era la última la orden se elimina.\n' +
+      'Si lo que querés es dejarla pendiente, usá "Reactivar".\n\n' +
       'Para confirmar escribí ELIMINAR.',
     )
     if (respuesta?.trim().toUpperCase() === 'ELIMINAR') void onDelete(r.id)
+  }
+
+  function handleReactivar(r: FitosanitarioResponse) {
+    if (!onReactivar) return
+    const ok = window.confirm(
+      `Vas a reactivar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n` +
+      'Se devuelve el stock y la aplicación vuelve a quedar pendiente en la orden.',
+    )
+    if (ok) void onReactivar(r.id)
   }
 
   return (
@@ -120,6 +131,16 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                         {onEdit && (
                           <button onClick={() => onEdit(r)} title="Corregir" className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors">
                             <Pencil size={15} />
+                          </button>
+                        )}
+                        {onReactivar && r.orden_id && (
+                          <button
+                            onClick={() => handleReactivar(r)}
+                            title="Reactivar: volver a pendiente"
+                            aria-label="Reactivar: volver a pendiente"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                          >
+                            <RotateCcw size={15} />
                           </button>
                         )}
                         {onDelete && (

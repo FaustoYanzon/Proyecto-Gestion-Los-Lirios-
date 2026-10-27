@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, AlertTriangle, Download } from 'lucide-react'
 import {
-  getFitosanitarios, deleteFitosanitario, getAlertasCarencia,
+  getFitosanitarios, deleteFitosanitario, reactivarFitosanitario, getAlertasCarencia,
   type FitosanitarioFilter, type FitosanitarioResponse,
 } from '@/lib/api/fitosanitarios'
 import { getParcelas } from '@/lib/api/produccion'
 import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
+import { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
 import { useAuthStore } from '@/store/authStore'
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export default function AplicacionesRealizadas() {
   const queryClient = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
   const puedeCorregir = role === 'super_admin' || role === 'gerencial'
+  const puedeReactivar = puedeCorregir || role === 'encargado'
   const [filtros, setFiltros] = useState<FitosanitarioFilter>(EMPTY_FILTERS)
   const [modalOpen, setModalOpen] = useState(false)
   const [registroEditar, setRegistroEditar] = useState<FitosanitarioResponse | null>(null)
@@ -110,16 +112,41 @@ export default function AplicacionesRealizadas() {
   function openEdit(r: FitosanitarioResponse) { setRegistroEditar(r); setModalOpen(true) }
   function closeModal() { setModalOpen(false); setRegistroEditar(null) }
 
+  // Delete and reactivar both change records, stock and the order itself
+  // (it can shrink or disappear), so refresh every dependent view.
+  function invalidateRelated() {
+    queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
+    queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+    queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion'] })
+    queryClient.invalidateQueries({ queryKey: A_REVISAR_QUERY_KEY })
+    queryClient.invalidateQueries({ queryKey: ['insumos'] })
+  }
+
   async function handleDelete(id: string) {
     setDeleteError(null)
     try {
       await deleteFitosanitario(id)
-      queryClient.invalidateQueries({ queryKey: ['fitosanitarios'] })
-      queryClient.invalidateQueries({ queryKey: ['fitosanitarios-alertas'] })
+      invalidateRelated()
     } catch (e) {
-      // Backend answers 409 for records born from a valvula; surface its detail
       const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       setDeleteError(typeof detail === 'string' ? detail : 'No se pudo eliminar el registro.')
+    }
+  }
+
+  async function handleReactivar(id: string) {
+    setDeleteError(null)
+    try {
+      await reactivarFitosanitario(id)
+      invalidateRelated()
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { detail?: unknown } } }
+      // 404 means it was already reactivated: just refresh the lists.
+      if (err.response?.status === 404) {
+        invalidateRelated()
+        return
+      }
+      const detail = err.response?.data?.detail
+      setDeleteError(typeof detail === 'string' ? detail : 'No se pudo reactivar la aplicación.')
     }
   }
 
@@ -202,6 +229,7 @@ export default function AplicacionesRealizadas() {
         parcelaNombre={parcelaNombre}
         onEdit={puedeCorregir ? openEdit : undefined}
         onDelete={puedeCorregir ? handleDelete : undefined}
+        onReactivar={puedeReactivar ? handleReactivar : undefined}
       />
 
       <Sheet open={modalOpen} onClose={closeModal} title="Corregir aplicación">

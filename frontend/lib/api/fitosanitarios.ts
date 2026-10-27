@@ -41,6 +41,8 @@ export interface FitosanitarioResponse {
   fecha_habilitacion_reingreso: string
   responsable: string
   responsable_id: string | null
+  // Order this record came from; null for manually created records.
+  orden_id: string | null
   created_by: string
   created_at: string
 }
@@ -75,4 +77,9 @@ export async function updateFitosanitario(id: string, data: FitosanitarioUpdate)
 
 export async function deleteFitosanitario(id: string): Promise<void> {
   await api.delete(`/produccion/fitosanitarios/${id}`)
+}
+
+// Deletes the record, returns stock and puts the parcela/valve back to pending in its order.
+export async function reactivarFitosanitario(id: string): Promise<void> {
+  await api.post(`/produccion/fitosanitarios/${id}/reactivar`)
 }
