@@ -342,9 +342,18 @@ class CumplimientoPlanItem(BaseModel):
     objetivo: str
     dosis_por_ha: float
     parcelas_total: int
+    # Parcels fully covered (ha_cubiertas >= ha_parcela; a parcel without
+    # surface counts once it has a linked record).
     parcelas_aplicadas: int
+    # By hectares (was by parcel count before the explicit plan link).
     porcentaje: int
     estado: Literal["pendiente", "parcial", "completo"]
+    ha_total: float
+    ha_cubiertas: float
+    pendiente_ha: float
+    pendiente_cantidad: float
+    # Hectare-weighted actual dose over the linked records; None = nothing applied.
+    dosis_real_promedio: float | None = None
 
 
 class NecesidadInsumoItem(BaseModel):
