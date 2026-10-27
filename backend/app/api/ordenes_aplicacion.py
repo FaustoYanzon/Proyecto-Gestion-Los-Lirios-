@@ -710,8 +710,16 @@ async def get_orden(
 async def _get_orden_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacion:
     """Toda orden (del plan o extra) se edita/elimina mientras ningún operario
     haya confirmado nada: una vez que hay RegistroFitosanitario real (con
-    stock ya descontado) la orden deja de ser un borrador."""
-    orden = await db.get(OrdenAplicacion, orden_id, options=list(_ORDEN_LOAD_OPTS))
+    stock ya descontado) la orden deja de ser un borrador.
+
+    Takes the order lock first (same as confirm/deshacer) and only then reads
+    its state: an edit racing a confirmation either sees it (409) or runs
+    before it, never leaving registros with a dose the order no longer shows.
+    Locking an unknown id locks nothing; the 404 below still applies."""
+    await bloquear_orden(db, orden_id)
+    orden = await db.get(
+        OrdenAplicacion, orden_id, options=list(_ORDEN_LOAD_OPTS), populate_existing=True
+    )
     if orden is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden not found")
     if any(
@@ -724,6 +732,21 @@ async def _get_orden_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacio
             detail="La orden ya tiene aplicaciones confirmadas, no se puede modificar.",
         )
     return orden
+
+
+def _lineas_conservando_ronda(
+    orden: OrdenAplicacion, data: OrdenAplicacionUpdate
+) -> list[OrdenAplicacionLineaCreate]:
+    """The old single-product body has no `numero_aplicacion`: on a plan order
+    whose product does not change, keep the existing line's round (and so
+    origen=plan and the plan link) instead of silently turning it into extra.
+    A different product is a different application, so it is not carried."""
+    if not data.es_body_viejo or len(orden.lineas) != 1 or len(data.lineas) != 1:
+        return data.lineas
+    actual, nueva = orden.lineas[0], data.lineas[0]
+    if nueva.insumo_id != actual.insumo_id or nueva.numero_aplicacion is not None:
+        return data.lineas
+    return [nueva.model_copy(update={"numero_aplicacion": actual.numero_aplicacion})]
 
 
 @router.put("/{orden_id}", response_model=OrdenAplicacionResponse)
@@ -740,15 +763,16 @@ async def actualizar_orden(
             status_code=status.HTTP_409_CONFLICT,
             detail="Esta orden tiene varios productos; actualizá la app/la web para editarla.",
         )
-    insumos = await _resolver_insumos(db, data.lineas)
+    lineas = _lineas_conservando_ronda(orden, data)
+    insumos = await _resolver_insumos(db, lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
     valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
-    planes = await _validar_rondas_plan(db, orden.temporada, data.lineas, parcelas, insumos)
+    planes = await _validar_rondas_plan(db, orden.temporada, lineas, parcelas, insumos)
 
     orden.objetivo = data.objetivo
     orden.fecha_planificada = data.fecha_planificada
     orden.notas = data.notas
-    _aplicar_lineas(orden, data.lineas, insumos)
+    _aplicar_lineas(orden, lineas, insumos)
 
     # Todas las filas siguen pendientes (lo garantiza _get_orden_editable):
     # se conservan las parcelas que siguen, se agregan las nuevas y se

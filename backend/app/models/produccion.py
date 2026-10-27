@@ -890,14 +890,31 @@ class FotoRegistroFitosanitario(Base):
 
 # Order a record came from, via its parcel row (set for whole-parcel and valve
 # confirmations alike). NULL for manual records. A column_property (correlated
-# subquery on the parcel row's primary key, in the same SELECT) instead of a
-# relationship chain so RegistroFitosanitarioResponse can read it in async code
-# without lazy loads. Defined here because it needs the order tables declared.
+# subqueries in the same SELECT) instead of a relationship chain so
+# RegistroFitosanitarioResponse can read it in async code without lazy loads.
+# Defined here because it needs the order tables declared.
+# Falls back to the legacy `registro_fitosanitario_id` links: during a deploy
+# the old backend keeps confirming on the new schema and writes only those
+# (both are unique partial indexes, so the fallback lookups are cheap).
 RegistroFitosanitario.orden_id = column_property(
-    select(OrdenAplicacionParcela.orden_id)
-    .where(OrdenAplicacionParcela.id == RegistroFitosanitario.orden_parcela_id)
-    .correlate_except(OrdenAplicacionParcela)
-    .scalar_subquery()
+    func.coalesce(
+        select(OrdenAplicacionParcela.orden_id)
+        .where(OrdenAplicacionParcela.id == RegistroFitosanitario.orden_parcela_id)
+        .correlate_except(OrdenAplicacionParcela)
+        .scalar_subquery(),
+        select(OrdenAplicacionParcela.orden_id)
+        .where(OrdenAplicacionParcela.registro_fitosanitario_id == RegistroFitosanitario.id)
+        .correlate_except(OrdenAplicacionParcela)
+        .scalar_subquery(),
+        select(OrdenAplicacionParcela.orden_id)
+        .join(
+            OrdenAplicacionValvula,
+            OrdenAplicacionValvula.orden_parcela_id == OrdenAplicacionParcela.id,
+        )
+        .where(OrdenAplicacionValvula.registro_fitosanitario_id == RegistroFitosanitario.id)
+        .correlate_except(OrdenAplicacionParcela, OrdenAplicacionValvula)
+        .scalar_subquery(),
+    )
 )
 
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, func, inspect, or_, select
+from sqlalchemy import and_, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
@@ -107,20 +107,31 @@ async def registros_de_fila(
     válvula, o los de la parcela entera. Exactamente uno de los dos argumentos.
 
     A fresh query, not the loaded collection: it must see the DB as it is
-    after the order lock."""
+    after the order lock.
+
+    Also matches the row's legacy `registro_fitosanitario_id`: a registro the
+    old backend wrote after the migration carries only that link (its
+    orden_valvula_id / orden_parcela_id stay NULL), and it must still be
+    refunded and deleted, or a re-confirm would discount the stock twice."""
     if (fila_valvula is None) == (item is None):
         raise ValueError("registros_de_fila needs exactly one of fila_valvula / item")
+    fila = fila_valvula if fila_valvula is not None else item
     if fila_valvula is not None:
-        condicion = RegistroFitosanitario.orden_valvula_id == fila_valvula.id
+        condiciones = [RegistroFitosanitario.orden_valvula_id == fila_valvula.id]
     else:
         # Valve registros also carry orden_parcela_id; a whole-parcel
         # confirmation never has orden_valvula_id, so exclude them.
-        condicion = and_(
-            RegistroFitosanitario.orden_parcela_id == item.id,
-            RegistroFitosanitario.orden_valvula_id.is_(None),
-        )
+        condiciones = [
+            and_(
+                RegistroFitosanitario.orden_parcela_id == item.id,
+                RegistroFitosanitario.orden_valvula_id.is_(None),
+            )
+        ]
+    if fila.registro_fitosanitario_id is not None:
+        condiciones.append(RegistroFitosanitario.id == fila.registro_fitosanitario_id)
+    # A single OR query returns each row once, so no dedupe is needed.
     result = await db.execute(
-        select(RegistroFitosanitario).where(condicion).order_by(RegistroFitosanitario.id)
+        select(RegistroFitosanitario).where(or_(*condiciones)).order_by(RegistroFitosanitario.id)
     )
     return list(result.scalars().all())
 
@@ -213,6 +224,53 @@ async def deshacer_fila_valvula(
     return registro_id
 
 
+async def _vincular_registro_legacy(db: AsyncSession, registro_id: str) -> None:
+    """Fills `orden_valvula_id` / `orden_parcela_id` of a registro that is
+    linked to its order ONLY through the legacy `registro_fitosanitario_id` of
+    a valve or parcel row (written by the old backend after the migration).
+    Without it Eliminar would treat it as manual and try to delete a row the
+    legacy FK still references, and Reactivar would answer 409.
+
+    Runs after the order lock and as a Core UPDATE, so no stale ORM instance
+    is left behind; a registro that already has the new links is untouched."""
+    vinculos = (
+        await db.execute(
+            select(
+                RegistroFitosanitario.orden_valvula_id, RegistroFitosanitario.orden_parcela_id
+            ).where(RegistroFitosanitario.id == registro_id)
+        )
+    ).first()
+    if vinculos is None or vinculos.orden_valvula_id is not None or vinculos.orden_parcela_id is not None:
+        return
+    # Valve first, mirroring the dispatch in reactivar/eliminar.
+    valvula = (
+        await db.execute(
+            select(OrdenAplicacionValvula.id, OrdenAplicacionValvula.orden_parcela_id).where(
+                OrdenAplicacionValvula.registro_fitosanitario_id == registro_id
+            )
+        )
+    ).first()
+    if valvula is not None:
+        valores = {"orden_valvula_id": valvula.id, "orden_parcela_id": valvula.orden_parcela_id}
+    else:
+        parcela_id = (
+            await db.execute(
+                select(OrdenAplicacionParcela.id).where(
+                    OrdenAplicacionParcela.registro_fitosanitario_id == registro_id
+                )
+            )
+        ).scalar_one_or_none()
+        if parcela_id is None:
+            return
+        valores = {"orden_parcela_id": parcela_id}
+    await db.execute(
+        update(RegistroFitosanitario)
+        .where(RegistroFitosanitario.id == registro_id)
+        .values(**valores)
+        .execution_options(synchronize_session=False)
+    )
+
+
 async def cargar_registro_con_orden_bloqueada(
     db: AsyncSession, registro_id: str
 ) -> RegistroFitosanitario | None:
@@ -235,6 +293,7 @@ async def cargar_registro_con_orden_bloqueada(
         return None
     if previo.orden_id is not None:
         await bloquear_orden(db, previo.orden_id)
+        await _vincular_registro_legacy(db, registro_id)
     result = await db.execute(
         select(RegistroFitosanitario)
         .options(*_REGISTRO_CON_ORDEN_OPTS)

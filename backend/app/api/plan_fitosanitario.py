@@ -2,14 +2,14 @@ from collections import defaultdict
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up, require_gerencial_up
 from app.models.insumo import Insumo
 from app.models.parcela import Parcela, VariedadUva
-from app.models.produccion import PlanFitosanitario
+from app.models.produccion import OrdenAplicacion, PlanFitosanitario, RegistroFitosanitario
 from app.models.user import User
 from app.schemas.produccion import (
     CumplimientoPlanItem,
@@ -402,5 +402,34 @@ async def delete_plan_fitosanitario(
     plan = await db.get(PlanFitosanitario, plan_id)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    # Explicit checks instead of catching the FK violation: a clear 409 and no
+    # failed statement inside the request transaction.
+    registros = (
+        await db.execute(
+            select(func.count(RegistroFitosanitario.id)).where(
+                RegistroFitosanitario.plan_fitosanitario_id == plan_id
+            )
+        )
+    ).scalar_one()
+    if registros:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta fila del plan ya tiene aplicaciones vinculadas; no se puede eliminar.",
+        )
+    ordenes = (
+        await db.execute(
+            select(func.count(OrdenAplicacion.id)).where(
+                OrdenAplicacion.plan_fitosanitario_id == plan_id
+            )
+        )
+    ).scalar_one()
+    if ordenes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Esta fila del plan tiene órdenes de aplicación vinculadas; "
+                "eliminá o editá esas órdenes primero."
+            ),
+        )
     await db.delete(plan)
     await db.flush()
