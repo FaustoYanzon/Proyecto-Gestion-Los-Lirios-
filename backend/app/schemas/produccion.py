@@ -365,7 +365,6 @@ class NecesidadInsumoItem(BaseModel):
     faltante: float
 
 
-
 class RondaPendienteLinea(BaseModel):
     insumo_id: str
     insumo_nombre: str
@@ -398,6 +397,7 @@ class RondaPendiente(BaseModel):
     # Only the products still pending on at least one parcel.
     lineas: list[RondaPendienteLinea]
     variedades: list[RondaPendienteVariedad]
+
 
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────
 

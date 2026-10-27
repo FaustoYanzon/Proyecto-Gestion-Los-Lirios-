@@ -211,6 +211,11 @@ def _ha_float(value: Decimal) -> float:
 _TarjetaKey = tuple[int, str, frozenset[tuple[str, Decimal]]]
 
 
+def _orden_campania(mes: int) -> int:
+    """Position of a calendar month in the campaign (May=0 ... April=11)."""
+    return (mes - 5) % 12
+
+
 @router.get("/rondas-pendientes", response_model=list[RondaPendiente])
 async def rondas_pendientes(
     temporada: int = Query(...),
@@ -220,11 +225,11 @@ async def rondas_pendientes(
     """Pending plan rounds as cards for the order form.
 
     Plan rows are grouped per variety by (numero_aplicacion, objetivo); the
-    varieties whose set of (insumo, dosis) is identical share one card, a
-    different dose means a separate card. A card lists only the lines still
-    pending on some parcel, so a round applied with 3 of its 4 products comes
-    back with the missing one alone; fully covered parcels, varieties and
-    cards are left out.
+    varieties whose set of STILL-PENDING (insumo, dosis) is identical share
+    one card, a different dose means a separate card. A round applied with 3
+    of its 4 products comes back with the missing one alone; fully covered
+    parcels, varieties and cards are left out. Months follow the campaign
+    (May -> April).
     """
     analisis = await analizar_plan(db, temporada)
     coberturas_por_plan: dict[str, list[CoberturaParcela]] = defaultdict(list)
@@ -235,12 +240,22 @@ async def rondas_pendientes(
     for plan in analisis.planes:
         filas_por_ronda[(plan.numero_aplicacion, plan.objetivo, plan.variedad)].append(plan)
 
-    # Card key -> [(variety, its rows of that round)].
+    # Card key -> [(variety, its rows of that round still pending somewhere)].
+    # Keyed by the STILL-PENDING set, not the planned one: orders go variety
+    # by variety, so with flame done on 3 of 4 products and bonarda untouched
+    # flame gets a one-tap card with the 4th product alone (its parcels
+    # ticked) and bonarda the full 4-line card.
     tarjetas: dict[_TarjetaKey, list[tuple[VariedadUva, list[PlanFitosanitario]]]] = defaultdict(list)
     for (numero, objetivo, variedad), filas in filas_por_ronda.items():
+        pendientes = [
+            f for f in filas
+            if any(_linea_pendiente(c) for c in coberturas_por_plan.get(f.id, []))
+        ]
+        if not pendientes:
+            continue
         # str() so a float dose (1.5) keys equal however it was loaded.
-        productos = frozenset((f.insumo_id, Decimal(str(f.dosis_por_ha))) for f in filas)
-        tarjetas[(numero, objetivo, productos)].append((variedad, filas))
+        productos = frozenset((f.insumo_id, Decimal(str(f.dosis_por_ha))) for f in pendientes)
+        tarjetas[(numero, objetivo, productos)].append((variedad, pendientes))
 
     parcela_ids = {c.parcela_id for c in analisis.coberturas}
     nombres: dict[str, str] = {}
@@ -254,23 +269,11 @@ async def rondas_pendientes(
 
     resultado: list[RondaPendiente] = []
     for (numero, objetivo, _productos), grupo in tarjetas.items():
-        # Insumos still pending on at least one parcel of any variety.
-        pendientes = {
-            fila.insumo_id
-            for _variedad, filas in grupo
-            for fila in filas
-            if any(_linea_pendiente(c) for c in coberturas_por_plan.get(fila.id, []))
-        }
-        if not pendientes:
-            continue
-
         variedades: list[RondaPendienteVariedad] = []
         for variedad, filas in sorted(grupo, key=lambda g: g[0].value):
-            # parcel id -> coverage of each still-pending line, in parcel order.
+            # parcel id -> coverage of each line of the card, in parcel order.
             por_parcela: dict[str, list[CoberturaParcela]] = {}
             for fila in filas:
-                if fila.insumo_id not in pendientes:
-                    continue
                 for cob in coberturas_por_plan.get(fila.id, []):
                     por_parcela.setdefault(cob.parcela_id, []).append(cob)
 
@@ -289,23 +292,21 @@ async def rondas_pendientes(
                         id=parcela_id,
                         nombre=nombres.get(parcela_id, ""),
                         ha_pendientes=_ha_float(ha_pendientes),
+                        # Any line of the card already (even partly) applied here
+                        # -> parcial on purpose, also when only some valves got the
+                        # round: re-ticking would re-spray the covered valves.
                         parcial=any(c.ha_cubiertas > 0 or c.tiene_registros for c in coberturas),
                     )
                 )
-            if parcelas:
-                variedades.append(
-                    RondaPendienteVariedad(
-                        variedad=variedad, ha_pendientes=_ha_float(ha_variedad), parcelas=parcelas,
-                    )
+            # Never empty: the variety only joined the card with a pending row.
+            variedades.append(
+                RondaPendienteVariedad(
+                    variedad=variedad, ha_pendientes=_ha_float(ha_variedad), parcelas=parcelas,
                 )
-        if not variedades:
-            continue
+            )
 
-        # Every variety of the card has the same (insumo, dosis) set: the rows
-        # of the first one describe the lines.
-        lineas_por_insumo = {
-            fila.insumo_id: fila for fila in grupo[0][1] if fila.insumo_id in pendientes
-        }
+        # Every variety of the card has the same pending (insumo, dosis) set:
+        # the rows of the first one describe the lines.
         lineas = [
             RondaPendienteLinea(
                 insumo_id=fila.insumo_id,
@@ -313,21 +314,24 @@ async def rondas_pendientes(
                 unidad=fila.insumo.unidad,
                 dosis_por_ha=fila.dosis_por_ha,
             )
-            for fila in sorted(lineas_por_insumo.values(), key=lambda f: (f.insumo.nombre, f.insumo_id))
+            for fila in sorted(grupo[0][1], key=lambda f: (f.insumo.nombre, f.insumo_id))
         ]
         resultado.append(
             RondaPendiente(
                 numero_aplicacion=numero,
                 objetivo=objetivo,
-                # Varieties may plan the same round in different months.
-                mes=min(f.mes for _v, filas in grupo for f in filas),
+                # Varieties may plan the same round in different months: the
+                # earliest in campaign order (May -> April), real month number.
+                mes=min((f.mes for _v, filas in grupo for f in filas), key=_orden_campania),
                 lineas=lineas,
                 variedades=variedades,
             )
         )
 
     resultado.sort(
-        key=lambda t: (t.numero_aplicacion, t.mes, t.objetivo, t.variedades[0].variedad.value)
+        key=lambda t: (
+            t.numero_aplicacion, _orden_campania(t.mes), t.objetivo, t.variedades[0].variedad.value,
+        )
     )
     return resultado
 

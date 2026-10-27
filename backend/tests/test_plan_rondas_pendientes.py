@@ -222,3 +222,70 @@ async def test_requiere_encargado(client, create_user):
 
     sin_token = await client.get("/plan-fitosanitario/rondas-pendientes", params={"temporada": 2026})
     assert sin_token.status_code == 401
+
+
+async def test_variedades_cubiertas_desparejo_separan_tarjetas(
+    client, create_user, create_parcela, create_insumo,
+):
+    """Orders go variety by variety: flame got 3 of 4 products, syrah nothing.
+    Flame must get a one-tap card with the 4th product alone (ticked), syrah
+    the full 4-line card."""
+    headers, _ = await auth(client, create_user)
+    flame = await create_parcela(nombre="F1", variedad=VariedadUva.flame, superficie_ha=5.0)
+    syrah = await create_parcela(nombre="S1", variedad=VariedadUva.syrah, superficie_ha=4.0)
+    insumos = await _cuatro_productos(create_insumo)
+    for insumo in insumos:
+        await crear_plan(client, headers, insumo.id, ["flame", "syrah"])
+
+    await aplicar(client, headers, [linea(i.id) for i in insumos[:3]], [flame.id])
+
+    tarjetas = await _rondas(client, headers)
+    assert len(tarjetas) == 2
+    por_variedad = {t["variedades"][0]["variedad"]: t for t in tarjetas}
+    assert all(len(t["variedades"]) == 1 for t in tarjetas)
+    assert [l["insumo_id"] for l in por_variedad["flame"]["lineas"]] == [insumos[3].id]
+    assert {l["insumo_id"] for l in por_variedad["syrah"]["lineas"]} == {i.id for i in insumos}
+    assert _parcelas(por_variedad["flame"])[flame.id]["parcial"] is False
+    assert _parcelas(por_variedad["syrah"])[syrah.id]["parcial"] is False
+
+
+async def test_mes_sigue_la_campania_mayo_abril(client, create_user, create_parcela, create_insumo):
+    headers, _ = await auth(client, create_user)
+    await create_parcela(nombre="F1", variedad=VariedadUva.flame, superficie_ha=5.0)
+    await create_parcela(nombre="S1", variedad=VariedadUva.syrah, superficie_ha=4.0)
+    azufre = await create_insumo(nombre="Azufre")
+    cobre = await create_insumo(nombre="Cobre")
+    # Same round planned in December for flame and January for syrah: December
+    # comes first in the campaign, so the card's month is 12, not 1.
+    await crear_plan(client, headers, azufre.id, ["flame"], numero_aplicacion=1, mes=12)
+    await crear_plan(client, headers, azufre.id, ["syrah"], numero_aplicacion=1, mes=1)
+    # Same number, other objetivo: January must sort after October.
+    await crear_plan(client, headers, cobre.id, ["flame"], numero_aplicacion=2, mes=1, objetivo="A")
+    await crear_plan(client, headers, cobre.id, ["flame"], numero_aplicacion=2, mes=10, objetivo="B")
+
+    tarjetas = await _rondas(client, headers)
+    assert [(t["numero_aplicacion"], t["mes"], t["objetivo"]) for t in tarjetas] == [
+        (1, 12, "Oidio"), (2, 10, "B"), (2, 1, "A"),
+    ]
+    assert len(tarjetas[0]["variedades"]) == 2
+
+
+async def test_ronda_en_algunas_valvulas_viene_parcial(
+    client, create_user, create_parcela, create_valvula, create_insumo,
+):
+    """Partly applied by valves -> parcial (unticked) on purpose: ticking it
+    would re-spray the valves already covered."""
+    headers, _ = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 2", variedad=VariedadUva.flame, superficie_ha=6.0)
+    v21 = await create_valvula(parcela_id=parcela.id, nombre="21", orden=1, superficie_ha=1.0)
+    await create_valvula(parcela_id=parcela.id, nombre="22", orden=2, superficie_ha=2.0)
+    v23 = await create_valvula(parcela_id=parcela.id, nombre="23", orden=3, superficie_ha=3.0)
+    azufre = await create_insumo(nombre="Azufre")
+    await crear_plan(client, headers, azufre.id, ["flame"])
+
+    await aplicar(client, headers, [linea(azufre.id)], [parcela.id], valvula_ids=[v21.id, v23.id])
+
+    (tarjeta,) = await _rondas(client, headers)
+    fila = _parcelas(tarjeta)[parcela.id]
+    assert fila["parcial"] is True
+    assert fila["ha_pendientes"] == 2.0
