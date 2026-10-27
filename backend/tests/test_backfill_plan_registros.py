@@ -181,3 +181,67 @@ def test_idempotente():
         for r in registros
     ]
     assert asignar_plan_a_registros(planes, parcelas, aplicados) == {}
+
+
+def test_reintento_tras_grupo_partido_reusa_la_ronda():
+    # A partial --apply committed r-v1 (plan-1) but not its same-day sibling
+    # r-v2 nor r-sep. The retry must reproduce the original assignment.
+    planes = [_plan("plan-1", 1), _plan("plan-2", 2)]
+    registros = [
+        _reg("r-v1", date(2026, 8, 1), plan_id="plan-1"),
+        _reg("r-v2", date(2026, 8, 1)),
+        _reg("r-sep", date(2026, 9, 1)),
+    ]
+
+    asignaciones = asignar_plan_a_registros(planes, {FLAME: ["p1"]}, registros)
+
+    assert asignaciones == {"r-v2": "plan-1", "r-sep": "plan-2"}
+
+
+def test_manual_mismo_dia_que_registro_de_orden_no_consume_ronda():
+    # Transition: the operator confirmed the order in mobile and someone also
+    # loaded it by hand the same day. The manual one is a duplicate: skipped,
+    # and round 2 stays free for the next real application.
+    planes = [_plan("plan-1", 1), _plan("plan-2", 2)]
+    registros = [
+        _reg("r-orden", date(2026, 8, 1), plan_id="plan-1", orden_parcela_id="op-1"),
+        _reg("r-man", date(2026, 8, 1)),
+        _reg("r-sep", date(2026, 9, 1)),
+    ]
+
+    resultado = analizar_backfill(planes, {FLAME: ["p1"]}, registros)
+
+    assert resultado.asignaciones == {"r-sep": "plan-2"}
+    assert resultado.omitidos["duplicado_de_vinculado"] == ["r-man"]
+
+
+def test_mismo_dia_que_vinculados_con_rondas_distintas_se_omite():
+    # Two manual linked records of the same day on different rounds: the plan
+    # id of the candidate cannot be determined.
+    planes = [_plan("plan-1", 1), _plan("plan-2", 2)]
+    registros = [
+        _reg("r-a", date(2026, 8, 1), plan_id="plan-1"),
+        _reg("r-b", date(2026, 8, 1), plan_id="plan-2"),
+        _reg("r-c", date(2026, 8, 1)),
+    ]
+
+    resultado = analizar_backfill(planes, {FLAME: ["p1"]}, registros)
+
+    assert resultado.asignaciones == {}
+    assert resultado.omitidos["duplicado_de_vinculado"] == ["r-c"]
+
+
+def test_reporta_parcelas_con_candidato_anterior_a_ronda_tomada():
+    # Round 1 was linked from an order in September; the August manual record
+    # takes the free round 2 (explicit links win) and the parcel is reported.
+    planes = [_plan("plan-1", 1), _plan("plan-2", 2)]
+    registros = [
+        _reg("r-orden", date(2026, 9, 1), plan_id="plan-1", orden_parcela_id="op-1"),
+        _reg("r-ago", date(2026, 8, 1)),
+        _reg("r-p2", date(2026, 8, 1), parcela_id="p2"),
+    ]
+
+    resultado = analizar_backfill(planes, {FLAME: ["p1", "p2"]}, registros)
+
+    assert resultado.asignaciones == {"r-ago": "plan-2", "r-p2": "plan-1"}
+    assert resultado.fuera_de_orden == [("p1", INSUMO_A)]

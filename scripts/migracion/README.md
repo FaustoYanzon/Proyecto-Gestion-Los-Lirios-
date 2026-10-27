@@ -597,5 +597,10 @@ en `backend/app/services/plan_backfill.py` (tests: `backend/tests/test_backfill_
   `orden_parcela_id IS NULL AND plan_fitosanitario_id IS NOT NULL` (la app nunca vincula
   registros manuales), así que se revierte con ese filtro.
 - `--local` ignora `.env.prod` y exige base en localhost (dry-runs de desarrollo).
+- `--apply` escribe todo en UNA transacción (no en chunks: un corte entre chunks podía dejar
+  partido un grupo del mismo día y el reintento le daba la ronda siguiente). Sin `--local`
+  muestra el host y pide escribir `SI`. Un candidato del mismo día/parcela/insumo que un
+  registro ya vinculado reusa su ronda si el vinculado es manual; si viene de una orden se
+  omite como `duplicado_de_vinculado` (no infla la cobertura).
 
 Estado: dry-run local OK (2026-10-27). **Producción pendiente** (dry-run + `--apply` solo con OK de Fausto).

@@ -10,8 +10,12 @@ de su variedad). Reglas completas en backend/app/services/plan_backfill.py.
 
 Solo toca registros de la temporada (1/5/T .. 30/4/T+1) con insumo, sin orden
 (orden_parcela_id NULL) y sin plan_fitosanitario_id. Idempotente: una segunda
-corrida no asigna nada nuevo; el UPDATE además re-chequea ambas columnas en
-NULL, así que un reintento tras un corte de conexión no pisa nada.
+corrida no asigna nada nuevo. `--apply` escribe todo en UNA transacción (son
+cientos de UPDATE de una fila): si la conexión se corta no queda nada a medias
+y el reintento parte de cero. Igual, el servicio reconstruye un grupo del mismo
+día que haya quedado partido (ver plan_backfill.py) y el UPDATE re-chequea ambas
+columnas en NULL. Contra una base que no es localhost, `--apply` muestra el host
+y pide escribir `SI` antes de tocar nada.
 
 Reversión: los registros manuales nunca reciben plan_fitosanitario_id por la
 app, así que los vinculados por este backfill son exactamente
@@ -34,6 +38,7 @@ import sys
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse
 
 import asyncpg
@@ -42,7 +47,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 ENV_FILE = ROOT / "backend" / ".env"
 PROD_ENV_FILE = HERE / ".env.prod"  # opcional, gitignored -- ver README
-CHUNK_SIZE = 150
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 # The pure assignment logic lives in the backend so its tests can import it.
@@ -77,6 +81,23 @@ def read_database_url(skip_prod: bool) -> tuple[str, str]:
     if url:
         return url, f"{ENV_FILE} (local/staging)"
     raise RuntimeError(f"DATABASE_URL not found in {ENV_FILE}")
+
+
+def confirmar_apply(host: str | None, *, local: bool, leer: Callable[[str], str] = input) -> None:
+    """Gate before the first write. With --local the host was already checked to
+    be localhost, so no prompt; otherwise show only the hostname (never the URL
+    or credentials) and require the literal answer `SI`. Anything else, or no
+    stdin, exits with code 1."""
+    if local:
+        return
+    print(f"\n--apply contra el host: {host}")
+    try:
+        respuesta = leer("Escribí SI para escribir en esa base: ")
+    except EOFError:
+        respuesta = ""
+    if respuesta.strip() != "SI":
+        print("Abortado: no se escribió nada.")
+        sys.exit(1)
 
 
 async def _load(conn: asyncpg.Connection, temporada: int, desde: date, hasta: date):
@@ -141,12 +162,18 @@ def _print_summary(plan_rows, parcela_rows, registro_rows, resultado) -> None:
 
     print("\nNo asignados, por motivo:")
     for motivo in MOTIVOS_OMISION:
-        print(f"  {motivo:<20} {len(resultado.omitidos[motivo])}")
-    for motivo in ("sin_variedad", "sin_plan", "excede_rondas"):
+        print(f"  {motivo:<24} {len(resultado.omitidos[motivo])}")
+    for motivo in ("sin_variedad", "sin_plan", "duplicado_de_vinculado", "excede_rondas"):
         ids = resultado.omitidos[motivo]
         if ids:
             detalle = Counter(nombre_parcela.get(registro_por_id[r]["parcela_id"], "?") for r in ids)
             print(f"  detalle {motivo}: " + ", ".join(f"{k} ({v})" for k, v in sorted(detalle.items())))
+
+    # Explicit links win over dates: worth a manual look (plan_backfill docstring).
+    print(f"\nParcelas con un candidato anterior a una ronda ya tomada: {len(resultado.fuera_de_orden)}")
+    nombre_insumo = {p["insumo_id"]: p["insumo_nombre"] for p in plan_rows}
+    for parcela_id, insumo_id in resultado.fuera_de_orden:
+        print(f"  {nombre_parcela.get(parcela_id, '?')} · {nombre_insumo.get(insumo_id, insumo_id)}")
 
 
 async def main() -> None:
@@ -194,24 +221,29 @@ async def main() -> None:
             print("\nDRY RUN -- nada escrito. Ejecutá con --apply para vincular.")
             return
 
+        confirmar_apply(urlparse(url).hostname, local=args.local)
+
         pares = sorted(resultado.asignaciones.items())
-        actualizados = 0
         now = datetime.now(timezone.utc)
-        for inicio in range(0, len(pares), CHUNK_SIZE):
-            chunk = pares[inicio:inicio + CHUNK_SIZE]
-            # One transaction per chunk: a dropped connection only loses the
-            # in-flight chunk, and the NULL guards make the retry safe.
-            async with conn.transaction():
-                for registro_id, plan_id in chunk:
-                    status = await conn.execute(
-                        """UPDATE registros_fitosanitarios
-                           SET plan_fitosanitario_id = $1, updated_at = $3
-                           WHERE id = $2 AND plan_fitosanitario_id IS NULL
-                             AND orden_parcela_id IS NULL""",
-                        plan_id, registro_id, now,
-                    )
-                    actualizados += int(status.split()[-1])
-            print(f"  chunk {inicio // CHUNK_SIZE + 1}: {len(chunk)} filas")
+        actualizados = 0
+        # Single transaction: all-or-nothing. Chunked commits could leave a
+        # same-day group half linked if the connection dropped in between.
+        async with conn.transaction():
+            for registro_id, plan_id in pares:
+                status = await conn.execute(
+                    """UPDATE registros_fitosanitarios
+                       SET plan_fitosanitario_id = $1, updated_at = $3
+                       WHERE id = $2 AND plan_fitosanitario_id IS NULL
+                         AND orden_parcela_id IS NULL""",
+                    plan_id, registro_id, now,
+                )
+                actualizados += int(status.split()[-1])
+            if actualizados != len(pares):
+                # Someone changed the rows since the load: roll back, re-run.
+                raise RuntimeError(
+                    f"Actualizados {actualizados} de {len(pares)}: los datos cambiaron "
+                    "desde la carga; transacción revertida, volvé a correr el dry-run."
+                )
         print(f"Actualizados: {actualizados} de {len(pares)}")
 
         vinculados = await conn.fetchval(

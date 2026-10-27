@@ -25,6 +25,20 @@ Details that make it safe to run on live data, and to run twice:
 - Several candidate records of the same insumo on the same day in one parcel
   (e.g. loaded once per valve) are ONE application: they all take the same
   round instead of burning the next ones.
+- A candidate on the same (parcel, insumo, day) as an already-linked record
+  joins that application and never takes a free round:
+  * linked records all manual with ONE plan id -> the candidate reuses it.
+    This is the half-applied group of an interrupted earlier run, so the
+    retry reproduces the original assignment;
+  * any of them from an order, or manual ones on different plan ids ->
+    skipped as `duplicado_de_vinculado`. An order record is the precise
+    (per-valve) truth of that application; linking a whole-parcel manual
+    duplicate to the same round would inflate the coverage to the full
+    parcel, so the duplicate stays extra and changes nothing.
+- Explicit links win over dates: free rounds go to the candidates in order
+  regardless of when the claimed rounds were applied (an August manual record
+  takes round 2 when round 1 was linked from a September order). Such
+  (parcel, insumo) pairs are reported in `fuera_de_orden` for a manual look.
 - Records whose parcel has no variety, whose campaign has no plan, whose
   variety+insumo has no plan row, or beyond the planned rounds stay unlinked
   (extra) and are reported under `omitidos`.
@@ -43,6 +57,7 @@ MOTIVOS_OMISION: tuple[str, ...] = (
     "sin_variedad",
     "fuera_de_temporada",
     "sin_plan",
+    "duplicado_de_vinculado",
     "excede_rondas",
 )
 
@@ -74,6 +89,9 @@ class BackfillResult:
     omitidos: dict[str, list[str]] = field(
         default_factory=lambda: {motivo: [] for motivo in MOTIVOS_OMISION}
     )
+    # (parcela_id, insumo_id) where a candidate predates a round already
+    # claimed by a linked record (sorted).
+    fuera_de_orden: list[tuple[str, str]] = field(default_factory=list)
 
 
 def temporada_de(fecha: date) -> int:
@@ -107,11 +125,20 @@ def analizar_backfill(
 
     ordenados = sorted(registros, key=lambda r: (r.fecha, r.id))
 
-    # Rounds already taken per parcel, from any linked record.
-    tomadas: dict[str, set[str]] = defaultdict(set)
+    # Rounds already taken per parcel (plan id -> latest date it was applied),
+    # and the linked applications per (parcel, insumo, day): plan ids and
+    # whether any of them comes from an order.
+    tomadas: dict[str, dict[str, date]] = defaultdict(dict)
+    vinculados_del_dia: dict[tuple[str, str, date], tuple[set[str], bool]] = {}
     for r in ordenados:
-        if r.plan_fitosanitario_id is not None:
-            tomadas[r.parcela_id].add(r.plan_fitosanitario_id)
+        if r.plan_fitosanitario_id is None:
+            continue
+        tomadas[r.parcela_id][r.plan_fitosanitario_id] = r.fecha  # sorted -> latest wins
+        if r.insumo_id is not None:
+            clave = (r.parcela_id, r.insumo_id, r.fecha)
+            planes_dia, con_orden = vinculados_del_dia.get(clave, (set(), False))
+            planes_dia.add(r.plan_fitosanitario_id)
+            vinculados_del_dia[clave] = (planes_dia, con_orden or r.orden_parcela_id is not None)
 
     # (temporada, parcela, insumo) -> fecha -> candidate record ids
     candidatos: dict[tuple[int, str, str], dict[date, list[str]]] = defaultdict(
@@ -130,16 +157,26 @@ def analizar_backfill(
             resultado.omitidos["fuera_de_temporada"].append(r.id)
         elif (temporada_de(r.fecha), variedad_de_parcela[r.parcela_id], r.insumo_id) not in rondas:
             resultado.omitidos["sin_plan"].append(r.id)
+        elif (r.parcela_id, r.insumo_id, r.fecha) in vinculados_del_dia:
+            # Same application as a linked record: never takes a free round.
+            planes_dia, con_orden = vinculados_del_dia[(r.parcela_id, r.insumo_id, r.fecha)]
+            if not con_orden and len(planes_dia) == 1:
+                resultado.asignaciones[r.id] = next(iter(planes_dia))
+            else:
+                resultado.omitidos["duplicado_de_vinculado"].append(r.id)
         else:
             candidatos[(temporada_de(r.fecha), r.parcela_id, r.insumo_id)][r.fecha].append(r.id)
 
     excedentes: list[tuple[date, str]] = []
+    fuera_de_orden: set[tuple[str, str]] = set()
     for (temporada, parcela_id, insumo_id), por_fecha in candidatos.items():
-        libres = [
-            plan
-            for plan in rondas[(temporada, variedad_de_parcela[parcela_id], insumo_id)]
-            if plan.id not in tomadas[parcela_id]
+        rondas_grupo = rondas[(temporada, variedad_de_parcela[parcela_id], insumo_id)]
+        libres = [plan for plan in rondas_grupo if plan.id not in tomadas[parcela_id]]
+        fechas_tomadas = [
+            tomadas[parcela_id][plan.id] for plan in rondas_grupo if plan.id in tomadas[parcela_id]
         ]
+        if fechas_tomadas and min(por_fecha) < max(fechas_tomadas):
+            fuera_de_orden.add((parcela_id, insumo_id))
         for indice, fecha in enumerate(sorted(por_fecha)):
             ids = por_fecha[fecha]
             if indice < len(libres):
@@ -148,6 +185,7 @@ def analizar_backfill(
             else:
                 excedentes.extend((fecha, registro_id) for registro_id in ids)
     resultado.omitidos["excede_rondas"] = [rid for _f, rid in sorted(excedentes)]
+    resultado.fuera_de_orden = sorted(fuera_de_orden)
 
     return resultado
 
