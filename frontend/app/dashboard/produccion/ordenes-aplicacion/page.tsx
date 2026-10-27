@@ -10,14 +10,16 @@ import {
   getValvulasARevisar,
   deshacerValvula,
   type OrdenAplicacion,
+  type OrdenAplicacionLinea,
   type EstadoOrdenAplicacion,
   type ValvulaARevisar,
   type OrdenAplicacionValvula,
 } from '@/lib/api/ordenesAplicacion'
 import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
 import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
-import ARevisarPanel, { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
-import NuevaOrdenAplicacion from '@/components/produccion/NuevaOrdenAplicacion'
+import ARevisarPanel, { A_REVISAR_QUERY_KEY, productosDe } from '@/components/produccion/ARevisarPanel'
+import NuevaOrdenAplicacion, { apiErrorMessage } from '@/components/produccion/NuevaOrdenAplicacion'
+import { formatNum } from '@/components/produccion/RondaCard'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 
@@ -81,12 +83,34 @@ function progresoOrden(orden: OrdenAplicacion) {
   return { total, hechas }
 }
 
+// Product lines of an order; orders served before the multi-product backend
+// carry no `lineas`, so fall back to the single-product shim.
+function lineasDe(orden: OrdenAplicacion): Pick<OrdenAplicacionLinea, 'insumo_id' | 'insumo_nombre' | 'insumo_unidad' | 'dosis_por_ha'>[] {
+  if (orden.lineas?.length) return orden.lineas
+  return [{
+    insumo_id: orden.insumo_id,
+    insumo_nombre: orden.insumo_nombre,
+    insumo_unidad: orden.insumo_unidad,
+    dosis_por_ha: orden.dosis_por_ha,
+  }]
+}
+
+function variedadesTexto(orden: OrdenAplicacion): string {
+  const variedades = orden.variedades?.length ? orden.variedades : [orden.variedad]
+  return variedades.map((v) => VARIEDAD_LABELS[v] ?? v).join(', ')
+}
+
+function productosTexto(orden: OrdenAplicacion): string {
+  return lineasDe(orden).map((l) => l.insumo_nombre).join(', ')
+}
+
 interface DeshacerTarget {
   ordenId: string
   ordenValvulaId: string
   valvulaNombre: string
   parcelaNombre: string
-  insumoNombre: string
+  // Every product of the valve: undoing reverts all of them together.
+  productos: string[]
 }
 
 function OrdenCard({
@@ -115,9 +139,9 @@ function OrdenCard({
         {abierta ? <ChevronDown size={16} className="text-gray-400 shrink-0" /> : <ChevronRight size={16} className="text-gray-400 shrink-0" />}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-gray-900">{orden.insumo_nombre}</span>
+            <span className="font-medium text-gray-900">{orden.objetivo}</span>
             <span className="text-xs text-gray-400">·</span>
-            <span className="text-sm text-gray-600">{VARIEDAD_LABELS[orden.variedad] ?? orden.variedad}</span>
+            <span className="text-sm text-gray-600">{variedadesTexto(orden)}</span>
             <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLES[orden.estado]}`}>
               {ESTADO_LABELS[orden.estado]}
             </span>
@@ -125,9 +149,20 @@ function OrdenCard({
               {ORIGEN_LABELS[orden.origen] ?? orden.origen}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {orden.dosis_por_ha} {orden.insumo_unidad}/ha · {orden.objetivo} · Planificada {orden.fecha_planificada}
-          </p>
+          <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="productos-orden">
+            {lineasDe(orden).map((l) => (
+              <span
+                key={l.insumo_id}
+                className="inline-flex items-baseline gap-1 text-[11px] font-medium text-gray-700 bg-[#fbfaf6] border border-[#7a1f2c]/20 px-2 py-0.5 rounded-md"
+              >
+                {l.insumo_nombre}
+                <span className="font-mono font-normal text-gray-500">
+                  {formatNum(l.dosis_por_ha)} {l.insumo_unidad}/ha
+                </span>
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Planificada {orden.fecha_planificada}</p>
         </div>
         <div className="w-32 shrink-0">
           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
@@ -269,8 +304,7 @@ function OrdenesAplicacion() {
       queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
       setOrdenEliminar(null)
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setEliminarError(typeof detail === 'string' ? detail : 'No se pudo eliminar la orden.')
+      setEliminarError(apiErrorMessage(e, 'No se pudo eliminar la orden.'))
     } finally {
       setEliminando(false)
     }
@@ -296,8 +330,7 @@ function OrdenesAplicacion() {
       queryClient.invalidateQueries({ queryKey: ['insumos'] })
       setValvulaDeshacer(null)
     } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setDeshacerError(typeof detail === 'string' ? detail : 'No se pudo deshacer la válvula.')
+      setDeshacerError(apiErrorMessage(e, 'No se pudo deshacer la válvula.'))
     } finally {
       setDeshaciendo(false)
     }
@@ -406,7 +439,7 @@ function OrdenesAplicacion() {
             ordenValvulaId: v.id,
             valvulaNombre: v.valvula_nombre,
             parcelaNombre: v.parcela_nombre,
-            insumoNombre: v.insumo_nombre,
+            productos: productosDe(v).map((p) => p.insumo_nombre),
           })}
         />
       ) : vista === 'aplicadas' ? (
@@ -444,7 +477,7 @@ function OrdenesAplicacion() {
                     ordenValvulaId: valvula.id,
                     valvulaNombre: valvula.valvula_nombre,
                     parcelaNombre,
-                    insumoNombre: orden.insumo_nombre,
+                    productos: lineasDe(orden).map((l) => l.insumo_nombre),
                   })
                 : undefined}
               onEditar={setOrdenEditar}
@@ -493,8 +526,8 @@ function OrdenesAplicacion() {
       {ordenEliminar && (
         <Modal title="Eliminar orden" onClose={() => setOrdenEliminar(null)}>
           <p className="text-sm text-gray-700">
-            ¿Eliminar la orden de <strong>{ordenEliminar.insumo_nombre}</strong> para{' '}
-            {VARIEDAD_LABELS[ordenEliminar.variedad] ?? ordenEliminar.variedad} ({ordenEliminar.parcelas.length}{' '}
+            ¿Eliminar la orden <strong>{ordenEliminar.objetivo}</strong> ({productosTexto(ordenEliminar)}) para{' '}
+            {variedadesTexto(ordenEliminar)} ({ordenEliminar.parcelas.length}{' '}
             {ordenEliminar.parcelas.length === 1 ? 'parcela' : 'parcelas'})? También desaparece de la app de los operarios.
           </p>
           {eliminarError && <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{eliminarError}</p>}
@@ -518,8 +551,11 @@ function OrdenesAplicacion() {
         <Modal title="Deshacer válvula" onClose={() => { if (!deshaciendo) setValvulaDeshacer(null) }}>
           <p className="text-sm text-gray-700">
             ¿Deshacer la confirmación de la válvula <strong>{valvulaDeshacer.valvulaNombre}</strong> de{' '}
-            {valvulaDeshacer.parcelaNombre} ({valvulaDeshacer.insumoNombre})? Se devuelve el stock del insumo y
-            se borra el registro fitosanitario. La válvula vuelve a quedar pendiente.
+            {valvulaDeshacer.parcelaNombre}?{' '}
+            {valvulaDeshacer.productos.length > 1
+              ? `Se revierten todos sus productos (${valvulaDeshacer.productos.join(', ')}): se devuelve el stock de cada uno y se borran sus registros fitosanitarios.`
+              : `Se devuelve el stock de ${valvulaDeshacer.productos[0] ?? 'el insumo'} y se borra el registro fitosanitario.`}{' '}
+            La válvula vuelve a quedar pendiente.
           </p>
           {deshacerError && <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{deshacerError}</p>}
           <div className="flex items-center justify-end gap-3 mt-5 pt-3 border-t border-gray-100">

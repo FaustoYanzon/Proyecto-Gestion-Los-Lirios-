@@ -9,6 +9,7 @@ import { AlertTriangle, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   actualizarOrden,
   crearOrden,
+  getOrdenAplicacion,
   revisarValvula,
   type OrdenAplicacion,
   type OrdenAplicacionLineaCreate,
@@ -21,7 +22,7 @@ import { getInsumos } from '@/lib/api/insumos'
 import { getValvulasReales, hoyArgentina, type ValvulaReal } from '@/lib/api/riego'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
 import RondaCard, { MESES, formatNum, rondaKey } from '@/components/produccion/RondaCard'
-import { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
+import { A_REVISAR_QUERY_KEY, productosDe } from '@/components/produccion/ARevisarPanel'
 
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const fieldSm = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
@@ -99,7 +100,7 @@ function lineaVacia(carencia = '', reingreso = ''): LineaForm {
 
 // Backend `detail` as-is: a string for 409/422 business rules, or the list of
 // pydantic errors for schema validation.
-function apiErrorMessage(e: unknown, fallback: string): string {
+export function apiErrorMessage(e: unknown, fallback: string): string {
   const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
   if (typeof detail === 'string' && detail) return detail
   if (Array.isArray(detail)) {
@@ -152,9 +153,49 @@ export interface NuevaOrdenAplicacionProps {
   onCancel: () => void
 }
 
-export default function NuevaOrdenAplicacion({
-  temporada, parcelas, orden, repaso, onSuccess, onCancel,
-}: NuevaOrdenAplicacionProps) {
+// A rework preloads every line of the original order (with its carencia and
+// reingreso, which the a-revisar item does not carry), so fetch it first and
+// mount the form once it is known: useForm only reads defaultValues on mount.
+export default function NuevaOrdenAplicacion(props: NuevaOrdenAplicacionProps) {
+  const { repaso, temporada } = props
+  const { data: repasoOrden, isLoading, isError } = useQuery({
+    queryKey: ['ordenes-aplicacion', 'detalle', repaso?.orden_id],
+    queryFn: () => getOrdenAplicacion(repaso?.orden_id ?? ''),
+    enabled: !!repaso,
+    staleTime: 30_000,
+    retry: 1,
+  })
+
+  if (!repaso) return <FormularioOrden {...props} />
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400">
+        <Loader2 size={14} className="animate-spin" /> Cargando la orden original…
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3">
+      {isError && (
+        <p className="flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+          No se pudo cargar la orden original: se precargan los productos de la válvula; completá carencia y reingreso.
+        </p>
+      )}
+      <FormularioOrden
+        {...props}
+        // The rework belongs to the campaign of the original order, not to the
+        // one selected in the page header.
+        temporada={repasoOrden?.temporada ?? temporada}
+        repasoOrden={repasoOrden ?? null}
+      />
+    </div>
+  )
+}
+
+function FormularioOrden({
+  temporada, parcelas, orden, repaso, repasoOrden = null, onSuccess, onCancel,
+}: NuevaOrdenAplicacionProps & { repasoOrden?: OrdenAplicacion | null }) {
   const queryClient = useQueryClient()
   const esCreacionLibre = !orden && !repaso
   const [modo, setModo] = useState<Modo>('plan')
@@ -254,23 +295,34 @@ export default function NuevaOrdenAplicacion({
       }
     }
     if (repaso) {
-      const productos = repaso.productos?.length
-        ? repaso.productos
-        : [{ insumo_id: repaso.insumo_id, insumo_nombre: repaso.insumo_nombre, dosis_por_ha: repaso.dosis_por_ha }]
+      // A rework is an extra order: every line is off-plan (numero_aplicacion
+      // null) even if the original counted against a plan round.
+      const originales = repasoOrden?.lineas ?? []
+      const lineas: LineaForm[] = originales.length
+        ? originales.map((l) => ({
+            ...lineaVacia(String(l.dias_carencia), String(l.dias_reingreso)),
+            insumo_id: l.insumo_id,
+            insumo_nombre: l.insumo_nombre,
+            unidad: l.insumo_unidad,
+            dosis_por_ha: String(Number(l.dosis_por_ha)),
+            carencia_manual: true,
+            reingreso_manual: true,
+          }))
+        : productosDe(repaso).map((p) => ({
+            ...lineaVacia(),
+            insumo_id: p.insumo_id,
+            insumo_nombre: p.insumo_nombre,
+            dosis_por_ha: String(Number(p.dosis_por_ha)),
+          }))
       return {
         objetivo: repaso.objetivo,
         fecha_planificada: hoyArgentina(),
         notas: `Repaso: válvula ${repaso.valvula_nombre} de ${repaso.parcela_nombre}`,
-        lineas: productos.map((p) => ({
-          ...lineaVacia(),
-          insumo_id: p.insumo_id,
-          insumo_nombre: p.insumo_nombre,
-          dosis_por_ha: String(Number(p.dosis_por_ha)),
-        })),
+        lineas,
       }
     }
     return { objetivo: '', fecha_planificada: hoyArgentina(), notas: '', lineas: [lineaVacia()] }
-  }, [orden, repaso])
+  }, [orden, repaso, repasoOrden])
 
   const {
     register, control, handleSubmit, setValue, getValues, reset,

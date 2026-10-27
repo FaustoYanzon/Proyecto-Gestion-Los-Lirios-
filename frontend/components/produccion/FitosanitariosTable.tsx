@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Pencil, Trash2, RotateCcw, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { usePaginatedList } from '@/lib/usePaginatedList'
@@ -26,6 +27,9 @@ interface Props {
   onDelete?: (id: string) => void | Promise<void>
   // Only offered for rows that came from an order (orden_id set).
   onReactivar?: (id: string) => void | Promise<void>
+  // For rows from an order: describes the whole valve/parcel application that
+  // Eliminar/Reactivar revert (every product of it), shown in the confirmation.
+  alcanceAplicacion?: (r: FitosanitarioResponse) => Promise<string>
 }
 
 function SkeletonRow() {
@@ -40,27 +44,51 @@ function SkeletonRow() {
 
 const PAGE_SIZE = 10
 
-export default function FitosanitariosTable({ registros, isLoading, parcelaNombre, onEdit, onDelete, onReactivar }: Props) {
+export default function FitosanitariosTable({
+  registros, isLoading, parcelaNombre, onEdit, onDelete, onReactivar, alcanceAplicacion,
+}: Props) {
   const { page, setPage, totalPages, paged: pagedRegistros } = usePaginatedList(registros, PAGE_SIZE)
+  // Row whose confirmation text is being prepared (order lookup in flight).
+  const [preparando, setPreparando] = useState<string | null>(null)
 
-  function handleDelete(r: FitosanitarioResponse) {
-    if (!onDelete) return
+  async function alcanceDe(r: FitosanitarioResponse): Promise<string> {
+    if (!r.orden_id || !alcanceAplicacion) return ''
+    setPreparando(r.id)
+    try {
+      return await alcanceAplicacion(r)
+    } finally {
+      setPreparando(null)
+    }
+  }
+
+  async function handleDelete(r: FitosanitarioResponse) {
+    if (!onDelete || preparando) return
+    const alcance = await alcanceDe(r)
+    const cabecera = `Vas a eliminar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n`
     // Typed confirmation: a stray click on the trash icon once reopened two
     // completed orders. Parent handles errors.
     const respuesta = window.prompt(
-      `Vas a eliminar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n` +
-      'Se quita del sistema y se devuelve el stock. Si vino de una orden, la parcela (o válvula) también sale de la orden, y si era la última la orden se elimina.\n' +
-      'Si lo que querés es dejarla pendiente, usá "Reactivar".\n\n' +
-      'Para confirmar escribí ELIMINAR.',
+      alcance
+        ? cabecera + `${alcance}\n\n` +
+          'Se quitan del sistema y se devuelve el stock de cada producto. La válvula (o parcela) sale de la orden, y si era la última la orden se elimina.\n' +
+          'Si lo que querés es dejarla pendiente, usá "Reactivar".\n\n' +
+          'Para confirmar escribí ELIMINAR.'
+        : cabecera +
+          'Se quita del sistema y se devuelve el stock. Si vino de una orden, la parcela (o válvula) también sale de la orden, y si era la última la orden se elimina.\n' +
+          'Si lo que querés es dejarla pendiente, usá "Reactivar".\n\n' +
+          'Para confirmar escribí ELIMINAR.',
     )
     if (respuesta?.trim().toUpperCase() === 'ELIMINAR') void onDelete(r.id)
   }
 
-  function handleReactivar(r: FitosanitarioResponse) {
-    if (!onReactivar) return
+  async function handleReactivar(r: FitosanitarioResponse) {
+    if (!onReactivar || preparando) return
+    const alcance = await alcanceDe(r)
     const ok = window.confirm(
       `Vas a reactivar la aplicación de ${r.producto_nombre} en ${parcelaNombre(r.parcela_id)} (${formatDate(r.fecha)}).\n\n` +
-      'Se devuelve el stock y la aplicación vuelve a quedar pendiente en la orden.',
+      (alcance
+        ? `${alcance}\n\nSe devuelve el stock de cada producto y la aplicación vuelve a quedar pendiente en la orden.`
+        : 'Se devuelve el stock y la aplicación vuelve a quedar pendiente en la orden.'),
     )
     if (ok) void onReactivar(r.id)
   }
@@ -135,16 +163,22 @@ export default function FitosanitariosTable({ registros, isLoading, parcelaNombr
                         )}
                         {onReactivar && r.orden_id && (
                           <button
-                            onClick={() => handleReactivar(r)}
+                            onClick={() => void handleReactivar(r)}
+                            disabled={preparando === r.id}
                             title="Reactivar: volver a pendiente"
                             aria-label="Reactivar: volver a pendiente"
-                            className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] disabled:opacity-40 transition-colors"
                           >
                             <RotateCcw size={15} />
                           </button>
                         )}
                         {onDelete && (
-                          <button onClick={() => handleDelete(r)} title="Eliminar" className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <button
+                            onClick={() => void handleDelete(r)}
+                            disabled={preparando === r.id}
+                            title="Eliminar"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
+                          >
                             <Trash2 size={15} />
                           </button>
                         )}

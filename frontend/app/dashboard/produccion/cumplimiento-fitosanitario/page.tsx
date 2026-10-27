@@ -1,16 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
-import { getCumplimiento } from '@/lib/api/planFitosanitario'
+import { getCumplimiento, getPlanFitosanitario, type CumplimientoPlanItem } from '@/lib/api/planFitosanitario'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
+import { MESES, formatNum } from '@/components/produccion/RondaCard'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
-
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-]
 
 // aniosAdelante=1: permite ver cumplimiento de la próxima campaña ya
 // planificada, antes de que empiece.
@@ -32,6 +28,25 @@ const BAR_COLORS: Record<string, string> = {
   completo: 'bg-green-500',
 }
 
+// Relative deviation of the actual weighted dose against the plan, or null
+// when there is nothing to compare (nothing applied, same dose, or no plan dose).
+function desvioDosis(c: CumplimientoPlanItem): number | null {
+  if (c.dosis_real_promedio == null) return null
+  const plan = Number(c.dosis_por_ha)
+  const real = Number(c.dosis_real_promedio)
+  if (!Number.isFinite(plan) || !Number.isFinite(real) || plan <= 0) return null
+  if (Math.abs(real - plan) < 1e-9) return null
+  return ((real - plan) / plan) * 100
+}
+
+interface Ronda {
+  key: string
+  numero: number
+  objetivo: string
+  mes: number
+  filas: CumplimientoPlanItem[]
+}
+
 export default function CumplimientoFitosanitarioPage() {
   const [temporada, setTemporada] = useCampanaAnio()
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
@@ -40,6 +55,14 @@ export default function CumplimientoFitosanitarioPage() {
     queryKey: ['cumplimiento-fitosanitario', temporada],
     queryFn: () => getCumplimiento(temporada),
   })
+
+  // The compliance rows carry no unit: take it from the plan rows (same id).
+  const { data: plan = [] } = useQuery({
+    queryKey: ['plan-fitosanitario', temporada],
+    queryFn: () => getPlanFitosanitario(temporada),
+    staleTime: 60_000,
+  })
+  const unidadPorPlan = useMemo(() => new Map(plan.map((p) => [p.id, p.insumo_unidad])), [plan])
 
   const variedadesDisponibles = useMemo(() => {
     const set = new Set<string>()
@@ -51,12 +74,23 @@ export default function CumplimientoFitosanitarioPage() {
     ? variedadActiva
     : variedadesDisponibles[0]
 
-  const filasVariedad = useMemo(
-    () => cumplimiento
+  // One group per plan round (number + objective + month) of the active variety.
+  const rondas = useMemo(() => {
+    const map = new Map<string, Ronda>()
+    const filas = cumplimiento
       .filter((c) => c.variedad === activa)
-      .sort((a, b) => a.numero_aplicacion - b.numero_aplicacion || a.mes - b.mes),
-    [cumplimiento, activa],
-  )
+      .sort((a, b) => a.numero_aplicacion - b.numero_aplicacion || a.mes - b.mes
+        || a.insumo_nombre.localeCompare(b.insumo_nombre))
+    for (const c of filas) {
+      const key = `${c.numero_aplicacion}|${c.objetivo}|${c.mes}`
+      const ronda = map.get(key) ?? { key, numero: c.numero_aplicacion, objetivo: c.objetivo, mes: c.mes, filas: [] }
+      ronda.filas.push(c)
+      map.set(key, ronda)
+    }
+    return Array.from(map.values())
+  }, [cumplimiento, activa])
+
+  const haySinSuperficie = useMemo(() => cumplimiento.some((c) => Number(c.ha_total) === 0), [cumplimiento])
 
   return (
     <div className="space-y-6">
@@ -67,8 +101,13 @@ export default function CumplimientoFitosanitarioPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Cumplimiento Fitosanitario</h1>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
-            Plan vs. real por variedad para esta temporada
+            Plan vs. real por variedad para esta temporada, por hectáreas aplicadas
           </p>
+          {haySinSuperficie && (
+            <p className="text-xs text-amber-700 mt-1" data-testid="aviso-sin-superficie">
+              Algunas filas no tienen superficie cargada (0 ha): su avance se cuenta por parcelas aplicadas.
+            </p>
+          )}
         </div>
         <select
           value={temporada}
@@ -110,51 +149,107 @@ export default function CumplimientoFitosanitarioPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Nº Apl.</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Mes</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600">Producto</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Objetivo</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-600">Dosis/ha</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Parcelas</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Dosis/ha</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Hectáreas</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600 w-40">Avance</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Pendiente</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filasVariedad.map((c) => (
-                      <tr key={c.plan_id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{c.numero_aplicacion}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{MESES[c.mes - 1]}</td>
-                        <td className="px-4 py-2.5 text-gray-800 font-medium">{c.insumo_nombre}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{c.objetivo}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-gray-700">{c.dosis_por_ha}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{c.parcelas_aplicadas} / {c.parcelas_total}</td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${BAR_COLORS[c.estado]}`}
-                                style={{ width: `${c.porcentaje}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-gray-500 w-9 text-right">{c.porcentaje}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ESTADO_STYLES[c.estado]}`}>
-                            {ESTADO_LABELS[c.estado]}
-                          </span>
-                        </td>
-                      </tr>
+                    {rondas.map((r) => (
+                      <Fragment key={r.key}>
+                        <tr className="bg-gray-50/70" data-testid="ronda-cumplimiento">
+                          <td colSpan={6} className="px-4 py-2 text-xs text-gray-600">
+                            <span className="font-semibold text-gray-900">Ronda Nº{r.numero}</span> · {r.objetivo} ·{' '}
+                            {MESES[r.mes - 1] ?? `Mes ${r.mes}`}
+                          </td>
+                        </tr>
+                        {r.filas.map((c) => {
+                          const unidad = unidadPorPlan.get(c.plan_id) ?? ''
+                          const desvio = desvioDosis(c)
+                          const sinSuperficie = Number(c.ha_total) === 0
+                          return (
+                            <tr key={c.plan_id} className="hover:bg-gray-50 transition-colors" data-testid="fila-cumplimiento">
+                              <td className="px-4 py-2.5 pl-8 text-gray-800 font-medium">{c.insumo_nombre}</td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                <span className="font-mono text-gray-700">
+                                  {formatNum(c.dosis_por_ha)}{unidad ? ` ${unidad}` : ''}
+                                </span>
+                                {desvio != null && c.dosis_real_promedio != null && (
+                                  <span
+                                    className={`block text-[11px] ${Math.abs(desvio) >= 10 ? 'text-red-600' : 'text-amber-700'}`}
+                                    data-testid="desvio-dosis"
+                                  >
+                                    real {formatNum(c.dosis_real_promedio)}{unidad ? ` ${unidad}` : ''} ({desvio > 0 ? '+' : ''}
+                                    {formatNum(desvio, 1)}%)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                {sinSuperficie ? (
+                                  <span className="text-gray-400">sin superficie</span>
+                                ) : (
+                                  <span className="font-mono text-gray-700">
+                                    {formatNum(c.ha_cubiertas, 2)} / {formatNum(c.ha_total, 2)} ha
+                                  </span>
+                                )}
+                                <span className="block text-[11px] text-gray-400">
+                                  {c.parcelas_aplicadas}/{c.parcelas_total} parcelas
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                                    {/* porcentaje comes clamped from the backend: never 100 unless complete. */}
+                                    <div
+                                      className={`h-full rounded-full ${BAR_COLORS[c.estado]}`}
+                                      style={{ width: `${c.porcentaje}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-gray-500 w-9 text-right">{c.porcentaje}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                {c.estado === 'completo' ? (
+                                  <span className="text-gray-400">—</span>
+                                ) : (
+                                  <>
+                                    {!sinSuperficie && (
+                                      <span className="font-mono text-gray-700">{formatNum(c.pendiente_ha, 2)} ha</span>
+                                    )}
+                                    {Number(c.pendiente_cantidad) > 0 && (
+                                      <span className="block text-[11px] text-gray-500">
+                                        {formatNum(c.pendiente_cantidad, 2)}{unidad ? ` ${unidad}` : ''} de producto
+                                      </span>
+                                    )}
+                                    {sinSuperficie && (
+                                      <span className="text-gray-500">
+                                        {c.parcelas_total - c.parcelas_aplicadas} parcelas
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ESTADO_STYLES[c.estado]}`}>
+                                  {ESTADO_LABELS[c.estado]}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
             <p className="text-xs text-gray-400">
-              El cumplimiento se calcula cruzando variedad + producto + fecha, sin vínculo manual —
-              si el mismo producto se aplica más de una vez en la temporada, cada aplicación real cubre
-              la siguiente ronda planificada por orden cronológico.
+              Una ronda se cubre con las hectáreas efectivamente aplicadas de cada producto, según la ronda del plan
+              elegida al crear la orden. Si la dosis real difiere de la del plan se muestra el desvío, pero la superficie
+              cuenta igual.
             </p>
           </>
         )}
