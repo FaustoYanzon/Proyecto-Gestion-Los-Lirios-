@@ -812,6 +812,14 @@ def _superficie_parcela(parcela: Parcela) -> Decimal:
     return Decimal(str(parcela.superficie_ha))
 
 
+def _calcular_cantidad_linea(dosis_por_ha: float, superficie_ha: Decimal) -> Decimal:
+    """Quantity stored for one order line: dose x surface, quantized to 0.01
+    with the default context (ROUND_HALF_EVEN). The mobile app reproduces this
+    exactly (mobile/lib/cantidad.ts) to show the same number before confirming;
+    tests/test_cantidad_valvula_redondeo.py pins both sides."""
+    return (Decimal(str(dosis_por_ha)) * superficie_ha).quantize(Decimal("0.01"))
+
+
 async def _crear_registros_orden(
     db: AsyncSession,
     *,
@@ -841,7 +849,7 @@ async def _crear_registros_orden(
 
     preparadas: list[tuple[OrdenAplicacionInsumo, Decimal, str | None]] = []
     for linea in orden.lineas:
-        cantidad = (Decimal(str(linea.dosis_por_ha)) * superficie_ha).quantize(Decimal("0.01"))
+        cantidad = _calcular_cantidad_linea(linea.dosis_por_ha, superficie_ha)
         # A parcel without variety cannot match any plan row (variedad is NOT NULL there).
         plan_id = (
             await resolver_plan_id(

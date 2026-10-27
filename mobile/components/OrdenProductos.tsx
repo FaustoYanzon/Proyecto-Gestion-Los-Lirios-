@@ -3,6 +3,7 @@
 // order card and the confirmation modals in OrdenesPendientes.
 import { View, Text, StyleSheet } from 'react-native'
 import { colors } from '../lib/theme'
+import { calcularCantidad } from '../lib/cantidad'
 import type { OrdenAplicacion, VariedadUva } from '../lib/types'
 import { VARIEDAD_LABELS } from '../lib/types'
 
@@ -46,14 +47,19 @@ export function formatDosis(p: ProductoOrden): string {
   return `${p.dosisPorHa.toLocaleString('es-AR', { maximumFractionDigits: 3 })} ${p.unidad}/ha`
 }
 
-// Quantity for a surface: dose × ha, 2 decimals. Null/invalid surface → "—"
-// (the server rejects the confirmation with a 422 in that case).
+// es-AR with exactly 2 decimals ("2,35"). Input is already rounded, so the
+// double conversion cannot move the second decimal.
+export function formatDosDecimales(value: string | number): string {
+  return Number(value).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Quantity for a surface, computed exactly as the server stores it (dose × ha,
+// half-even to 0.01). Null/invalid surface → "—" (the server rejects the
+// confirmation with a 422 in that case).
 export function formatCantidad(p: ProductoOrden, superficieHa: string | number | null | undefined): string {
-  if (superficieHa === null || superficieHa === undefined || superficieHa === '') return '—'
-  const ha = Number(superficieHa)
-  if (!Number.isFinite(ha) || !Number.isFinite(p.dosisPorHa)) return '—'
-  const cantidad = p.dosisPorHa * ha
-  return `${cantidad.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${p.unidad}`
+  const cantidad = calcularCantidad(p.dosisPorHa, superficieHa)
+  if (cantidad === null) return '—'
+  return `${formatDosDecimales(cantidad)} ${p.unidad}`
 }
 
 // Compact list for the order card: "Super folpan  1,5 kg/ha" per row.

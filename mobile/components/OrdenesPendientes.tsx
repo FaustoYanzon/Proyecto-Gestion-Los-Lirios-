@@ -23,7 +23,8 @@ import type {
   ResultadoValvula, Trabajador as TrabajadorDb,
 } from '../lib/types'
 import {
-  ProductosCantidades, ProductosLista, formatDosis, labelVariedades, productosDeOrden,
+  ProductosCantidades, ProductosLista, formatDosDecimales, formatDosis, labelVariedades,
+  productosDeOrden,
 } from './OrdenProductos'
 
 function formatDateDisplay(iso: string) {
@@ -265,7 +266,7 @@ function ConfirmarValvulaModal({
             {[
               { label: 'Parral', value: item.parcela_nombre },
               { label: 'Válvula', value: valvula.valvula_nombre },
-              { label: 'Superficie', value: valvula.superficie_ha ? `${Number(valvula.superficie_ha).toFixed(2)} ha` : '—' },
+              { label: 'Superficie', value: valvula.superficie_ha ? `${formatDosDecimales(valvula.superficie_ha)} ha` : '—' },
               { label: 'Objetivo', value: orden.objetivo },
             ].map(({ label, value }, idx, arr) => (
               <View key={label} style={[styles.summaryRow, idx < arr.length - 1 && styles.summaryRowBorder]}>
@@ -410,7 +411,7 @@ function OrdenCard({
             </>
           ) : (
             <>
-              <Text style={styles.ordenProducto}>{orden.objetivo}</Text>
+              <Text style={styles.ordenProducto}>{orden.objetivo?.trim() || 'Aplicación'}</Text>
               <Text style={styles.ordenSub}>{productos.length} productos</Text>
             </>
           )}
