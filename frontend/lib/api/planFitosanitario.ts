@@ -58,26 +58,6 @@ export async function deletePlanFitosanitario(id: string): Promise<void> {
   await api.delete(`/plan-fitosanitario/${id}`)
 }
 
-export interface CumplimientoPlanItem {
-  plan_id: string
-  variedad: string
-  numero_aplicacion: number
-  mes: number
-  insumo_nombre: string
-  objetivo: string
-  dosis_por_ha: number
-  parcelas_total: number
-  parcelas_aplicadas: number
-  porcentaje: number
-  estado: 'pendiente' | 'parcial' | 'completo'
-  ha_total: number
-  ha_cubiertas: number
-  pendiente_ha: number
-  pendiente_cantidad: number
-  // Hectare-weighted actual dose; null = nothing applied yet.
-  dosis_real_promedio: number | null
-}
-
 export interface NecesidadInsumoItem {
   insumo_id: string
   insumo_nombre: string
@@ -85,13 +65,6 @@ export interface NecesidadInsumoItem {
   cantidad_pendiente: number
   stock_actual: number
   faltante: number
-}
-
-export async function getCumplimiento(temporada: number, variedad?: string): Promise<CumplimientoPlanItem[]> {
-  const { data } = await api.get('/plan-fitosanitario/cumplimiento', {
-    params: variedad ? { temporada, variedad } : { temporada },
-  })
-  return data
 }
 
 export async function getNecesidadStock(temporada: number): Promise<NecesidadInsumoItem[]> {
@@ -103,38 +76,65 @@ export async function getNecesidadStock(temporada: number): Promise<NecesidadIns
   }))
 }
 
-export interface RondaPendienteLinea {
-  insumo_id: string
-  insumo_nombre: string
-  unidad: 'kg' | 'lt'
-  dosis_por_ha: number
-}
+// ── Monthly progress against the plan ───────────────────────────────────────
+// Decimals arrive as strings: always go through Number() before computing.
 
-export interface RondaPendienteParcela {
+export type EstadoAvance = 'pendiente' | 'bajo' | 'ok' | 'exceso' | 'no_planificado'
+
+export interface AvanceParcela {
   id: string
   nombre: string
-  // Area still missing at least one of the card's lines.
-  ha_pendientes: number
-  // Some line is already (partly) applied here: leave it unticked by default.
-  parcial: boolean
+  ha: string
+  dosis_aplicada: string
+  porcentaje: string | null
+  estado: EstadoAvance
 }
 
-export interface RondaPendienteVariedad {
+export interface AvanceItem {
   variedad: string
-  ha_pendientes: number
-  parcelas: RondaPendienteParcela[]
-}
-
-// A pending plan round across varieties sharing the same products/doses.
-export interface RondaPendiente {
-  numero_aplicacion: number
-  objetivo: string
   mes: number
-  lineas: RondaPendienteLinea[]
-  variedades: RondaPendienteVariedad[]
+  insumo_id: string
+  insumo_nombre: string
+  unidad: string | null
+  // null = applied but not in the plan for that variety and month.
+  dosis_plan: string | null
+  dosis_aplicada_promedio: string
+  porcentaje: string | null
+  estado: EstadoAvance
+  ha_total: string
+  parcelas: AvanceParcela[]
 }
 
-export async function getRondasPendientes(temporada: number): Promise<RondaPendiente[]> {
-  const { data } = await api.get('/plan-fitosanitario/rondas-pendientes', { params: { temporada } })
+export async function getAvance(temporada: number, mes?: number, variedad?: string): Promise<AvanceItem[]> {
+  const { data } = await api.get('/plan-fitosanitario/avance', {
+    params: { temporada, ...(mes ? { mes } : {}), ...(variedad ? { variedad } : {}) },
+  })
+  return data
+}
+
+export type EstadoContraste = 'en_plan' | 'excede' | 'fuera_del_plan'
+
+export interface ContrasteVariedad {
+  variedad: string
+  estado: EstadoContraste
+  dosis_plan: string | null
+  dosis_aplicada_promedio: string
+  dosis_proyectada_promedio: string
+  porcentaje_proyectado: string | null
+}
+
+export interface ContrasteLineaResultado {
+  insumo_id: string
+  variedades: ContrasteVariedad[]
+}
+
+export interface ContrasteBody {
+  fecha: string
+  parcelas: { parcela_id: string; valvula_ids?: string[] }[]
+  lineas: { insumo_id: string; dosis_por_ha: number }[]
+}
+
+export async function postContraste(body: ContrasteBody): Promise<ContrasteLineaResultado[]> {
+  const { data } = await api.post('/plan-fitosanitario/contraste', body)
   return data
 }

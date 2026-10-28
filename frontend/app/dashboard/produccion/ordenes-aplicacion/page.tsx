@@ -19,7 +19,7 @@ import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
 import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
 import ARevisarPanel, { A_REVISAR_QUERY_KEY, productosDe } from '@/components/produccion/ARevisarPanel'
 import NuevaOrdenAplicacion, { apiErrorMessage } from '@/components/produccion/NuevaOrdenAplicacion'
-import { formatNum } from '@/components/produccion/RondaCard'
+import { formatNum } from '@/components/produccion/formato'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 

@@ -9,7 +9,7 @@ import {
 } from '@/lib/api/fitosanitarios'
 import { getParcelas } from '@/lib/api/produccion'
 import { getOrdenAplicacion, type OrdenAplicacion } from '@/lib/api/ordenesAplicacion'
-import { formatNum } from '@/components/produccion/RondaCard'
+import { formatNum } from '@/components/produccion/formato'
 import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
 import { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'

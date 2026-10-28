@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { getCumplimiento, getPlanFitosanitario, type CumplimientoPlanItem } from '@/lib/api/planFitosanitario'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
-import { MESES, formatNum } from '@/components/produccion/RondaCard'
+import { MESES, formatNum } from '@/components/produccion/formato'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
 // aniosAdelante=1: permite ver cumplimiento de la próxima campaña ya
