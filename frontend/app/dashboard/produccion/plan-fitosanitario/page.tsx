@@ -12,30 +12,41 @@ import {
   createPlanFitosanitario,
   updatePlanFitosanitario,
   deletePlanFitosanitario,
+  getAvance,
+  type AvanceItem,
+  type EstadoAvance,
   type PlanFitosanitario,
 } from '@/lib/api/planFitosanitario'
 import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
+import { MESES, formatNum } from '@/components/produccion/formato'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
 import type { InsumoResponse } from '@/lib/api/insumos'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
-
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-]
 
 const now = new Date()
 // aniosAdelante=1: permite cargar el plan de la próxima campaña antes de
 // que empiece.
 const AVAILABLE_YEARS = buildCampanas(1).map(campanaToAnio)
 
+// Campaign order: May = 0 ... April = 11.
+const ordenCampania = (mes: number): number => (mes - 5 + 12) % 12
+const MESES_CAMPANIA = Array.from({ length: 12 }, (_, i) => ((i + 4) % 12) + 1)
+
+// Same palette as the compliance matrix: red under, green on target, blue over.
+const ESTADO_CHIP: Record<EstadoAvance, { label: string; clase: string }> = {
+  pendiente: { label: 'Sin aplicar', clase: 'bg-red-50 text-red-700 border border-red-200' },
+  bajo: { label: 'Por debajo', clase: 'bg-red-50 text-red-700 border border-red-200' },
+  ok: { label: 'En plan', clase: 'bg-green-50 text-green-700 border border-green-200' },
+  exceso: { label: 'De más', clase: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  no_planificado: { label: 'No planificado', clase: 'bg-blue-50 text-blue-700 border border-blue-200' },
+}
+
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 const label = 'block text-sm font-medium text-gray-700 mb-1'
 const err = 'mt-1 text-xs text-red-600'
 
 const schema = z.object({
-  numero_aplicacion: z.coerce.number().int().min(1, 'Mínimo 1'),
   mes: z.coerce.number().int().min(1).max(12),
   insumo_id: z.string().min(1, 'Elegí un insumo de la lista'),
   objetivo: z.string().min(1, 'Requerido'),
@@ -44,6 +55,8 @@ const schema = z.object({
 })
 
 type FormData = z.infer<typeof schema>
+
+type ModalState = { create: number | null } | { edit: PlanFitosanitario } | null
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +93,7 @@ function PlanForm({
   temporada,
   variedadesDisponibles,
   variedadActiva,
+  mesInicial,
   onSuccess,
   onCancel,
 }: {
@@ -87,6 +101,7 @@ function PlanForm({
   temporada: number
   variedadesDisponibles: string[]
   variedadActiva: string
+  mesInicial?: number
   onSuccess: () => void
   onCancel: () => void
 }) {
@@ -110,14 +125,13 @@ function PlanForm({
     resolver: zodResolver(schema) as Resolver<FormData>,
     defaultValues: isEdit
       ? {
-          numero_aplicacion: plan.numero_aplicacion,
           mes: plan.mes,
           insumo_id: plan.insumo_id,
           objetivo: plan.objetivo,
           dosis_por_ha: plan.dosis_por_ha,
           notas: plan.notas ?? '',
         }
-      : { numero_aplicacion: 1, mes: now.getMonth() + 1, insumo_id: '', objetivo: '', notas: '' },
+      : { mes: mesInicial ?? now.getMonth() + 1, insumo_id: '', objetivo: '', notas: '' },
   })
 
   const insumoIdW = watch('insumo_id')
@@ -144,6 +158,7 @@ function PlanForm({
         })
       }
       queryClient.invalidateQueries({ queryKey: ['plan-fitosanitario', temporada] })
+      queryClient.invalidateQueries({ queryKey: ['plan-avance', temporada] })
       onSuccess()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -153,18 +168,11 @@ function PlanForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={label}>Nº aplicación</label>
-          <input type="number" min="1" {...register('numero_aplicacion')} className={field} />
-          {errors.numero_aplicacion && <p className={err}>{errors.numero_aplicacion.message}</p>}
-        </div>
-        <div>
-          <label className={label}>Mes</label>
-          <select {...register('mes')} className={field}>
-            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-        </div>
+      <div>
+        <label className={label}>Mes</label>
+        <select {...register('mes')} className={field}>
+          {MESES_CAMPANIA.map((m) => <option key={m} value={m}>{MESES[m - 1]}</option>)}
+        </select>
       </div>
 
       <div>
@@ -190,7 +198,7 @@ function PlanForm({
         </div>
         <div>
           <label className={label}>
-            Dosis {insumoInfo ? `(${insumoInfo.unidad}/ha)` : plan?.insumo_unidad ? `(${plan.insumo_unidad}/ha)` : '/ha'}
+            Dosis objetivo {insumoInfo ? `(${insumoInfo.unidad}/ha)` : plan?.insumo_unidad ? `(${plan.insumo_unidad}/ha)` : '/ha'}
           </label>
           <input type="number" step="0.01" min="0" placeholder="0.00" {...register('dosis_por_ha')} className={field} />
           {errors.dosis_por_ha && <p className={err}>{errors.dosis_por_ha.message}</p>}
@@ -243,7 +251,7 @@ function PlanForm({
         </button>
         <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] disabled:opacity-60 transition-colors">
           {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-          {isEdit ? 'Guardar cambios' : 'Agregar aplicación'}
+          {isEdit ? 'Guardar cambios' : 'Agregar al plan'}
         </button>
       </div>
     </form>
@@ -259,7 +267,7 @@ export default function PlanFitosanitarioPage() {
   const isGerencialUp = currentUser?.role === 'super_admin' || currentUser?.role === 'gerencial'
 
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
-  const [modal, setModal] = useState<'create' | { edit: PlanFitosanitario } | null>(null)
+  const [modal, setModal] = useState<ModalState>(null)
   const queryClient = useQueryClient()
 
   const { data: parcelas = [] } = useQuery({
@@ -273,6 +281,11 @@ export default function PlanFitosanitarioPage() {
     queryFn: () => getPlanFitosanitario(temporada),
   })
 
+  const { data: avance = [] } = useQuery({
+    queryKey: ['plan-avance', temporada, 'todo'],
+    queryFn: () => getAvance(temporada),
+  })
+
   const variedadesDisponibles = useMemo(() => {
     const set = new Set<string>()
     for (const p of parcelas) if (p.is_active && p.variedad) set.add(p.variedad)
@@ -284,24 +297,41 @@ export default function PlanFitosanitarioPage() {
     ? variedadActiva
     : variedadesDisponibles[0]
 
-  const filasVariedad = useMemo(
-    () => planes
-      .filter((p) => p.variedad === activa)
-      .sort((a, b) => a.numero_aplicacion - b.numero_aplicacion || a.mes - b.mes),
-    [planes, activa],
-  )
+  // Rows of the active variety grouped by month, in campaign order.
+  const porMes = useMemo(() => {
+    const grupos = new Map<number, PlanFitosanitario[]>()
+    for (const p of planes.filter((x) => x.variedad === activa)) {
+      grupos.set(p.mes, [...(grupos.get(p.mes) ?? []), p])
+    }
+    return Array.from(grupos.entries())
+      .sort(([a], [b]) => ordenCampania(a) - ordenCampania(b))
+      .map(([mes, filas]) => ({
+        mes,
+        filas: [...filas].sort((a, b) => a.insumo_nombre.localeCompare(b.insumo_nombre)),
+      }))
+  }, [planes, activa])
+
+  const totalFilas = porMes.reduce((n, g) => n + g.filas.length, 0)
+
+  // (variety, month, product) -> progress, shown next to each target dose.
+  const avancePorClave = useMemo(() => {
+    const mapa = new Map<string, AvanceItem>()
+    for (const a of avance) mapa.set(`${a.variedad}|${a.mes}|${a.insumo_id}`, a)
+    return mapa
+  }, [avance])
+
+  const mesActual = now.getMonth() + 1
 
   async function handleDelete(id: string) {
-    if (!window.confirm('¿Eliminar esta aplicación del plan?')) return
+    if (!window.confirm('¿Eliminar este producto del plan?')) return
     try {
       await deletePlanFitosanitario(id)
       queryClient.invalidateQueries({ queryKey: ['plan-fitosanitario', temporada] })
+      queryClient.invalidateQueries({ queryKey: ['plan-avance', temporada] })
     } catch {
       alert('Error al eliminar.')
     }
   }
-
-  const colSpan = isGerencialUp ? 7 : 6
 
   return (
     <div className="space-y-5">
@@ -312,7 +342,7 @@ export default function PlanFitosanitarioPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Plan Fitosanitario</h1>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
-            Programa de aplicaciones por variedad, cargado a mano cada temporada
+            Dosis objetivo por hectárea, por variedad, mes y producto. Lo aplicado en el mes se descuenta del objetivo.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -357,87 +387,125 @@ export default function PlanFitosanitarioPage() {
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              {filasVariedad.length} aplicación{filasVariedad.length !== 1 ? 'es' : ''} planificada{filasVariedad.length !== 1 ? 's' : ''}
-              {activa && <> para {VARIEDAD_LABELS[activa] ?? activa}</>}
+              {totalFilas} producto{totalFilas !== 1 ? 's' : ''} en el plan
+              {activa && <> de {VARIEDAD_LABELS[activa] ?? activa}</>}
             </p>
             {isGerencialUp && (
               <button
-                onClick={() => setModal('create')}
+                onClick={() => setModal({ create: null })}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
               >
                 <Plus size={16} />
-                Agregar aplicación
+                Agregar al plan
               </button>
             )}
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Nº Apl.</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Mes</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Producto</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Objetivo</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Dosis/ha</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Notas</th>
-                    {isGerencialUp && (
-                      <th className="px-4 py-3 font-medium text-gray-600 text-center">Acciones</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {isLoading ? (
-                    <tr><td colSpan={colSpan} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
-                  ) : filasVariedad.length === 0 ? (
-                    <tr>
-                      <td colSpan={colSpan} className="px-4 py-10 text-center text-gray-400">
-                        Sin aplicaciones planificadas para {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'esta variedad'}
-                      </td>
-                    </tr>
-                  ) : (
-                    filasVariedad.map((p) => (
-                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{p.numero_aplicacion}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{MESES[p.mes - 1]}</td>
-                        <td className="px-4 py-2.5 text-gray-800 font-medium">{p.insumo_nombre}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{p.objetivo}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-gray-700">{p.dosis_por_ha} {p.insumo_unidad}</td>
-                        <td className="px-4 py-2.5 text-gray-500 max-w-[160px] truncate">{p.notas ?? '—'}</td>
-                        {isGerencialUp && (
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => setModal({ edit: p })}
-                                title="Editar"
-                                className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
-                              >
-                                <Pencil size={15} />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(p.id)}
-                                title="Eliminar"
-                                className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+          {isLoading ? (
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center text-gray-400">Cargando…</div>
+          ) : porMes.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
+              Sin productos planificados para {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'esta variedad'}
             </div>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              {porMes.map(({ mes, filas }) => (
+                <section
+                  key={mes}
+                  data-testid="plan-mes"
+                  className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <header className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                    <h2 className="text-sm font-semibold text-gray-800">
+                      {MESES[mes - 1]}
+                      {mes === mesActual && (
+                        <span className="ml-2 rounded-full bg-[#7a1f2c] px-2 py-0.5 text-[10px] font-medium text-white">Mes actual</span>
+                      )}
+                    </h2>
+                    {isGerencialUp && (
+                      <button
+                        onClick={() => setModal({ create: mes })}
+                        className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
+                      >
+                        <Plus size={13} /> Producto en {MESES[mes - 1]}
+                      </button>
+                    )}
+                  </header>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                          <th className="px-4 py-2 font-medium">Producto</th>
+                          <th className="px-3 py-2 font-medium">Objetivo</th>
+                          <th className="px-3 py-2 font-medium text-right">Dosis/ha</th>
+                          <th className="px-3 py-2 font-medium">Avance del mes</th>
+                          {isGerencialUp && <th className="px-4 py-2 font-medium text-center">Acciones</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filas.map((p) => {
+                          const av = activa ? avancePorClave.get(`${activa}|${mes}|${p.insumo_id}`) : undefined
+                          const chip = av ? ESTADO_CHIP[av.estado] : null
+                          return (
+                            <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-2.5 font-medium text-gray-800">
+                                {p.insumo_nombre}
+                                {p.notas && <span className="block text-xs font-normal text-gray-500">{p.notas}</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-gray-600">{p.objetivo}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-gray-700">
+                                {formatNum(p.dosis_por_ha, 2)} {p.insumo_unidad}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {chip && av ? (
+                                  <span
+                                    data-testid="plan-avance-chip"
+                                    data-estado={av.estado}
+                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.clase}`}
+                                  >
+                                    {chip.label}{av.porcentaje !== null ? ` · ${formatNum(av.porcentaje, 0)} %` : ''}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-300">–</span>
+                                )}
+                              </td>
+                              {isGerencialUp && (
+                                <td className="px-4 py-2.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => setModal({ edit: p })}
+                                      title="Editar"
+                                      className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                                    >
+                                      <Pencil size={15} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete(p.id)}
+                                      title="Eliminar"
+                                      className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
         </>
       )}
 
-      {modal === 'create' && activa && (
-        <Modal title={`Agregar aplicación — ${VARIEDAD_LABELS[activa] ?? activa}`} onClose={() => setModal(null)}>
+      {modal !== null && 'create' in modal && activa && (
+        <Modal title={`Agregar al plan — ${VARIEDAD_LABELS[activa] ?? activa}`} onClose={() => setModal(null)}>
           <PlanForm
+            mesInicial={modal.create ?? undefined}
             temporada={temporada}
             variedadesDisponibles={variedadesDisponibles}
             variedadActiva={activa}
@@ -447,8 +515,8 @@ export default function PlanFitosanitarioPage() {
         </Modal>
       )}
 
-      {modal !== null && modal !== 'create' && (
-        <Modal title="Editar aplicación" onClose={() => setModal(null)}>
+      {modal !== null && 'edit' in modal && (
+        <Modal title="Editar dosis del plan" onClose={() => setModal(null)}>
           <PlanForm
             plan={modal.edit}
             temporada={temporada}

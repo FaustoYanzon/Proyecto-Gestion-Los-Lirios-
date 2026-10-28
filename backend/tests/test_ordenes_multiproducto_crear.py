@@ -114,46 +114,6 @@ async def test_crea_orden_con_4_lineas_y_2_variedades(
     assert {p["parcela_id"] for p in body["parcelas"]} == {flame.id, syrah.id}
 
 
-async def test_origen_plan_si_alguna_linea_tiene_numero_aplicacion(
-    client, create_user, create_insumo, create_parcela,
-):
-    headers, _ = await _auth(client, create_user)
-    insumos = await _cuatro_insumos(create_insumo)
-    parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
-    plan = await _plan(client, headers, insumos[1].id, ["flame"], numero=3)
-
-    lineas = [_linea(insumos[0].id), _linea(insumos[1].id, numero_aplicacion=3)]
-    resp = await client.post(
-        "/ordenes-aplicacion/", json=_payload(lineas, [parcela.id]), headers=headers,
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["origen"] == "plan"
-    assert [l["numero_aplicacion"] for l in body["lineas"]] == [None, 3]
-    # First line is off-plan: the legacy plan link stays empty.
-    assert body["plan_fitosanitario_id"] is None
-    assert plan[0]["id"]
-
-
-async def test_numero_aplicacion_sin_ronda_en_plan_da_422(
-    client, create_user, create_insumo, create_parcela,
-):
-    headers, _ = await _auth(client, create_user)
-    insumos = await _cuatro_insumos(create_insumo)
-    flame = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
-    # The round exists, but for another variety and for another product.
-    await _plan(client, headers, insumos[0].id, ["syrah"], numero=2)
-    await _plan(client, headers, insumos[1].id, ["flame"], numero=2)
-
-    resp = await client.post(
-        "/ordenes-aplicacion/",
-        json=_payload([_linea(insumos[0].id, numero_aplicacion=2)], [flame.id]),
-        headers=headers,
-    )
-    assert resp.status_code == 422, resp.text
-    assert "ronda 2" in resp.text
-
-
 async def test_insumo_repetido_da_422(client, create_user, create_insumo, create_parcela):
     headers, _ = await _auth(client, create_user)
     insumo = await create_insumo(nombre="Azufre")
@@ -249,10 +209,11 @@ async def test_desde_plan_sigue_funcionando(client, create_user, create_insumo, 
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["origen"] == "plan"
-    assert body["plan_fitosanitario_id"] == plan[0]["id"]
+    # Progress is by date now: no round, no plan link on the order.
+    assert body["origen"] == "extra"
+    assert body["plan_fitosanitario_id"] is None
     assert len(body["lineas"]) == 1
-    assert body["lineas"][0]["numero_aplicacion"] == 4
+    assert body["lineas"][0]["numero_aplicacion"] is None
     assert body["lineas"][0]["insumo_id"] == insumo.id
     assert body["lineas"][0]["dosis_por_ha"] == 1.5
     assert [p["parcela_id"] for p in body["parcelas"]] == [parcela.id]
@@ -295,7 +256,6 @@ async def test_put_edita_orden_del_plan_sin_confirmaciones(
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["origen"] == "plan"
     assert [l["insumo_nombre"] for l in body["lineas"]] == ["Super folpan", "Oxicloruro"]
     # Same product keeps its line (updated in place, no unique clash).
     assert body["lineas"][0]["id"] == linea_original_id

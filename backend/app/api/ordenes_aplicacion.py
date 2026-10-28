@@ -53,7 +53,6 @@ from app.services.aplicaciones import (
     deshacer_fila_valvula,
     recalcular_estado_orden,
 )
-from app.services.plan_vinculo import resolver_plan_id
 
 logger = logging.getLogger("app")
 
@@ -341,49 +340,6 @@ async def _resolver_insumos(
     return {linea.insumo_id: await _resolve_insumo(db, linea.insumo_id) for linea in lineas}
 
 
-PlanesPorRonda = dict[tuple[int, str], list[PlanFitosanitario]]
-
-
-async def _validar_rondas_plan(
-    db: AsyncSession,
-    temporada: int,
-    lineas: list[OrdenAplicacionLineaCreate],
-    parcelas: list[Parcela],
-    insumos: dict[str, Insumo],
-) -> PlanesPorRonda:
-    """A line with `numero_aplicacion` must match a plan row
-    (temporada, numero_aplicacion, insumo) for at least one variety of the
-    chosen parcels; otherwise it would count against a round that does not
-    exist. Returns the matching plan rows keyed by (numero_aplicacion, insumo_id)."""
-    con_ronda = [linea for linea in lineas if linea.numero_aplicacion is not None]
-    if not con_ronda:
-        return {}
-    variedades = {p.variedad for p in parcelas if p.variedad is not None}
-    filas = (
-        await db.execute(
-            select(PlanFitosanitario).where(
-                PlanFitosanitario.temporada == temporada,
-                PlanFitosanitario.numero_aplicacion.in_({l.numero_aplicacion for l in con_ronda}),
-                PlanFitosanitario.insumo_id.in_({l.insumo_id for l in con_ronda}),
-                PlanFitosanitario.variedad.in_(variedades),
-            )
-        )
-    ).scalars().all()
-    planes: PlanesPorRonda = {}
-    for fila in sorted(filas, key=lambda f: (f.variedad.value, f.id)):
-        planes.setdefault((fila.numero_aplicacion, fila.insumo_id), []).append(fila)
-    for linea in con_ronda:
-        if (linea.numero_aplicacion, linea.insumo_id) not in planes:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"La ronda {linea.numero_aplicacion} del plan {temporada} no tiene "
-                    f"{insumos[linea.insumo_id].nombre} para las variedades de las parcelas elegidas."
-                ),
-            )
-    return planes
-
-
 def _aplicar_lineas(
     orden: OrdenAplicacion,
     lineas: list[OrdenAplicacionLineaCreate],
@@ -401,7 +357,6 @@ def _aplicar_lineas(
         linea.dosis_por_ha = data.dosis_por_ha
         linea.dias_carencia = data.dias_carencia
         linea.dias_reingreso = data.dias_reingreso
-        linea.numero_aplicacion = data.numero_aplicacion
         linea.posicion = posicion
         nuevas.append(linea)
     orden.lineas = nuevas
@@ -411,8 +366,7 @@ def _sincronizar_shim(orden: OrdenAplicacion) -> None:
     """Write the deprecated single-product columns (still NOT NULL until the
     cleanup migration) from the first line and the largest parcel's variety,
     and derive `origen` from the lines. Requires `orden.lineas` (with
-    `insumo`) and `orden.parcelas[*].parcela` in memory. The legacy
-    `plan_fitosanitario_id` needs the plan rows: see `_plan_id_shim`."""
+    `insumo`) and `orden.parcelas[*].parcela` in memory."""
     primera = orden.lineas[0]
     orden.insumo_id = primera.insumo_id
     orden.insumo = primera.insumo
@@ -429,22 +383,6 @@ def _sincronizar_shim(orden: OrdenAplicacion) -> None:
     )
 
 
-def _plan_id_shim(orden: OrdenAplicacion, planes: PlanesPorRonda) -> str | None:
-    """Legacy `plan_fitosanitario_id`: the plan row of the first line,
-    preferring the shim variety. Keeps the current value while it still
-    matches, so an edit never swaps it for a twin row."""
-    primera = orden.lineas[0]
-    if primera.numero_aplicacion is None:
-        return None
-    candidatos = planes.get((primera.numero_aplicacion, primera.insumo_id), [])
-    if orden.plan_fitosanitario_id in {fila.id for fila in candidatos}:
-        return orden.plan_fitosanitario_id
-    for fila in candidatos:
-        if fila.variedad == orden.variedad:
-            return fila.id
-    return candidatos[0].id if candidatos else None
-
-
 async def _crear_orden(
     db: AsyncSession, data: OrdenAplicacionCreate, user: User
 ) -> OrdenAplicacion:
@@ -453,7 +391,6 @@ async def _crear_orden(
     insumos = await _resolver_insumos(db, data.lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
     valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
-    planes = await _validar_rondas_plan(db, data.temporada, data.lineas, parcelas, insumos)
 
     orden = OrdenAplicacion(
         temporada=data.temporada,
@@ -469,7 +406,6 @@ async def _crear_orden(
         orden.parcelas.append(item)
     # Shim columns are NOT NULL: set them before the valve queries autoflush.
     _sincronizar_shim(orden)
-    orden.plan_fitosanitario_id = _plan_id_shim(orden, planes)
     db.add(orden)
     for item in orden.parcelas:
         await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))
@@ -502,7 +438,6 @@ async def crear_orden_desde_plan(
                     dosis_por_ha=plan.dosis_por_ha,
                     dias_carencia=data.dias_carencia,
                     dias_reingreso=data.dias_reingreso,
-                    numero_aplicacion=plan.numero_aplicacion,
                 )
             ],
             parcela_ids=data.parcela_ids,
@@ -518,9 +453,6 @@ async def crear_orden_desde_plan(
         ) from exc
 
     orden = await _crear_orden(db, orden_data, current_user)
-    # The exact row the user picked (the round lookup could match a twin row).
-    orden.plan_fitosanitario_id = plan.id
-    await db.flush()
     _avisar_orden_nueva(orden)
     return _to_response(orden)
 
@@ -734,21 +666,6 @@ async def _get_orden_editable(db: AsyncSession, orden_id: str) -> OrdenAplicacio
     return orden
 
 
-def _lineas_conservando_ronda(
-    orden: OrdenAplicacion, data: OrdenAplicacionUpdate
-) -> list[OrdenAplicacionLineaCreate]:
-    """The old single-product body has no `numero_aplicacion`: on a plan order
-    whose product does not change, keep the existing line's round (and so
-    origen=plan and the plan link) instead of silently turning it into extra.
-    A different product is a different application, so it is not carried."""
-    if not data.es_body_viejo or len(orden.lineas) != 1 or len(data.lineas) != 1:
-        return data.lineas
-    actual, nueva = orden.lineas[0], data.lineas[0]
-    if nueva.insumo_id != actual.insumo_id or nueva.numero_aplicacion is not None:
-        return data.lineas
-    return [nueva.model_copy(update={"numero_aplicacion": actual.numero_aplicacion})]
-
-
 @router.put("/{orden_id}", response_model=OrdenAplicacionResponse)
 async def actualizar_orden(
     orden_id: str,
@@ -763,11 +680,10 @@ async def actualizar_orden(
             status_code=status.HTTP_409_CONFLICT,
             detail="Esta orden tiene varios productos; actualizá la app/la web para editarla.",
         )
-    lineas = _lineas_conservando_ronda(orden, data)
+    lineas = data.lineas
     insumos = await _resolver_insumos(db, lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
     valvulas_por_parcela = await _validar_valvula_ids(db, parcelas, data.valvula_ids)
-    planes = await _validar_rondas_plan(db, orden.temporada, lineas, parcelas, insumos)
 
     orden.objetivo = data.objetivo
     orden.fecha_planificada = data.fecha_planificada
@@ -790,7 +706,6 @@ async def actualizar_orden(
             agregadas.append(item)
     # Before any query below autoflushes the order.
     _sincronizar_shim(orden)
-    orden.plan_fitosanitario_id = _plan_id_shim(orden, planes)
 
     for item in agregadas:
         await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))
@@ -861,9 +776,9 @@ async def _crear_registros_orden(
     """One RegistroFitosanitario (plus its stock movement) per order line, in
     line order. Requires `orden.lineas[*].insumo` loaded and the order locked.
 
-    Quantities and plan links are all resolved before the first `db.add`, so
-    a validation failure leaves nothing pending in the session (get_db's
-    rollback is only the safety net). Returns the records; the first one is
+    Quantities are all resolved before the first `db.add`, so a validation
+    failure leaves nothing pending in the session (get_db's rollback is only
+    the safety net). Returns the records; the first one is
     the legacy link callers write on the parcel/valve row."""
     if not orden.lineas:
         raise HTTPException(
@@ -871,25 +786,12 @@ async def _crear_registros_orden(
             detail="La orden no tiene productos cargados.",
         )
 
-    preparadas: list[tuple[OrdenAplicacionInsumo, Decimal, str | None]] = []
-    for linea in orden.lineas:
-        cantidad = _calcular_cantidad_linea(linea.dosis_por_ha, superficie_ha)
-        # A parcel without variety cannot match any plan row (variedad is NOT NULL there).
-        plan_id = (
-            await resolver_plan_id(
-                db,
-                temporada=orden.temporada,
-                variedad=parcela.variedad,
-                insumo_id=linea.insumo_id,
-                numero_aplicacion=linea.numero_aplicacion,
-            )
-            if parcela.variedad is not None
-            else None
-        )
-        preparadas.append((linea, cantidad, plan_id))
+    preparadas: list[tuple[OrdenAplicacionInsumo, Decimal]] = [
+        (linea, _calcular_cantidad_linea(linea.dosis_por_ha, superficie_ha)) for linea in orden.lineas
+    ]
 
     registros: list[RegistroFitosanitario] = []
-    for linea, cantidad, plan_id in preparadas:
+    for linea, cantidad in preparadas:
         fito = RegistroFitosanitario(
             fecha=fecha,
             parcela_id=parcela.id,
@@ -905,7 +807,6 @@ async def _crear_registros_orden(
             responsable=responsable,
             responsable_id=responsable_id,
             observaciones=observaciones,
-            plan_fitosanitario_id=plan_id,
             orden_insumo_id=linea.id,
             orden_parcela_id=item.id,
             orden_valvula_id=fila.id if fila is not None else None,
@@ -915,7 +816,7 @@ async def _crear_registros_orden(
         registros.append(fito)
     # Flush once so every record has its id before the movements reference it.
     await db.flush()
-    for fito, (linea, cantidad, _plan_id) in zip(registros, preparadas):
+    for fito, (linea, cantidad) in zip(registros, preparadas):
         await _aplicar_movimiento_stock(db, fito, linea.insumo, cantidad, user_id)
     return registros
 

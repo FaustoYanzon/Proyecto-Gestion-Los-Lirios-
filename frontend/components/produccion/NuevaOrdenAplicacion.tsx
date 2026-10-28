@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFieldArray, useForm, useWatch, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   actualizarOrden,
   crearOrden,
@@ -16,12 +16,18 @@ import {
   type OrdenAplicacionUpdate,
   type ValvulaARevisar,
 } from '@/lib/api/ordenesAplicacion'
-import { getRondasPendientes, type RondaPendiente } from '@/lib/api/planFitosanitario'
+import {
+  getAvance,
+  postContraste,
+  type AvanceItem,
+  type ContrasteLineaResultado,
+  type ContrasteVariedad,
+} from '@/lib/api/planFitosanitario'
 import { VARIEDAD_LABELS, type ParcelaItem } from '@/lib/api/produccion'
 import { getInsumos } from '@/lib/api/insumos'
 import { getValvulasReales, hoyArgentina, type ValvulaReal } from '@/lib/api/riego'
 import InsumoSelect from '@/components/produccion/InsumoSelect'
-import RondaCard, { MESES, formatNum, rondaKey } from '@/components/produccion/RondaCard'
+import { MESES, formatNum } from '@/components/produccion/formato'
 import { A_REVISAR_QUERY_KEY, productosDe } from '@/components/produccion/ARevisarPanel'
 
 const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
@@ -58,8 +64,6 @@ const lineaSchema = z.object({
     .refine((v) => Number.isFinite(Number(v)) && Number(v) > 0, 'Mayor a 0'),
   dias_carencia: diasSchema,
   dias_reingreso: diasSchema,
-  // Plan round this line counts against; null = off-plan product.
-  numero_aplicacion: z.number().int().nullable(),
   // Whether the user typed carencia/reingreso on this line: untouched lines
   // follow the last typed value.
   carencia_manual: z.boolean(),
@@ -91,7 +95,7 @@ type LineaForm = FormValues['lineas'][number]
 function lineaVacia(carencia = '', reingreso = ''): LineaForm {
   return {
     insumo_id: '', insumo_nombre: '', unidad: '', dosis_por_ha: '',
-    dias_carencia: carencia, dias_reingreso: reingreso, numero_aplicacion: null,
+    dias_carencia: carencia, dias_reingreso: reingreso,
     carencia_manual: false, reingreso_manual: false,
   }
 }
@@ -112,33 +116,154 @@ export function apiErrorMessage(e: unknown, fallback: string): string {
   return fallback
 }
 
-function pad2(n: number): string {
-  return String(n).padStart(2, '0')
+// Season (May→April) and calendar month of an ISO date; the backend measures
+// the plan with the same rule, so the form asks about the right month.
+function periodoDeFecha(fecha: string): { temporada: number; mes: number } | null {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(fecha)
+  if (!m) return null
+  const anio = Number(m[1])
+  const mes = Number(m[2])
+  return { temporada: mes >= 5 ? anio : anio - 1, mes }
 }
 
-// Campaign runs May→April: months 5-12 belong to `temporada`, 1-4 to the next
-// calendar year. Default to today, or to the 1st of the round's month if that
-// month has not started yet.
-function fechaPorDefecto(mes: number, temporada: number): string {
-  const hoy = hoyArgentina()
-  const anio = mes >= 5 ? temporada : temporada + 1
-  const inicio = `${anio}-${pad2(mes)}-01`
-  return hoy < inicio ? inicio : hoy
+function mesAnterior(p: { temporada: number; mes: number }): { temporada: number; mes: number } {
+  if (p.mes === 5) return { temporada: p.temporada - 1, mes: 4 }
+  return { temporada: p.temporada, mes: p.mes === 1 ? 12 : p.mes - 1 }
 }
 
-function mesDeFecha(fecha: string): number | null {
-  const m = /^\d{4}-(\d{2})-\d{2}$/.exec(fecha)
-  return m ? Number(m[1]) : null
+// Waits for the user to stop typing before the plan contrast is asked.
+function useDebounced<T>(value: T, ms = 400): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return debounced
 }
 
-interface CardParcelaInfo {
-  ha_pendientes: number
-  parcial: boolean
+const fmtDosis = (v: number): string => formatNum(Math.round(v * 10000) / 10000, 4)
+
+type ResumenOrden = 'del_plan' | 'parcial' | 'mixta' | 'fuera'
+
+const RESUMEN_ESTILO: Record<ResumenOrden, { texto: string; clase: string }> = {
+  del_plan: { texto: 'Orden del plan', clase: 'text-green-800 bg-green-50 border-green-200' },
+  parcial: { texto: 'Orden parcial del plan', clase: 'text-amber-800 bg-amber-50 border-amber-200' },
+  mixta: { texto: 'Orden mixta: tiene productos fuera del plan', clase: 'text-blue-800 bg-blue-50 border-blue-200' },
+  fuera: { texto: 'Orden fuera del plan', clase: 'text-blue-800 bg-blue-50 border-blue-200' },
+}
+
+// Whole-order verdict from the per-line contrast (spec section 5).
+function resumirContraste(resultados: ContrasteLineaResultado[]): ResumenOrden | null {
+  const todas = resultados.flatMap((r) => r.variedades)
+  if (todas.length === 0) return null
+  const fuera = todas.filter((v) => v.estado === 'fuera_del_plan').length
+  if (fuera === todas.length) return 'fuera'
+  if (fuera > 0) return 'mixta'
+  return todas.every((v) => Number(v.porcentaje_proyectado) >= 95) ? 'del_plan' : 'parcial'
+}
+
+function dosisFaltante(item: AvanceItem): number {
+  return Math.max(Number(item.dosis_plan ?? 0) - Number(item.dosis_aplicada_promedio), 0)
+}
+
+function ContrasteLinea({
+  resultado, insumoNombre, unidad, mes, cargando,
+}: {
+  resultado: ContrasteLineaResultado | undefined
+  insumoNombre: string
+  unidad: string
+  mes: number | null
+  cargando: boolean
+}) {
+  if (!resultado) {
+    return (
+      <p className="mt-1.5 text-[11px] text-gray-400">
+        {cargando ? 'Comparando con el plan…' : 'Elegí parcelas y dosis para ver cómo encaja en el plan.'}
+      </p>
+    )
+  }
+  return (
+    <ul className="mt-1.5 space-y-0.5 text-[11px]" data-testid="contraste-linea">
+      {resultado.variedades.map((v: ContrasteVariedad) => {
+        const variedad = variedadLabel(v.variedad)
+        const pct = Number(v.porcentaje_proyectado)
+        if (v.estado === 'fuera_del_plan') {
+          return (
+            <li key={v.variedad} className="text-blue-700">
+              <strong>Fuera del plan</strong> · {insumoNombre || 'El producto'} no está en el plan de{' '}
+              {mes ? MESES[mes - 1] : 'este mes'} para {variedad}
+            </li>
+          )
+        }
+        const detalle = `${variedad}: plan ${fmtDosis(Number(v.dosis_plan))} ${unidad}/ha · aplicado ${fmtDosis(
+          Number(v.dosis_aplicada_promedio),
+        )} · con esta orden ${formatNum(pct, 0)} %`
+        if (v.estado === 'excede') {
+          return (
+            <li key={v.variedad} className="text-blue-700">
+              <strong>Excede el plan</strong> · {detalle}
+            </li>
+          )
+        }
+        return pct >= 95 ? (
+          <li key={v.variedad} className="text-green-700">
+            <strong>En plan</strong> · {detalle}
+          </li>
+        ) : (
+          <li key={v.variedad} className="text-amber-700">
+            <strong>Cubre parte del plan</strong> · {detalle}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function PendientePlan({
+  titulo, items, enOrden, onAgregar, vacio,
+}: {
+  titulo: string
+  items: AvanceItem[]
+  enOrden: Set<string>
+  onAgregar: (item: AvanceItem) => void
+  vacio: string
+}) {
+  if (items.length === 0 && !vacio) return null
+  return (
+    <div className="rounded-md border border-gray-200 bg-[#fbfaf6] px-3 py-2">
+      <p className="text-xs font-semibold text-gray-800">{titulo}</p>
+      {items.length === 0 ? (
+        <p className="mt-1 text-xs text-gray-500">{vacio}</p>
+      ) : (
+        <ul className="mt-1 divide-y divide-gray-100">
+          {items.map((i) => {
+            const yaEsta = enOrden.has(i.insumo_id)
+            return (
+              <li key={`${i.variedad}|${i.insumo_id}`} className="flex items-center justify-between gap-3 py-1 text-xs">
+                <span className="min-w-0 text-gray-700">
+                  <span className="font-medium text-red-700">{i.estado === 'pendiente' ? 'Sin aplicar' : 'Incompleto'}</span>
+                  {' · '}
+                  {variedadLabel(i.variedad)} · {i.insumo_nombre} · faltan {fmtDosis(dosisFaltante(i))} {i.unidad ?? ''}/ha
+                </span>
+                <button
+                  type="button"
+                  disabled={yaEsta}
+                  onClick={() => onAgregar(i)}
+                  data-testid="agregar-pendiente"
+                  className="shrink-0 font-medium text-[#7a1f2c] hover:underline disabled:text-gray-400 disabled:no-underline"
+                >
+                  {yaEsta ? 'Ya está en la orden' : 'Agregar'}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
-type Modo = 'plan' | 'extra'
 
 export interface NuevaOrdenAplicacionProps {
   temporada: number
@@ -197,9 +322,6 @@ function FormularioOrden({
   temporada, parcelas, orden, repaso, repasoOrden = null, onSuccess, onCancel,
 }: NuevaOrdenAplicacionProps & { repasoOrden?: OrdenAplicacion | null }) {
   const queryClient = useQueryClient()
-  const esCreacionLibre = !orden && !repaso
-  const [modo, setModo] = useState<Modo>('plan')
-  const [ronda, setRonda] = useState<RondaPendiente | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const parcelaById = useMemo(() => {
@@ -235,12 +357,6 @@ function FormularioOrden({
   const [valvulasModo, setValvulasModo] = useState(false)
   const [valvulasSel, setValvulasSel] = useState<string[]>([])
 
-  const { data: rondas = [], isLoading: cargandoRondas, isError: errorRondas } = useQuery({
-    queryKey: ['rondas-pendientes', temporada],
-    queryFn: () => getRondasPendientes(temporada),
-    enabled: esCreacionLibre,
-  })
-
   // Same cache key as InsumoSelect; used to know the unit of preloaded lines.
   const { data: insumos = [] } = useQuery({
     queryKey: ['insumos', 'fitosanitario'],
@@ -265,15 +381,6 @@ function FormularioOrden({
     return map
   }, [valvulas])
 
-  const cardInfo = useMemo(() => {
-    if (!ronda) return null
-    const map = new Map<string, CardParcelaInfo>()
-    for (const v of ronda.variedades) {
-      for (const p of v.parcelas) map.set(p.id, { ha_pendientes: Number(p.ha_pendientes), parcial: p.parcial })
-    }
-    return map
-  }, [ronda])
-
   const defaultValues = useMemo<FormValues>(() => {
     if (orden) {
       const lineas: LineaForm[] = (orden.lineas ?? []).map((l) => ({
@@ -283,7 +390,6 @@ function FormularioOrden({
         dosis_por_ha: String(Number(l.dosis_por_ha)),
         dias_carencia: String(l.dias_carencia),
         dias_reingreso: String(l.dias_reingreso),
-        numero_aplicacion: l.numero_aplicacion ?? null,
         carencia_manual: true,
         reingreso_manual: true,
       }))
@@ -295,8 +401,7 @@ function FormularioOrden({
       }
     }
     if (repaso) {
-      // A rework is an extra order: every line is off-plan (numero_aplicacion
-      // null) even if the original counted against a plan round.
+      // A rework preloads the original lines; the plan contrast is recomputed.
       const originales = repasoOrden?.lineas ?? []
       const lineas: LineaForm[] = originales.length
         ? originales.map((l) => ({
@@ -325,61 +430,19 @@ function FormularioOrden({
   }, [orden, repaso, repasoOrden])
 
   const {
-    register, control, handleSubmit, setValue, getValues, reset,
+    register, control, handleSubmit, setValue, getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema) as Resolver<FormValues>,
     defaultValues,
   })
-  const { fields, append, remove } = useFieldArray({ control, name: 'lineas' })
+  const { fields, append, remove, update } = useFieldArray({ control, name: 'lineas' })
 
   const lineasW = useWatch({ control, name: 'lineas' })
   const fechaW = useWatch({ control, name: 'fecha_planificada' })
 
   const unidadDe = (l: LineaForm): string =>
     l.unidad || insumos.find((i) => i.id === l.insumo_id)?.unidad || ''
-
-  // ── Mode / card selection ───────────────────────────────────────────────────
-
-  function limpiarParcelas() {
-    setVariedadesSel([])
-    setSeleccionadas([])
-    setValvulasModo(false)
-    setValvulasSel([])
-  }
-
-  function cambiarModo(m: Modo) {
-    if (m === modo) return
-    setModo(m)
-    setRonda(null)
-    setSubmitError(null)
-    limpiarParcelas()
-    reset({ objetivo: '', fecha_planificada: hoyArgentina(), notas: '', lineas: [lineaVacia()] })
-  }
-
-  function elegirRonda(r: RondaPendiente) {
-    setRonda(r)
-    setSubmitError(null)
-    setVariedadesSel(r.variedades.map((v) => v.variedad))
-    // Partly covered parcels come unticked: the order applies every line to
-    // every parcel, so forcing them would duplicate the lines already applied.
-    setSeleccionadas(r.variedades.flatMap((v) => v.parcelas.filter((p) => !p.parcial).map((p) => p.id)))
-    setValvulasModo(false)
-    setValvulasSel([])
-    reset({
-      objetivo: r.objetivo,
-      fecha_planificada: fechaPorDefecto(r.mes, temporada),
-      notas: '',
-      lineas: r.lineas.map((l) => ({
-        ...lineaVacia(),
-        insumo_id: l.insumo_id,
-        insumo_nombre: l.insumo_nombre,
-        unidad: l.unidad,
-        dosis_por_ha: String(Number(l.dosis_por_ha)),
-        numero_aplicacion: r.numero_aplicacion,
-      })),
-    })
-  }
 
   // ── Lines ───────────────────────────────────────────────────────────────────
 
@@ -397,7 +460,6 @@ function FormularioOrden({
     const actuales = getValues('lineas')
     const ultimaCarencia = [...actuales].reverse().find((l) => l.dias_carencia !== '')?.dias_carencia ?? ''
     const ultimoReingreso = [...actuales].reverse().find((l) => l.dias_reingreso !== '')?.dias_reingreso ?? ''
-    // A product added by hand never counts against a plan round.
     append(lineaVacia(ultimaCarencia, ultimoReingreso))
   }
 
@@ -422,10 +484,7 @@ function FormularioOrden({
   )
 
   function parcelasPorDefecto(v: string): string[] {
-    const delGrupo = parcelas.filter((p) => p.is_active && (p.variedad ?? SIN_VARIEDAD) === v)
-    const card = ronda?.variedades.find((rv) => rv.variedad === v)
-    if (card) return card.parcelas.filter((p) => !p.parcial).map((p) => p.id)
-    return delGrupo.map((p) => p.id)
+    return parcelas.filter((p) => p.is_active && (p.variedad ?? SIN_VARIEDAD) === v).map((p) => p.id)
   }
 
   function toggleVariedad(v: string) {
@@ -487,6 +546,77 @@ function FormularioOrden({
 
   const haSeleccionadas = seleccionadas.reduce((acc, id) => acc + Number(parcelaById.get(id)?.superficie_ha ?? 0), 0)
 
+  // ── Plan contrast (no preload: the plan is shown next to what is typed) ─────
+
+  const periodo = periodoDeFecha(fechaW ?? '')
+  const parcelaIdsContraste = repaso ? [repaso.parcela_id] : Array.from(new Set(seleccionadas))
+  const lineasContraste = (lineasW ?? [])
+    .filter((l) => l.insumo_id && Number(l.dosis_por_ha) > 0)
+    .map((l) => ({ insumo_id: l.insumo_id, dosis_por_ha: Number(l.dosis_por_ha) }))
+  const contrasteKey = useDebounced(
+    parcelaIdsContraste.length > 0 && lineasContraste.length > 0 && periodo
+      ? JSON.stringify({
+          fecha: fechaW,
+          parcelas: parcelaIdsContraste.map((pid) => ({
+            parcela_id: pid,
+            valvula_ids: repaso
+              ? [repaso.valvula_id]
+              : valvulasModo
+                ? valvulas.filter((v) => v.parcela_id === pid && valvulasSel.includes(v.id)).map((v) => v.id)
+                : [],
+          })),
+          lineas: lineasContraste,
+        })
+      : '',
+  )
+  const { data: contraste = [], isFetching: contrasteCargando } = useQuery({
+    queryKey: ['plan-contraste', contrasteKey],
+    queryFn: () => postContraste(JSON.parse(contrasteKey)),
+    enabled: !!contrasteKey,
+    placeholderData: (previo) => previo,
+    staleTime: 15_000,
+    retry: 1,
+  })
+  const resultadoDe = (insumoId: string): ContrasteLineaResultado | undefined =>
+    contrasteKey ? contraste.find((r) => r.insumo_id === insumoId) : undefined
+  const resumenOrden = contrasteKey
+    ? resumirContraste(contraste.filter((r) => lineasContraste.some((l) => l.insumo_id === r.insumo_id)))
+    : null
+
+  const variedadesPlan = variedadesSel.filter((v) => v !== SIN_VARIEDAD)
+  const anterior = periodo ? mesAnterior(periodo) : null
+  const { data: avanceMes = [], isError: errorAvance } = useQuery({
+    queryKey: ['plan-avance', periodo?.temporada, periodo?.mes],
+    queryFn: () => getAvance(periodo?.temporada ?? temporada, periodo?.mes),
+    enabled: !!periodo && variedadesPlan.length > 0,
+    staleTime: 30_000,
+  })
+  const { data: avanceAnterior = [] } = useQuery({
+    queryKey: ['plan-avance', anterior?.temporada, anterior?.mes],
+    queryFn: () => getAvance(anterior?.temporada ?? temporada, anterior?.mes),
+    enabled: !!anterior && variedadesPlan.length > 0,
+    staleTime: 30_000,
+  })
+  const faltantesDe = (items: AvanceItem[]) =>
+    items.filter((i) => variedadesPlan.includes(i.variedad) && (i.estado === 'pendiente' || i.estado === 'bajo'))
+  const insumosEnOrden = new Set((lineasW ?? []).map((l) => l.insumo_id).filter(Boolean))
+
+  function agregarDesdePlan(item: AvanceItem) {
+    const actuales = getValues('lineas')
+    const ultimaCarencia = [...actuales].reverse().find((l) => l.dias_carencia !== '')?.dias_carencia ?? ''
+    const ultimoReingreso = [...actuales].reverse().find((l) => l.dias_reingreso !== '')?.dias_reingreso ?? ''
+    const nueva: LineaForm = {
+      ...lineaVacia(ultimaCarencia, ultimoReingreso),
+      insumo_id: item.insumo_id,
+      insumo_nombre: item.insumo_nombre,
+      unidad: item.unidad ?? '',
+      dosis_por_ha: String(Math.round(dosisFaltante(item) * 10000) / 10000),
+    }
+    // The empty first line the form starts with is replaced, not kept.
+    if (actuales.length === 1 && !actuales[0].insumo_id) update(0, nueva)
+    else append(nueva)
+  }
+
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   async function onSubmit(data: FormValues) {
@@ -519,7 +649,6 @@ function FormularioOrden({
       dosis_por_ha: Number(l.dosis_por_ha),
       dias_carencia: Number(l.dias_carencia),
       dias_reingreso: Number(l.dias_reingreso),
-      numero_aplicacion: l.numero_aplicacion,
     }))
     // Never send `variedad`: explicit parcels may span several varieties.
     const body: OrdenAplicacionUpdate = {
@@ -542,7 +671,7 @@ function FormularioOrden({
         }
       }
       queryClient.invalidateQueries({ queryKey: ['ordenes-aplicacion', temporada] })
-      queryClient.invalidateQueries({ queryKey: ['rondas-pendientes', temporada] })
+      queryClient.invalidateQueries({ queryKey: ['plan-avance'] })
       onSuccess()
     } catch (e: unknown) {
       setSubmitError(apiErrorMessage(e, orden ? 'Error al guardar la orden.' : 'Error al crear la orden.'))
@@ -551,84 +680,10 @@ function FormularioOrden({
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const mostrarFormulario = !esCreacionLibre || modo === 'extra' || ronda !== null
-  const mesFecha = mesDeFecha(fechaW ?? '')
-  const fueraDeMes = ronda !== null && mesFecha !== null && mesFecha !== ronda.mes
-
   return (
     <div className="space-y-4">
-      {esCreacionLibre && (
-        <div role="tablist" aria-label="Origen de la orden" className="inline-flex rounded-md border border-gray-300 p-0.5 bg-gray-50">
-          {([
-            { value: 'plan', label: 'Del plan' },
-            { value: 'extra', label: 'Fuera del plan' },
-          ] as const).map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              role="tab"
-              aria-selected={modo === t.value}
-              data-testid={`modo-${t.value}`}
-              onClick={() => cambiarModo(t.value)}
-              className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                modo === t.value ? 'bg-[#7a1f2c] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {esCreacionLibre && modo === 'plan' && ronda === null && (
-        <div className="space-y-2">
-          <p className="text-xs text-gray-500">
-            Elegí una ronda pendiente del plan: se cargan sus productos, dosis, variedades y parcelas.
-          </p>
-          {cargandoRondas ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400">
-              <Loader2 size={14} className="animate-spin" /> Cargando rondas…
-            </div>
-          ) : errorRondas ? (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">No se pudieron cargar las rondas del plan.</p>
-          ) : rondas.length === 0 ? (
-            <div className="rounded-md border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
-              No quedan rondas pendientes del plan para esta campaña.
-              <button type="button" onClick={() => cambiarModo('extra')} className="block mx-auto mt-2 text-[#7a1f2c] font-medium hover:underline">
-                Crear una orden fuera del plan
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {rondas.map((r) => <RondaCard key={rondaKey(r)} ronda={r} onSelect={elegirRonda} />)}
-            </div>
-          )}
-          <div className="flex justify-end pt-2 border-t border-gray-100">
-            <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mostrarFormulario && (
+      {(
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          {ronda && (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-[#7a1f2c]/30 bg-[#fbfaf6] px-3 py-2">
-              <p className="text-sm text-gray-700 min-w-0">
-                <span className="font-semibold text-gray-900">Ronda Nº{ronda.numero_aplicacion}</span> · {ronda.objetivo} ·{' '}
-                {MESES[ronda.mes - 1] ?? `Mes ${ronda.mes}`}
-              </p>
-              <button
-                type="button"
-                onClick={() => { setRonda(null); limpiarParcelas() }}
-                className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
-              >
-                <ArrowLeft size={12} /> Cambiar ronda
-              </button>
-            </div>
-          )}
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Objetivo / Plaga</label>
@@ -641,13 +696,6 @@ function FormularioOrden({
               {errors.fecha_planificada && <p className={err}>{errors.fecha_planificada.message}</p>}
             </div>
           </div>
-          {fueraDeMes && ronda && (
-            <p className="flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2" data-testid="aviso-mes">
-              <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-              El plan ubica esta ronda en {MESES[ronda.mes - 1]}; la fecha elegida cae en {MESES[(mesFecha ?? 1) - 1]}. Se puede crear igual.
-            </p>
-          )}
-
           {/* Products */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -661,6 +709,14 @@ function FormularioOrden({
                 <Plus size={13} /> Agregar producto
               </button>
             </div>
+            {resumenOrden && (
+              <p
+                data-testid="resumen-plan"
+                className={`mb-2 inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${RESUMEN_ESTILO[resumenOrden].clase}`}
+              >
+                {RESUMEN_ESTILO[resumenOrden].texto}
+              </p>
+            )}
             <div className="space-y-2">
               {fields.map((f, i) => {
                 const l = lineasW?.[i] ?? f
@@ -675,12 +731,9 @@ function FormularioOrden({
                           value={l.insumo_nombre}
                           insumoId={l.insumo_id || undefined}
                           onChange={(nombre, insumoId, insumo) => {
-                            const anterior = getValues(`lineas.${i}.insumo_id`)
                             setValue(`lineas.${i}.insumo_nombre`, nombre)
                             setValue(`lineas.${i}.insumo_id`, insumoId ?? '', { shouldValidate: !!insumoId })
                             setValue(`lineas.${i}.unidad`, insumo?.unidad ?? '')
-                            // A different product no longer matches the plan round.
-                            if ((insumoId ?? '') !== anterior) setValue(`lineas.${i}.numero_aplicacion`, null)
                           }}
                           className={fieldSm}
                           error={e?.insumo_id?.message}
@@ -725,13 +778,10 @@ function FormularioOrden({
                         </button>
                       </div>
                     </div>
-                    <p className="mt-1.5 text-[11px]">
-                      {l.numero_aplicacion != null ? (
-                        <span className="font-medium text-[#7a1f2c]">Cuenta para la ronda Nº{l.numero_aplicacion} del plan</span>
-                      ) : (
-                        <span className="text-gray-400">Fuera del plan</span>
-                      )}
-                    </p>
+                    <ContrasteLinea
+                      resultado={resultadoDe(l.insumo_id)} insumoNombre={l.insumo_nombre} unidad={unidad}
+                      mes={periodo?.mes ?? null} cargando={contrasteCargando}
+                    />
                   </div>
                 )
               })}
@@ -789,7 +839,6 @@ function FormularioOrden({
                   {grupos.map((g) => {
                     const ids = g.parcelas.map((p) => p.id)
                     const marcadas = ids.filter((id) => seleccionadas.includes(id)).length
-                    const enCard = ronda?.variedades.some((rv) => rv.variedad === g.variedad) ?? false
                     return (
                       <div key={g.variedad || 'sin-variedad'} className="px-3 py-2">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -805,7 +854,6 @@ function FormularioOrden({
                         {g.parcelas.length === 0 && <p className="text-xs text-gray-400">Sin parcelas activas para esta variedad.</p>}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
                           {g.parcelas.map((p) => {
-                            const info = cardInfo?.get(p.id)
                             const checked = seleccionadas.includes(p.id)
                             const vs = valvulasPorParcela.get(p.id) ?? []
                             return (
@@ -817,20 +865,8 @@ function FormularioOrden({
                                     onChange={(ev) => toggleParcela(p.id, ev.target.checked)}
                                   />
                                   <span className="truncate">{p.nombre}</span>
-                                  {info ? (
-                                    <span className="text-[11px] text-gray-400 shrink-0">{formatNum(info.ha_pendientes, 2)} ha pend.</span>
-                                  ) : p.superficie_ha != null ? (
+                                  {p.superficie_ha != null && (
                                     <span className="text-[11px] text-gray-400 shrink-0">{formatNum(p.superficie_ha, 2)} ha</span>
-                                  ) : null}
-                                  {info?.parcial && (
-                                    <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
-                                      parcial
-                                    </span>
-                                  )}
-                                  {enCard && !info && p.is_active && (
-                                    <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded shrink-0">
-                                      al día
-                                    </span>
                                   )}
                                   {!p.is_active && (
                                     <span className="text-[10px] font-medium text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">
@@ -888,6 +924,28 @@ function FormularioOrden({
                 <p className="mt-1 text-[11px] text-gray-500">
                   Esta orden tiene válvulas puntuales: se mantienen salvo que actives &quot;Elegir válvulas&quot;.
                 </p>
+              )}
+            </div>
+          )}
+
+          {variedadesPlan.length > 0 && periodo && (
+            <div className="space-y-2" data-testid="pendiente-plan">
+              {errorAvance && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  No se pudo cargar el avance del plan; podés crear la orden igual.
+                </p>
+              )}
+              <PendientePlan
+                titulo={`Pendiente del plan de ${MESES[periodo.mes - 1]}`}
+                items={faltantesDe(avanceMes)} enOrden={insumosEnOrden} onAgregar={agregarDesdePlan}
+                vacio="El plan de este mes está al día para las variedades elegidas."
+              />
+              {anterior && faltantesDe(avanceAnterior).length > 0 && (
+                <PendientePlan
+                  titulo={`Quedó pendiente de ${MESES[anterior.mes - 1]}`}
+                  items={faltantesDe(avanceAnterior)} enOrden={insumosEnOrden} onAgregar={agregarDesdePlan}
+                  vacio=""
+                />
               )}
             </div>
           )}

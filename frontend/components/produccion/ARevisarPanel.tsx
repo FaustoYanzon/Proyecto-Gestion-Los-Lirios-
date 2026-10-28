@@ -7,7 +7,7 @@ import {
   getValvulasARevisar, revisarValvula, type ProductoAplicado, type ValvulaARevisar,
 } from '@/lib/api/ordenesAplicacion'
 import { VARIEDAD_LABELS } from '@/lib/api/produccion'
-import { formatNum } from '@/components/produccion/RondaCard'
+import { formatNum } from '@/components/produccion/formato'
 
 export const A_REVISAR_QUERY_KEY = ['valvulas-a-revisar']
 

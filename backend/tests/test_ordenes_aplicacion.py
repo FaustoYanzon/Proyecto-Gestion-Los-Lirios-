@@ -50,7 +50,6 @@ async def test_crear_orden_desde_plan_incluye_toda_la_variedad(client, create_us
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["origen"] == "plan"
     assert body["estado"] == "pendiente"
     assert body["insumo_nombre"] == "Azufre"
     assert {p["parcela_id"] for p in body["parcelas"]} == {p1.id, p2.id}

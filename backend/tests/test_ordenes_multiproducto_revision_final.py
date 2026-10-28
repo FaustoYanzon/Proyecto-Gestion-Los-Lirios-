@@ -32,51 +32,6 @@ async def _orden_desde_plan(client, headers, plan_id):
 # ── M1: borrar fila del plan con vínculos ────────────────────────────────────
 
 
-async def test_borrar_fila_del_plan_con_registros_vinculados_da_409(
-    client, db_session, create_user, create_insumo, create_parcela,
-):
-    headers, _ = await _auth(client, create_user)
-    insumo = await create_insumo(nombre="Azufre")
-    await create_parcela(
-        nombre="Potrero 1", variedad="flame", finca=Finca.media_agua, superficie_ha=1.0,
-    )
-    plan_id = (await _plan(client, headers, insumo.id, ["flame"]))[0]["id"]
-    orden = await _orden_desde_plan(client, headers, plan_id)
-    item_id = orden["parcelas"][0]["id"]
-    conf = await client.post(
-        f"/ordenes-aplicacion/{orden['id']}/parcelas/{item_id}/confirmar", json={}, headers=headers,
-    )
-    assert conf.status_code == 200, conf.text
-    vinculados = (
-        await db_session.execute(
-            select(RegistroFitosanitario.id).where(RegistroFitosanitario.plan_fitosanitario_id == plan_id)
-        )
-    ).scalars().all()
-    assert len(vinculados) == 1
-
-    resp = await client.delete(f"/plan-fitosanitario/{plan_id}", headers=headers)
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["detail"] == (
-        "Esta fila del plan ya tiene aplicaciones vinculadas; no se puede eliminar."
-    )
-    listado = await client.get("/plan-fitosanitario/?temporada=2026", headers=headers)
-    assert [f["id"] for f in listado.json()] == [plan_id]
-
-
-async def test_borrar_fila_del_plan_con_orden_vinculada_da_409(
-    client, create_user, create_insumo, create_parcela,
-):
-    headers, _ = await _auth(client, create_user)
-    insumo = await create_insumo(nombre="Azufre")
-    await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
-    plan_id = (await _plan(client, headers, insumo.id, ["flame"]))[0]["id"]
-    await _orden_desde_plan(client, headers, plan_id)
-
-    resp = await client.delete(f"/plan-fitosanitario/{plan_id}", headers=headers)
-    assert resp.status_code == 409, resp.text
-    assert "órdenes de aplicación" in resp.json()["detail"]
-
-
 async def test_borrar_fila_del_plan_sin_vinculos_sigue_funcionando(client, create_user, create_insumo):
     headers, _ = await _auth(client, create_user)
     insumo = await create_insumo(nombre="Azufre")
@@ -186,7 +141,7 @@ def _body_viejo(insumo_id, parcela_id, **extra):
     return body
 
 
-async def test_put_body_viejo_mismo_insumo_conserva_la_ronda_del_plan(
+async def test_put_body_viejo_mismo_insumo_sigue_funcionando(
     client, create_user, create_insumo, create_parcela,
 ):
     headers, _ = await _auth(client, create_user)
@@ -194,18 +149,17 @@ async def test_put_body_viejo_mismo_insumo_conserva_la_ronda_del_plan(
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
     plan_id = (await _plan(client, headers, insumo.id, ["flame"], numero=3))[0]["id"]
     orden = await _orden_desde_plan(client, headers, plan_id)
-    assert orden["origen"] == "plan"
-    assert orden["lineas"][0]["numero_aplicacion"] == 3
+    assert orden["lineas"][0]["numero_aplicacion"] is None
 
     resp = await client.put(
         f"/ordenes-aplicacion/{orden['id']}", json=_body_viejo(insumo.id, parcela.id), headers=headers,
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["origen"] == "plan"
-    assert body["lineas"][0]["numero_aplicacion"] == 3
+    assert body["origen"] == "extra"
+    assert body["lineas"][0]["numero_aplicacion"] is None
     assert body["lineas"][0]["dosis_por_ha"] == 2.0
-    assert body["plan_fitosanitario_id"] == plan_id
+    assert body["plan_fitosanitario_id"] is None
 
 
 async def test_put_body_viejo_con_otro_insumo_deja_la_orden_extra(

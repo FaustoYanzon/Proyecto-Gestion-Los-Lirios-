@@ -1,4 +1,4 @@
-"""Confirmation prompt of scripts/migracion/backfill_plan_registros.py before
+"""Confirmation prompt of scripts/migracion/_prod_db.py before
 writing to a non-local database."""
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "migracion" / "backfill_plan_registros.py"
-_spec = importlib.util.spec_from_file_location("backfill_plan_registros", _SCRIPT)
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "migracion" / "_prod_db.py"
+_spec = importlib.util.spec_from_file_location("_prod_db", _SCRIPT)
 cli = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cli)
 

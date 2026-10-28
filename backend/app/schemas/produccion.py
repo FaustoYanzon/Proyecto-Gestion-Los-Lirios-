@@ -292,11 +292,13 @@ class RegistroFitosanitarioResponse(BaseModel):
 # ── Plan Fitosanitario ──────────────────────────────────────────────────────
 
 class PlanFitosanitarioBase(BaseModel):
-    numero_aplicacion: int
+    # Legacy round number: the plan is monthly now, so it is optional and the
+    # API assigns the next free one per (season, variety, product).
+    numero_aplicacion: int | None = None
     mes: int = Field(ge=1, le=12)
     insumo_id: str
     objetivo: str
-    dosis_por_ha: float
+    dosis_por_ha: float = Field(gt=0)
     notas: str | None = None
 
 
@@ -311,7 +313,7 @@ class PlanFitosanitarioUpdate(BaseModel):
     mes: int | None = Field(None, ge=1, le=12)
     insumo_id: str | None = None
     objetivo: str | None = None
-    dosis_por_ha: float | None = None
+    dosis_por_ha: float | None = Field(None, gt=0)
     notas: str | None = None
 
 
@@ -333,27 +335,63 @@ class PlanFitosanitarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CumplimientoPlanItem(BaseModel):
-    plan_id: str
+EstadoAvanceLiteral = Literal["pendiente", "bajo", "ok", "exceso", "no_planificado"]
+
+
+class AvanceParcela(BaseModel):
+    id: str
+    nombre: str
+    ha: Decimal
+    dosis_aplicada: Decimal
+    porcentaje: Decimal | None = None
+    estado: EstadoAvanceLiteral
+
+
+class AvanceItem(BaseModel):
+    """Plan vs applied for one (variety, month, product); see services/plan_avance."""
     variedad: VariedadUva
-    numero_aplicacion: int
     mes: int
+    insumo_id: str
     insumo_nombre: str
-    objetivo: str
-    dosis_por_ha: float
-    parcelas_total: int
-    # Parcels fully covered (ha_cubiertas >= ha_parcela; a parcel without
-    # surface counts once it has a linked record).
-    parcelas_aplicadas: int
-    # By hectares (was by parcel count before the explicit plan link).
-    porcentaje: int
-    estado: Literal["pendiente", "parcial", "completo"]
-    ha_total: float
-    ha_cubiertas: float
-    pendiente_ha: float
-    pendiente_cantidad: float
-    # Hectare-weighted actual dose over the linked records; None = nothing applied.
-    dosis_real_promedio: float | None = None
+    unidad: str | None = None
+    # None = applied but not in the plan for that variety and month.
+    dosis_plan: Decimal | None = None
+    dosis_aplicada_promedio: Decimal
+    porcentaje: Decimal | None = None
+    estado: EstadoAvanceLiteral
+    ha_total: Decimal
+    parcelas: list[AvanceParcela]
+
+
+class ContrasteParcela(BaseModel):
+    parcela_id: str
+    # Empty = the whole parcel.
+    valvula_ids: list[str] = Field(default_factory=list)
+
+
+class ContrasteLineaIn(BaseModel):
+    insumo_id: str
+    dosis_por_ha: Decimal = Field(gt=0)
+
+
+class ContrasteRequest(BaseModel):
+    fecha: date
+    parcelas: list[ContrasteParcela] = Field(min_length=1)
+    lineas: list[ContrasteLineaIn] = Field(min_length=1)
+
+
+class ContrasteVariedad(BaseModel):
+    variedad: VariedadUva
+    estado: Literal["en_plan", "excede", "fuera_del_plan"]
+    dosis_plan: Decimal | None = None
+    dosis_aplicada_promedio: Decimal
+    dosis_proyectada_promedio: Decimal
+    porcentaje_proyectado: Decimal | None = None
+
+
+class ContrasteLineaOut(BaseModel):
+    insumo_id: str
+    variedades: list[ContrasteVariedad]
 
 
 class NecesidadInsumoItem(BaseModel):
@@ -363,40 +401,6 @@ class NecesidadInsumoItem(BaseModel):
     cantidad_pendiente: float
     stock_actual: Decimal
     faltante: float
-
-
-class RondaPendienteLinea(BaseModel):
-    insumo_id: str
-    insumo_nombre: str
-    unidad: UnidadInsumo
-    dosis_por_ha: float
-
-
-class RondaPendienteParcela(BaseModel):
-    id: str
-    nombre: str
-    # Area still missing at least one of the card's lines (max over lines).
-    ha_pendientes: float
-    # Some line of the card is already (partly) applied here: the UI leaves it
-    # unticked, since an order sprays every line on every parcel it lists.
-    parcial: bool
-
-
-class RondaPendienteVariedad(BaseModel):
-    variedad: VariedadUva
-    ha_pendientes: float
-    parcelas: list[RondaPendienteParcela]
-
-
-class RondaPendiente(BaseModel):
-    """A pending plan round across varieties sharing the same products/doses:
-    one tap in the order form preloads all of it."""
-    numero_aplicacion: int
-    objetivo: str
-    mes: int
-    # Only the products still pending on at least one parcel.
-    lineas: list[RondaPendienteLinea]
-    variedades: list[RondaPendienteVariedad]
 
 
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────
