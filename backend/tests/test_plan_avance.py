@@ -145,7 +145,7 @@ async def test_limite_30_abril_1_mayo_cambia_de_temporada(
 ):
     headers, uid, parcela, _v, insumo = await _escenario(
         client, create_user, create_parcela, create_valvula, create_insumo)
-    await crear_plan(client, headers, insumo.id, ["flame"], dosis_por_ha=2.0, mes=4, temporada=2026)
+    await crear_plan(client, headers, insumo.id, ["flame"], numero_aplicacion=2, dosis_por_ha=2.0, mes=4, temporada=2026)
     await _registro(db_session, uid, parcela.id, insumo.id, date(2027, 4, 30), 2.0)
     await _registro(db_session, uid, parcela.id, insumo.id, date(2027, 5, 1), 2.0)
 

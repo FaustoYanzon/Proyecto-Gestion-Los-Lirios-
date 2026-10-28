@@ -552,6 +552,12 @@ class PlanFitosanitario(Base):
 
     __table_args__ = (
         Index("ix_planes_fitosanitarios_temporada_variedad", "temporada", "variedad"),
+        # A twin row of the same round would double the monthly target.
+        Index(
+            "ux_planes_fitosanitarios_clave",
+            "temporada", "variedad", "numero_aplicacion", "insumo_id",
+            unique=True,
+        ),
     )
 
     insumo: Mapped[Insumo] = relationship("Insumo")

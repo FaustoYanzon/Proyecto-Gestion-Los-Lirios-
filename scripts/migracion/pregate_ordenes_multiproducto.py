@@ -1,7 +1,7 @@
 """Read-only pre-deploy gates for the multi-product orders migration.
 
-Runs SELECTs only (autocommit connection, no writes). Reuses the backfill
-script's connection resolution, so it reads `.env.prod` the same way and prints
+Runs SELECTs only (autocommit connection, no writes). Reuses the shared
+connection helper (_prod_db.py), so it reads `.env.prod` the same way and prints
 only the host name, never the URL or credentials.
 
 Usage (from the repo root, venv python):
@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 import asyncpg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from backfill_plan_registros import read_database_url  # noqa: E402
+from _prod_db import read_database_url  # noqa: E402
 
 
 async def main() -> int:

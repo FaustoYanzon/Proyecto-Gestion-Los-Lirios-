@@ -581,26 +581,11 @@ después.
 
 ---
 
-## Vínculo registro-plan fitosanitario (histórico manual) — `backfill_plan_registros.py`
+## Vínculo registro-plan fitosanitario — retirado (2026-10-28)
 
-Una sola vez por temporada (spec `2026-10-27-ordenes-multiproducto-plan`, "Migración +
-backfill", paso 4). El cumplimiento del plan se mide ahora por hectáreas desde
-`registros_fitosanitarios.plan_fitosanitario_id`; los registros cargados a mano antes de
-eso no tienen el vínculo. El script les aplica la heurística vieja (N-ésima aplicación de
-un insumo en una parcela -> N-ésima ronda del plan de su variedad). Lógica pura y reglas
-en `backend/app/services/plan_backfill.py` (tests: `backend/tests/test_backfill_plan_registros.py`).
-
-- Solo registros de la ventana de campaña, con insumo, sin orden y sin plan. Los ya
-  vinculados marcan rondas tomadas; nunca se tocan. Idempotente (2da corrida = 0).
-- Mismo día + parcela + insumo = una aplicación. `valvula_id` sin orden = parcela entera.
-- Sin columna `fuente` en la tabla: los vinculados por el backfill son exactamente
-  `orden_parcela_id IS NULL AND plan_fitosanitario_id IS NOT NULL` (la app nunca vincula
-  registros manuales), así que se revierte con ese filtro.
-- `--local` ignora `.env.prod` y exige base en localhost (dry-runs de desarrollo).
-- `--apply` escribe todo en UNA transacción (no en chunks: un corte entre chunks podía dejar
-  partido un grupo del mismo día y el reintento le daba la ronda siguiente). Sin `--local`
-  muestra el host y pide escribir `SI`. Un candidato del mismo día/parcela/insumo que un
-  registro ya vinculado reusa su ronda si el vinculado es manual; si viene de una orden se
-  omite como `duplicado_de_vinculado` (no infla la cobertura).
-
-Estado: dry-run local OK (2026-10-27). **Producción pendiente** (dry-run + `--apply` solo con OK de Fausto).
+`backfill_plan_registros.py` ya no existe. El cumplimiento del plan pasó a medirse por mes y
+producto con la fecha del registro (spec `2026-10-28-plan-mensual-avance-design`), así que ningún
+registro necesita vínculo al plan: los cargados a mano cuentan solos. Las funciones comunes
+(`read_database_url`, `confirmar_apply`) viven ahora en `scripts/migracion/_prod_db.py`.
+Antes de desplegar la migración del índice único del plan, correr el chequeo de solo lectura
+`pregate_ordenes_multiproducto.py` (duplicados de temporada+variedad+ronda+insumo).

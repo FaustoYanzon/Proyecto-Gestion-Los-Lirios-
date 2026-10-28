@@ -333,29 +333,6 @@ class PlanFitosanitarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CumplimientoPlanItem(BaseModel):
-    plan_id: str
-    variedad: VariedadUva
-    numero_aplicacion: int
-    mes: int
-    insumo_nombre: str
-    objetivo: str
-    dosis_por_ha: float
-    parcelas_total: int
-    # Parcels fully covered (ha_cubiertas >= ha_parcela; a parcel without
-    # surface counts once it has a linked record).
-    parcelas_aplicadas: int
-    # By hectares (was by parcel count before the explicit plan link).
-    porcentaje: int
-    estado: Literal["pendiente", "parcial", "completo"]
-    ha_total: float
-    ha_cubiertas: float
-    pendiente_ha: float
-    pendiente_cantidad: float
-    # Hectare-weighted actual dose over the linked records; None = nothing applied.
-    dosis_real_promedio: float | None = None
-
-
 EstadoAvanceLiteral = Literal["pendiente", "bajo", "ok", "exceso", "no_planificado"]
 
 
@@ -422,40 +399,6 @@ class NecesidadInsumoItem(BaseModel):
     cantidad_pendiente: float
     stock_actual: Decimal
     faltante: float
-
-
-class RondaPendienteLinea(BaseModel):
-    insumo_id: str
-    insumo_nombre: str
-    unidad: UnidadInsumo
-    dosis_por_ha: float
-
-
-class RondaPendienteParcela(BaseModel):
-    id: str
-    nombre: str
-    # Area still missing at least one of the card's lines (max over lines).
-    ha_pendientes: float
-    # Some line of the card is already (partly) applied here: the UI leaves it
-    # unticked, since an order sprays every line on every parcel it lists.
-    parcial: bool
-
-
-class RondaPendienteVariedad(BaseModel):
-    variedad: VariedadUva
-    ha_pendientes: float
-    parcelas: list[RondaPendienteParcela]
-
-
-class RondaPendiente(BaseModel):
-    """A pending plan round across varieties sharing the same products/doses:
-    one tap in the order form preloads all of it."""
-    numero_aplicacion: int
-    objetivo: str
-    mes: int
-    # Only the products still pending on at least one parcel.
-    lineas: list[RondaPendienteLinea]
-    variedades: list[RondaPendienteVariedad]
 
 
 # ── Órdenes de Aplicación ────────────────────────────────────────────────────

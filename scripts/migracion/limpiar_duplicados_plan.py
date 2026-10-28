@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent / "backend"))
 
-from backfill_plan_registros import confirmar_apply, read_database_url  # noqa: E402
+from _prod_db import confirmar_apply, read_database_url  # noqa: E402
 from app.services.plan_duplicados import FilaPlan, planear_limpieza  # noqa: E402
 
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
