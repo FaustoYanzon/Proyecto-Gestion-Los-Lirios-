@@ -147,3 +147,16 @@ async def test_plan_sin_ronda_asigna_numero_y_rechaza_mes_repetido(
     otro_mes = await client.post("/plan-fitosanitario/", json={**body, "mes": 11}, headers=headers)
     assert otro_mes.status_code == 201
     assert otro_mes.json()[0]["numero_aplicacion"] == 2
+
+
+async def test_editar_plan_a_un_mes_ocupado_da_409(client, create_user, create_insumo):
+    headers, _uid = await auth(client, create_user)
+    insumo = await create_insumo(nombre="Cobre")
+    body = {"temporada": 2026, "variedades": ["flame"], "insumo_id": insumo.id,
+            "objetivo": "Peronospora", "dosis_por_ha": 1.0}
+    octubre = (await client.post("/plan-fitosanitario/", json={**body, "mes": 10}, headers=headers)).json()[0]
+    await client.post("/plan-fitosanitario/", json={**body, "mes": 11}, headers=headers)
+    mismo = await client.put(f"/plan-fitosanitario/{octubre['id']}", json={"mes": 10, "dosis_por_ha": 2.0}, headers=headers)
+    assert mismo.status_code == 200, mismo.text
+    choque = await client.put(f"/plan-fitosanitario/{octubre['id']}", json={"mes": 11}, headers=headers)
+    assert choque.status_code == 409

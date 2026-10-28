@@ -30,4 +30,4 @@ Rediseño pedido tras probar con el ingeniero el flujo por rondas. Decisión: [[
 ## Pendientes
 
 - Limpiar columnas shim/legacy y `numero_aplicacion` de órdenes y registros.
-- El editar de una fila del plan no revalida que el producto no quede duplicado en el mes destino (solo lo ataja el índice por ronda).
+- Editar una fila a un (variedad, mes, producto) ocupado da 409; las filas gemelas creadas con ronda explícita (clientes viejos) siguen sumando.

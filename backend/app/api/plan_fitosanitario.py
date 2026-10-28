@@ -185,6 +185,7 @@ async def _verificar_clave_libre(
 
 async def _verificar_mes_libre(
     db: AsyncSession, temporada: int, variedad: VariedadUva, mes: int, insumo_id: str,
+    excepto_id: str | None = None,
 ) -> None:
     """409 when the product already has a dose for that variety and month: the
     target is one dose per key, so the existing row must be edited instead."""
@@ -194,6 +195,8 @@ async def _verificar_mes_libre(
         PlanFitosanitario.mes == mes,
         PlanFitosanitario.insumo_id == insumo_id,
     )
+    if excepto_id is not None:
+        stmt = stmt.where(PlanFitosanitario.id != excepto_id)
     if (await db.execute(stmt.limit(1))).first() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -286,6 +289,10 @@ async def update_plan_fitosanitario(
     }
     if any(k in update_data for k in clave):
         await _verificar_clave_libre(db, excepto_id=plan.id, **clave)
+    destino = {k: update_data.get(k, getattr(plan, k)) for k in ("temporada", "variedad", "mes", "insumo_id")}
+    if any(k in update_data for k in ("variedad", "mes", "insumo_id")):
+        # Moving a row onto an occupied (variety, month, product) would double its target.
+        await _verificar_mes_libre(db, excepto_id=plan.id, **destino)
     for field, value in update_data.items():
         setattr(plan, field, value)
 
