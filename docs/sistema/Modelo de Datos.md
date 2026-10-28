@@ -4,7 +4,7 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-27 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-10-28 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
 **47 tablas** · **9 vistas** · **36 enums** · **92 relaciones**
 
