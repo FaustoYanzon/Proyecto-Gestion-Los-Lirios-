@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,9 @@ from app.models.user import User
 from app.schemas.produccion import (
     AvanceItem,
     AvanceParcela,
+    ContrasteLineaOut,
+    ContrasteRequest,
+    ContrasteVariedad,
     CumplimientoPlanItem,
     NecesidadInsumoItem,
     PlanFitosanitarioCreate,
@@ -24,7 +28,8 @@ from app.schemas.produccion import (
     RondaPendienteParcela,
     RondaPendienteVariedad,
 )
-from app.services.plan_avance import calcular_avance
+from app.services.plan_avance import calcular_avance, pendiente_por_insumo
+from app.services.plan_contraste import LineaContraste, ParcelaElegida, calcular_contraste
 from app.services.plan_cobertura import CoberturaParcela, analizar_plan
 
 router = APIRouter(prefix="/plan-fitosanitario", tags=["Plan Fitosanitario"])
@@ -177,6 +182,35 @@ async def avance_plan_fitosanitario(
     ]
 
 
+@router.post("/contraste", response_model=list[ContrasteLineaOut])
+async def contraste_orden(
+    body: ContrasteRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[ContrasteLineaOut]:
+    """Read-only: how each product line of a draft order fits the monthly plan."""
+    lineas = await calcular_contraste(
+        db, body.fecha,
+        [ParcelaElegida(p.parcela_id, tuple(p.valvula_ids)) for p in body.parcelas],
+        [LineaContraste(ln.insumo_id, ln.dosis_por_ha) for ln in body.lineas],
+    )
+    return [
+        ContrasteLineaOut(
+            insumo_id=ln.insumo_id,
+            variedades=[
+                ContrasteVariedad(
+                    variedad=v.variedad, estado=v.estado.value, dosis_plan=v.dosis_plan,
+                    dosis_aplicada_promedio=v.dosis_aplicada_promedio,
+                    dosis_proyectada_promedio=v.dosis_proyectada_promedio,
+                    porcentaje_proyectado=v.porcentaje_proyectado,
+                )
+                for v in ln.variedades
+            ],
+        )
+        for ln in lineas
+    ]
+
+
 @router.get("/cumplimiento", response_model=list[CumplimientoPlanItem])
 async def cumplimiento_plan_fitosanitario(
     temporada: int = Query(...),
@@ -194,19 +228,19 @@ async def necesidad_stock(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[NecesidadInsumoItem]:
-    _resultado, pendiente_por_insumo = await _calcular_cumplimiento(db, temporada)
-    if not pendiente_por_insumo:
+    pendientes = await pendiente_por_insumo(db, temporada, date.today())
+    if not pendientes:
         return []
 
     insumos = {
         i.id: i
         for i in (
-            await db.execute(select(Insumo).where(Insumo.id.in_(pendiente_por_insumo.keys())))
+            await db.execute(select(Insumo).where(Insumo.id.in_(pendientes.keys())))
         ).scalars().all()
     }
 
     items: list[NecesidadInsumoItem] = []
-    for insumo_id, cantidad_pendiente in pendiente_por_insumo.items():
+    for insumo_id, cantidad_pendiente in pendientes.items():
         insumo = insumos.get(insumo_id)
         if insumo is None:
             continue

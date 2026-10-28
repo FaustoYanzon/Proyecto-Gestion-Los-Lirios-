@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.lotes_pasa import temporada_de
 from app.models.insumo import Insumo
 from app.models.parcela import Parcela, VariedadUva
 from app.models.produccion import PlanFitosanitario, RegistroFitosanitario
@@ -151,6 +152,28 @@ async def dosis_aplicada_por_parcela(
     desde, hasta = rango_mes(temporada, mes)
     grupos = await _dosis_por_grupo(db, desde, hasta, parcelas)
     return {(pid, insumo_id): dosis for (pid, _m, insumo_id), dosis in grupos.items()}
+
+
+async def pendiente_por_insumo(db: AsyncSession, temporada: int, hoy: date) -> dict[str, Decimal]:
+    """insumo_id -> quantity still to apply, only over months not yet closed.
+
+    A closed month in red will not be applied by itself, so it must not ask for
+    stock. A parcel above target does not offset another below it.
+    """
+    actual = temporada_de(hoy)
+    if temporada < actual:
+        return {}
+    pendiente: dict[str, Decimal] = defaultdict(Decimal)
+    for clave in await calcular_avance(db, temporada):
+        if clave.dosis_plan is None:
+            continue
+        if temporada == actual and orden_campania(clave.mes) < orden_campania(hoy.month):
+            continue
+        for p in clave.parcelas:
+            faltante = clave.dosis_plan - p.dosis_aplicada
+            if faltante > 0:
+                pendiente[clave.insumo_id] += faltante * p.ha
+    return dict(pendiente)
 
 
 def _agregar(parcelas: list[AvanceParcela], dosis_plan: Decimal | None) -> tuple[Decimal, Decimal, Decimal | None, EstadoAvance]:

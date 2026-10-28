@@ -384,6 +384,37 @@ class AvanceItem(BaseModel):
     parcelas: list[AvanceParcela]
 
 
+class ContrasteParcela(BaseModel):
+    parcela_id: str
+    # Empty = the whole parcel.
+    valvula_ids: list[str] = Field(default_factory=list)
+
+
+class ContrasteLineaIn(BaseModel):
+    insumo_id: str
+    dosis_por_ha: Decimal = Field(gt=0)
+
+
+class ContrasteRequest(BaseModel):
+    fecha: date
+    parcelas: list[ContrasteParcela] = Field(min_length=1)
+    lineas: list[ContrasteLineaIn] = Field(min_length=1)
+
+
+class ContrasteVariedad(BaseModel):
+    variedad: VariedadUva
+    estado: Literal["en_plan", "excede", "fuera_del_plan"]
+    dosis_plan: Decimal | None = None
+    dosis_aplicada_promedio: Decimal
+    dosis_proyectada_promedio: Decimal
+    porcentaje_proyectado: Decimal | None = None
+
+
+class ContrasteLineaOut(BaseModel):
+    insumo_id: str
+    variedades: list[ContrasteVariedad]
+
+
 class NecesidadInsumoItem(BaseModel):
     insumo_id: str
     insumo_nombre: str
