@@ -292,7 +292,9 @@ class RegistroFitosanitarioResponse(BaseModel):
 # ── Plan Fitosanitario ──────────────────────────────────────────────────────
 
 class PlanFitosanitarioBase(BaseModel):
-    numero_aplicacion: int
+    # Legacy round number: the plan is monthly now, so it is optional and the
+    # API assigns the next free one per (season, variety, product).
+    numero_aplicacion: int | None = None
     mes: int = Field(ge=1, le=12)
     insumo_id: str
     objetivo: str

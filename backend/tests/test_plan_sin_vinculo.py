@@ -130,3 +130,20 @@ async def test_endpoints_de_rondas_ya_no_existen(client, create_user):
     for ruta in ("cumplimiento", "rondas-pendientes"):
         resp = await client.get(f"/plan-fitosanitario/{ruta}", params={"temporada": 2026}, headers=headers)
         assert resp.status_code in (404, 405), (ruta, resp.status_code)
+
+
+async def test_plan_sin_ronda_asigna_numero_y_rechaza_mes_repetido(
+    client, create_user, create_insumo,
+):
+    headers, _uid = await auth(client, create_user)
+    insumo = await create_insumo(nombre="Azufre")
+    body = {"temporada": 2026, "variedades": ["flame"], "mes": 10,
+            "insumo_id": insumo.id, "objetivo": "Oidio", "dosis_por_ha": 2.0}
+    ok = await client.post("/plan-fitosanitario/", json=body, headers=headers)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()[0]["numero_aplicacion"] == 1
+    dup = await client.post("/plan-fitosanitario/", json=body, headers=headers)
+    assert dup.status_code == 409
+    otro_mes = await client.post("/plan-fitosanitario/", json={**body, "mes": 11}, headers=headers)
+    assert otro_mes.status_code == 201
+    assert otro_mes.json()[0]["numero_aplicacion"] == 2

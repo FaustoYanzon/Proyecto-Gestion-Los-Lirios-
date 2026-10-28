@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -183,6 +183,43 @@ async def _verificar_clave_libre(
         )
 
 
+async def _verificar_mes_libre(
+    db: AsyncSession, temporada: int, variedad: VariedadUva, mes: int, insumo_id: str,
+) -> None:
+    """409 when the product already has a dose for that variety and month: the
+    target is one dose per key, so the existing row must be edited instead."""
+    stmt = select(PlanFitosanitario.id).where(
+        PlanFitosanitario.temporada == temporada,
+        PlanFitosanitario.variedad == variedad,
+        PlanFitosanitario.mes == mes,
+        PlanFitosanitario.insumo_id == insumo_id,
+    )
+    if (await db.execute(stmt.limit(1))).first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ese producto ya está en el plan de {variedad.value} para ese mes: "
+                "editá la dosis de la fila existente."
+            ),
+        )
+
+
+async def _siguiente_numero(
+    db: AsyncSession, temporada: int, variedad: VariedadUva, insumo_id: str,
+) -> int:
+    """Next free legacy round number for the unique index (not user-facing)."""
+    maximo = (
+        await db.execute(
+            select(func.max(PlanFitosanitario.numero_aplicacion)).where(
+                PlanFitosanitario.temporada == temporada,
+                PlanFitosanitario.variedad == variedad,
+                PlanFitosanitario.insumo_id == insumo_id,
+            )
+        )
+    ).scalar()
+    return (maximo or 0) + 1
+
+
 @router.post("/", response_model=list[PlanFitosanitarioResponse], status_code=status.HTTP_201_CREATED)
 async def create_plan_fitosanitario(
     data: PlanFitosanitarioCreate,
@@ -193,16 +230,23 @@ async def create_plan_fitosanitario(
     if insumo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insumo not found")
 
+    numeros: dict[VariedadUva, int] = {}
     for variedad in data.variedades:
-        await _verificar_clave_libre(
-            db, data.temporada, variedad, data.numero_aplicacion, data.insumo_id)
+        if data.numero_aplicacion is not None:
+            # Explicit round (legacy clients): same-month twins stay allowed and add up.
+            await _verificar_clave_libre(
+                db, data.temporada, variedad, data.numero_aplicacion, data.insumo_id)
+            numeros[variedad] = data.numero_aplicacion
+        else:
+            await _verificar_mes_libre(db, data.temporada, variedad, data.mes, data.insumo_id)
+            numeros[variedad] = await _siguiente_numero(db, data.temporada, variedad, data.insumo_id)
 
     creados: list[PlanFitosanitario] = []
     for variedad in data.variedades:
         plan = PlanFitosanitario(
             temporada=data.temporada,
             variedad=variedad,
-            numero_aplicacion=data.numero_aplicacion,
+            numero_aplicacion=numeros[variedad],
             mes=data.mes,
             insumo_id=data.insumo_id,
             objetivo=data.objetivo,

@@ -19,7 +19,7 @@ export interface PlanFitosanitario {
 export interface PlanFitosanitarioCreate {
   temporada: number
   variedades: string[]
-  numero_aplicacion: number
+  numero_aplicacion?: number
   mes: number
   insumo_id: string
   objetivo: string
