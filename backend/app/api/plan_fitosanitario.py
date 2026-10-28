@@ -12,6 +12,8 @@ from app.models.parcela import Parcela, VariedadUva
 from app.models.produccion import OrdenAplicacion, PlanFitosanitario, RegistroFitosanitario
 from app.models.user import User
 from app.schemas.produccion import (
+    AvanceItem,
+    AvanceParcela,
     CumplimientoPlanItem,
     NecesidadInsumoItem,
     PlanFitosanitarioCreate,
@@ -22,6 +24,7 @@ from app.schemas.produccion import (
     RondaPendienteParcela,
     RondaPendienteVariedad,
 )
+from app.services.plan_avance import calcular_avance
 from app.services.plan_cobertura import CoberturaParcela, analizar_plan
 
 router = APIRouter(prefix="/plan-fitosanitario", tags=["Plan Fitosanitario"])
@@ -145,6 +148,33 @@ async def _calcular_cumplimiento(
         )
 
     return resultado, dict(pendiente_por_insumo)
+
+
+@router.get("/avance", response_model=list[AvanceItem])
+async def avance_plan_fitosanitario(
+    temporada: int = Query(...),
+    mes: int | None = Query(None, ge=1, le=12),
+    variedad: VariedadUva | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> list[AvanceItem]:
+    """Plan vs applied by variety, month and product (all months without `mes`)."""
+    claves = await calcular_avance(db, temporada, mes, variedad)
+    return [
+        AvanceItem(
+            variedad=c.variedad, mes=c.mes, insumo_id=c.insumo_id, insumo_nombre=c.insumo_nombre,
+            unidad=c.unidad, dosis_plan=c.dosis_plan, dosis_aplicada_promedio=c.dosis_aplicada_promedio,
+            porcentaje=c.porcentaje, estado=c.estado.value, ha_total=c.ha_total,
+            parcelas=[
+                AvanceParcela(
+                    id=p.parcela_id, nombre=p.nombre, ha=p.ha, dosis_aplicada=p.dosis_aplicada,
+                    porcentaje=p.porcentaje, estado=p.estado.value,
+                )
+                for p in c.parcelas
+            ],
+        )
+        for c in claves
+    ]
 
 
 @router.get("/cumplimiento", response_model=list[CumplimientoPlanItem])

@@ -356,6 +356,34 @@ class CumplimientoPlanItem(BaseModel):
     dosis_real_promedio: float | None = None
 
 
+EstadoAvanceLiteral = Literal["pendiente", "bajo", "ok", "exceso", "no_planificado"]
+
+
+class AvanceParcela(BaseModel):
+    id: str
+    nombre: str
+    ha: Decimal
+    dosis_aplicada: Decimal
+    porcentaje: Decimal | None = None
+    estado: EstadoAvanceLiteral
+
+
+class AvanceItem(BaseModel):
+    """Plan vs applied for one (variety, month, product); see services/plan_avance."""
+    variedad: VariedadUva
+    mes: int
+    insumo_id: str
+    insumo_nombre: str
+    unidad: str | None = None
+    # None = applied but not in the plan for that variety and month.
+    dosis_plan: Decimal | None = None
+    dosis_aplicada_promedio: Decimal
+    porcentaje: Decimal | None = None
+    estado: EstadoAvanceLiteral
+    ha_total: Decimal
+    parcelas: list[AvanceParcela]
+
+
 class NecesidadInsumoItem(BaseModel):
     insumo_id: str
     insumo_nombre: str
