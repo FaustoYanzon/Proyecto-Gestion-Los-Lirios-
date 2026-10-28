@@ -1,9 +1,10 @@
 'use client'
 
 import { Suspense, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2, Undo2 } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Plus, X, Loader2, ChevronDown, ChevronRight, Check, Pencil, Trash2, Undo2 } from 'lucide-react'
 import {
   getOrdenesAplicacion,
   eliminarOrdenExtra,
@@ -19,7 +20,9 @@ import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
 import AplicacionesRealizadas from '@/components/produccion/AplicacionesRealizadas'
 import ARevisarPanel, { A_REVISAR_QUERY_KEY, productosDe } from '@/components/produccion/ARevisarPanel'
 import NuevaOrdenAplicacion, { apiErrorMessage } from '@/components/produccion/NuevaOrdenAplicacion'
-import { formatNum } from '@/components/produccion/formato'
+import { MESES, formatNum } from '@/components/produccion/formato'
+import { getAvance } from '@/lib/api/planFitosanitario'
+import { hoyArgentina } from '@/lib/api/riego'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 import { useAuthStore } from '@/store/authStore'
 
@@ -38,7 +41,6 @@ const ESTADO_STYLES: Record<EstadoOrdenAplicacion, string> = {
 const BAR_COLORS: Record<EstadoOrdenAplicacion, string> = {
   pendiente: 'bg-amber-400', en_curso: 'bg-blue-500', completada: 'bg-green-500',
 }
-const ORIGEN_LABELS: Record<string, string> = { plan: 'Del plan', extra: 'Fuera de plan' }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
@@ -144,9 +146,6 @@ function OrdenCard({
             <span className="text-sm text-gray-600">{variedadesTexto(orden)}</span>
             <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLES[orden.estado]}`}>
               {ESTADO_LABELS[orden.estado]}
-            </span>
-            <span className="text-[11px] font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200">
-              {ORIGEN_LABELS[orden.origen] ?? orden.origen}
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="productos-orden">
@@ -341,6 +340,18 @@ function OrdenesAplicacion() {
     queryFn: () => getOrdenesAplicacion({ temporada }),
   })
 
+  // Plan of the current month: products still missing, for the banner below.
+  const hoy = hoyArgentina()
+  const mesActual = Number(hoy.slice(5, 7))
+  const temporadaActual = mesActual >= 5 ? Number(hoy.slice(0, 4)) : Number(hoy.slice(0, 4)) - 1
+  const { data: avanceMes = [] } = useQuery({
+    queryKey: ['plan-avance', temporadaActual, mesActual],
+    queryFn: () => getAvance(temporadaActual, mesActual),
+    staleTime: 60_000,
+  })
+  const faltantesPlan = avanceMes.filter((a) => a.estado === 'pendiente' || a.estado === 'bajo')
+  const variedadesFaltantes = new Set(faltantesPlan.map((a) => a.variedad)).size
+
   const { data: aRevisar = [] } = useQuery({
     queryKey: A_REVISAR_QUERY_KEY,
     queryFn: getValvulasARevisar,
@@ -414,6 +425,22 @@ function OrdenesAplicacion() {
           )}
         </div>
       </div>
+
+      {faltantesPlan.length > 0 && (
+        <div
+          data-testid="banner-plan"
+          className="flex items-center justify-between gap-3 flex-wrap rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          <span className="flex items-center gap-2">
+            <AlertTriangle size={15} className="shrink-0" />
+            {MESES[mesActual - 1]}: faltan {faltantesPlan.length} {faltantesPlan.length === 1 ? 'producto' : 'productos'} del
+            plan en {variedadesFaltantes} {variedadesFaltantes === 1 ? 'variedad' : 'variedades'}
+          </span>
+          <Link href="/dashboard/produccion/cumplimiento-fitosanitario" className="font-medium underline">
+            Ver cumplimiento
+          </Link>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {TABS.map((t) => (
