@@ -160,3 +160,16 @@ async def test_editar_plan_a_un_mes_ocupado_da_409(client, create_user, create_i
     assert mismo.status_code == 200, mismo.text
     choque = await client.put(f"/plan-fitosanitario/{octubre['id']}", json={"mes": 11}, headers=headers)
     assert choque.status_code == 409
+
+
+async def test_plan_rechaza_dosis_cero_y_variedades_repetidas(client, create_user, create_insumo):
+    headers, _uid = await auth(client, create_user)
+    insumo = await create_insumo(nombre="Zinc")
+    body = {"temporada": 2026, "variedades": ["flame"], "mes": 10, "insumo_id": insumo.id,
+            "objetivo": "Carencia", "dosis_por_ha": 0}
+    assert (await client.post("/plan-fitosanitario/", json=body, headers=headers)).status_code == 422
+    repetidas = await client.post(
+        "/plan-fitosanitario/", json={**body, "dosis_por_ha": 1.0, "variedades": ["flame", "flame"]},
+        headers=headers)
+    assert repetidas.status_code == 201, repetidas.text
+    assert len(repetidas.json()) == 1

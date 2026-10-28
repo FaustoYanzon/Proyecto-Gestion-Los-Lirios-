@@ -234,7 +234,9 @@ async def create_plan_fitosanitario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insumo not found")
 
     numeros: dict[VariedadUva, int] = {}
-    for variedad in data.variedades:
+    # Repeated varieties in the body would get the same round number.
+    variedades = list(dict.fromkeys(data.variedades))
+    for variedad in variedades:
         if data.numero_aplicacion is not None:
             # Explicit round (legacy clients): same-month twins stay allowed and add up.
             await _verificar_clave_libre(
@@ -245,7 +247,7 @@ async def create_plan_fitosanitario(
             numeros[variedad] = await _siguiente_numero(db, data.temporada, variedad, data.insumo_id)
 
     creados: list[PlanFitosanitario] = []
-    for variedad in data.variedades:
+    for variedad in variedades:
         plan = PlanFitosanitario(
             temporada=data.temporada,
             variedad=variedad,

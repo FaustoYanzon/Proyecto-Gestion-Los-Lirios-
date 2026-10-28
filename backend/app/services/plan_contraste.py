@@ -136,7 +136,7 @@ async def calcular_contraste(
                 proyectada = sum((p for _w, _a, p in pares), _ZERO) / len(pares)
 
             dosis_plan = objetivo.get((var, ln.insumo_id))
-            if dosis_plan is None:
+            if dosis_plan is None or dosis_plan <= 0:
                 estado, pct = EstadoContraste.fuera_del_plan, None
             else:
                 pct = proyectada / dosis_plan * _CIEN

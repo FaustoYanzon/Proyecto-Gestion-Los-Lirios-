@@ -273,3 +273,15 @@ async def test_avance_endpoint_filtra_mes_y_variedad(
         "/plan-fitosanitario/avance", params={"temporada": 2026, "variedad": "bonarda"}, headers=headers,
     )
     assert vacio.json() == []
+
+
+async def test_registro_sin_plan_con_dosis_cero_no_rompe_el_avance(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, uid = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 5", variedad=VariedadUva.flame, superficie_ha=3.0)
+    insumo = await create_insumo(nombre="Azufre")
+    await _registro(db_session, uid, parcela.id, insumo.id, date(2026, 10, 5), 0.0)
+    resp = await client.get("/plan-fitosanitario/avance", params={"temporada": 2026}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []

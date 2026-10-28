@@ -298,7 +298,7 @@ class PlanFitosanitarioBase(BaseModel):
     mes: int = Field(ge=1, le=12)
     insumo_id: str
     objetivo: str
-    dosis_por_ha: float
+    dosis_por_ha: float = Field(gt=0)
     notas: str | None = None
 
 
@@ -313,7 +313,7 @@ class PlanFitosanitarioUpdate(BaseModel):
     mes: int | None = Field(None, ge=1, le=12)
     insumo_id: str | None = None
     objetivo: str | None = None
-    dosis_por_ha: float | None = None
+    dosis_por_ha: float | None = Field(None, gt=0)
     notas: str | None = None
 
 

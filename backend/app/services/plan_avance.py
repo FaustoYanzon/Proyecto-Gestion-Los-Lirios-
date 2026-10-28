@@ -246,6 +246,8 @@ async def calcular_avance(
 
     resultado: list[AvanceClave] = []
     for (var, m, insumo_id), dosis_plan in objetivo.items():
+        if dosis_plan <= 0:
+            continue  # legacy zero-dose row: no target to measure against
         filas = [
             AvanceParcela(
                 parcela_id=p.id, nombre=p.nombre, ha=_ha(p.superficie_ha),
@@ -266,6 +268,8 @@ async def calcular_avance(
             for p in por_variedad.get(var, [])
             if (d := dosis.get((p.id, m, insumo_id), _ZERO)) > 0
         ]
+        if not filas:
+            continue  # applied dose weighs 0 (zero-dose record, valve without surface)
         ha_total, promedio, porcentaje, estado = _agregar(filas, None)
         nombre, unidad = nombres[insumo_id]
         resultado.append(AvanceClave(var, m, insumo_id, nombre, unidad, None, promedio, porcentaje, estado, ha_total, filas))
