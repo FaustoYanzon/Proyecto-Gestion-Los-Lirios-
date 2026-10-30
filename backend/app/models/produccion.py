@@ -275,6 +275,15 @@ class RegistroRiego(Base):
         Index("ix_registros_riego_fecha", "fecha"),
         Index("ix_registros_riego_parcela_fecha", "parcela_id", "fecha"),
         Index("ix_registros_riego_en_curso", "cabezal", postgresql_where=text("fin IS NULL")),
+        # One manto in progress per parcel; closes the race the 409 check in
+        # iniciar_riego cannot (two operators starting at the same time).
+        Index(
+            "ux_registros_riego_manto_en_curso",
+            "parcela_id",
+            unique=True,
+            postgresql_where=text("fin IS NULL AND tipo = 'manto'"),
+            sqlite_where=text("fin IS NULL AND tipo = 'manto'"),
+        ),
         Index(
             "uq_registros_riego_idempotency",
             "idempotency_key",

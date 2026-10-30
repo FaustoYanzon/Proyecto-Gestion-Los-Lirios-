@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, outerjoin, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -930,7 +931,17 @@ async def iniciar_riego(
         **data,
     )
     db.add(riego)
-    await db.flush()
+    try:
+        # Savepoint: a lost race must not poison the request's transaction.
+        async with db.begin_nested():
+            await db.flush()
+    except IntegrityError as exc:
+        if "ux_registros_riego_manto_en_curso" not in str(exc.orig):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya hay un riego a manto en curso en esta parcela.",
+        ) from exc
     await db.refresh(riego)
     return riego
 
