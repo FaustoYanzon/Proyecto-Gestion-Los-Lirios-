@@ -5,7 +5,10 @@ Usa la API REST firmada directo con httpx (async) en vez del SDK oficial
 un endpoint async sin envolverlo en un threadpool.
 """
 
+import asyncio
 import hashlib
+import logging
+import re
 import time
 import uuid
 
@@ -13,6 +16,8 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
@@ -293,3 +298,94 @@ async def upload_comprobante_whatsapp(raw: bytes, content_type: str, wa_message_
     if response.status_code != 200:
         return None
     return response.json()["secure_url"]
+
+
+
+# ── Borrado de medios huérfanos ───────────────────────────────────────────────
+#
+# Borrar la fila de una foto/informe no borraba el archivo en Cloudinary. El
+# borrado va por la sesión de BD: el endpoint solo encola la URL (`db.info`) y
+# `get_db` la procesa DESPUÉS del commit, así un rollback no deja una fila que
+# apunta a una imagen ya destruida. Es de mejor esfuerzo: si Cloudinary falla,
+# queda un huérfano y se loguea, nunca se rompe la operación del usuario.
+
+MEDIA_A_BORRAR_KEY = "cloudinary_a_borrar"
+
+# Solo se destruye lo que esta app sube como álbum/informe. Avatares (se pisan
+# solos) y comprobantes de WhatsApp quedan fuera a propósito.
+_PREFIJOS_BORRABLES = ("fotos_parcela/", "fotos_ordenes_aplicacion/", "informes_analisis/")
+_URL_MEDIA_RE = re.compile(
+    r"^https://res\.cloudinary\.com/(?P<cloud>[^/]+)/(?P<tipo>image|raw|video)/upload/"
+    r"(?:v\d+/)?(?P<public_id>.+)$"
+)
+
+_tareas_borrado: set[asyncio.Task] = set()
+
+
+def parse_media_url(url: str) -> tuple[str, str, str] | None:
+    """(cloud_name, resource_type, public_id) de una URL de Cloudinary propia de
+    esta app, o None si no es borrable (otra carpeta, otro host, URL externa)."""
+    match = _URL_MEDIA_RE.match(url or "")
+    if match is None:
+        return None
+    tipo, public_id = match["tipo"], match["public_id"]
+    if tipo != "raw":
+        # image/video URLs carry the format as an extension; the public_id does not.
+        cabeza, _, ultimo = public_id.rpartition("/")
+        ultimo = ultimo.rsplit(".", 1)[0]
+        public_id = f"{cabeza}/{ultimo}" if cabeza else ultimo
+    if not public_id.startswith(_PREFIJOS_BORRABLES):
+        return None
+    return match["cloud"], tipo, public_id
+
+
+def encolar_borrado(db, url: str | None) -> None:
+    """Marca `url` para destruirla en Cloudinary cuando la sesión haga commit."""
+    if url and parse_media_url(url) is not None:
+        db.info.setdefault(MEDIA_A_BORRAR_KEY, []).append(url)
+
+
+async def borrar_medios(urls: list[str]) -> None:
+    """Destruye en Cloudinary cada URL borrable. Nunca levanta."""
+    try:
+        cloud_name, api_key, api_secret = _require_config()
+    except CloudinaryNotConfigured:
+        return  # Local/dev without credentials: nothing to clean.
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        for url in urls:
+            parsed = parse_media_url(url)
+            if parsed is None or parsed[0] != cloud_name:
+                continue  # Never touch another account's media.
+            _, tipo, public_id = parsed
+            timestamp = int(time.time())
+            # Params are signed in alphabetical order.
+            to_sign = f"invalidate=true&public_id={public_id}&timestamp={timestamp}"
+            signature = hashlib.sha1((to_sign + api_secret).encode()).hexdigest()
+            try:
+                response = await client.post(
+                    f"https://api.cloudinary.com/v1_1/{cloud_name}/{tipo}/destroy",
+                    data={
+                        "public_id": public_id,
+                        "timestamp": timestamp,
+                        "invalidate": "true",
+                        "api_key": api_key,
+                        "signature": signature,
+                    },
+                )
+            except httpx.HTTPError as exc:
+                logger.warning("cloudinary destroy failed public_id=%s error=%s", public_id, exc)
+                continue
+            resultado = response.json().get("result") if response.status_code == 200 else None
+            if resultado not in ("ok", "not found"):
+                logger.warning(
+                    "cloudinary destroy rejected public_id=%s status=%s body=%s",
+                    public_id, response.status_code, response.text[:200],
+                )
+
+
+def programar_borrado(urls: list[str]) -> None:
+    """Lanza `borrar_medios` en segundo plano (no demora la respuesta HTTP)."""
+    tarea = asyncio.create_task(borrar_medios(urls))
+    _tareas_borrado.add(tarea)  # Keep a reference or the task can be garbage-collected.
+    tarea.add_done_callback(_tareas_borrado.discard)

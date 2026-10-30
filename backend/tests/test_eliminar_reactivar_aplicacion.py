@@ -194,8 +194,13 @@ async def test_eliminar_registro_de_valvula_con_las_otras_aplicadas_cierra_parce
     await _confirmar_valvula(client, headers, orden, filas["23"])
     assert await _stock(db_session, insumo) == 88.0
 
+    # The photo's file must be queued for destruction in Cloudinary, not just its row.
+    encoladas: list[str | None] = []
+    monkeypatch.setattr("app.services.aplicaciones.encolar_borrado", lambda db, url: encoladas.append(url))
+
     resp = await client.delete(_url_eliminar(r22), headers=headers)
     assert resp.status_code == 204, resp.text
+    assert encoladas == [foto.json()["url"]]
 
     assert await _stock(db_session, insumo) == 92.0  # vuelven exactamente las 4 de la válvula 22
     db_session.expire_all()

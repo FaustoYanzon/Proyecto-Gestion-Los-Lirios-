@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.core.cloudinary_client import encolar_borrado
 from app.models.insumo import Insumo, MovimientoStock
 from app.models.produccion import (
     EstadoOrdenAplicacion,
@@ -176,6 +177,7 @@ async def _borrar_registros(
             await db.execute(select(FotoRegistroFitosanitario).where(or_(*condiciones)))
         ).scalars().all()
         for foto in fotos:
+            encolar_borrado(db, foto.url)
             await db.delete(foto)
 
     # Legacy unique FK from the row to the first registro: detach before deleting.
