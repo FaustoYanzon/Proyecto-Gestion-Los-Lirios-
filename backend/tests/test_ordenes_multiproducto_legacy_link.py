@@ -45,7 +45,6 @@ async def _como_backend_viejo(db_session) -> str:
     await db_session.execute(
         update(RegistroFitosanitario).values(
             orden_valvula_id=None, orden_parcela_id=None, orden_insumo_id=None,
-            plan_fitosanitario_id=None,
         )
     )
     await db_session.commit()

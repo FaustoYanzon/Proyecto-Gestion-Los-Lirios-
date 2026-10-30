@@ -162,15 +162,12 @@ export interface OrdenAplicacionLinea {
   dosis_por_ha: number
   dias_carencia: number
   dias_reingreso: number
-  // Plan round this product counts against; null = off-plan product.
-  numero_aplicacion: number | null
 }
 
 export interface OrdenAplicacion {
   id: string
   temporada: number
   origen: OrigenOrdenAplicacion
-  plan_fitosanitario_id: string | null
   // Deprecated single-product shim (first line / variety of the largest
   // parcel). Still the fallback when `lineas`/`variedades` are missing
   // (old server or old cached data).

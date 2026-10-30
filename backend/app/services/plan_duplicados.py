@@ -3,8 +3,9 @@
 A plan row is identified by (temporada, variedad, numero_aplicacion, insumo_id).
 The order-line resolution picks one row per key, so a second row with the same
 key can never be covered and its round card would never disappear. This module
-decides which duplicates are safe to delete; the CLI in
-scripts/migracion/limpiar_duplicados_plan.py loads the rows and applies the plan.
+decides which duplicates are safe to delete. The one-shot CLI that applied it
+(limpiar_duplicados_plan.py, run on prod 2026-10-27) was removed with the order/plan
+link columns; see git history.
 
 Rules (conservative on purpose, a wrong delete is hard to undo):
 - Only groups whose rows are identical in (mes, objetivo, dosis_por_ha) are

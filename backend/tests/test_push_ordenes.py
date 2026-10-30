@@ -135,7 +135,7 @@ async def test_crear_orden_extra_notifica_a_todos(
     assert llamadas[0]["user_ids"] is None
 
 
-async def test_crear_orden_desde_plan_notifica_a_todos(
+async def test_crear_orden_por_variedad_notifica_a_todos(
     client, monkeypatch, create_user, create_insumo, create_parcela, create_valvula,
 ):
     llamadas = _recorder(monkeypatch)
@@ -151,10 +151,12 @@ async def test_crear_orden_desde_plan_notifica_a_todos(
         headers=headers,
     )
     r = await client.post(
-        "/ordenes-aplicacion/desde-plan",
+        "/ordenes-aplicacion/",
         json={
-            "plan_fitosanitario_id": plan.json()[0]["id"], "dias_carencia": 7,
-            "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
         },
         headers=headers,
     )

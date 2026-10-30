@@ -1,12 +1,9 @@
 """Shared helpers for plan-coverage tests: build plan rows and orders through
 the API and confirm them, so the records carry the same explicit links
-(`plan_fitosanitario_id`, `orden_valvula_id`, ...) production code writes.
+(`orden_valvula_id`, ...) production code writes.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
-
-from app.models.produccion import RegistroFitosanitario
 from app.models.user import UserRole
 
 
@@ -76,20 +73,3 @@ async def aplicar(client, headers, lineas, parcela_ids, valvula_ids=None) -> dic
     orden = await crear_orden(client, headers, lineas, parcela_ids, valvula_ids)
     await confirmar_todo(client, headers, orden)
     return orden
-
-
-def registro_parcela_entera(
-    parcela_id: str, insumo_id: str, plan_id: str | None, created_by: str,
-    dosis_por_ha: float = 1.5,
-) -> RegistroFitosanitario:
-    """A whole-parcel record linked to a plan row with no order behind it
-    (what the historical backfill writes for manual records)."""
-    hoy = date(2026, 10, 20)
-    return RegistroFitosanitario(
-        fecha=hoy, parcela_id=parcela_id, producto_nombre="Producto",
-        dosis_por_ha=dosis_por_ha, insumo_id=insumo_id, motivo="Oidio",
-        dias_carencia=7, dias_reingreso=2,
-        fecha_habilitacion_cosecha=hoy + timedelta(days=7),
-        fecha_habilitacion_reingreso=hoy + timedelta(days=2),
-        responsable="Juan Perez", plan_fitosanitario_id=plan_id, created_by=created_by,
-    )

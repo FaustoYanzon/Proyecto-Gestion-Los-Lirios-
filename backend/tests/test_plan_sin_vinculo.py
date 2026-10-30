@@ -1,4 +1,4 @@
-"""Orders no longer link to the plan (progress is by date) and the plan keeps a
+"""Orders and records no longer link to the plan (progress is by date) and the plan keeps a
 unique (temporada, variedad, ronda, insumo) key.
 
 Spec: docs/superpowers/specs/2026-10-28-plan-mensual-avance-design.md (sections 4 and 6).
@@ -7,12 +7,11 @@ from __future__ import annotations
 
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models.parcela import VariedadUva
-from app.models.produccion import PlanFitosanitario, RegistroFitosanitario
-from tests.helpers_plan import aplicar, auth, crear_orden, crear_plan, linea, registro_parcela_entera
+from app.models.produccion import PlanFitosanitario
+from tests.helpers_plan import auth, crear_orden, crear_plan, linea
 
 
 async def _parral(create_parcela, create_valvula):
@@ -28,41 +27,20 @@ async def test_post_orden_acepta_e_ignora_numero_aplicacion(
     parcela, _v = await _parral(create_parcela, create_valvula)
     insumo = await create_insumo()
     orden = await crear_orden(client, headers, [linea(insumo.id, numero_aplicacion=3)], [parcela.id])
-    assert orden["lineas"][0]["numero_aplicacion"] is None
-    assert orden["plan_fitosanitario_id"] is None
+    assert "numero_aplicacion" not in orden["lineas"][0]
+    assert "plan_fitosanitario_id" not in orden
 
 
-async def test_orden_confirmada_no_escribe_vinculo_al_plan(
-    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
-):
+async def test_desde_plan_ya_no_existe(client, create_user):
     headers, _ = await auth(client, create_user)
-    parcela, _v = await _parral(create_parcela, create_valvula)
-    insumo = await create_insumo()
-    await crear_plan(client, headers, insumo.id, ["flame"])
-    await aplicar(client, headers, [linea(insumo.id, numero_aplicacion=1)], [parcela.id])
-    registros = (await db_session.execute(select(RegistroFitosanitario))).scalars().all()
-    assert registros and all(r.plan_fitosanitario_id is None for r in registros)
-
-
-async def test_desde_plan_equivale_a_post(
-    client, create_user, create_parcela, create_valvula, create_insumo,
-):
-    headers, _ = await auth(client, create_user)
-    parcela, _v = await _parral(create_parcela, create_valvula)
-    insumo = await create_insumo()
-    planes = await crear_plan(client, headers, insumo.id, ["flame"], dosis_por_ha=2.0)
     resp = await client.post(
         "/ordenes-aplicacion/desde-plan",
-        json={
-            "plan_fitosanitario_id": planes["flame"], "parcela_ids": [parcela.id],
-            "fecha_planificada": "2026-10-15", "dias_carencia": 7, "dias_reingreso": 2,
-        },
+        json={"plan_fitosanitario_id": "x", "fecha_planificada": "2026-10-15",
+              "dias_carencia": 7, "dias_reingreso": 2},
         headers=headers,
     )
-    assert resp.status_code == 201, resp.text
-    cuerpo = resp.json()
-    assert cuerpo["plan_fitosanitario_id"] is None
-    assert cuerpo["lineas"][0]["dosis_por_ha"] == 2.0
+    # No POST handler is left on /ordenes-aplicacion/{orden_id}, so the path is 405.
+    assert resp.status_code == 405, resp.status_code
 
 
 async def test_plan_duplicado_devuelve_409_en_post_y_put(
@@ -106,23 +84,6 @@ async def test_indice_unico_respalda_la_clave(db_session, create_user, create_in
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()
-
-
-async def test_borrar_fila_de_plan_con_registro_legacy_vinculado(
-    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
-):
-    headers, uid = await auth(client, create_user)
-    parcela, _v = await _parral(create_parcela, create_valvula)
-    insumo = await create_insumo()
-    planes = await crear_plan(client, headers, insumo.id, ["flame"])
-    db_session.add(registro_parcela_entera(parcela.id, insumo.id, planes["flame"], uid))
-    await db_session.commit()
-
-    resp = await client.delete(f"/plan-fitosanitario/{planes['flame']}", headers=headers)
-    assert resp.status_code == 204, resp.text
-    registro = (await db_session.execute(select(RegistroFitosanitario))).scalars().one()
-    await db_session.refresh(registro)
-    assert registro.plan_fitosanitario_id is None  # kept, just unlinked
 
 
 async def test_endpoints_de_rondas_ya_no_existen(client, create_user):

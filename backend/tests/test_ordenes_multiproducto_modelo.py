@@ -64,13 +64,13 @@ async def test_orden_con_dos_lineas_ordenadas_por_posicion(
     orden.lineas.append(
         OrdenAplicacionInsumo(
             insumo_id=cobre.id, dosis_por_ha=2.0, dias_carencia=10, dias_reingreso=1,
-            numero_aplicacion=None, posicion=1,
+            posicion=1,
         )
     )
     orden.lineas.append(
         OrdenAplicacionInsumo(
             insumo_id=azufre.id, dosis_por_ha=1.0, dias_carencia=7, dias_reingreso=2,
-            numero_aplicacion=3, posicion=0,
+            posicion=0,
         )
     )
     db_session.add(orden)
@@ -88,7 +88,6 @@ async def test_orden_con_dos_lineas_ordenadas_por_posicion(
         )
     ).scalar_one()
     assert [linea.insumo.nombre for linea in cargada.lineas] == ["Azufre", "Cobre"]
-    assert [linea.numero_aplicacion for linea in cargada.lineas] == [3, None]
 
 
 async def test_registro_orden_id_sale_de_orden_parcela_id(
@@ -174,7 +173,6 @@ async def test_orden_extra_nace_con_una_linea_y_confirmar_valvula_vincula_el_reg
     assert registro.orden_valvula_id == fila["id"]
     assert registro.orden_parcela_id == item["id"]
     assert registro.orden_insumo_id == lineas[0].id
-    assert registro.plan_fitosanitario_id is None
     assert registro.orden_id == orden["id"]
 
 

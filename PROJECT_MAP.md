@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-28
+> Última generación: 2026-10-30
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 58 (head: `a4d7c19e3b52_plan_indice_unico.py`)
+**Migraciones de Alembic:** 59 (head: `506076f9ed21_drop_plan_links_and_linea_numero_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -185,10 +185,10 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `_alembic_prod.py`
 - `_audit_jornales_historicos.py`
 - `_prod_db.py`
+- `auditar_avance_plan.py`
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`
 - `cleanup_contaminacion_jornales_hist.py`
-- `limpiar_duplicados_plan.py`
 - `migrate_bd_cobros.py`
 - `migrate_cosecha_2024_2026.py`
 - `migrate_excels.py`
