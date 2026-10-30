@@ -408,12 +408,6 @@ class RegistroFitosanitario(Base):
     # Explicit links to where the record came from. They replace the 1-1
     # `registro_fitosanitario_id` columns on the order rows, which cannot hold
     # N records (one per product) per valve. All null for manual records.
-    # Plan row this application counts against (null = extra, outside the plan).
-    plan_fitosanitario_id: Mapped[str | None] = mapped_column(
-        String(36),
-        ForeignKey("planes_fitosanitarios.id", name="fk_registros_plan_fitosanitario"),
-        nullable=True,
-    )
     # Order line (product) that produced this record.
     orden_insumo_id: Mapped[str | None] = mapped_column(
         String(36),
@@ -460,7 +454,6 @@ class RegistroFitosanitario(Base):
     __table_args__ = (
         Index("ix_registros_fitosanitarios_fecha", "fecha"),
         Index("ix_registros_fitosanitarios_parcela_fecha", "parcela_id", "fecha"),
-        Index("ix_registros_fitosanitarios_plan", "plan_fitosanitario_id"),
         Index("ix_registros_fitosanitarios_orden_insumo", "orden_insumo_id"),
         Index("ix_registros_fitosanitarios_orden_parcela", "orden_parcela_id"),
         Index("ix_registros_fitosanitarios_orden_valvula", "orden_valvula_id"),
@@ -591,9 +584,9 @@ class ResultadoValvula(str, enum.Enum):
 
 class OrdenAplicacion(Base):
     """Orden de aplicación ejecutable: lo que un operario ve y confirma en
-    mobile, en vez de recibir la indicación solo de palabra. Nace de una
-    línea del PlanFitosanitario (origen=plan, con plan_fitosanitario_id) o la
-    crea el ingeniero/encargado suelta, fuera del plan (origen=extra).
+    mobile, en vez de recibir la indicación solo de palabra. No se vincula
+    al plan: el avance se mide por fecha (services/plan_avance.py) y `origen`
+    queda en `extra` en las órdenes nuevas (las históricas conservan `plan`).
     Congela insumo/dosis/objetivo/carencia al momento de crearse -- un
     cambio posterior en el plan no altera órdenes ya generadas."""
 
@@ -605,9 +598,6 @@ class OrdenAplicacion(Base):
     temporada: Mapped[int] = mapped_column(Integer, nullable=False)
     origen: Mapped[OrigenOrdenAplicacion] = mapped_column(
         SAEnum(OrigenOrdenAplicacion), nullable=False
-    )
-    plan_fitosanitario_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("planes_fitosanitarios.id"), nullable=True
     )
     variedad: Mapped[VariedadUva] = mapped_column(SAEnum(VariedadUva), nullable=False)
     insumo_id: Mapped[str] = mapped_column(
@@ -643,7 +633,6 @@ class OrdenAplicacion(Base):
     )
 
     insumo: Mapped[Insumo] = relationship("Insumo")
-    plan: Mapped[PlanFitosanitario | None] = relationship("PlanFitosanitario")
     created_by_user: Mapped[User] = relationship("User")
     parcelas: Mapped[list[OrdenAplicacionParcela]] = relationship(
         "OrdenAplicacionParcela", back_populates="orden", cascade="all, delete-orphan"
@@ -659,8 +648,7 @@ class OrdenAplicacion(Base):
 class OrdenAplicacionInsumo(Base):
     """Una línea (producto) de una orden de aplicación. Una orden aplica todas
     sus líneas a todas sus parcelas/válvulas; al confirmar se crea un
-    RegistroFitosanitario por línea. `numero_aplicacion` es la ronda del plan
-    que la línea descuenta (null = producto fuera del plan). Congela
+    RegistroFitosanitario por línea. Congela
     dosis/carencia al crearse, igual que la orden."""
 
     __tablename__ = "ordenes_aplicacion_insumos"
@@ -677,7 +665,6 @@ class OrdenAplicacionInsumo(Base):
     dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
     dias_carencia: Mapped[int] = mapped_column(Integer, nullable=False)
     dias_reingreso: Mapped[int] = mapped_column(Integer, nullable=False)
-    numero_aplicacion: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Display order of the line inside the order (0 = first = legacy shim).
     posicion: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0"), nullable=False

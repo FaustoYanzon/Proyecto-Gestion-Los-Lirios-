@@ -107,25 +107,19 @@ async def test_orden_extra_trae_las_valvulas_de_cada_parcela_ordenadas(
     assert [v["superficie_ha"] for v in valvulas] == ["1.0000", "2.0000", "3.0000"]
 
 
-async def test_orden_desde_plan_trae_las_valvulas(
+async def test_orden_por_variedad_trae_las_valvulas(
     client, create_user, create_insumo, create_parcela, create_valvula,
 ):
     headers, _ = await _auth(client, create_user)
     insumo = await create_insumo(nombre="Azufre")
     await _parral2_con_valvulas(create_parcela, create_valvula)
-    plan = await client.post(
-        "/plan-fitosanitario/",
-        json={
-            "temporada": 2026, "variedades": ["flame"], "numero_aplicacion": 1, "mes": 10,
-            "insumo_id": insumo.id, "objetivo": "Oidio", "dosis_por_ha": 1.5,
-        },
-        headers=headers,
-    )
     resp = await client.post(
-        "/ordenes-aplicacion/desde-plan",
+        "/ordenes-aplicacion/",
         json={
-            "plan_fitosanitario_id": plan.json()[0]["id"], "dias_carencia": 7,
-            "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
         },
         headers=headers,
     )

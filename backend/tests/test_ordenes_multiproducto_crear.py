@@ -185,7 +185,7 @@ async def test_body_viejo_un_producto_sigue_funcionando(
     assert len(data["lineas"]) == 1
     assert data["lineas"][0]["insumo_id"] == insumo.id
     assert data["lineas"][0]["dosis_por_ha"] == 2.0
-    assert data["lineas"][0]["numero_aplicacion"] is None
+    assert "numero_aplicacion" not in data["lineas"][0]
     assert data["insumo_id"] == insumo.id
     assert data["insumo_nombre"] == "Azufre"
     assert data["dias_carencia"] == 7
@@ -193,17 +193,19 @@ async def test_body_viejo_un_producto_sigue_funcionando(
     assert data["origen"] == "extra"
 
 
-async def test_desde_plan_sigue_funcionando(client, create_user, create_insumo, create_parcela):
+async def test_orden_de_un_producto_por_variedad_sin_parcelas_explicitas(client, create_user, create_insumo, create_parcela):
     headers, _ = await _auth(client, create_user)
     insumo = await create_insumo(nombre="Azufre")
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
     plan = await _plan(client, headers, insumo.id, ["flame"], numero=4, dosis=1.5)
 
     resp = await client.post(
-        "/ordenes-aplicacion/desde-plan",
+        "/ordenes-aplicacion/",
         json={
-            "plan_fitosanitario_id": plan[0]["id"], "dias_carencia": 7,
-            "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
         },
         headers=headers,
     )
@@ -211,9 +213,9 @@ async def test_desde_plan_sigue_funcionando(client, create_user, create_insumo, 
     body = resp.json()
     # Progress is by date now: no round, no plan link on the order.
     assert body["origen"] == "extra"
-    assert body["plan_fitosanitario_id"] is None
+    assert "plan_fitosanitario_id" not in body
     assert len(body["lineas"]) == 1
-    assert body["lineas"][0]["numero_aplicacion"] is None
+    assert "numero_aplicacion" not in body["lineas"][0]
     assert body["lineas"][0]["insumo_id"] == insumo.id
     assert body["lineas"][0]["dosis_por_ha"] == 1.5
     assert [p["parcela_id"] for p in body["parcelas"]] == [parcela.id]
@@ -232,11 +234,13 @@ async def test_put_edita_orden_del_plan_sin_confirmaciones(
     plan = await _plan(client, headers, insumos[0].id, ["flame"], numero=1)
     orden = (
         await client.post(
-            "/ordenes-aplicacion/desde-plan",
-            json={
-                "plan_fitosanitario_id": plan[0]["id"], "dias_carencia": 7,
-                "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
-            },
+            "/ordenes-aplicacion/",
+        json={
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumos[0].id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
+        },
             headers=headers,
         )
     ).json()
@@ -367,11 +371,13 @@ async def test_delete_orden_del_plan_sin_confirmaciones(
     plan = await _plan(client, headers, insumo.id, ["flame"])
     orden = (
         await client.post(
-            "/ordenes-aplicacion/desde-plan",
-            json={
-                "plan_fitosanitario_id": plan[0]["id"], "dias_carencia": 7,
-                "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
-            },
+            "/ordenes-aplicacion/",
+        json={
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
+        },
             headers=headers,
         )
     ).json()

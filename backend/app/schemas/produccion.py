@@ -471,8 +471,6 @@ class OrdenAplicacionLineaResponse(BaseModel):
     dosis_por_ha: float
     dias_carencia: int
     dias_reingreso: int
-    # Plan round this product counts against; None = off-plan product.
-    numero_aplicacion: int | None = None
 
 
 class OrdenAplicacionResponse(BaseModel):
@@ -480,8 +478,7 @@ class OrdenAplicacionResponse(BaseModel):
     temporada: int
     origen: OrigenOrdenAplicacion
     # Deprecated single-product shim (first line / variety of the largest
-    # parcel), kept for old web/mobile clients until the cleanup migration.
-    plan_fitosanitario_id: str | None = None
+    # parcel), kept for old web/mobile clients until the single-product columns are dropped.
     variedad: VariedadUva
     insumo_id: str
     insumo_nombre: str
@@ -502,24 +499,11 @@ class OrdenAplicacionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class OrdenAplicacionCreateDesdePlan(BaseModel):
-    plan_fitosanitario_id: str
-    dias_carencia: int = Field(ge=0)
-    dias_reingreso: int = Field(ge=0)
-    fecha_planificada: date
-    # None = todas las parcelas activas de la variedad del plan.
-    parcela_ids: list[str] | None = None
-    notas: str | None = None
-
-
 class OrdenAplicacionLineaCreate(BaseModel):
     insumo_id: str
     dosis_por_ha: float = Field(gt=0)
     dias_carencia: int = Field(ge=0)
     dias_reingreso: int = Field(ge=0)
-    # Plan round the product counts against (must exist in the plan for at
-    # least one variety of the chosen parcels). None = off-plan product.
-    numero_aplicacion: int | None = None
 
 
 def _es_body_viejo(data: Any) -> bool:

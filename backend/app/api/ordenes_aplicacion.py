@@ -3,7 +3,6 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,7 +27,6 @@ from app.models.produccion import (
     OrdenAplicacionParcela,
     OrdenAplicacionValvula,
     OrigenOrdenAplicacion,
-    PlanFitosanitario,
     RegistroFitosanitario,
     ResultadoValvula,
 )
@@ -38,7 +36,6 @@ from app.schemas.produccion import (
     ConfirmarValvulaRequest,
     FotoRegistroFitosanitarioResponse,
     OrdenAplicacionCreate,
-    OrdenAplicacionCreateDesdePlan,
     OrdenAplicacionLineaCreate,
     OrdenAplicacionLineaResponse,
     OrdenAplicacionParcelaResponse,
@@ -123,7 +120,6 @@ def _linea_response(linea: OrdenAplicacionInsumo) -> OrdenAplicacionLineaRespons
         dosis_por_ha=linea.dosis_por_ha,
         dias_carencia=linea.dias_carencia,
         dias_reingreso=linea.dias_reingreso,
-        numero_aplicacion=linea.numero_aplicacion,
     )
 
 
@@ -134,7 +130,6 @@ def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
         id=orden.id,
         temporada=orden.temporada,
         origen=orden.origen,
-        plan_fitosanitario_id=orden.plan_fitosanitario_id,
         variedad=orden.variedad,
         insumo_id=orden.insumo_id,
         insumo_nombre=orden.insumo.nombre,
@@ -363,10 +358,11 @@ def _aplicar_lineas(
 
 
 def _sincronizar_shim(orden: OrdenAplicacion) -> None:
-    """Write the deprecated single-product columns (still NOT NULL until the
-    cleanup migration) from the first line and the largest parcel's variety,
-    and derive `origen` from the lines. Requires `orden.lineas` (with
-    `insumo`) and `orden.parcelas[*].parcela` in memory."""
+    """Write the deprecated single-product columns (still NOT NULL until a
+    later migration drops them) from the first line and the largest parcel's
+    variety, and pin `origen` to `extra` (orders no longer link to the plan).
+    Requires `orden.lineas` (with `insumo`) and `orden.parcelas[*].parcela`
+    in memory."""
     primera = orden.lineas[0]
     orden.insumo_id = primera.insumo_id
     orden.insumo = primera.insumo
@@ -376,17 +372,13 @@ def _sincronizar_shim(orden: OrdenAplicacion) -> None:
     variedad = _variedad_principal([item.parcela for item in orden.parcelas])
     if variedad is not None:  # Guaranteed by _resolve_parcelas_orden.
         orden.variedad = variedad
-    orden.origen = (
-        OrigenOrdenAplicacion.plan
-        if any(linea.numero_aplicacion is not None for linea in orden.lineas)
-        else OrigenOrdenAplicacion.extra
-    )
+    orden.origen = OrigenOrdenAplicacion.extra
 
 
 async def _crear_orden(
     db: AsyncSession, data: OrdenAplicacionCreate, user: User
 ) -> OrdenAplicacion:
-    """Shared by POST / and POST /desde-plan: validate, build the order with
+    """Used by POST /: validate, build the order with
     its lines, parcels and valve rows, and flush."""
     insumos = await _resolver_insumos(db, data.lineas)
     parcelas = await _resolve_parcelas_orden(db, data.variedad, data.parcela_ids)
@@ -412,49 +404,6 @@ async def _crear_orden(
 
     await db.flush()
     return orden
-
-
-@router.post(
-    "/desde-plan", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED
-)
-async def crear_orden_desde_plan(
-    data: OrdenAplicacionCreateDesdePlan,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_encargado_up),
-) -> OrdenAplicacionResponse:
-    """Compatible shortcut: a one-line order from a single plan row."""
-    plan = await db.get(PlanFitosanitario, data.plan_fitosanitario_id)
-    if plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
-
-    try:
-        orden_data = OrdenAplicacionCreate(
-            temporada=plan.temporada,
-            objetivo=plan.objetivo,
-            fecha_planificada=data.fecha_planificada,
-            lineas=[
-                OrdenAplicacionLineaCreate(
-                    insumo_id=plan.insumo_id,
-                    dosis_por_ha=plan.dosis_por_ha,
-                    dias_carencia=data.dias_carencia,
-                    dias_reingreso=data.dias_reingreso,
-                )
-            ],
-            parcela_ids=data.parcela_ids,
-            # Restricts explicit parcels to the plan row's variety, as before.
-            variedad=plan.variedad,
-            notas=data.notas,
-        )
-    except ValidationError as exc:
-        # Only reachable with a bad plan row (e.g. dosis 0): a 422, not a 500.
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="La fila del plan tiene datos inválidos para armar una orden (revisá la dosis).",
-        ) from exc
-
-    orden = await _crear_orden(db, orden_data, current_user)
-    _avisar_orden_nueva(orden)
-    return _to_response(orden)
 
 
 @router.post("/", response_model=OrdenAplicacionResponse, status_code=status.HTTP_201_CREATED)

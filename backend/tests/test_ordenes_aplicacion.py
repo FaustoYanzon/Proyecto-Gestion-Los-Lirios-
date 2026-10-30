@@ -21,7 +21,7 @@ async def _auth(client, create_user, **kwargs):
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}, user
 
 
-async def test_crear_orden_desde_plan_incluye_toda_la_variedad(client, create_user, create_insumo, create_parcela):
+async def test_crear_orden_por_variedad_incluye_todas_las_parcelas(client, create_user, create_insumo, create_parcela):
     headers, _ = await _auth(client, create_user, email="ger@test.com", role=UserRole.gerencial)
     insumo = await create_insumo(nombre="Azufre", unidad="kg")
     p1 = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua, superficie_ha=2.0)
@@ -39,12 +39,12 @@ async def test_crear_orden_desde_plan_incluye_toda_la_variedad(client, create_us
     plan_id = plan.json()[0]["id"]
 
     resp = await client.post(
-        "/ordenes-aplicacion/desde-plan",
+        "/ordenes-aplicacion/",
         json={
-            "plan_fitosanitario_id": plan_id,
-            "dias_carencia": 7,
-            "dias_reingreso": 2,
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
             "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
         },
         headers=headers,
     )
@@ -314,10 +314,12 @@ async def test_orden_del_plan_sin_confirmaciones_se_elimina(client, create_user,
         headers=headers,
     )
     orden = await client.post(
-        "/ordenes-aplicacion/desde-plan",
+        "/ordenes-aplicacion/",
         json={
-            "plan_fitosanitario_id": plan.json()[0]["id"], "dias_carencia": 7,
-            "dias_reingreso": 2, "fecha_planificada": "2026-10-15",
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo.id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
         },
         headers=headers,
     )

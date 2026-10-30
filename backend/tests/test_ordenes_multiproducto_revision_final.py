@@ -16,13 +16,17 @@ from app.models.produccion import RegistroFitosanitario
 from app.services import aplicaciones
 from tests.test_ordenes_multiproducto_crear import _auth, _linea, _payload, _plan
 
-_DESDE_PLAN = {"dias_carencia": 7, "dias_reingreso": 2, "fecha_planificada": "2026-10-15"}
 
-
-async def _orden_desde_plan(client, headers, plan_id):
+async def _orden_desde_plan(client, headers, insumo_id):
+    """Single-product order over every flame parcel (what /desde-plan used to build)."""
     resp = await client.post(
-        "/ordenes-aplicacion/desde-plan",
-        json={"plan_fitosanitario_id": plan_id, **_DESDE_PLAN},
+        "/ordenes-aplicacion/",
+        json={
+            "temporada": 2026, "variedad": "flame", "objetivo": "Oidio",
+            "fecha_planificada": "2026-10-15",
+            "lineas": [{"insumo_id": insumo_id, "dosis_por_ha": 1.5,
+                        "dias_carencia": 7, "dias_reingreso": 2}],
+        },
         headers=headers,
     )
     assert resp.status_code == 201, resp.text
@@ -147,9 +151,8 @@ async def test_put_body_viejo_mismo_insumo_sigue_funcionando(
     headers, _ = await _auth(client, create_user)
     insumo = await create_insumo(nombre="Azufre")
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
-    plan_id = (await _plan(client, headers, insumo.id, ["flame"], numero=3))[0]["id"]
-    orden = await _orden_desde_plan(client, headers, plan_id)
-    assert orden["lineas"][0]["numero_aplicacion"] is None
+    orden = await _orden_desde_plan(client, headers, insumo.id)
+    assert "numero_aplicacion" not in orden["lineas"][0]
 
     resp = await client.put(
         f"/ordenes-aplicacion/{orden['id']}", json=_body_viejo(insumo.id, parcela.id), headers=headers,
@@ -157,9 +160,9 @@ async def test_put_body_viejo_mismo_insumo_sigue_funcionando(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["origen"] == "extra"
-    assert body["lineas"][0]["numero_aplicacion"] is None
+    assert "numero_aplicacion" not in body["lineas"][0]
     assert body["lineas"][0]["dosis_por_ha"] == 2.0
-    assert body["plan_fitosanitario_id"] is None
+    assert "plan_fitosanitario_id" not in body
 
 
 async def test_put_body_viejo_con_otro_insumo_deja_la_orden_extra(
@@ -169,8 +172,7 @@ async def test_put_body_viejo_con_otro_insumo_deja_la_orden_extra(
     insumo = await create_insumo(nombre="Azufre")
     otro = await create_insumo(nombre="Mancozeb")
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
-    plan_id = (await _plan(client, headers, insumo.id, ["flame"]))[0]["id"]
-    orden = await _orden_desde_plan(client, headers, plan_id)
+    orden = await _orden_desde_plan(client, headers, insumo.id)
 
     resp = await client.put(
         f"/ordenes-aplicacion/{orden['id']}", json=_body_viejo(otro.id, parcela.id), headers=headers,
@@ -179,5 +181,5 @@ async def test_put_body_viejo_con_otro_insumo_deja_la_orden_extra(
     body = resp.json()
     # A different product is no longer the plan's round.
     assert body["origen"] == "extra"
-    assert body["lineas"][0]["numero_aplicacion"] is None
-    assert body["plan_fitosanitario_id"] is None
+    assert "numero_aplicacion" not in body["lineas"][0]
+    assert "plan_fitosanitario_id" not in body

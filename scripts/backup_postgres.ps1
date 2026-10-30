@@ -62,8 +62,23 @@ try {
     # Prefer TLS when the server offers it (Railway does); fall back otherwise.
     $env:PGSSLMODE = 'prefer'
     try {
-        $pgErr = & $pgDump -Fc -h $dbHost -p $dbPort -U $dbUser -d $dbName -f $dumpFile 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) { throw "pg_dump exited with code $LASTEXITCODE : $($pgErr.Trim()) (a 'server version mismatch' means the local pg_dump is older than the Railway server - install matching client tools)" }
+        # After a wake-from-sleep catch-up run the NIC is often up before DNS
+        # resolves (seen 2026-10-29: "no se pudo traducir el nombre"), so retry
+        # transient network errors a few times; any other error fails at once.
+        $maxAttempts = 5
+        $retryDelaySeconds = 60
+        $transient = 'traducir|translate|resolve|Name or service|could not connect|no se pudo conectar|timeout expired|Connection timed out|Connection refused|Network is unreachable'
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $pgErr = & $pgDump -Fc -h $dbHost -p $dbPort -U $dbUser -d $dbName -f $dumpFile 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($pgErr -match $transient -and $attempt -lt $maxAttempts) {
+                Write-Log "RETRY [$Label] attempt $attempt/$maxAttempts failed on a network error; waiting ${retryDelaySeconds}s"
+                Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds $retryDelaySeconds
+                continue
+            }
+            throw "pg_dump exited with code $LASTEXITCODE : $($pgErr.Trim()) (a 'server version mismatch' means the local pg_dump is older than the Railway server - install matching client tools)"
+        }
     }
     finally {
         Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue

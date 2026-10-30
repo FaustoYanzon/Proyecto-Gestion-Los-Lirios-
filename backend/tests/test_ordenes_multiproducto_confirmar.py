@@ -146,7 +146,6 @@ async def test_confirmar_valvula_crea_un_registro_por_linea_con_stock(
         assert registro.orden_valvula_id == fila_id
         assert registro.orden_parcela_id == orden["parcelas"][0]["id"]
         assert registro.orden_insumo_id == lineas[insumo.id]
-        assert registro.plan_fitosanitario_id is None
         assert await _stock(db_session, insumo) == Decimal("100") - esperado[insumo.id]
     assert await _count_movimientos(db_session) == 3
 

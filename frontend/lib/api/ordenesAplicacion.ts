@@ -38,8 +38,6 @@ export interface OrdenAplicacionLinea {
   dosis_por_ha: number
   dias_carencia: number
   dias_reingreso: number
-  // Plan round this product counts against; null = off-plan product.
-  numero_aplicacion: number | null
 }
 
 export interface OrdenAplicacion {
@@ -48,7 +46,6 @@ export interface OrdenAplicacion {
   origen: OrigenOrdenAplicacion
   // @deprecated Single-product shim (first line / variety of the largest
   // parcel): read `lineas` and `variedades` instead.
-  plan_fitosanitario_id: string | null
   variedad: string
   insumo_id: string
   insumo_nombre: string
@@ -72,8 +69,6 @@ export interface OrdenAplicacionLineaCreate {
   dosis_por_ha: number
   dias_carencia: number
   dias_reingreso: number
-  // Plan round the product counts against; null/omitted = off-plan product.
-  numero_aplicacion?: number | null
 }
 
 // Mirrors the backend OrdenAplicacionUpdate (full replacement of an order).
@@ -92,15 +87,6 @@ export interface OrdenAplicacionUpdate {
 
 export interface OrdenAplicacionCreate extends OrdenAplicacionUpdate {
   temporada: number
-}
-
-export interface OrdenAplicacionCreateDesdePlan {
-  plan_fitosanitario_id: string
-  dias_carencia: number
-  dias_reingreso: number
-  fecha_planificada: string
-  parcela_ids?: string[] | null
-  notas?: string | null
 }
 
 /** @deprecated Single-product body; use OrdenAplicacionCreate with `lineas`. */
@@ -130,13 +116,6 @@ export async function getOrdenesAplicacion(params: {
 
 export async function getOrdenAplicacion(id: string): Promise<OrdenAplicacion> {
   const { data } = await api.get(`/ordenes-aplicacion/${id}`)
-  return data
-}
-
-export async function crearOrdenDesdePlan(
-  payload: OrdenAplicacionCreateDesdePlan,
-): Promise<OrdenAplicacion> {
-  const { data } = await api.post('/ordenes-aplicacion/desde-plan', payload)
   return data
 }
 

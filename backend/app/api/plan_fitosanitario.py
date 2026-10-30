@@ -2,14 +2,14 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_up, require_gerencial_up
 from app.models.insumo import Insumo
 from app.models.parcela import VariedadUva
-from app.models.produccion import OrdenAplicacion, PlanFitosanitario, RegistroFitosanitario
+from app.models.produccion import PlanFitosanitario
 from app.models.user import User
 from app.schemas.produccion import (
     AvanceItem,
@@ -312,17 +312,5 @@ async def delete_plan_fitosanitario(
     plan = await db.get(PlanFitosanitario, plan_id)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
-    # Progress is measured by date now; clear the legacy links (FKs) so old
-    # orders/records that still point at this row do not block the delete.
-    await db.execute(
-        update(RegistroFitosanitario)
-        .where(RegistroFitosanitario.plan_fitosanitario_id == plan_id)
-        .values(plan_fitosanitario_id=None)
-    )
-    await db.execute(
-        update(OrdenAplicacion)
-        .where(OrdenAplicacion.plan_fitosanitario_id == plan_id)
-        .values(plan_fitosanitario_id=None)
-    )
     await db.delete(plan)
     await db.flush()
