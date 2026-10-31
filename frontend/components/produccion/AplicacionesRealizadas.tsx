@@ -1,16 +1,18 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, AlertTriangle, Download } from 'lucide-react'
+import { X, Download } from 'lucide-react'
 import {
-  getFitosanitarios, deleteFitosanitario, reactivarFitosanitario, getAlertasCarencia,
+  getFitosanitariosTodos, deleteFitosanitario, reactivarFitosanitario, getAlertasCarencia,
   type FitosanitarioFilter, type FitosanitarioResponse,
 } from '@/lib/api/fitosanitarios'
 import { getParcelas } from '@/lib/api/produccion'
-import { getOrdenAplicacion, type OrdenAplicacion } from '@/lib/api/ordenesAplicacion'
+import { getOrdenAplicacion, getOrdenesAplicacion, type OrdenAplicacion } from '@/lib/api/ordenesAplicacion'
+import { agruparRegistros, carenciaPorParcela, hoyLocalISO } from '@/lib/fitosanitariosAgrupar'
 import { formatNum } from '@/components/produccion/formato'
-import FitosanitariosTable from '@/components/produccion/FitosanitariosTable'
+import AplicacionesAgrupadas from '@/components/produccion/AplicacionesAgrupadas'
+import CarenciaParrales from '@/components/produccion/CarenciaParrales'
 import FitosanitarioForm from '@/components/produccion/FitosanitarioForm'
 import { A_REVISAR_QUERY_KEY } from '@/components/produccion/ARevisarPanel'
 import { useAuthStore } from '@/store/authStore'
@@ -73,13 +75,13 @@ function Sheet({ open, onClose, title, children }: {
 }
 
 const EMPTY_FILTERS: FitosanitarioFilter = {}
-const today = new Date().toISOString().split('T')[0]
 
 // Historial de aplicaciones realizadas -- pestaña "Aplicadas" de Órdenes de
 // Aplicación. Ya no se cargan a mano: cada fila nace cuando un operario
-// confirma una orden en mobile. Gerencial+ puede corregir o borrar una fila
-// (mismo permiso que exige el backend).
-export default function AplicacionesRealizadas() {
+// confirma una orden en mobile. Se muestra agrupado orden > parcela > válvula
+// y acotado a la campaña elegida (mayo -> abril) salvo que se filtre por fecha.
+// Gerencial+ puede corregir o borrar una fila (mismo permiso que exige el backend).
+export default function AplicacionesRealizadas({ temporada }: { temporada: number }) {
   const queryClient = useQueryClient()
   const role = useAuthStore((s) => s.user?.role)
   const puedeCorregir = role === 'super_admin' || role === 'gerencial'
@@ -89,9 +91,24 @@ export default function AplicacionesRealizadas() {
   const [registroEditar, setRegistroEditar] = useState<FitosanitarioResponse | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Campaign window unless the user narrows it with their own dates.
+  const filtrosEfectivos: FitosanitarioFilter = {
+    ...filtros,
+    fecha_desde: filtros.fecha_desde ?? `${temporada}-05-01`,
+    fecha_hasta: filtros.fecha_hasta ?? `${temporada + 1}-04-30`,
+  }
+
   const { data: registros = [], isLoading } = useQuery({
-    queryKey: ['fitosanitarios', filtros],
-    queryFn: () => getFitosanitarios(filtros),
+    queryKey: ['fitosanitarios', filtrosEfectivos],
+    queryFn: () => getFitosanitariosTodos(filtrosEfectivos),
+    staleTime: 30_000,
+  })
+
+  // Same key/fn as the "Pendientes" tab, so the cache is shared. Gives the
+  // group headers (objetivo, fecha) and each valve's name and confirmation time.
+  const { data: ordenes = [] } = useQuery({
+    queryKey: ['ordenes-aplicacion', temporada],
+    queryFn: () => getOrdenesAplicacion({ temporada }),
     staleTime: 30_000,
   })
 
@@ -110,6 +127,12 @@ export default function AplicacionesRealizadas() {
   function parcelaNombre(id: string) {
     return parcelas.find((p) => p.id === id)?.nombre ?? id
   }
+
+  // Lazy init: stays pure under render and fixes "today" for the tab's lifetime.
+  const [hoy] = useState(() => hoyLocalISO())
+  const grupos = useMemo(() => agruparRegistros(registros, ordenes), [registros, ordenes])
+  // Built from the unfiltered alerts, so a product filter never hides a parcel's carencia.
+  const carencia = useMemo(() => carenciaPorParcela(alertas, hoy), [alertas, hoy])
 
   function openEdit(r: FitosanitarioResponse) { setRegistroEditar(r); setModalOpen(true) }
   function closeModal() { setModalOpen(false); setRegistroEditar(null) }
@@ -152,7 +175,8 @@ export default function AplicacionesRealizadas() {
       const aplicadas = (item?.valvulas ?? []).filter((v) => v.estado === 'aplicada' && v.resultado !== 'no_aplicada')
       // The legacy link points at the first-line registro of each valve; with a
       // single applied valve in the parcel there is no ambiguity either.
-      const valvula = aplicadas.find((v) => v.registro_fitosanitario_id === r.id)
+      const valvula = aplicadas.find((v) => v.id === r.orden_valvula_id)
+        ?? aplicadas.find((v) => v.registro_fitosanitario_id === r.id)
         ?? (aplicadas.length === 1 ? aplicadas[0] : undefined)
       unidad = valvula ? `la válvula ${valvula.valvula_nombre} de ${nombre}` : `su válvula de ${nombre}`
     }
@@ -205,22 +229,7 @@ export default function AplicacionesRealizadas() {
 
   return (
     <div className="space-y-5">
-      {/* Alertas carencia */}
-      {alertas.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2 text-amber-800 font-medium text-sm">
-            <AlertTriangle size={15} />
-            {alertas.length} producto{alertas.length !== 1 ? 's' : ''} aún en período de carencia
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {alertas.map((a) => (
-              <span key={a.id} className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
-                {parcelaNombre(a.parcela_id)} — {a.producto_nombre} (hasta {a.fecha_habilitacion_cosecha.split('-').reverse().join('/')})
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <CarenciaParrales carencia={carencia} parcelaNombre={parcelaNombre} hoy={hoy} />
 
       {/* Filtros */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
@@ -269,10 +278,11 @@ export default function AplicacionesRealizadas() {
         </div>
       )}
 
-      <FitosanitariosTable
-        registros={registros}
+      <AplicacionesAgrupadas
+        grupos={grupos}
         isLoading={isLoading}
         parcelaNombre={parcelaNombre}
+        carencia={carencia}
         onEdit={puedeCorregir ? openEdit : undefined}
         onDelete={puedeCorregir ? handleDelete : undefined}
         onReactivar={puedeReactivar ? handleReactivar : undefined}
