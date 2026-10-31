@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+from app.core.cloudinary_client import MEDIA_A_BORRAR_KEY, programar_borrado
 from app.core.config import settings
 
 # QueuePool sizing options are invalid for SQLite (used by the test suite), so
@@ -29,6 +30,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
+            # Only after a successful commit: media of rows that really went away.
+            if urls := session.info.pop(MEDIA_A_BORRAR_KEY, None):
+                programar_borrado(urls)
         except Exception:
             await session.rollback()
             raise

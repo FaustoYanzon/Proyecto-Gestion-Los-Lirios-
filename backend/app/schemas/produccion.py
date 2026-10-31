@@ -285,6 +285,9 @@ class RegistroFitosanitarioResponse(BaseModel):
     # Order the record came from (parcel or valve confirmation); None for manual
     # records. Lets the web offer "Reactivar" only where it applies.
     orden_id: str | None = None
+    # Valve row of the order that produced this record (one per product line of
+    # the same valve confirmation); lets the web group records by valve.
+    orden_valvula_id: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

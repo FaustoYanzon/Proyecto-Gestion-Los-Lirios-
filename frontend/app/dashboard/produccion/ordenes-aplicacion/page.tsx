@@ -470,7 +470,7 @@ function OrdenesAplicacion() {
           })}
         />
       ) : vista === 'aplicadas' ? (
-        <AplicacionesRealizadas />
+        <AplicacionesRealizadas temporada={temporada} />
       ) : (
       <div className="space-y-2">
         {puedeRevisar && (

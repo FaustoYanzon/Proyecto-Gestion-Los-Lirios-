@@ -194,8 +194,13 @@ async def test_eliminar_registro_de_valvula_con_las_otras_aplicadas_cierra_parce
     await _confirmar_valvula(client, headers, orden, filas["23"])
     assert await _stock(db_session, insumo) == 88.0
 
+    # The photo's file must be queued for destruction in Cloudinary, not just its row.
+    encoladas: list[str | None] = []
+    monkeypatch.setattr("app.services.aplicaciones.encolar_borrado", lambda db, url: encoladas.append(url))
+
     resp = await client.delete(_url_eliminar(r22), headers=headers)
     assert resp.status_code == 204, resp.text
+    assert encoladas == [foto.json()["url"]]
 
     assert await _stock(db_session, insumo) == 92.0  # vuelven exactamente las 4 de la válvula 22
     db_session.expire_all()
@@ -642,6 +647,27 @@ async def test_orden_id_en_todas_las_respuestas_de_registro(
         assert historial.status_code == 200, historial.text
         vistos.update({r["id"]: r["orden_id"] for r in historial.json()["fitosanitarios"]})
     assert vistos == esperado
+
+
+async def test_orden_valvula_id_agrupa_registros_por_valvula(
+    client, create_user, create_insumo, create_parcela, create_valvula,
+):
+    headers, _ = await _auth(client, create_user)
+    orden_v, filas_v, _insumo = await _orden_parral2(client, headers, create_insumo, create_parcela, create_valvula)
+    r_valvula = await _confirmar_valvula(client, headers, orden_v, filas_v["21"])
+    orden_p, filas_p, _i = await _orden_por_parcelas(
+        client, headers, create_insumo, create_parcela, superficies=(1.0,),
+    )
+    r_parcela = await _confirmar_parcela(client, headers, orden_p, filas_p["Potrero 1"])
+
+    listado = await client.get("/produccion/fitosanitarios/", headers=headers)
+    assert listado.status_code == 200, listado.text
+    por_id = {r["id"]: r["orden_valvula_id"] for r in listado.json()}
+    # Valve-born record points at its valve row; parcel-born one has none.
+    assert por_id == {r_valvula: filas_v["21"], r_parcela: None}
+
+    carencia = await client.get("/produccion/fitosanitarios/alertas/carencia", headers=headers)
+    assert {r["id"]: r["orden_valvula_id"] for r in carencia.json()} == por_id
 
 
 async def test_editar_registro_de_orden_con_recalculo_de_stock_conserva_orden_id(

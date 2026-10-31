@@ -1070,7 +1070,11 @@ async def list_fitosanitarios(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[RegistroFitosanitario]:
-    stmt = select(RegistroFitosanitario).order_by(RegistroFitosanitario.fecha.desc())
+    # id as tiebreaker: one confirmation writes many rows with the same fecha, and
+    # without a total order skip/limit pages could drop or repeat rows.
+    stmt = select(RegistroFitosanitario).order_by(
+        RegistroFitosanitario.fecha.desc(), RegistroFitosanitario.id
+    )
     if fecha_desde is not None:
         stmt = stmt.where(RegistroFitosanitario.fecha >= fecha_desde)
     if fecha_hasta is not None:

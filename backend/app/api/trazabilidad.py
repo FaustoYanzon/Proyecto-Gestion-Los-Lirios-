@@ -10,7 +10,11 @@ from starlette.responses import Response
 
 from app.api.deps import get_db, require_any_role, require_encargado_up, require_gerencial_up
 from app.core import ciclo_campana, labels, termografo_metrics
-from app.core.cloudinary_client import upload_foto_parcela, upload_informe_analisis
+from app.core.cloudinary_client import (
+    encolar_borrado,
+    upload_foto_parcela,
+    upload_informe_analisis,
+)
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCIAL
@@ -775,6 +779,7 @@ async def delete_foto(
     foto = (await db.execute(select(Foto).where(Foto.id == foto_id))).scalar_one_or_none()
     if foto is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Foto not found")
+    encolar_borrado(db, foto.url)
     await db.delete(foto)
     await db.flush()
     return foto
@@ -850,6 +855,7 @@ async def delete_analisis(
     )).scalar_one_or_none()
     if analisis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analisis not found")
+    encolar_borrado(db, analisis.informe_url)
     await db.delete(analisis)
     await db.flush()
     return analisis

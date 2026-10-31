@@ -43,6 +43,8 @@ export interface FitosanitarioResponse {
   responsable_id: string | null
   // Order this record came from; null for manually created records.
   orden_id: string | null
+  // Valve row of that order (one per product of the same valve confirmation).
+  orden_valvula_id: string | null
   created_by: string
   created_at: string
 }
@@ -53,11 +55,27 @@ export interface FitosanitarioFilter {
   parcela_id?: string
   producto_nombre?: string
   limit?: number
+  skip?: number
 }
 
 export async function getFitosanitarios(params: FitosanitarioFilter): Promise<FitosanitarioResponse[]> {
   const { data } = await api.get('/produccion/fitosanitarios/', { params })
   return data
+}
+
+const LOTE_MAX = 1000 // backend cap per request
+
+// Every record matching the filters. The backend defaults to 100 rows, which
+// with several products per valve would cut an order in half when grouping.
+export async function getFitosanitariosTodos(
+  params: Omit<FitosanitarioFilter, 'limit' | 'skip'>,
+): Promise<FitosanitarioResponse[]> {
+  const todos: FitosanitarioResponse[] = []
+  for (let skip = 0; ; skip += LOTE_MAX) {
+    const lote = await getFitosanitarios({ ...params, limit: LOTE_MAX, skip })
+    todos.push(...lote)
+    if (lote.length < LOTE_MAX) return todos
+  }
 }
 
 export async function getAlertasCarencia(): Promise<FitosanitarioResponse[]> {
