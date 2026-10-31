@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.models.parcela import TipoParcela, TipoRiego
 from app.models.produccion import RegistroRiego
 from app.models.user import User, UserRole
@@ -226,6 +229,29 @@ async def test_reintento_idempotente_de_iniciar_manto_no_da_409(client, create_u
     assert primero.status_code == 201
     assert segundo.status_code == 201
     assert segundo.json()["id"] == primero.json()["id"]
+
+
+async def test_indice_unico_un_manto_en_curso_por_parcela(client, create_user, create_parcela, db_session):
+    # DB-level guard behind the 409: two requests that both pass the check at
+    # the same time must not both insert.
+    _headers, user = await _login(client, create_user)
+    parcela = await create_parcela(superficie_ha=2.3)
+    ahora = datetime.now(timezone.utc)
+
+    def fila(tipo: TipoRiego, fin: datetime | None) -> RegistroRiego:
+        return RegistroRiego(
+            fecha=ahora.date(), parcela_id=parcela.id, tipo=tipo, inicio=ahora, fin=fin,
+            responsable="Juan Perez", created_by=user.id,
+        )
+
+    # Allowed: a finished manto and a goteo in progress next to the one in progress.
+    db_session.add_all([fila(TipoRiego.manto, ahora), fila(TipoRiego.goteo, None), fila(TipoRiego.manto, None)])
+    await db_session.commit()
+
+    db_session.add(fila(TipoRiego.manto, None))
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+    await db_session.rollback()
 
 
 async def test_manto_en_curso_en_otra_parcela_ok(client, create_user, create_parcela):

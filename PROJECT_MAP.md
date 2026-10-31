@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 59 (head: `506076f9ed21_drop_plan_links_and_linea_numero_.py`)
+**Migraciones de Alembic:** 60 (head: `822f93f13a0d_riego_manto_en_curso_indice_unico.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -196,6 +196,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `migrate_jornales_gap_sep25_mar26.py`
 - `migrate_jornales_historicos.py`
 - `pregate_ordenes_multiproducto.py`
+- `pregate_riego_manto_unico.py`
 
 ---
 
