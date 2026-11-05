@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-10-31
+> Última generación: 2026-11-05
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 60 (head: `822f93f13a0d_riego_manto_en_curso_indice_unico.py`)
+**Migraciones de Alembic:** 61 (head: `0861ea1414eb_drop_shim_columns_ordenes_aplicacion.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -196,6 +196,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `migrate_jornales_gap_sep25_mar26.py`
 - `migrate_jornales_historicos.py`
 - `pregate_ordenes_multiproducto.py`
+- `pregate_quitar_shims_orden.py`
 - `pregate_riego_manto_unico.py`
 
 ---

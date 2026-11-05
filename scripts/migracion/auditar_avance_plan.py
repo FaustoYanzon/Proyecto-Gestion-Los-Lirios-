@@ -51,11 +51,11 @@ async def main() -> int:
     conn = await asyncpg.connect(url)
     try:
         ordenes = await conn.fetch(
-            "SELECT estado, origen, objetivo, fecha_planificada FROM ordenes_aplicacion ORDER BY fecha_planificada"
+            "SELECT estado, objetivo, fecha_planificada FROM ordenes_aplicacion ORDER BY fecha_planificada"
         )
         print(f"\nÓrdenes ({len(ordenes)}):")
         for o in ordenes:
-            print(f"    {o['estado']:<10} {o['origen']:<6} {o['fecha_planificada']}  {o['objetivo']}")
+            print(f"    {o['estado']:<10} {o['fecha_planificada']}  {o['objetivo']}")
 
         planes = await conn.fetch(
             "SELECT p.variedad::text AS variedad, p.mes, p.insumo_id, i.nombre, sum(p.dosis_por_ha) AS dosis "

@@ -159,7 +159,7 @@ async def test_put_body_viejo_mismo_insumo_sigue_funcionando(
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["origen"] == "extra"
+    assert "origen" not in body
     assert "numero_aplicacion" not in body["lineas"][0]
     assert body["lineas"][0]["dosis_por_ha"] == 2.0
     assert "plan_fitosanitario_id" not in body
@@ -180,6 +180,6 @@ async def test_put_body_viejo_con_otro_insumo_deja_la_orden_extra(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     # A different product is no longer the plan's round.
-    assert body["origen"] == "extra"
+    assert "origen" not in body
     assert "numero_aplicacion" not in body["lineas"][0]
     assert "plan_fitosanitario_id" not in body

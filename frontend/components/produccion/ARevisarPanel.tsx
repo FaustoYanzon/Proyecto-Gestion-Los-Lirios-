@@ -97,7 +97,10 @@ export default function ARevisarPanel({
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {v.objetivo} · {VARIEDAD_LABELS[v.variedad] ?? v.variedad}
+                  {/* variedad is null when the parcel carries none */}
+                  {[v.objetivo, v.variedad ? (VARIEDAD_LABELS[v.variedad] ?? v.variedad) : null]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-1" data-testid="productos-valvula">
                   {productosDe(v).map((p) => (

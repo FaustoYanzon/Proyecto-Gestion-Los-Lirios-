@@ -60,11 +60,11 @@ async def main() -> int:
         print(f"\n(b) Válvulas activas sin superficie: {sin_sup} de {total}")
 
         ordenes = await conn.fetch(
-            "SELECT estado, origen, count(*) AS n FROM ordenes_aplicacion GROUP BY 1,2 ORDER BY 1,2"
+            "SELECT estado, count(*) AS n FROM ordenes_aplicacion GROUP BY 1 ORDER BY 1"
         )
-        print("\n(c) Órdenes por estado/origen:")
+        print("\n(c) Órdenes por estado (origen se dropeó en 0861ea1414eb):")
         for r in ordenes:
-            print(f"    {r['estado']:<11} {r['origen']:<6} {r['n']}")
+            print(f"    {r['estado']:<11} {r['n']}")
         con_registro = await conn.fetchval(
             "SELECT count(*) FROM ordenes_aplicacion_parcelas WHERE registro_fitosanitario_id IS NOT NULL"
         )

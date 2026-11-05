@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,7 +26,6 @@ from app.models.produccion import (
     OrdenAplicacionInsumo,
     OrdenAplicacionParcela,
     OrdenAplicacionValvula,
-    OrigenOrdenAplicacion,
     RegistroFitosanitario,
     ResultadoValvula,
 )
@@ -56,7 +55,6 @@ logger = logging.getLogger("app")
 router = APIRouter(prefix="/ordenes-aplicacion", tags=["Ordenes Aplicacion"])
 
 _ORDEN_LOAD_OPTS = (
-    selectinload(OrdenAplicacion.insumo),
     selectinload(OrdenAplicacion.lineas).selectinload(OrdenAplicacionInsumo.insumo),
     selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.parcela),
     selectinload(OrdenAplicacion.parcelas).selectinload(OrdenAplicacionParcela.registros),
@@ -101,16 +99,6 @@ def _variedades_orden(orden: OrdenAplicacion) -> list[VariedadUva]:
     )
 
 
-def _variedad_principal(parcelas: list[Parcela]) -> VariedadUva | None:
-    """Variety of the largest parcel (unknown area counts as zero; ties go to
-    the parcel name) -- the single `variedad` old clients still read."""
-    con_variedad = [p for p in parcelas if p.variedad is not None]
-    if not con_variedad:
-        return None
-    mayor = max(con_variedad, key=lambda p: (p.superficie_ha or 0.0, p.nombre))
-    return mayor.variedad
-
-
 def _linea_response(linea: OrdenAplicacionInsumo) -> OrdenAplicacionLineaResponse:
     return OrdenAplicacionLineaResponse(
         id=linea.id,
@@ -124,20 +112,10 @@ def _linea_response(linea: OrdenAplicacionInsumo) -> OrdenAplicacionLineaRespons
 
 
 def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
-    # Shim fields come from the order columns, which `_sincronizar_shim` keeps
-    # equal to the first line (and to the largest parcel's variety).
     return OrdenAplicacionResponse(
         id=orden.id,
         temporada=orden.temporada,
-        origen=orden.origen,
-        variedad=orden.variedad,
-        insumo_id=orden.insumo_id,
-        insumo_nombre=orden.insumo.nombre,
-        insumo_unidad=orden.insumo.unidad,
-        dosis_por_ha=orden.dosis_por_ha,
         objetivo=orden.objetivo,
-        dias_carencia=orden.dias_carencia,
-        dias_reingreso=orden.dias_reingreso,
         fecha_planificada=orden.fecha_planificada,
         estado=orden.estado,
         notas=orden.notas,
@@ -196,8 +174,8 @@ async def _resolve_parcelas_orden(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"Estas parcelas no son de la variedad {variedad.value}: {', '.join(fuera_de_variedad)}",
                 )
-        # The legacy `variedad` column is NOT NULL: some parcel must carry one.
-        if _variedad_principal(parcelas) is None:
+        # An order is classified by its parcels' varieties: some parcel must carry one.
+        if all(p.variedad is None for p in parcelas):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Ninguna de las parcelas elegidas tiene variedad cargada.",
@@ -357,24 +335,6 @@ def _aplicar_lineas(
     orden.lineas = nuevas
 
 
-def _sincronizar_shim(orden: OrdenAplicacion) -> None:
-    """Write the deprecated single-product columns (still NOT NULL until a
-    later migration drops them) from the first line and the largest parcel's
-    variety, and pin `origen` to `extra` (orders no longer link to the plan).
-    Requires `orden.lineas` (with `insumo`) and `orden.parcelas[*].parcela`
-    in memory."""
-    primera = orden.lineas[0]
-    orden.insumo_id = primera.insumo_id
-    orden.insumo = primera.insumo
-    orden.dosis_por_ha = primera.dosis_por_ha
-    orden.dias_carencia = primera.dias_carencia
-    orden.dias_reingreso = primera.dias_reingreso
-    variedad = _variedad_principal([item.parcela for item in orden.parcelas])
-    if variedad is not None:  # Guaranteed by _resolve_parcelas_orden.
-        orden.variedad = variedad
-    orden.origen = OrigenOrdenAplicacion.extra
-
-
 async def _crear_orden(
     db: AsyncSession, data: OrdenAplicacionCreate, user: User
 ) -> OrdenAplicacion:
@@ -396,8 +356,6 @@ async def _crear_orden(
         item = OrdenAplicacionParcela(parcela_id=parcela.id, valvulas=[])
         item.parcela = parcela
         orden.parcelas.append(item)
-    # Shim columns are NOT NULL: set them before the valve queries autoflush.
-    _sincronizar_shim(orden)
     db.add(orden)
     for item in orden.parcelas:
         await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))
@@ -480,9 +438,6 @@ async def list_valvulas_a_revisar(
             ),
             selectinload(OrdenAplicacionValvula.orden_parcela)
             .selectinload(OrdenAplicacionParcela.orden)
-            .selectinload(OrdenAplicacion.insumo),
-            selectinload(OrdenAplicacionValvula.orden_parcela)
-            .selectinload(OrdenAplicacionParcela.orden)
             .selectinload(OrdenAplicacion.lineas)
             .selectinload(OrdenAplicacionInsumo.insumo),
         )
@@ -510,13 +465,11 @@ async def list_valvulas_a_revisar(
             )
             for linea in orden.lineas
         ]
-        # Shim = first line; the order columns only back up a line-less order
-        # (should not exist after the backfill) instead of failing with a 500.
-        principal = productos[0] if productos else ProductoAplicadoResponse(
-            insumo_id=orden.insumo_id,
-            insumo_nombre=orden.insumo.nombre,
-            dosis_por_ha=orden.dosis_por_ha,
-        )
+        if not productos:
+            # Impossible after the backfill; skip it rather than 500 the whole list.
+            logger.error("Order %s has no product lines; skipped in /a-revisar", orden.id)
+            continue
+        principal = productos[0]
         resultado.append(
             ValvulaARevisarResponse(
                 id=fila.id,
@@ -526,7 +479,7 @@ async def list_valvulas_a_revisar(
                 valvula_id=fila.valvula_id,
                 valvula_nombre=fila.valvula.nombre,
                 # A multi-variety order: the row shows its own parcel's variety.
-                variedad=parcela.variedad or orden.variedad,
+                variedad=parcela.variedad,
                 insumo_id=principal.insumo_id,
                 insumo_nombre=principal.insumo_nombre,
                 dosis_por_ha=principal.dosis_por_ha,
@@ -560,8 +513,7 @@ async def list_ordenes(
         stmt = stmt.where(OrdenAplicacion.estado == estado)
     if variedad is not None:
         # Any of the order's parcels, so a multi-variety order matches each of
-        # its varieties (EXISTS: no duplicate rows). The shim column is kept in
-        # the OR so legacy orders whose parcel later changed variety still match.
+        # its varieties (EXISTS: no duplicate rows).
         tiene_variedad = (
             select(OrdenAplicacionParcela.id)
             .join(Parcela, Parcela.id == OrdenAplicacionParcela.parcela_id)
@@ -571,7 +523,7 @@ async def list_ordenes(
             )
             .exists()
         )
-        stmt = stmt.where(or_(OrdenAplicacion.variedad == variedad, tiene_variedad))
+        stmt = stmt.where(tiene_variedad)
     ordenes = (await db.execute(stmt)).scalars().all()
     return [_to_response(o) for o in ordenes]
 
@@ -653,8 +605,6 @@ async def actualizar_orden(
             item.parcela = parcela
             orden.parcelas.append(item)
             agregadas.append(item)
-    # Before any query below autoflushes the order.
-    _sincronizar_shim(orden)
 
     for item in agregadas:
         await _crear_filas_valvula(db, item, valvulas_por_parcela.get(item.parcela_id))

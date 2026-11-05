@@ -566,11 +566,6 @@ class PlanFitosanitario(Base):
     created_by_user: Mapped[User] = relationship("User")
 
 
-class OrigenOrdenAplicacion(str, enum.Enum):
-    plan = "plan"
-    extra = "extra"
-
-
 class EstadoOrdenAplicacion(str, enum.Enum):
     pendiente = "pendiente"
     en_curso = "en_curso"
@@ -594,10 +589,10 @@ class ResultadoValvula(str, enum.Enum):
 class OrdenAplicacion(Base):
     """Orden de aplicación ejecutable: lo que un operario ve y confirma en
     mobile, en vez de recibir la indicación solo de palabra. No se vincula
-    al plan: el avance se mide por fecha (services/plan_avance.py) y `origen`
-    queda en `extra` en las órdenes nuevas (las históricas conservan `plan`).
-    Congela insumo/dosis/objetivo/carencia al momento de crearse -- un
-    cambio posterior en el plan no altera órdenes ya generadas."""
+    al plan: el avance se mide por fecha (services/plan_avance.py). Los
+    productos viven en `lineas` y las variedades salen de las parcelas.
+    Congela objetivo y las líneas (dosis/carencia) al crearse -- un cambio
+    posterior en el plan no altera órdenes ya generadas."""
 
     __tablename__ = "ordenes_aplicacion"
 
@@ -605,17 +600,7 @@ class OrdenAplicacion(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     temporada: Mapped[int] = mapped_column(Integer, nullable=False)
-    origen: Mapped[OrigenOrdenAplicacion] = mapped_column(
-        SAEnum(OrigenOrdenAplicacion), nullable=False
-    )
-    variedad: Mapped[VariedadUva] = mapped_column(SAEnum(VariedadUva), nullable=False)
-    insumo_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("insumos.id"), nullable=False
-    )
-    dosis_por_ha: Mapped[float] = mapped_column(Float, nullable=False)
     objetivo: Mapped[str] = mapped_column(String(200), nullable=False)
-    dias_carencia: Mapped[int] = mapped_column(Integer, nullable=False)
-    dias_reingreso: Mapped[int] = mapped_column(Integer, nullable=False)
     fecha_planificada: Mapped[date] = mapped_column(Date, nullable=False)
     estado: Mapped[EstadoOrdenAplicacion] = mapped_column(
         SAEnum(EstadoOrdenAplicacion),
@@ -641,7 +626,6 @@ class OrdenAplicacion(Base):
         Index("ix_ordenes_aplicacion_temporada_estado", "temporada", "estado"),
     )
 
-    insumo: Mapped[Insumo] = relationship("Insumo")
     created_by_user: Mapped[User] = relationship("User")
     parcelas: Mapped[list[OrdenAplicacionParcela]] = relationship(
         "OrdenAplicacionParcela", back_populates="orden", cascade="all, delete-orphan"

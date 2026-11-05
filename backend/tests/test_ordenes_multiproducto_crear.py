@@ -14,9 +14,9 @@ from app.models.parcela import VariedadUva
 from app.models.produccion import (
     OrdenAplicacion,
     OrdenAplicacionParcela,
-    OrigenOrdenAplicacion,
 )
 from app.models.user import UserRole
+from tests.helpers_ordenes import SHIM_FIELDS
 
 
 async def _auth(client, create_user, **kwargs):
@@ -105,12 +105,8 @@ async def test_crea_orden_con_4_lineas_y_2_variedades(
     assert body["lineas"][3]["insumo_unidad"] == "lt"
     assert body["lineas"][3]["dosis_por_ha"] == 0.15
     assert set(body["variedades"]) == {"flame", "syrah"}
-    assert body["origen"] == "extra"
-    # Legacy shim: first line + variety of the largest parcel.
-    assert body["insumo_id"] == insumos[0].id
-    assert body["insumo_nombre"] == "Super folpan"
-    assert body["dosis_por_ha"] == 1.5
-    assert body["variedad"] == "syrah"
+    for campo in SHIM_FIELDS:
+        assert campo not in body
     assert {p["parcela_id"] for p in body["parcelas"]} == {flame.id, syrah.id}
 
 
@@ -186,11 +182,10 @@ async def test_body_viejo_un_producto_sigue_funcionando(
     assert data["lineas"][0]["insumo_id"] == insumo.id
     assert data["lineas"][0]["dosis_por_ha"] == 2.0
     assert "numero_aplicacion" not in data["lineas"][0]
-    assert data["insumo_id"] == insumo.id
-    assert data["insumo_nombre"] == "Azufre"
-    assert data["dias_carencia"] == 7
-    assert data["variedad"] == "flame"
-    assert data["origen"] == "extra"
+    assert data["lineas"][0]["dias_carencia"] == 7
+    assert data["variedades"] == ["flame"]
+    for campo in SHIM_FIELDS:
+        assert campo not in data
 
 
 async def test_orden_de_un_producto_por_variedad_sin_parcelas_explicitas(client, create_user, create_insumo, create_parcela):
@@ -212,7 +207,7 @@ async def test_orden_de_un_producto_por_variedad_sin_parcelas_explicitas(client,
     assert resp.status_code == 201, resp.text
     body = resp.json()
     # Progress is by date now: no round, no plan link on the order.
-    assert body["origen"] == "extra"
+    assert "origen" not in body
     assert "plan_fitosanitario_id" not in body
     assert len(body["lineas"]) == 1
     assert "numero_aplicacion" not in body["lineas"][0]
@@ -264,7 +259,6 @@ async def test_put_edita_orden_del_plan_sin_confirmaciones(
     # Same product keeps its line (updated in place, no unique clash).
     assert body["lineas"][0]["id"] == linea_original_id
     assert body["lineas"][0]["dosis_por_ha"] == 2.5
-    assert body["dosis_por_ha"] == 2.5
     assert set(body["variedades"]) == {"flame", "syrah"}
     assert {p["parcela_id"] for p in body["parcelas"]} == {p1.id, p2.id}
 
@@ -297,9 +291,8 @@ async def test_put_cambia_insumo_y_dosis_reemplaza_lineas(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert [l["insumo_nombre"] for l in body["lineas"]] == ["Oponente"]
-    assert body["insumo_id"] == insumos[3].id
-    assert body["insumo_nombre"] == "Oponente"
-    assert body["dosis_por_ha"] == 0.2
+    assert body["lineas"][0]["insumo_id"] == insumos[3].id
+    assert body["lineas"][0]["dosis_por_ha"] == 0.2
 
 
 async def test_put_body_viejo_un_producto(client, create_user, create_insumo, create_parcela):
@@ -328,7 +321,7 @@ async def test_put_body_viejo_un_producto(client, create_user, create_insumo, cr
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert [l["insumo_id"] for l in body["lineas"]] == [insumos[2].id]
-    assert body["dias_carencia"] == 10
+    assert body["lineas"][0]["dias_carencia"] == 10
 
 
 async def test_put_con_valvula_ids_recorta_las_valvulas_de_la_orden(
@@ -424,7 +417,7 @@ async def test_put_y_delete_bloqueados_si_hay_confirmaciones(
 # ── Lectura / shim ────────────────────────────────────────────────────────────
 
 
-async def test_get_orden_multivariedad_devuelve_variedad_valida(
+async def test_get_orden_multivariedad_devuelve_variedades_y_filtra_por_cada_una(
     client, create_user, create_insumo, create_parcela,
 ):
     headers, _ = await _auth(client, create_user)
@@ -444,10 +437,18 @@ async def test_get_orden_multivariedad_devuelve_variedad_valida(
     resp = await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["variedad"] == "bonarda"
+    assert "variedad" not in body
     assert set(body["variedades"]) == {"flame", "bonarda", "syrah"}
-    listado = await client.get("/ordenes-aplicacion/", params={"temporada": 2026}, headers=headers)
-    assert listado.json()[0]["variedad"] == "bonarda"
+    # ?variedad= matches an order through any of its parcels.
+    for variedad in ("flame", "bonarda", "syrah"):
+        listado = await client.get(
+            "/ordenes-aplicacion/", params={"temporada": 2026, "variedad": variedad}, headers=headers,
+        )
+        assert [o["id"] for o in listado.json()] == [orden["id"]]
+    otra = await client.get(
+        "/ordenes-aplicacion/", params={"temporada": 2026, "variedad": "sultanina"}, headers=headers,
+    )
+    assert otra.json() == []
 
 
 async def test_confirmar_orden_sin_lineas_da_409(
@@ -459,9 +460,8 @@ async def test_confirmar_orden_sin_lineas_da_409(
     insumo = await create_insumo(nombre="Azufre")
     parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
     orden = OrdenAplicacion(
-        temporada=2026, origen=OrigenOrdenAplicacion.extra, variedad=VariedadUva.flame,
-        insumo_id=insumo.id, dosis_por_ha=1.0, objetivo="Oidio", dias_carencia=7,
-        dias_reingreso=2, fecha_planificada=date(2026, 10, 15), created_by=user.id,
+        temporada=2026, objetivo="Oidio",
+        fecha_planificada=date(2026, 10, 15), created_by=user.id,
     )
     item = OrdenAplicacionParcela(parcela_id=parcela.id)
     orden.parcelas.append(item)

@@ -17,18 +17,16 @@ from app.models.produccion import (
     OrdenAplicacion,
     OrdenAplicacionInsumo,
     OrdenAplicacionParcela,
-    OrigenOrdenAplicacion,
     RegistroFitosanitario,
 )
 from app.models.user import UserRole
-from tests.helpers_ordenes import add_linea_desde_shim
+from tests.helpers_ordenes import add_linea
 
 
 def _orden(user_id: str, insumo_id: str) -> OrdenAplicacion:
     return OrdenAplicacion(
-        temporada=2026, origen=OrigenOrdenAplicacion.extra, variedad=VariedadUva.flame,
-        insumo_id=insumo_id, dosis_por_ha=1.0, objetivo="Oidio", dias_carencia=7,
-        dias_reingreso=2, fecha_planificada=date(2026, 10, 15), created_by=user_id,
+        temporada=2026, objetivo="Oidio",
+        fecha_planificada=date(2026, 10, 15), created_by=user_id,
     )
 
 
@@ -45,8 +43,8 @@ async def test_linea_unica_por_orden_e_insumo(db_session, create_user, create_in
     insumo = await create_insumo(nombre="Azufre")
 
     orden = _orden(user.id, insumo.id)
-    add_linea_desde_shim(orden)
-    add_linea_desde_shim(orden)
+    add_linea(orden, insumo.id)
+    add_linea(orden, insumo.id)
     db_session.add(orden)
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -98,7 +96,7 @@ async def test_registro_orden_id_sale_de_orden_parcela_id(
     parcela = await create_parcela(nombre="Parral 2", variedad="flame", finca=Finca.media_agua)
 
     orden = _orden(user.id, insumo.id)
-    linea = add_linea_desde_shim(orden)
+    linea = add_linea(orden, insumo.id)
     item = OrdenAplicacionParcela(parcela_id=parcela.id)
     orden.parcelas.append(item)
     db_session.add(orden)

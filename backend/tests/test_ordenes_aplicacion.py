@@ -51,7 +51,7 @@ async def test_crear_orden_por_variedad_incluye_todas_las_parcelas(client, creat
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["estado"] == "pendiente"
-    assert body["insumo_nombre"] == "Azufre"
+    assert [l["insumo_nombre"] for l in body["lineas"]] == ["Azufre"]
     assert {p["parcela_id"] for p in body["parcelas"]} == {p1.id, p2.id}
 
 
@@ -78,7 +78,7 @@ async def test_crear_orden_extra_con_parcelas_especificas(client, create_user, c
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["origen"] == "extra"
+    assert "origen" not in body
     assert [p["parcela_id"] for p in body["parcelas"]] == [p1.id]
 
 
@@ -270,8 +270,8 @@ async def test_editar_orden_extra_cambia_campos_y_parcelas(client, create_user, 
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["insumo_nombre"] == "Azufre"
-    assert body["dosis_por_ha"] == 3.5
+    assert [l["insumo_nombre"] for l in body["lineas"]] == ["Azufre"]
+    assert body["lineas"][0]["dosis_por_ha"] == 3.5
     assert body["fecha_planificada"] == "2026-11-20"
     assert [p["parcela_id"] for p in body["parcelas"]] == [p2.id]
 
