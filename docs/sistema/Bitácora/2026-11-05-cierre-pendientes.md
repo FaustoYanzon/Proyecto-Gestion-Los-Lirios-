@@ -54,6 +54,11 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
 - `Modelo de Datos.md` regenerado desde prod: 36 → 35 enums, 90 → 89 relaciones.
 - Sin verificar: click-through en la web de prod (la pestaña pidió login; lo inicia Fausto).
 
+### 3. Huérfanos en Cloudinary (barrido de solo reporte)
+- Script nuevo `scripts/migracion/reporte_huerfanos_cloudinary.py`: lista los assets de Cloudinary bajo `fotos_parcela/`, `fotos_ordenes_aplicacion/` e `informes_analisis/` y los compara con `fotos_parcela.url`, `fotos_registros_fitosanitarios.url` y `analisis_calidad.informe_url`. No borra nada; ignora lo más nuevo que 24 h (subidas en curso) y reusa `parse_media_url` del borrado real.
+- Se corre con las variables de prod inyectadas por Railway CLI, porque `backend/.env` local no tiene las `CLOUDINARY_*`: `npx @railway/cli run "backend\\venv\\Scripts\\python.exe" scripts/migracion/reporte_huerfanos_cloudinary.py` (desde Git Bash; las barras normales fallan en `cmd`).
+- **Resultado en prod (cloud `swj5zkyq`):** 0 filas con URL en las tres tablas, 0 assets bajo los tres prefijos, 0 huérfanos, 0 filas con archivo faltante. Todavía no se subió ninguna foto o informe en prod, así que no hay nada que limpiar.
+
 ## Abiertos
 - Click-through en prod de órdenes y A revisar (requiere sesión de Fausto).
-- Huérfanos en Cloudinary, plan vs aplicado, cuentas de operarios, testers, Ingresos vs dashboard, Alta de Producción (ver bitácora del 2026-10-31 y memoria del proyecto).
+- Plan vs aplicado, cuentas de operarios, testers, Ingresos vs dashboard, Alta de Producción (ver bitácora del 2026-10-31 y memoria del proyecto).
