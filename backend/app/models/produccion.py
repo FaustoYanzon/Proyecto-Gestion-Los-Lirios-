@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum as SAEnum,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    false,
     func,
     select,
     text,
@@ -609,6 +611,10 @@ class OrdenAplicacion(Base):
         nullable=False,
     )
     notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # True = ad-hoc order that must not count toward monthly plan compliance.
+    fuera_de_plan: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False
     )

@@ -119,6 +119,7 @@ def _to_response(orden: OrdenAplicacion) -> OrdenAplicacionResponse:
         fecha_planificada=orden.fecha_planificada,
         estado=orden.estado,
         notas=orden.notas,
+        fuera_de_plan=orden.fuera_de_plan,
         created_by=orden.created_by,
         created_at=orden.created_at,
         lineas=[_linea_response(linea) for linea in orden.lineas],
@@ -349,6 +350,7 @@ async def _crear_orden(
         objetivo=data.objetivo,
         fecha_planificada=data.fecha_planificada,
         notas=data.notas,
+        fuera_de_plan=data.fuera_de_plan,
         created_by=user.id,
     )
     _aplicar_lineas(orden, data.lineas, insumos)
@@ -589,6 +591,7 @@ async def actualizar_orden(
     orden.objetivo = data.objetivo
     orden.fecha_planificada = data.fecha_planificada
     orden.notas = data.notas
+    orden.fuera_de_plan = data.fuera_de_plan
     _aplicar_lineas(orden, lineas, insumos)
 
     # Todas las filas siguen pendientes (lo garantiza _get_orden_editable):

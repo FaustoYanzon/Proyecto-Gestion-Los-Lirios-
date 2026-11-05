@@ -481,6 +481,7 @@ class OrdenAplicacionResponse(BaseModel):
     fecha_planificada: date
     estado: EstadoOrdenAplicacion
     notas: str | None = None
+    fuera_de_plan: bool = False
     created_by: str
     created_at: datetime
     lineas: list[OrdenAplicacionLineaResponse] = Field(default_factory=list)
@@ -533,6 +534,8 @@ class OrdenAplicacionUpdate(BaseModel):
     valvula_ids: list[str] | None = None
     variedad: VariedadUva | None = None
     notas: str | None = None
+    # Old clients omit it: default keeps the order inside the plan.
+    fuera_de_plan: bool = False
 
     # Not part of the payload: remembers that the request came in the old
     # single-product shape, so PUT can refuse to collapse a multi-line order.
