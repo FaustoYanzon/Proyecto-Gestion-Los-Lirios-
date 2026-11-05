@@ -59,6 +59,20 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
 - Se corre con las variables de prod inyectadas por Railway CLI, porque `backend/.env` local no tiene las `CLOUDINARY_*`: `npx @railway/cli run "backend\\venv\\Scripts\\python.exe" scripts/migracion/reporte_huerfanos_cloudinary.py` (desde Git Bash; las barras normales fallan en `cmd`).
 - **Resultado en prod (cloud `swj5zkyq`):** 0 filas con URL en las tres tablas, 0 assets bajo los tres prefijos, 0 huérfanos, 0 filas con archivo faltante. Todavía no se subió ninguna foto o informe en prod, así que no hay nada que limpiar.
 
+### 4. Orden Del plan / Fuera del plan (frente A, rama feat/orden-fuera-de-plan, sin deployar)
+- **Qué se construyó:**
+  - Columna `ordenes_aplicacion.fuera_de_plan` (NOT NULL, default false). Migración `91b7e7904993` sobre `0861ea1414eb`.
+  - Filtro único en `plan_avance._dosis_por_grupo`: excluye los registros de órdenes fuera de plan y conserva las cargas a mano con `orden_id` NULL. Lo heredan avance, banner, necesidad de stock y contraste.
+  - El PUT sin el campo `fuera_de_plan` conserva el valor existente.
+  - Web: interruptor Del plan / Fuera del plan en `NuevaOrdenAplicacion.tsx`. Con Fuera del plan no se llama al contraste ni se muestra «Pendiente del plan». Insignia en la tarjeta de la orden.
+- **Decisiones:**
+  - Revierte parcialmente la decisión del 2026-10-28 de quitar el selector.
+  - No son rondas.
+  - Los productos ajenos al plan dentro de una orden Del plan siguen como «no planificado».
+- **Verificación:** pytest 480 passed; tsc, lint y build OK; `alembic check` limpio; click real manual de Fausto OK.
+- **Falta para cerrar:** backup, merge a `main` + push (Railway migra), `npx vercel --prod` desde `frontend/`, regenerar `Modelo de Datos.md` (lo corre Fausto).
+
 ## Abiertos
+- Frente B pendiente: aplicadas agrupadas en mobile, en rama aparte, OTA al final. Ver `docs/superpowers/specs/2026-11-05-orden-fuera-de-plan-y-aplicadas-mobile-design.md` y `docs/superpowers/plans/2026-11-05-orden-fuera-de-plan-y-aplicadas-mobile.md`.
 - Click-through en prod de órdenes y A revisar (requiere sesión de Fausto).
 - Plan vs aplicado, cuentas de operarios, testers, Ingresos vs dashboard, Alta de Producción (ver bitácora del 2026-10-31 y memoria del proyecto).
