@@ -578,7 +578,7 @@ function FormularioOrden({
   const { data: contraste = [], isFetching: contrasteCargando } = useQuery({
     queryKey: ['plan-contraste', contrasteKey],
     queryFn: () => postContraste(JSON.parse(contrasteKey)),
-    enabled: !!contrasteKey,
+    enabled: !fueraDePlan && !!contrasteKey,
     placeholderData: (previo) => previo,
     staleTime: 15_000,
     retry: 1,

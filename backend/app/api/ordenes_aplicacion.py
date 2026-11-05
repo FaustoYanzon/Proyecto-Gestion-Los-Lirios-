@@ -591,7 +591,8 @@ async def actualizar_orden(
     orden.objetivo = data.objetivo
     orden.fecha_planificada = data.fecha_planificada
     orden.notas = data.notas
-    orden.fuera_de_plan = data.fuera_de_plan
+    if data.fuera_de_plan is not None:
+        orden.fuera_de_plan = data.fuera_de_plan
     _aplicar_lineas(orden, lineas, insumos)
 
     # Todas las filas siguen pendientes (lo garantiza _get_orden_editable):

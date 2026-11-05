@@ -119,3 +119,24 @@ async def test_put_con_valvula_confirmada_no_cambia_fuera_de_plan(
     assert resp.status_code == 409
     got = await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)
     assert got.json()["fuera_de_plan"] is False
+
+
+async def test_put_sin_campo_conserva_fuera_de_plan(
+    client, create_user, create_insumo, create_parcela,
+):
+    headers, insumo, parcela = await _setup(client, create_user, create_insumo, create_parcela)
+    orden = (
+        await client.post(
+            "/ordenes-aplicacion/",
+            json=_payload(insumo.id, parcela.id, fuera_de_plan=True),
+            headers=headers,
+        )
+    ).json()
+    body = _put_payload(insumo.id, parcela.id, True)
+    body.pop("fuera_de_plan")  # old web clients never send it
+
+    resp = await client.put(f"/ordenes-aplicacion/{orden['id']}", json=body, headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    got = await client.get(f"/ordenes-aplicacion/{orden['id']}", headers=headers)
+    assert got.json()["fuera_de_plan"] is True
