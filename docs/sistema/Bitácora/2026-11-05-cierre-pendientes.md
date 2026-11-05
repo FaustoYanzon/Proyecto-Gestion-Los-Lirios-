@@ -47,6 +47,13 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
   - Android: update group `ca2dfebf-c073-4261-9b35-a45de2a791dd`.
   - Bundle verificado: sin `ORIGEN_LABELS`/`origenBadge`/`orden.origen`, con la URL de prod y sin IP local.
 
+### 2e. Deploy de los shims: hecho (2026-11-05)
+- Commit `317bac9` + merge `031a17f` en `main`, push a `origin/main`. Railway deploy `0b5ca2ad…` SUCCESS: la migración `0861ea1414eb` corrió sin errores y uvicorn levantó.
+- **Verificación directa en prod (solo lectura):** `alembic_version = 0861ea1414eb`, ninguna columna shim en `ordenes_aplicacion`, enum `origenordenaplicacion` inexistente, datos intactos (3 órdenes, 12 líneas).
+- **Web:** `npx vercel --prod` READY, alias `frontend-six-jade-79.vercel.app`.
+- `Modelo de Datos.md` regenerado desde prod: 36 → 35 enums, 90 → 89 relaciones.
+- Sin verificar: click-through en la web de prod (la pestaña pidió login; lo inicia Fausto).
+
 ## Abiertos
-- Deploy de los shims: pregate en prod, backup, OTA mobile, merge a `main` (Railway migra), web en Vercel y regenerar `Modelo de Datos.md`.
+- Click-through en prod de órdenes y A revisar (requiere sesión de Fausto).
 - Huérfanos en Cloudinary, plan vs aplicado, cuentas de operarios, testers, Ingresos vs dashboard, Alta de Producción (ver bitácora del 2026-10-31 y memoria del proyecto).
