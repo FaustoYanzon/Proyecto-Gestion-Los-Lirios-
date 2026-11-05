@@ -25,7 +25,6 @@ from app.models.produccion import (
     EstadoOrdenAplicacion,
     EstadoOrdenAplicacionParcela,
     OrigenCosecha,
-    OrigenOrdenAplicacion,
     ResultadoValvula,
     TipoEnvase,
     UnidadMedida,
@@ -437,9 +436,8 @@ class ValvulaARevisarResponse(BaseModel):
     parcela_nombre: str
     valvula_id: str
     valvula_nombre: str
-    # Variety of the valve's parcel (falls back to the order's shim variety
-    # when the parcel has none).
-    variedad: VariedadUva
+    # Variety of the valve's parcel (None when the parcel has none).
+    variedad: VariedadUva | None = None
     # Deprecated single-product shim (first line), kept for old clients.
     insumo_id: str
     insumo_nombre: str
@@ -479,17 +477,7 @@ class OrdenAplicacionLineaResponse(BaseModel):
 class OrdenAplicacionResponse(BaseModel):
     id: str
     temporada: int
-    origen: OrigenOrdenAplicacion
-    # Deprecated single-product shim (first line / variety of the largest
-    # parcel), kept for old web/mobile clients until the single-product columns are dropped.
-    variedad: VariedadUva
-    insumo_id: str
-    insumo_nombre: str
-    insumo_unidad: UnidadInsumo
-    dosis_por_ha: float
     objetivo: str
-    dias_carencia: int
-    dias_reingreso: int
     fecha_planificada: date
     estado: EstadoOrdenAplicacion
     notas: str | None = None

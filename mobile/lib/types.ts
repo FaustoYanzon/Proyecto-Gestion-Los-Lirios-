@@ -122,7 +122,6 @@ export interface RegistroFitosanitario {
 }
 
 // ── Órdenes de Aplicación (GET /ordenes-aplicacion/pendientes, POST confirmar) ──
-export type OrigenOrdenAplicacion = 'plan' | 'extra'
 export type EstadoOrdenAplicacion = 'pendiente' | 'en_curso' | 'completada'
 export type EstadoOrdenAplicacionParcela = 'pendiente' | 'aplicada'
 
@@ -167,21 +166,9 @@ export interface OrdenAplicacionLinea {
 export interface OrdenAplicacion {
   id: string
   temporada: number
-  origen: OrigenOrdenAplicacion
-  // Deprecated single-product shim (first line / variety of the largest
-  // parcel). Still the fallback when `lineas`/`variedades` are missing
-  // (old server or old cached data).
-  variedad: VariedadUva
-  insumo_id: string
-  insumo_nombre: string
-  insumo_unidad: 'kg' | 'lt'
-  dosis_por_ha: number
-  // Optional: absent in responses from servers older than multi-product orders.
-  lineas?: OrdenAplicacionLinea[]
-  variedades?: VariedadUva[]
+  lineas: OrdenAplicacionLinea[]
+  variedades: VariedadUva[]
   objetivo: string
-  dias_carencia: number
-  dias_reingreso: number
   fecha_planificada: string
   estado: EstadoOrdenAplicacion
   notas: string | null

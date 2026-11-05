@@ -17,13 +17,12 @@ from app.models.produccion import (
     OrdenAplicacion,
     OrdenAplicacionParcela,
     OrdenAplicacionValvula,
-    OrigenOrdenAplicacion,
     RegistroFitosanitario,
 )
 from app.models.trabajador import Trabajador
 from app.models.parcela import VariedadUva
 from app.models.user import UserRole
-from tests.helpers_ordenes import add_linea_desde_shim
+from tests.helpers_ordenes import add_linea
 
 
 async def test_orden_valvula_unica_por_parcela_de_orden(
@@ -36,11 +35,10 @@ async def test_orden_valvula_unica_por_parcela_de_orden(
 
     session = db_session
     orden = OrdenAplicacion(
-        temporada=2026, origen=OrigenOrdenAplicacion.extra, variedad=VariedadUva.flame,
-        insumo_id=insumo.id, dosis_por_ha=1.0, objetivo="Oidio", dias_carencia=7,
-        dias_reingreso=2, fecha_planificada=date(2026, 10, 15), created_by=user.id,
+        temporada=2026, objetivo="Oidio",
+        fecha_planificada=date(2026, 10, 15), created_by=user.id,
     )
-    add_linea_desde_shim(orden)
+    add_linea(orden, insumo.id)
     item = OrdenAplicacionParcela(parcela_id=parcela.id)
     orden.parcelas.append(item)
     session.add(orden)

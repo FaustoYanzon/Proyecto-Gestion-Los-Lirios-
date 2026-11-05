@@ -1,6 +1,5 @@
 import api from '@/lib/api'
 
-export type OrigenOrdenAplicacion = 'plan' | 'extra'
 export type EstadoOrdenAplicacion = 'pendiente' | 'en_curso' | 'completada'
 export type EstadoOrdenAplicacionParcela = 'pendiente' | 'aplicada'
 
@@ -43,16 +42,6 @@ export interface OrdenAplicacionLinea {
 export interface OrdenAplicacion {
   id: string
   temporada: number
-  origen: OrigenOrdenAplicacion
-  // @deprecated Single-product shim (first line / variety of the largest
-  // parcel): read `lineas` and `variedades` instead.
-  variedad: string
-  insumo_id: string
-  insumo_nombre: string
-  insumo_unidad: 'kg' | 'lt'
-  dosis_por_ha: number
-  dias_carencia: number
-  dias_reingreso: number
   objetivo: string
   fecha_planificada: string
   estado: EstadoOrdenAplicacion
@@ -183,7 +172,7 @@ export interface ValvulaARevisar {
   parcela_nombre: string
   valvula_id: string
   valvula_nombre: string
-  variedad: string
+  variedad: string | null
   // @deprecated Single-product shim (first line): read `productos`.
   insumo_id: string
   insumo_nombre: string

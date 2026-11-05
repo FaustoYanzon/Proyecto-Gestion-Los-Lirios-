@@ -14,28 +14,18 @@ export interface ProductoOrden {
   dosisPorHa: number
 }
 
-// Falls back to the legacy single-product fields when the response has no
-// `lineas` (old server or data fetched before the multi-product release).
 export function productosDeOrden(orden: OrdenAplicacion): ProductoOrden[] {
-  if (orden.lineas && orden.lineas.length > 0) {
-    return orden.lineas.map((l) => ({
-      key: l.id,
-      nombre: l.insumo_nombre,
-      unidad: l.insumo_unidad,
-      // Number() guards against a server serializing the dose as a string.
-      dosisPorHa: Number(l.dosis_por_ha),
-    }))
-  }
-  return [{
-    key: orden.insumo_id,
-    nombre: orden.insumo_nombre,
-    unidad: orden.insumo_unidad,
-    dosisPorHa: Number(orden.dosis_por_ha),
-  }]
+  return orden.lineas.map((l) => ({
+    key: l.id,
+    nombre: l.insumo_nombre,
+    unidad: l.insumo_unidad,
+    // Number() guards against a server serializing the dose as a string.
+    dosisPorHa: Number(l.dosis_por_ha),
+  }))
 }
 
 export function variedadesDeOrden(orden: OrdenAplicacion): VariedadUva[] {
-  return orden.variedades && orden.variedades.length > 0 ? orden.variedades : [orden.variedad]
+  return orden.variedades
 }
 
 export function labelVariedades(orden: OrdenAplicacion): string {

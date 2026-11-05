@@ -85,25 +85,17 @@ function progresoOrden(orden: OrdenAplicacion) {
   return { total, hechas }
 }
 
-// Product lines of an order; orders served before the multi-product backend
-// carry no `lineas`, so fall back to the single-product shim.
-function lineasDe(orden: OrdenAplicacion): Pick<OrdenAplicacionLinea, 'insumo_id' | 'insumo_nombre' | 'insumo_unidad' | 'dosis_por_ha'>[] {
-  if (orden.lineas?.length) return orden.lineas
-  return [{
-    insumo_id: orden.insumo_id,
-    insumo_nombre: orden.insumo_nombre,
-    insumo_unidad: orden.insumo_unidad,
-    dosis_por_ha: orden.dosis_por_ha,
-  }]
+// Product lines of an order (always present since the single-product shim was removed).
+function lineasDe(orden: OrdenAplicacion): OrdenAplicacionLinea[] {
+  return orden.lineas
 }
 
 function variedadesTexto(orden: OrdenAplicacion): string {
-  const variedades = orden.variedades?.length ? orden.variedades : [orden.variedad]
-  return variedades.map((v) => VARIEDAD_LABELS[v] ?? v).join(', ')
+  return orden.variedades.map((v) => VARIEDAD_LABELS[v] ?? v).join(', ')
 }
 
 function productosTexto(orden: OrdenAplicacion): string {
-  return lineasDe(orden).map((l) => l.insumo_nombre).join(', ')
+  return orden.lineas.map((l) => l.insumo_nombre).join(', ')
 }
 
 interface DeshacerTarget {

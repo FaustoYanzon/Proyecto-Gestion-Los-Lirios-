@@ -6,11 +6,21 @@ Spec: docs/superpowers/specs/2026-10-27-ordenes-multiproducto-plan-design.md
 """
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
 
 from app.models.finanzas import Finca
-from app.models.produccion import RegistroFitosanitario
+from app.models.produccion import (
+    EstadoOrdenAplicacionParcela,
+    OrdenAplicacion,
+    OrdenAplicacionParcela,
+    OrdenAplicacionValvula,
+    RegistroFitosanitario,
+    ResultadoValvula,
+)
 from app.models.user import UserRole
+from tests.helpers_ordenes import SHIM_FIELDS
 
 
 async def _auth(client, create_user, **kwargs):
@@ -82,7 +92,7 @@ async def test_a_revisar_lista_todos_los_productos(
         [_linea(folpan.id, 1.5), _linea(mancozeb.id, 2.0), _linea(oponente.id, 0.15)],
         [flame.id, syrah.id],
     )
-    assert orden["variedad"] == "syrah"
+    assert set(orden["variedades"]) == {"flame", "syrah"}
 
     r = await client.post(
         _url_valvula(orden, _fila_de(orden, flame.id)),
@@ -103,11 +113,11 @@ async def test_a_revisar_lista_todos_los_productos(
     assert fila["insumo_id"] == folpan.id
     assert fila["insumo_nombre"] == "Super folpan"
     assert fila["dosis_por_ha"] == 1.5
-    # Variety of the valve's own parcel, not the order's shim.
+    # Variety of the valve's own parcel.
     assert fila["variedad"] == "flame"
 
 
-async def test_a_revisar_parcela_sin_variedad_usa_la_variedad_de_la_orden(
+async def test_a_revisar_parcela_sin_variedad_devuelve_none(
     client, create_user, create_insumo, create_parcela, create_valvula,
 ):
     headers, _ = await _auth(client, create_user)
@@ -124,11 +134,36 @@ async def test_a_revisar_parcela_sin_variedad_usa_la_variedad_de_la_orden(
     assert r.status_code == 200, r.text
 
     [fila] = (await client.get("/ordenes-aplicacion/a-revisar", headers=headers)).json()
-    assert fila["variedad"] == "flame"
+    assert fila["variedad"] is None
     assert [p["insumo_nombre"] for p in fila["productos"]] == ["Azufre"]
 
 
 # ── Cliente viejo ─────────────────────────────────────────────────────────────
+
+
+async def test_a_revisar_orden_sin_lineas_se_omite_sin_error(
+    client, db_session, create_user, create_insumo, create_parcela, create_valvula,
+):
+    """No product fallback: a line-less order (impossible after the backfill)
+    is skipped instead of breaking the whole list."""
+    headers, user = await _auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 1", variedad="flame", finca=Finca.media_agua)
+    valvula = await create_valvula(parcela_id=parcela.id, nombre="11", superficie_ha=1.0)
+    orden = OrdenAplicacion(
+        temporada=2026, objetivo="Oidio", fecha_planificada=date(2026, 10, 15), created_by=user.id,
+    )
+    item = OrdenAplicacionParcela(parcela_id=parcela.id)
+    item.valvulas.append(OrdenAplicacionValvula(
+        valvula_id=valvula.id, estado=EstadoOrdenAplicacionParcela.aplicada,
+        resultado=ResultadoValvula.no_aplicada, observaciones="Viento",
+    ))
+    orden.parcelas.append(item)
+    db_session.add(orden)
+    await db_session.commit()
+
+    resp = await client.get("/ordenes-aplicacion/a-revisar", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
 
 
 async def test_cliente_viejo_flujo_completo(
@@ -148,12 +183,15 @@ async def test_cliente_viejo_flujo_completo(
     pendientes = await client.get("/ordenes-aplicacion/pendientes", headers=regador)
     assert pendientes.status_code == 200, pendientes.text
     [orden] = pendientes.json()
-    # Fields the current mobile build reads.
-    assert orden["insumo_id"] == insumo.id
-    assert orden["insumo_nombre"] == "Azufre"
-    assert orden["insumo_unidad"] == "kg"
-    assert orden["dosis_por_ha"] == 2.0
-    assert orden["variedad"] == "flame"
+    # The shim fields are gone: product data lives in `lineas`, varieties in `variedades`.
+    for campo in SHIM_FIELDS:
+        assert campo not in orden
+    [linea] = orden["lineas"]
+    assert linea["insumo_id"] == insumo.id
+    assert linea["insumo_nombre"] == "Azufre"
+    assert linea["insumo_unidad"] == "kg"
+    assert linea["dosis_por_ha"] == 2.0
+    assert orden["variedades"] == ["flame"]
     fila_id = orden["parcelas"][0]["valvulas"][0]["id"]
 
     conf = await client.post(_url_valvula(orden, fila_id), json={"resultado": "completa"}, headers=regador)
@@ -234,8 +272,8 @@ async def test_put_body_viejo_sobre_orden_de_una_linea_sigue_funcionando(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert [l["insumo_id"] for l in body["lineas"]] == [azufre.id]
-    assert body["dosis_por_ha"] == 3.0
-    assert body["dias_carencia"] == 10
+    assert body["lineas"][0]["dosis_por_ha"] == 3.0
+    assert body["lineas"][0]["dias_carencia"] == 10
 
 
 async def test_put_body_nuevo_sobre_orden_de_varias_lineas_no_se_bloquea(

@@ -50,7 +50,6 @@ function productosLabel(n: number) {
   return n === 1 ? 'PRODUCTO' : `PRODUCTOS (${n})`
 }
 
-const ORIGEN_LABELS: Record<string, string> = { plan: 'Del plan', extra: 'Fuera de plan' }
 
 // ─── Modal de confirmación ──────────────────────────────────────────────────
 
@@ -416,9 +415,6 @@ function OrdenCard({
             </>
           )}
         </View>
-        <View style={styles.origenBadge}>
-          <Text style={styles.origenBadgeText}>{ORIGEN_LABELS[orden.origen] ?? orden.origen}</Text>
-        </View>
       </View>
       {!unProducto && <ProductosLista productos={productos} />}
       <Text style={styles.ordenMeta}>
@@ -662,11 +658,6 @@ const styles = StyleSheet.create({
   ordenProducto: { fontSize: 15, fontWeight: '700', color: colors.ink },
   ordenSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
   ordenMeta: { fontSize: 11, color: colors.niebla, marginTop: 6, textTransform: 'capitalize' },
-  origenBadge: {
-    backgroundColor: colors.crema, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
-    marginLeft: 8,
-  },
-  origenBadgeText: { fontSize: 10, fontWeight: '700', color: colors.tierra },
   parcelasWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   parcelaChipPendiente: {
     backgroundColor: colors.tierra, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
