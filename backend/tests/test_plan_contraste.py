@@ -7,10 +7,11 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+from app.api.lotes_pasa import temporada_de
 from app.models.parcela import VariedadUva
 from app.services.plan_avance import pendiente_por_insumo
 from tests.helpers_plan import auth, crear_plan
-from tests.test_plan_avance import _registro
+from tests.test_plan_avance import _aplicar_en_hoy, _escenario_hoy, _registro
 
 
 async def _contraste(client, headers, parcelas, lineas, fecha="2026-10-15") -> list[dict]:
@@ -155,3 +156,26 @@ async def test_necesidad_forma_de_respuesta_no_cambia(
         assert set(item) == {
             "insumo_id", "insumo_nombre", "unidad", "cantidad_pendiente", "stock_actual", "faltante",
         }
+
+
+async def test_necesidad_de_stock_ignora_ordenes_fuera_de_plan(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 2.0, fuera_de_plan=True)
+    # Out-of-plan product does not reduce what the plan still needs: 2/ha x 6 ha.
+    assert await pendiente_por_insumo(db_session, temporada_de(hoy), hoy) == {insumo.id: Decimal("12")}
+
+
+async def test_contraste_no_descuenta_lo_aplicado_por_orden_fuera(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 2.0, fuera_de_plan=True)
+    [linea] = await _contraste(
+        client, headers, [{"parcela_id": parcela.id}], [{"insumo_id": insumo.id, "dosis_por_ha": 2.0}],
+        fecha=hoy.isoformat())
+    [var] = linea["variedades"]
+    assert Decimal(var["dosis_aplicada_promedio"]) == Decimal("0")
