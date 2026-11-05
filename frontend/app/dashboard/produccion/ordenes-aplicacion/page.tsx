@@ -139,6 +139,14 @@ function OrdenCard({
             <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLES[orden.estado]}`}>
               {ESTADO_LABELS[orden.estado]}
             </span>
+            {orden.fuera_de_plan && (
+              <span
+                data-testid="insignia-fuera-de-plan"
+                className="text-[11px] font-medium px-2 py-0.5 rounded-full border text-blue-800 bg-blue-50 border-blue-200"
+              >
+                Fuera del plan
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="productos-orden">
             {lineasDe(orden).map((l) => (

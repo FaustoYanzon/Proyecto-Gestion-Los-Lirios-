@@ -51,6 +51,8 @@ export interface OrdenAplicacion {
   lineas: OrdenAplicacionLinea[]
   variedades: string[]
   parcelas: OrdenAplicacionParcela[]
+  // Orders outside the plan do not count towards plan compliance.
+  fuera_de_plan: boolean
 }
 
 export interface OrdenAplicacionLineaCreate {
@@ -72,6 +74,7 @@ export interface OrdenAplicacionUpdate {
   valvula_ids?: string[] | null
   variedad?: string | null
   notas?: string | null
+  fuera_de_plan?: boolean
 }
 
 export interface OrdenAplicacionCreate extends OrdenAplicacionUpdate {
