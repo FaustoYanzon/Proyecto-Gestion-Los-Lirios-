@@ -248,8 +248,8 @@ async def calcular_avance(
 
     # Products applied with no plan row for that variety and month.
     sin_plan: set[tuple[VariedadUva, int, str]] = set()
-    for (parcela_id, m, insumo_id) in dosis:
-        clave = (parcelas[parcela_id].variedad, m, insumo_id)
+    for (pid, m, insumo_id) in dosis:
+        clave = (parcelas[pid].variedad, m, insumo_id)
         if clave not in objetivo:
             sin_plan.add(clave)
     faltantes = {i for _v, _m, i in sin_plan} - nombres.keys()

@@ -169,6 +169,8 @@ export default function CumplimientoFitosanitarioPage() {
         </div>
       ) : (
         <>
+          {/* Per-variety tabs are redundant once the variedad filter is set. */}
+          {!variedadFiltro && (
           <div className="flex flex-wrap gap-1.5">
             {variedades.map((v) => (
               <button
@@ -186,6 +188,7 @@ export default function CumplimientoFitosanitarioPage() {
               </button>
             ))}
           </div>
+          )}
 
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm" data-testid="matriz-avance">

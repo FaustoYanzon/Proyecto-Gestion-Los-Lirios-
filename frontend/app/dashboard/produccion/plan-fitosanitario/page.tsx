@@ -300,21 +300,14 @@ export default function PlanFitosanitarioPage() {
     ? variedadActiva
     : variedadesDisponibles[0]
 
-  // Rows of the active variety grouped by month, in campaign order.
-  const porMes = useMemo(() => {
-    const grupos = new Map<number, PlanFitosanitario[]>()
-    for (const p of planes.filter((x) => x.variedad === activa)) {
-      grupos.set(p.mes, [...(grupos.get(p.mes) ?? []), p])
-    }
-    return Array.from(grupos.entries())
-      .sort(([a], [b]) => ordenCampania(a) - ordenCampania(b))
-      .map(([mes, filas]) => ({
-        mes,
-        filas: [...filas].sort((a, b) => a.insumo_nombre.localeCompare(b.insumo_nombre)),
-      }))
-  }, [planes, activa])
-
-  const totalFilas = porMes.reduce((n, g) => n + g.filas.length, 0)
+  // Rows of the active variety as one flat list, in campaign order (May -> April).
+  const filasPlan = useMemo(
+    () =>
+      planes
+        .filter((x) => x.variedad === activa)
+        .sort((a, b) => ordenCampania(a.mes) - ordenCampania(b.mes) || a.insumo_nombre.localeCompare(b.insumo_nombre)),
+    [planes, activa],
+  )
 
   // (variety, month, product) -> progress, shown next to each target dose.
   const avancePorClave = useMemo(() => {
@@ -324,6 +317,15 @@ export default function PlanFitosanitarioPage() {
   }, [avance])
 
   const mesActual = now.getMonth() + 1
+
+  // Summary cards: products in the plan, months covered, and how many products
+  // of the current month are under target.
+  const mesesConPlan = new Set(filasPlan.map((f) => f.mes)).size
+  const bajoMesActual = filasPlan.filter((f) => {
+    if (f.mes !== mesActual) return false
+    const estado = avancePorClave.get(`${activa}|${f.mes}|${f.insumo_id}`)?.estado
+    return estado === 'bajo' || estado === 'pendiente'
+  }).length
 
   async function handleDelete(id: string) {
     if (!window.confirm('¿Eliminar este producto del plan?')) return
@@ -390,8 +392,7 @@ export default function PlanFitosanitarioPage() {
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              {totalFilas} producto{totalFilas !== 1 ? 's' : ''} en el plan
-              {activa && <> de {VARIEDAD_LABELS[activa] ?? activa}</>}
+              Plan de {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'la variedad'}
             </p>
             {isGerencialUp && (
               <div className="flex items-center gap-2">
@@ -416,104 +417,104 @@ export default function PlanFitosanitarioPage() {
             )}
           </div>
 
-          {isLoading ? (
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center text-gray-400">Cargando…</div>
-          ) : porMes.length === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
-              Sin productos planificados para {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'esta variedad'}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Productos en el plan</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{filasPlan.length}</p>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {porMes.map(({ mes, filas }) => (
-                <section
-                  key={mes}
-                  data-testid="plan-mes"
-                  className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
-                >
-                  <header className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <h2 className="text-sm font-semibold text-gray-800">
-                      {MESES[mes - 1]}
-                      {mes === mesActual && (
-                        <span className="ml-2 rounded-full bg-[#7a1f2c] px-2 py-0.5 text-[10px] font-medium text-white">Mes actual</span>
-                      )}
-                    </h2>
-                    {puedeEditar && (
-                      <button
-                        onClick={() => setModal({ create: mes })}
-                        className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
-                      >
-                        <Plus size={13} /> Producto en {MESES[mes - 1]}
-                      </button>
-                    )}
-                  </header>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
-                          <th className="px-4 py-2 font-medium">Producto</th>
-                          <th className="px-3 py-2 font-medium">Objetivo</th>
-                          <th className="px-3 py-2 font-medium text-right">Dosis/ha</th>
-                          <th className="px-3 py-2 font-medium">Avance del mes</th>
-                          {puedeEditar && <th className="px-4 py-2 font-medium text-center">Acciones</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {filas.map((p) => {
-                          const av = activa ? avancePorClave.get(`${activa}|${mes}|${p.insumo_id}`) : undefined
-                          const chip = av ? ESTADO_CHIP[av.estado] : null
-                          return (
-                            <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-4 py-2.5 font-medium text-gray-800">
-                                {p.insumo_nombre}
-                                {p.notas && <span className="block text-xs font-normal text-gray-500">{p.notas}</span>}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-600">{p.objetivo}</td>
-                              <td className="px-3 py-2.5 text-right font-mono text-gray-700">
-                                {formatNum(p.dosis_por_ha, 2)} {p.insumo_unidad}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                {chip && av ? (
-                                  <span
-                                    data-testid="plan-avance-chip"
-                                    data-estado={av.estado}
-                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.clase}`}
-                                  >
-                                    {chip.label}{av.porcentaje !== null ? ` · ${formatNum(av.porcentaje, 0)} %` : ''}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-gray-300">–</span>
-                                )}
-                              </td>
-                              {puedeEditar && (
-                                <td className="px-4 py-2.5">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => setModal({ edit: p })}
-                                      title="Editar"
-                                      className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
-                                    >
-                                      <Pencil size={15} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(p.id)}
-                                      title="Eliminar"
-                                      className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                    >
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              ))}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Meses con plan</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{mesesConPlan} / 12</p>
             </div>
-          )}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+                Por debajo en {MESES[mesActual - 1]}
+              </p>
+              <p className="text-2xl font-bold text-gray-900 mt-1" data-testid="plan-bajo-mes-actual">{bajoMesActual}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm" data-testid="plan-tabla">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="px-4 py-3">Mes</th>
+                  <th className="px-4 py-3">Producto</th>
+                  <th className="px-4 py-3">Objetivo</th>
+                  <th className="px-4 py-3 text-right">Dosis/ha</th>
+                  <th className="px-4 py-3">Avance</th>
+                  {puedeEditar && <th className="px-4 py-3 text-center w-28">Acciones</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
+                ) : filasPlan.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                      Sin productos planificados para {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'esta variedad'}
+                    </td>
+                  </tr>
+                ) : (
+                  filasPlan.map((p) => {
+                    const av = activa ? avancePorClave.get(`${activa}|${p.mes}|${p.insumo_id}`) : undefined
+                    const chip = av ? ESTADO_CHIP[av.estado] : null
+                    return (
+                      <tr key={p.id} data-testid="plan-fila" className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-2.5 text-gray-700">
+                          {MESES[p.mes - 1]}
+                          {p.mes === mesActual && (
+                            <span className="ml-2 rounded-full bg-[#7a1f2c] px-2 py-0.5 text-[10px] font-medium text-white">Mes actual</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">
+                          {p.insumo_nombre}
+                          {p.notas && <span className="block text-xs font-normal text-gray-500">{p.notas}</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-600">{p.objetivo}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-700">
+                          {formatNum(p.dosis_por_ha, 2)} {p.insumo_unidad}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {chip && av ? (
+                            <span
+                              data-testid="plan-avance-chip"
+                              data-estado={av.estado}
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${chip.clase}`}
+                            >
+                              {chip.label}{av.porcentaje !== null ? ` · ${formatNum(av.porcentaje, 0)} %` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300">–</span>
+                          )}
+                        </td>
+                        {puedeEditar && (
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => setModal({ edit: p })}
+                                title="Editar"
+                                className="p-1.5 rounded-md text-gray-400 hover:text-[#7a1f2c] hover:bg-[#fbfaf6] transition-colors"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(p.id)}
+                                title="Eliminar"
+                                className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
