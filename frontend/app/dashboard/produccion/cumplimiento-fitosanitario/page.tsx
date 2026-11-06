@@ -37,8 +37,7 @@ export default function CumplimientoFitosanitarioPage() {
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null)
 
-  // '' = Todas. Filters sent to the API; the parcela select depends on the variety.
-  const [variedadFiltro, setVariedadFiltro] = useState('')
+  // '' = Todas. Only filters parcela within the active variety tab.
   const [parcelaFiltro, setParcelaFiltro] = useState('')
 
   const { data: parcelas = [] } = useQuery({
@@ -47,34 +46,36 @@ export default function CumplimientoFitosanitarioPage() {
     staleTime: 300_000,
   })
 
-  const { data: avance = [], isLoading, isError } = useQuery({
-    queryKey: ['plan-avance', temporada, 'todo', variedadFiltro, parcelaFiltro],
-    queryFn: () => getAvance(temporada, undefined, variedadFiltro || undefined, parcelaFiltro || undefined),
+  // Unfiltered query: always feeds the tabs so none disappear when filtering.
+  const { data: avanceTodo = [], isLoading, isError } = useQuery({
+    queryKey: ['plan-avance', temporada, 'todo'],
+    queryFn: () => getAvance(temporada),
   })
 
-  // Only productive parcelas (parral/potrero) of the chosen variety.
+  const variedades = useMemo(() => {
+    const set = new Set<string>(avanceTodo.map((a) => a.variedad))
+    return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
+  }, [avanceTodo])
+
+  const activa = variedadActiva && variedades.includes(variedadActiva) ? variedadActiva : variedades[0]
+
+  // Second query only when a parcela is selected; its matrix replaces the unfiltered one.
+  const { data: avanceParcela = [], isLoading: cargandoParcela, isError: errorParcela } = useQuery({
+    queryKey: ['plan-avance', temporada, 'parcela', activa, parcelaFiltro],
+    queryFn: () => getAvance(temporada, undefined, activa, parcelaFiltro),
+    enabled: Boolean(parcelaFiltro && activa),
+  })
+
+  const avance = parcelaFiltro ? avanceParcela : avanceTodo
+
+  // Only active productive parcelas (parral/potrero) of the active tab's variety.
   const parcelasDeVariedad = useMemo(
     () =>
       parcelas
-        .filter((p) => p.is_active && (p.tipo === 'parral' || p.tipo === 'potrero') && p.variedad === variedadFiltro)
+        .filter((p) => p.is_active && (p.tipo === 'parral' || p.tipo === 'potrero') && p.variedad === activa)
         .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    [parcelas, variedadFiltro],
+    [parcelas, activa],
   )
-
-  const variedadesFiltrables = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of parcelas) {
-      if (p.is_active && p.variedad && (p.tipo === 'parral' || p.tipo === 'potrero')) set.add(p.variedad)
-    }
-    return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
-  }, [parcelas])
-
-  const variedades = useMemo(() => {
-    const set = new Set<string>(avance.map((a) => a.variedad))
-    return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
-  }, [avance])
-
-  const activa = variedadActiva && variedades.includes(variedadActiva) ? variedadActiva : variedades[0]
 
   // Matrix of the active variety: rows = products (planned first), columns = months.
   const matriz = useMemo(() => {
@@ -123,20 +124,10 @@ export default function CumplimientoFitosanitarioPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            aria-label="Variedad"
-            value={variedadFiltro}
-            onChange={(e) => { setVariedadFiltro(e.target.value); setParcelaFiltro(''); setSeleccion(null) }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Todas las variedades</option>
-            {variedadesFiltrables.map((v) => <option key={v} value={v}>{VARIEDAD_LABELS[v] ?? v}</option>)}
-          </select>
-          <select
             aria-label="Parral o potrero"
             value={parcelaFiltro}
-            disabled={!variedadFiltro}
             onChange={(e) => { setParcelaFiltro(e.target.value); setSeleccion(null) }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todas</option>
             {parcelasDeVariedad.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -159,25 +150,24 @@ export default function CumplimientoFitosanitarioPage() {
         ))}
       </div>
 
-      {isError ? (
+      {isError || errorParcela ? (
         <div className="bg-white rounded-lg border border-red-200 p-6 text-sm text-red-600">
           No se pudo cargar el avance del plan.
         </div>
       ) : variedades.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
-          {isLoading ? 'Cargando…' : 'No hay plan cargado para esta temporada.'}
+          {isLoading || cargandoParcela ? 'Cargando…' : 'No hay plan cargado para esta temporada.'}
         </div>
       ) : (
         <>
-          {/* Per-variety tabs are redundant once the variedad filter is set. */}
-          {!variedadFiltro && (
+          {/* Variety tabs are the variedad filter; always visible. */}
           <div className="flex flex-wrap gap-1.5">
             {variedades.map((v) => (
               <button
                 key={v}
                 type="button"
                 aria-pressed={v === activa}
-                onClick={() => { setVariedadActiva(v); setSeleccion(null) }}
+                onClick={() => { setVariedadActiva(v); setParcelaFiltro(''); setSeleccion(null) }}
                 className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
                   v === activa
                     ? 'bg-[#7a1f2c] text-white border-[#7a1f2c]'
@@ -188,7 +178,6 @@ export default function CumplimientoFitosanitarioPage() {
               </button>
             ))}
           </div>
-          )}
 
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm" data-testid="matriz-avance">
