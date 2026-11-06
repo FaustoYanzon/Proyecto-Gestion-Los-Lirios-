@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native'
 import { WebView, WebViewMessageEvent } from 'react-native-webview'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import api, { getCumplimientoRiego, getEstadoCampanaActual, getRiegosEnCurso } from '../../lib/api'
 import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad, RiegoEnCurso } from '../../lib/types'
@@ -829,7 +829,11 @@ export default function MapaScreen() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  // Refetch on every focus (also covers first mount) so campaign state
+  // changes made elsewhere show up without restarting the app.
+  useFocusEffect(
+    useCallback(() => { loadData() }, [loadData]),
+  )
 
   // Riegos en curso — para resaltar en el mapa el parral que se está regando
   // ahora mismo. Poll cada 30s, mismo intervalo que riego.tsx. Falla en
