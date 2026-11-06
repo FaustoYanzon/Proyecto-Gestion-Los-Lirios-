@@ -77,7 +77,8 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
   - Web desplegada en Vercel (READY, alias `frontend-six-jade-79.vercel.app`).
 - **Pendiente de Fausto:** regenerar `Modelo de Datos.md`.
 
-### 5. Aplicadas en mobile como en la web (frente B, rama feat/aplicadas-mobile-agrupadas, sin publicar)
+### 5. Aplicadas en mobile como en la web (frente B, publicado por OTA el 2026-11-05)
+- **Publicación:** merge `ff449ad` a `main` y push. OTA en la rama `production` con `EXPO_PUBLIC_API_URL` explícita: Android update group `176a3a36-cbd4-4eda-8e7f-feb57269c96d` (runtime `1ccf455d…`), iOS `62862836-dee1-447e-88cc-e2ad365f3793` (runtime `07054827…`). Bundle verificado: textos de la vista agrupada y mensaje de rol presentes, URL de Railway grabada, sin IP local. Falta probar en el dispositivo.
 - La pestaña «Realizadas» de mobile pasa de los últimos 10 registros planos al árbol orden > parcela > válvula, con chip de carencia (rojo ≥ 15 días, ámbar ≥ 7, amarillo menos, «Habilitado» en verde). Solo lectura.
 - Carga la campaña completa (mayo→abril) paginada de a 1000, más las órdenes de la campaña. Caché de 15 min con claves `fitosanitarios:<temporada>` y `ordenes-campania:<temporada>`.
 - El agrupador se portó de la web a `mobile/lib/fitosanitariosAgrupar.ts` y se verificó contra el de la web con `scripts/verificar_agrupador_mobile.mjs` (12 checks, fecha fija, tsx@4).
@@ -92,7 +93,7 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
   - Límite de ~2 MB por valor de AsyncStorage con miles de registros.
 
 ## Abiertos
-- Publicar el OTA del frente B (merge a main, `eas update` con EXPO_PUBLIC_API_URL explícita) y probar «Realizadas» en el dispositivo
+- Probar «Realizadas» en el dispositivo con un usuario encargado o superior (OTA ya publicado); avisar a los operarios que esa pestaña les muestra «Esta vista es para encargados.»
 - Regenerar Modelo de Datos.md (Fausto)
 - Plan vs aplicado (Mancozeb, Super folpan, Karathane) con el ingeniero: Fausto lo retoma
 - Alta de Producción: lo define Fausto el lunes
