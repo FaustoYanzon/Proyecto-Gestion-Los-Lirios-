@@ -173,12 +173,39 @@ export async function postEstadoVariedadCampana(
 // ─── Órdenes de Aplicación ──────────────────────────────────────────────────
 
 import type {
-  OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem, ResultadoValvula,
+  OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem, RegistroFitosanitario,
+  ResultadoValvula,
 } from './types'
 
 export async function getOrdenesPendientes(): Promise<OrdenAplicacion[]> {
   const { data } = await api.get<OrdenAplicacion[]>('/ordenes-aplicacion/pendientes')
   return data
+}
+
+export async function getOrdenesCampania(temporada: number): Promise<OrdenAplicacion[]> {
+  const { data } = await api.get<OrdenAplicacion[]>('/ordenes-aplicacion/', {
+    params: { temporada },
+  })
+  return data
+}
+
+// Every fito record of the campaign (May -> April). The backend defaults to
+// 100 rows, so page in batches of 1000 until a short page comes back.
+export async function getRegistrosCampania(temporada: number): Promise<RegistroFitosanitario[]> {
+  const LOTE_MAX = 1000
+  const todos: RegistroFitosanitario[] = []
+  for (let skip = 0; ; skip += LOTE_MAX) {
+    const { data } = await api.get<RegistroFitosanitario[]>('/produccion/fitosanitarios/', {
+      params: {
+        fecha_desde: `${temporada}-05-01`,
+        fecha_hasta: `${temporada + 1}-04-30`,
+        limit: LOTE_MAX,
+        skip,
+      },
+    })
+    todos.push(...data)
+    if (data.length < LOTE_MAX) return todos
+  }
 }
 
 export async function confirmarAplicacionOrden(

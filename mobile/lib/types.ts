@@ -116,8 +116,13 @@ export interface RegistroFitosanitario {
   dias_reingreso: number
   responsable: string
   responsable_id: string | null
+  // Backend schema declares the date non-null, so it stays `string` here.
   fecha_habilitacion_cosecha: string
   fecha_habilitacion_reingreso: string
+  observaciones: string | null
+  // Set when the record was born from an order confirmation; null for manual loads.
+  orden_id: string | null
+  orden_valvula_id: string | null
   created_at: string
 }
 
