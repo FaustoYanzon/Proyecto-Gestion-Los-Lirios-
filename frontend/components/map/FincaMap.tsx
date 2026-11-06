@@ -107,6 +107,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
         tareas_recomendadas: item.tareas_recomendadas,
         proxima_fase_label: item.proxima_fase_label,
         proxima_fase_fecha: item.proxima_fase_fecha,
+        fuente: item.fuente,
       }
     }
     return map

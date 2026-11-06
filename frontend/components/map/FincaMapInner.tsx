@@ -94,6 +94,7 @@ export interface FenologiaMapaInfo {
   tareas_recomendadas: string[]
   proxima_fase_label: string | null
   proxima_fase_fecha: string | null
+  fuente: 'automatico' | 'manual'
 }
 
 // Ciclo de Campaña nuevo (calendario único por variedad, /produccion/estado-campana/*).
@@ -439,7 +440,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                   <Sprout size={14} className="text-purple-600 flex-shrink-0" />
                   <p className="text-xs font-medium text-purple-800">
                     {fenologiaByVariedad[parcela.variedad].fase_label}
-                    <span className="text-purple-500 font-normal"> · estimado automático</span>
+                    <span className="text-purple-500 font-normal"> · {fenologiaByVariedad[parcela.variedad].fuente === 'manual' ? 'confirmado a mano' : 'estimado automático'}</span>
                   </p>
                 </div>
                 {fenologiaByVariedad[parcela.variedad].proxima_fase_label && (
