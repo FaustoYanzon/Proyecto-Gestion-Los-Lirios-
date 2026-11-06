@@ -638,7 +638,7 @@ class EstadoActualResponse(BaseModel):
 class FaseVariedadResponse(BaseModel):
     """Estado fenológico de una variedad, calculado automáticamente por
     fecha (ver app.core.fenologia) salvo que exista una confirmación manual
-    reciente (CicloCampana) para alguna de sus parcelas, en cuyo caso esa
+    reciente (EstadoVariedadCampana) para la variedad, en cuyo caso esa
     confirmación tiene prioridad (`fuente="manual"`). Agrupa todos los
     parrales activos de esa variedad."""
     variedad: str

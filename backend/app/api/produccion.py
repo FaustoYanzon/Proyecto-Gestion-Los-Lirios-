@@ -1351,7 +1351,7 @@ async def estado_actual(
 
 
 
-# Una confirmación manual (CicloCampana) pisa el cálculo automático mientras
+# Una confirmación manual (EstadoVariedadCampana) pisa el cálculo automático mientras
 # sea "reciente" — pasado ese umbral se la considera vieja y el motor
 # automático vuelve a tomar el control (evita que quede congelada para
 # siempre en un estado que ya se pasó de fecha).
@@ -1369,58 +1369,20 @@ async def fenologia_estado_actual(
 
     Agrupa los parrales activos por variedad. El estado "de hoy" es el mismo
     para todas (un solo calendario), pero cada variedad puede tener su
-    propia confirmación manual (CicloCampana) que lo reemplaza mientras esté
+    propia confirmación manual (EstadoVariedadCampana) que lo reemplaza mientras esté
     vigente (últimos `UMBRAL_VIGENCIA_MANUAL_DIAS` días) — y las tareas
     recomendadas sí varían por variedad (app.core.fenologia). Alimenta las
     notificaciones de inicio (mobile y web), el modo "Fenología" del mapa, y
     la página Ciclo de Campaña.
     """
-    parcelas = list(
-        (await db.execute(
-            select(Parcela).where(
-                Parcela.is_active.is_(True),
-                Parcela.tipo == TipoParcela.parral,
-                Parcela.variedad.is_not(None),
-            )
-        )).scalars().all()
-    )
-
-    parcelas_por_variedad: dict[VariedadUva, list[str]] = defaultdict(list)
-    for p in parcelas:
-        if p.variedad is not None:
-            parcelas_por_variedad[p.variedad].append(p.nombre)
-
-    # Confirmación manual más reciente por variedad (join CicloCampana ->
-    # Parcela, ordenado desc: la primera fila vista por variedad ya es la
-    # más nueva).
-    parcela_ids = [p.id for p in parcelas]
-    ciclos_rows = (await db.execute(
-        select(CicloCampana, Parcela.variedad)
-        .join(Parcela, CicloCampana.parcela_id == Parcela.id)
-        .where(Parcela.id.in_(parcela_ids))
-        .order_by(CicloCampana.fecha_estado.desc())
-    )).all()
-    manual_por_variedad: dict[VariedadUva, CicloCampana] = {}
-    for ciclo, variedad in ciclos_rows:
-        if variedad is not None and variedad not in manual_por_variedad:
-            manual_por_variedad[variedad] = ciclo
-
-    hoy = date.today()
-    estado_auto = ciclo_campana.calcular_estado_actual(hoy)
-    proxima_auto = ciclo_campana.calcular_proximo_estado(hoy)
+    # Single source of truth: the per-variedad store (EstadoVariedadCampana)
+    # shared with /estado-campana/actual. CicloCampana is not read here.
+    estados = await _estados_actuales_por_variedad(db)
 
     items: list[FaseVariedadResponse] = []
-    for variedad, nombres in parcelas_por_variedad.items():
-        fuente = "automatico"
-        estado_fenologico = EstadoFenologico(estado_auto.value)
-        fecha_confirmacion: date | None = None
-
-        manual = manual_por_variedad.get(variedad)
-        if manual is not None and (hoy - manual.fecha_estado).days <= UMBRAL_VIGENCIA_MANUAL_DIAS:
-            fuente = "manual"
-            estado_fenologico = manual.estado_fenologico
-            fecha_confirmacion = manual.fecha_estado
-
+    for variedad, info in estados.items():
+        # EstadoCampana and EstadoFenologico share the same 7 values.
+        estado_fenologico = EstadoFenologico(info.estado_campana.value)
         items.append(FaseVariedadResponse(
             variedad=variedad.value,
             tipo_uso=fenologia.TIPO_USO_POR_VARIEDAD.get(variedad, fenologia.TipoUso.otro).value,
@@ -1429,12 +1391,12 @@ async def fenologia_estado_actual(
             estado_fenologico=estado_fenologico,
             riesgo_oidio=fenologia.RIESGO_OIDIO_POR_VARIEDAD.get(variedad, fenologia.RiesgoSanitario.medio).value,
             tareas_recomendadas=fenologia.tareas_recomendadas(variedad, estado_fenologico),
-            proxima_fase=proxima_auto[0].value,
-            proxima_fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[proxima_auto[0]],
-            proxima_fase_fecha=proxima_auto[1],
-            parcelas=sorted(nombres),
-            fuente=fuente,
-            fecha_confirmacion=fecha_confirmacion,
+            proxima_fase=info.proxima_estado_campana.value,
+            proxima_fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[info.proxima_estado_campana],
+            proxima_fase_fecha=info.proxima_fecha,
+            parcelas=info.parcelas,
+            fuente=info.fuente,
+            fecha_confirmacion=info.fecha_confirmacion,
         ))
 
     items.sort(key=lambda x: x.variedad)
