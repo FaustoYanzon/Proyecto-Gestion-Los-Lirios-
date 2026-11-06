@@ -134,7 +134,7 @@ export default function CumplimientoFitosanitarioPage() {
           </select>
           <select
             value={temporada}
-            onChange={(e) => { setTemporada(Number(e.target.value)); setSeleccion(null) }}
+            onChange={(e) => { setTemporada(Number(e.target.value)); setParcelaFiltro(''); setSeleccion(null) }}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
@@ -150,13 +150,13 @@ export default function CumplimientoFitosanitarioPage() {
         ))}
       </div>
 
-      {isError || errorParcela ? (
+      {isError ? (
         <div className="bg-white rounded-lg border border-red-200 p-6 text-sm text-red-600">
           No se pudo cargar el avance del plan.
         </div>
       ) : variedades.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center text-gray-400">
-          {isLoading || cargandoParcela ? 'Cargando…' : 'No hay plan cargado para esta temporada.'}
+          {isLoading ? 'Cargando…' : 'No hay plan cargado para esta temporada.'}
         </div>
       ) : (
         <>
@@ -179,6 +179,12 @@ export default function CumplimientoFitosanitarioPage() {
             ))}
           </div>
 
+          {parcelaFiltro && errorParcela && (
+            <p className="text-sm text-red-600" role="alert" data-testid="error-parcela">
+              No se pudo cargar el avance de la parcela seleccionada.
+            </p>
+          )}
+
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm" data-testid="matriz-avance">
               <thead>
@@ -190,6 +196,13 @@ export default function CumplimientoFitosanitarioPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
+                {parcelaFiltro && cargandoParcela && (
+                  <tr>
+                    <td colSpan={Math.max(matriz.meses.length, 1) + 1} className="px-4 py-6 text-center text-gray-400">
+                      Cargando…
+                    </td>
+                  </tr>
+                )}
                 {matriz.filas.map((fila) => (
                   <tr key={fila.insumo_id}>
                     <td className="px-4 py-2 align-top">
