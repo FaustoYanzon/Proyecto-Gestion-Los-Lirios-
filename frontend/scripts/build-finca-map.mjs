@@ -17,8 +17,8 @@ const OUT = resolve(__dirname, '../lib/content/finca-map.ts')
 // nombre en el KML -> { variedad, ha }
 const PARCELA_META = {
   'Parral 2': { variedad: 'flame', ha: 3.0 },
-  'Parral 4': { variedad: 'fiesta', ha: 2.85 },
-  'Parral 5': { variedad: 'fiesta', ha: 2.85 },
+  'Parral 4': { variedad: 'fiesta', ha: 2 },
+  'Parral 5': { variedad: 'fiesta', ha: 2 },
   'Parral 6': { variedad: 'red_globe', ha: 4.0 },
   'Parral 7': { variedad: 'flame', ha: 4.0 },
   'Parral 8': { variedad: 'syrah', ha: 2.8 },
@@ -58,6 +58,19 @@ for (const pm of placemarks) {
   else if (name.startsWith('Cabezal')) kind = 'cabezal'
   else if (name === 'Finca') kind = 'finca'
   raw.push({ name, kind, ring })
+}
+
+// The KML labels Parral 4 / Parral 5 swapped. Field truth: Parral 4 is the
+// NORTH parral and Parral 5 the SOUTH one. Decide by centroid latitude (higher
+// = further north) so the fix holds if the KML is ever corrected.
+{
+  const lat = (r) => r.ring.reduce((s, p) => s + p[1], 0) / r.ring.length
+  const a = raw.find((r) => r.name === 'Parral 4')
+  const b = raw.find((r) => r.name === 'Parral 5')
+  if (a && b && lat(a) < lat(b)) {
+    a.name = 'Parral 5'
+    b.name = 'Parral 4'
+  }
 }
 
 // Proyección equirectangular local. El viewBox se ajusta a los PARRALES

@@ -38,7 +38,7 @@ KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 # comparar, no se importan (son TS). Fuente: frontend/lib/api/riego.ts y
 # mobile/lib/types.ts (idénticas entre sí salvo por este comentario).
 VALVULAS_POR_PARCELA_HARDCODED: dict[str, int] = {
-    "Parral Sult.": 4, "Parral 9": 2, "Parral 4": 2, "Parral 5": 2, "Parral 2": 2,
+    "Parral Sult.": 4, "Parral 9": 2, "Parral 4": 4, "Parral 5": 4, "Parral 2": 2,
     "Parral 10": 3, "Parral 6": 4, "Parral 11": 4, "Parral 7": 4, "Parral 16": 2,
     "Parral 13": 3, "Parral 15": 2, "Parral 14": 3, "Parral 21": 4, "Parral 12": 3,
     "Parral 8": 3, "Parral SYR-RG": 3, "Parral Bond. Viejo": 2, "Parral Bond. Nuevo": 2,
@@ -105,6 +105,13 @@ def polygon_centroid(poly: list[tuple[float, float]]) -> tuple[float, float]:
 
 # ── Carga de datos ───────────────────────────────────────────────────────────
 
+def fix_parral_4_5_labels(parrales: dict[str, list[tuple[float, float]]]) -> None:
+    """The KML labels Parral 4/5 swapped: Parral 4 is the NORTH one (higher lat)."""
+    a, b = parrales.get("Parral 4"), parrales.get("Parral 5")
+    if a and b and sum(p[1] for p in a) / len(a) < sum(p[1] for p in b) / len(b):
+        parrales["Parral 4"], parrales["Parral 5"] = b, a
+
+
 def load_kml_parrales() -> dict[str, list[tuple[float, float]]]:
     root = ET.parse(KML_FILE).getroot()
     parrales: dict[str, list[tuple[float, float]]] = {}
@@ -121,6 +128,7 @@ def load_kml_parrales() -> dict[str, list[tuple[float, float]]]:
             lng_str, lat_str, *_ = chunk.split(",")
             pts.append((float(lng_str), float(lat_str)))
         parrales[name] = pts
+    fix_parral_4_5_labels(parrales)
     return parrales
 
 

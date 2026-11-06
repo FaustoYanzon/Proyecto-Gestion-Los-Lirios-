@@ -11,8 +11,8 @@ import app.models  # noqa: F401,E402
 PARCELAS: list[dict] = [
     # Parrales
     {"nombre": "Parral 2",          "tipo": "parral", "variedad": "flame",     "superficie_ha": 3.0,  "cabezal_riego": "1"},
-    {"nombre": "Parral 4",          "tipo": "parral", "variedad": "fiesta",    "superficie_ha": 2.85, "cabezal_riego": "1"},
-    {"nombre": "Parral 5",          "tipo": "parral", "variedad": "fiesta",    "superficie_ha": 2.85, "cabezal_riego": "1"},
+    {"nombre": "Parral 4",          "tipo": "parral", "variedad": "fiesta",    "superficie_ha": 2.0,  "cabezal_riego": "1"},
+    {"nombre": "Parral 5",          "tipo": "parral", "variedad": "fiesta",    "superficie_ha": 2.0,  "cabezal_riego": "1"},
     {"nombre": "Parral 6",          "tipo": "parral", "variedad": "red_globe", "superficie_ha": 4.0,  "cabezal_riego": "2"},
     {"nombre": "Parral 7",          "tipo": "parral", "variedad": "flame",     "superficie_ha": 4.0,  "cabezal_riego": "2"},
     {"nombre": "Parral 8",          "tipo": "parral", "variedad": "syrah",     "superficie_ha": 2.8,  "cabezal_riego": "4"},
