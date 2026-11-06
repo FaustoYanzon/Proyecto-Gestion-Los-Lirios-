@@ -1400,11 +1400,17 @@ async def list_campana(
 
 
 # Must be before /campana/{campana_id} — same method (GET) + same path depth
-@router.get("/campana/estado-actual/", response_model=list[EstadoActualResponse])
+@router.get(
+    "/campana/estado-actual/",
+    response_model=list[EstadoActualResponse],
+    deprecated=True,
+    description="Deprecated: use GET /fenologia/estado-actual. Nothing writes CicloCampana any more.",
+)
 async def estado_actual(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[EstadoActualResponse]:
+    """Deprecated: per-parcela CicloCampana state; superseded by /fenologia/estado-actual."""
     # Subquery: latest cycle date per parcel
     subq = (
         select(

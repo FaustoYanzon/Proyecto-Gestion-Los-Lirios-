@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, Check } from 'lucide-react'
 import { getRiegos, type RiegoResponse } from '@/lib/api/riego'
-import { getEstadoActual, type EstadoActualItem } from '@/lib/api/produccion'
+import { getParcelas, type ParcelaItem } from '@/lib/api/produccion'
 import { getAlertasCarencia, type FitosanitarioResponse } from '@/lib/api/fitosanitarios'
 import { getAlertasDescartadas, descartarAlerta } from '@/lib/api/alertas'
 import { getLotesArca, type LoteImportacionArcaResponse } from '@/lib/api/arca'
@@ -39,7 +39,7 @@ interface Alerta {
 
 function derivarAlertas(
   riegos: RiegoResponse[],
-  estadoActual: EstadoActualItem[],
+  parcelas: ParcelaItem[],
   carencias: FitosanitarioResponse[],
   lotesArca: LoteImportacionArcaResponse[],
 ): Alerta[] {
@@ -70,7 +70,7 @@ function derivarAlertas(
   // Backend already filters fecha_habilitacion_cosecha >= today; we keep
   // only the latest habilitación per parcela (multiple applications may overlap).
   const nombrePorParcela: Record<string, string> = {}
-  for (const e of estadoActual) nombrePorParcela[e.parcela_id] = e.parcela_nombre
+  for (const p of parcelas) nombrePorParcela[p.id] = p.nombre
 
   const carenciaPorParcela: Record<string, FitosanitarioResponse> = {}
   for (const c of carencias) {
@@ -114,16 +114,6 @@ function derivarAlertas(
         mensaje: `Cabezal ${cabezal} sin riego hace ${dias} días`,
       })
     }
-  }
-
-  // Parcelas sin estado fenológico
-  const sinEstado = estadoActual.filter((e) => !e.estado_fenologico)
-  if (sinEstado.length > 0) {
-    alertas.push({
-      id: 'sin-fenologia',
-      nivel: 'info',
-      mensaje: `${sinEstado.length} parral${sinEstado.length !== 1 ? 'es' : ''} sin estado fenológico`,
-    })
   }
 
   return alertas
@@ -205,9 +195,10 @@ export default function NotificacionesBell() {
     staleTime: 300_000,
   })
 
-  const { data: estadoActual = [] } = useQuery({
-    queryKey: ['alertas-estado'],
-    queryFn: getEstadoActual,
+  // Only used to resolve parcela names in carencia alerts
+  const { data: parcelas = [] } = useQuery({
+    queryKey: ['alertas-parcelas'],
+    queryFn: getParcelas,
     staleTime: 300_000,
   })
 
@@ -232,7 +223,7 @@ export default function NotificacionesBell() {
   })
 
   const descartadasIds = new Set(descartadas.map((d) => d.alerta_id))
-  const todasLasAlertas = derivarAlertas(riegos, estadoActual, carencias, lotesArca)
+  const todasLasAlertas = derivarAlertas(riegos, parcelas, carencias, lotesArca)
   const alertasVisibles = todasLasAlertas.filter((a) => !descartadasIds.has(a.id))
 
   async function handleDescartar(id: string) {
