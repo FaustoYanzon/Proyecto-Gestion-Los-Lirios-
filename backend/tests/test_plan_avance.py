@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from app.api.lotes_pasa import temporada_de
 from app.models.parcela import VariedadUva
-from app.models.produccion import RegistroFitosanitario
+from app.models.produccion import OrdenAplicacion, RegistroFitosanitario
 from app.services.plan_avance import (
     EstadoAvance,
     calcular_avance,
@@ -285,3 +285,91 @@ async def test_registro_sin_plan_con_dosis_cero_no_rompe_el_avance(
     resp = await client.get("/plan-fitosanitario/avance", params={"temporada": 2026}, headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
+
+
+async def _aplicar_en_hoy(
+    client, db, headers, insumo_id, parcela_id, dosis: float, fuera_de_plan: bool,
+) -> dict:
+    """Apply a real order (confirmed today, whole parcel) and flag it as in/out of plan."""
+    orden = await aplicar(client, headers, [linea(insumo_id, dosis)], [parcela_id])
+    row = await db.get(OrdenAplicacion, orden["id"])
+    row.fuera_de_plan = fuera_de_plan
+    await db.commit()
+    return orden
+
+
+async def _escenario_hoy(client, create_user, create_parcela, create_insumo, dosis=2.0):
+    """6 ha flame parcel with a plan of `dosis`/ha in the current month and season."""
+    headers, user_id = await auth(client, create_user)
+    parcela = await create_parcela(nombre="Parral 2", variedad=VariedadUva.flame, superficie_ha=6.0)
+    insumo = await create_insumo(nombre="Mancozeb")
+    hoy = date.today()
+    await crear_plan(
+        client, headers, insumo.id, ["flame"], dosis_por_ha=dosis, mes=hoy.month, temporada=temporada_de(hoy),
+    )
+    return headers, user_id, parcela, insumo, hoy
+
+
+async def test_orden_fuera_de_plan_no_suma_al_avance(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 2.0, fuera_de_plan=True)
+
+    [item] = await calcular_avance(db_session, temporada_de(hoy), hoy.month)
+    assert item.estado == EstadoAvance.pendiente
+    assert item.parcelas[0].dosis_aplicada == Decimal("0")
+
+
+async def test_orden_del_plan_sigue_sumando(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 2.0, fuera_de_plan=False)
+
+    [item] = await calcular_avance(db_session, temporada_de(hoy), hoy.month)
+    assert item.estado == EstadoAvance.ok
+    assert item.parcelas[0].dosis_aplicada == Decimal("2")
+
+
+async def test_mezcla_orden_del_plan_y_orden_fuera_solo_cuenta_la_del_plan(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 2.0, fuera_de_plan=False)
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 1.0, fuera_de_plan=True)
+
+    [item] = await calcular_avance(db_session, temporada_de(hoy), hoy.month)
+    assert item.parcelas[0].dosis_aplicada == Decimal("2")
+    assert item.estado == EstadoAvance.ok
+
+
+async def test_registro_a_mano_sigue_contando_con_ordenes_fuera_en_la_base(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, uid, parcela, insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    # An out-of-plan order exists in the DB: `NULL NOT IN (...)` must not hide manual loads.
+    await _aplicar_en_hoy(client, db_session, headers, insumo.id, parcela.id, 1.0, fuera_de_plan=True)
+    await _registro(db_session, uid, parcela.id, insumo.id, hoy, 2.0)
+
+    [item] = await calcular_avance(db_session, temporada_de(hoy), hoy.month)
+    assert item.parcelas[0].dosis_aplicada == Decimal("2")
+    assert item.estado == EstadoAvance.ok
+
+
+async def test_producto_ajeno_en_orden_del_plan_sigue_no_planificado(
+    client, db_session, create_user, create_parcela, create_insumo,
+):
+    headers, _uid, parcela, _insumo, hoy = await _escenario_hoy(
+        client, create_user, create_parcela, create_insumo)
+    otro = await create_insumo(nombre="Azufre")
+    await _aplicar_en_hoy(client, db_session, headers, otro.id, parcela.id, 3.0, fuera_de_plan=False)
+
+    items = await calcular_avance(db_session, temporada_de(hoy), hoy.month)
+    por_producto = {i.insumo_nombre: i for i in items}
+    assert por_producto["Azufre"].estado == EstadoAvance.no_planificado
+    assert por_producto["Mancozeb"].estado == EstadoAvance.pendiente

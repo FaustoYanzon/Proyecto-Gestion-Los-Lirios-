@@ -18,14 +18,14 @@ from datetime import date
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.lotes_pasa import temporada_de
 from app.models.insumo import Insumo
 from app.models.parcela import Parcela, VariedadUva
-from app.models.produccion import PlanFitosanitario, RegistroFitosanitario
+from app.models.produccion import OrdenAplicacion, PlanFitosanitario, RegistroFitosanitario
 from app.models.valvula import Valvula
 
 TOLERANCIA = Decimal("0.05")
@@ -118,6 +118,14 @@ async def _dosis_por_grupo(
                 RegistroFitosanitario.insumo_id.is_not(None),
                 RegistroFitosanitario.fecha >= desde,
                 RegistroFitosanitario.fecha < hasta,
+                # Out-of-plan orders do not count toward compliance. The explicit
+                # IS NULL keeps manual loads: `NULL NOT IN (...)` evaluates to NULL.
+                or_(
+                    RegistroFitosanitario.orden_id.is_(None),
+                    RegistroFitosanitario.orden_id.not_in(
+                        select(OrdenAplicacion.id).where(OrdenAplicacion.fuera_de_plan.is_(True))
+                    ),
+                ),
             )
         )
     ).all()

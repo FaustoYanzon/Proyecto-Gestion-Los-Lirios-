@@ -356,6 +356,12 @@ function FormularioOrden({
   const [seleccionadas, setSeleccionadas] = useState<string[]>(() => orden?.parcelas.map((p) => p.parcela_id) ?? [])
   const [valvulasModo, setValvulasModo] = useState(false)
   const [valvulasSel, setValvulasSel] = useState<string[]>([])
+  const [fueraDePlan, setFueraDePlan] = useState(orden?.fuera_de_plan ?? false)
+  // Same rule as the backend and the order card: once any parcel or valve is
+  // confirmed, the plan membership can no longer change.
+  const tieneConfirmadas = (orden?.parcelas ?? []).some(
+    (p) => p.estado === 'aplicada' || (p.valvulas ?? []).some((v) => v.estado === 'aplicada'),
+  )
 
   // Same cache key as InsumoSelect; used to know the unit of preloaded lines.
   const { data: insumos = [] } = useQuery({
@@ -554,7 +560,7 @@ function FormularioOrden({
     .filter((l) => l.insumo_id && Number(l.dosis_por_ha) > 0)
     .map((l) => ({ insumo_id: l.insumo_id, dosis_por_ha: Number(l.dosis_por_ha) }))
   const contrasteKey = useDebounced(
-    parcelaIdsContraste.length > 0 && lineasContraste.length > 0 && periodo
+    !fueraDePlan && parcelaIdsContraste.length > 0 && lineasContraste.length > 0 && periodo
       ? JSON.stringify({
           fecha: fechaW,
           parcelas: parcelaIdsContraste.map((pid) => ({
@@ -572,14 +578,16 @@ function FormularioOrden({
   const { data: contraste = [], isFetching: contrasteCargando } = useQuery({
     queryKey: ['plan-contraste', contrasteKey],
     queryFn: () => postContraste(JSON.parse(contrasteKey)),
-    enabled: !!contrasteKey,
+    enabled: !fueraDePlan && !!contrasteKey,
     placeholderData: (previo) => previo,
     staleTime: 15_000,
     retry: 1,
   })
   const resultadoDe = (insumoId: string): ContrasteLineaResultado | undefined =>
     contrasteKey ? contraste.find((r) => r.insumo_id === insumoId) : undefined
-  const resumenOrden = contrasteKey
+  // The debounce can leave a stale key for a moment after toggling, so the
+  // summary is also gated on the switch itself.
+  const resumenOrden = !fueraDePlan && contrasteKey
     ? resumirContraste(contraste.filter((r) => lineasContraste.some((l) => l.insumo_id === r.insumo_id)))
     : null
 
@@ -588,13 +596,13 @@ function FormularioOrden({
   const { data: avanceMes = [], isError: errorAvance } = useQuery({
     queryKey: ['plan-avance', periodo?.temporada, periodo?.mes],
     queryFn: () => getAvance(periodo?.temporada ?? temporada, periodo?.mes),
-    enabled: !!periodo && variedadesPlan.length > 0,
+    enabled: !fueraDePlan && !!periodo && variedadesPlan.length > 0,
     staleTime: 30_000,
   })
   const { data: avanceAnterior = [] } = useQuery({
     queryKey: ['plan-avance', anterior?.temporada, anterior?.mes],
     queryFn: () => getAvance(anterior?.temporada ?? temporada, anterior?.mes),
-    enabled: !!anterior && variedadesPlan.length > 0,
+    enabled: !fueraDePlan && !!anterior && variedadesPlan.length > 0,
     staleTime: 30_000,
   })
   const faltantesDe = (items: AvanceItem[]) =>
@@ -658,6 +666,7 @@ function FormularioOrden({
       lineas,
       parcela_ids: parcelaIds,
       valvula_ids: valvulaIds,
+      fuera_de_plan: fueraDePlan,
     }
 
     try {
@@ -684,6 +693,38 @@ function FormularioOrden({
     <div className="space-y-4">
       {(
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <div>
+            <div role="group" aria-label="Tipo de orden" className="inline-flex rounded-md border border-gray-300 overflow-hidden" data-testid="interruptor-plan">
+              {([
+                { valor: false, texto: 'Del plan' },
+                { valor: true, texto: 'Fuera del plan' },
+              ] as const).map((op) => {
+                const activa = fueraDePlan === op.valor
+                return (
+                  <button
+                    key={op.texto}
+                    type="button"
+                    aria-pressed={activa}
+                    disabled={tieneConfirmadas}
+                    onClick={() => setFueraDePlan(op.valor)}
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                      activa ? 'bg-[#7a1f2c] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {op.texto}
+                  </button>
+                )
+              })}
+            </div>
+            {fueraDePlan && (
+              <p className="mt-1 text-xs text-gray-500" data-testid="aviso-fuera-de-plan">
+                Esta orden no cuenta para el cumplimiento
+              </p>
+            )}
+            {tieneConfirmadas && (
+              <p className="mt-1 text-[11px] text-gray-400">Ya tiene aplicaciones confirmadas: no se puede cambiar.</p>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Objetivo / Plaga</label>
@@ -778,10 +819,16 @@ function FormularioOrden({
                         </button>
                       </div>
                     </div>
+                    {fueraDePlan ? (
+                      <p className="mt-1.5 text-[11px] text-blue-700" data-testid="contraste-linea">
+                        <strong>Fuera del plan</strong>
+                      </p>
+                    ) : (
                     <ContrasteLinea
                       resultado={resultadoDe(l.insumo_id)} insumoNombre={l.insumo_nombre} unidad={unidad}
                       mes={periodo?.mes ?? null} cargando={contrasteCargando}
                     />
+                    )}
                   </div>
                 )
               })}
@@ -928,7 +975,7 @@ function FormularioOrden({
             </div>
           )}
 
-          {variedadesPlan.length > 0 && periodo && (
+          {!fueraDePlan && variedadesPlan.length > 0 && periodo && (
             <div className="space-y-2" data-testid="pendiente-plan">
               {errorAvance && (
                 <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">

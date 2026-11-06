@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 61 (head: `0861ea1414eb_drop_shim_columns_ordenes_aplicacion.py`)
+**Migraciones de Alembic:** 62 (head: `91b7e7904993_orden_fuera_de_plan.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -198,6 +198,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `pregate_ordenes_multiproducto.py`
 - `pregate_quitar_shims_orden.py`
 - `pregate_riego_manto_unico.py`
+- `reporte_huerfanos_cloudinary.py`
 
 ---
 
