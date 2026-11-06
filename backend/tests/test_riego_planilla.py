@@ -1,4 +1,4 @@
-"""Planilla de cumplimiento de riego: parcelas x meses, cada riego en el mes de su inicio.
+"""Planilla de cumplimiento de riego: parcelas x meses, cada riego en el mes de su fecha.
 Run with: pytest
 """
 from __future__ import annotations

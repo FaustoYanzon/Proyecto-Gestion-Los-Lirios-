@@ -478,14 +478,6 @@ export function superficieManto(p: Parcela): number | null {
   return p.superficie_ha != null && Number.isFinite(ha) && ha > 0 ? ha : null
 }
 
-export function calcMmRiego(inicioISO: string, finISO: string): number | null {
-  const start = new Date(inicioISO)
-  const end = new Date(finISO)
-  const horas = (end.getTime() - start.getTime()) / 3600000
-  if (horas <= 0) return null
-  return Math.round(horas * MM_POR_HORA * 100) / 100
-}
-
 export function calcRiegoTotales(
   inicioISO: string, finISO: string, nValvulas: number, factor: number,
 ): { horas: number; mm: number; litros: number } | null {

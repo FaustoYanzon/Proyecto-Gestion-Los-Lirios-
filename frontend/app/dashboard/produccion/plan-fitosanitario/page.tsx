@@ -448,10 +448,10 @@ export default function PlanFitosanitarioPage() {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
+                  <tr><td colSpan={puedeEditar ? 6 : 5} className="px-4 py-8 text-center text-gray-400">Cargando…</td></tr>
                 ) : filasPlan.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={puedeEditar ? 6 : 5} className="px-4 py-8 text-center text-gray-400">
                       Sin productos planificados para {activa ? (VARIEDAD_LABELS[activa] ?? activa) : 'esta variedad'}
                     </td>
                   </tr>

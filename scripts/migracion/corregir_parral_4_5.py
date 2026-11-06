@@ -75,7 +75,7 @@ async def main() -> int:
             for r in pendientes:
                 resultado = await conn.execute(
                     "UPDATE parcelas SET superficie_ha = $1, updated_at = now() WHERE id = $2",
-                    HA_NUEVA, r["id"],
+                    float(HA_NUEVA), r["id"],
                 )
                 # Raising inside the transaction rolls everything back
                 if resultado != "UPDATE 1":

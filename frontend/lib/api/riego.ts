@@ -245,7 +245,7 @@ export async function terminarRiego(id: string, fin?: string): Promise<RiegoResp
 }
 
 // Planilla de cumplimiento de riego: parcelas (filas) x meses (columnas). Cada
-// riego cae en el mes de su inicio (hora de Argentina). Los Decimal llegan como
+// riego cae en el mes de su fecha (hora de Argentina). Los Decimal llegan como
 // string (o null si el riego sigue en curso): pasar por Number() antes de formatear.
 export type PlanillaTipo = TipoRiego | 'ambos'
 
