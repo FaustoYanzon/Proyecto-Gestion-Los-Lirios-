@@ -12,7 +12,7 @@ import { useRouter, useFocusEffect } from 'expo-router'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import api, { getCumplimientoRiego, getEstadoCampanaActual, getRiegosEnCurso } from '../../lib/api'
 import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVariedad, RiegoEnCurso } from '../../lib/types'
-import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA } from '../../lib/types'
+import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA, MM_RIEGO_ESTANDAR, LITROS_POR_MM_HA } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 import { useAuthStore } from '../../store/authStore'
 
@@ -71,8 +71,9 @@ interface ParcelPanel {
   parcela: Parcela
   estadoCampana: EstadoActualVariedad | null
   fenologia: FaseVariedad | null
-  mmTotal: number | null
+  mmTotal: number | null // lamina over the parcela (null = no surface or not loaded)
   m3Total: number | null
+  riegosEquivalentes: number | null // within the current estado de campaña
   riegoCount: number | null
   tareas: { tarea: string; fecha: string }[]
   fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]
@@ -635,16 +636,18 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
         {!panel.loadingExtra && (
           <View style={panelStyles.section}>
             <Text style={panelStyles.sectionTitle}>RIEGO — CAMPAÑA</Text>
-            {panel.mmTotal === null ? (
+            {panel.m3Total === null ? (
               <Text style={panelStyles.emptyText}>Sin datos</Text>
             ) : (
               <View style={panelStyles.riegoRow}>
                 <Text style={panelStyles.mmValue}>
-                  {panel.m3Total != null ? `${panel.m3Total.toLocaleString('es-AR', { maximumFractionDigits: 1 })} m³` : `${panel.mmTotal.toFixed(1)} mm`}
+                  {panel.mmTotal != null
+                    ? `${panel.mmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })} mm`
+                    : 'Sin superficie'}
                 </Text>
-                {panel.m3Total != null && (
-                  <Text style={panelStyles.riegoSub}>{panel.mmTotal.toFixed(1)} mm</Text>
-                )}
+                <Text style={panelStyles.riegoSub}>
+                  {panel.m3Total.toLocaleString('es-AR', { maximumFractionDigits: panel.m3Total >= 100 ? 0 : 1 })} m³
+                </Text>
                 {panel.riegoCount != null && (
                   <Text style={panelStyles.riegoSub}>
                     {panel.riegoCount} riego{panel.riegoCount !== 1 ? 's' : ''}
@@ -652,7 +655,12 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
                 )}
               </View>
             )}
-            {panel.mmTotal !== null && (() => {
+            {panel.riegosEquivalentes != null && panel.estadoCampana && (
+              <Text style={panelStyles.riegoSub}>
+                {panel.riegosEquivalentes.toLocaleString('es-AR', { maximumFractionDigits: 1 })} de {panel.estadoCampana.riegos_esperados} riegos esperados en {panel.estadoCampana.estado_campana_label}
+              </Text>
+            )}
+            {panel.mmTotal != null && (() => {
               const pct = (panel.mmTotal / MM_OBJETIVO_ANUAL_POR_HA) * 100
               return (
                 <View style={panelStyles.objetivoWrap}>
@@ -866,8 +874,10 @@ export default function MapaScreen() {
     )
   }, [riegosEnCurso])
 
-  async function fetchPanelExtras(parcelaId: string): Promise<{
-    mmTotal: number; m3Total: number; riegoCount: number;
+  async function fetchPanelExtras(
+    parcelaId: string, superficieHa: number | null, fechaInicioEstado: string | null,
+  ): Promise<{
+    mmTotal: number | null; m3Total: number; riegoCount: number; riegosEquivalentes: number | null;
     tareas: { tarea: string; fecha: string }[];
     fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[];
   }> {
@@ -877,7 +887,7 @@ export default function MapaScreen() {
     const today = now.toISOString().split('T')[0]
     try {
       const [riegosRes, tareasRes, fitosRes] = await Promise.all([
-        api.get<{ mm_aplicados: number | null; litros_aplicados: number | null }[]>('/produccion/riego/', {
+        api.get<{ fecha: string; litros_aplicados: number | null }[]>('/produccion/riego/', {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
         }),
         api.get<{ tarea: string; fecha: string }[]>('/produccion/trabajo/', {
@@ -887,9 +897,19 @@ export default function MapaScreen() {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 100 },
         }),
       ])
-      const mmTotal = riegosRes.data.reduce((s, r) => s + (Number(r.mm_aplicados) || 0), 0)
       const litrosTotal = riegosRes.data.reduce((s, r) => s + (Number(r.litros_aplicados) || 0), 0)
       const m3Total = litrosTotal / 1000
+      // Per-record mm is the depth over ONE valve hectare; summing it inflates
+      // compliance, so derive the lamina from litros over the parcela surface.
+      const mmTotal = superficieHa ? litrosTotal / (superficieHa * LITROS_POR_MM_HA) : null
+      const litrosEstado = fechaInicioEstado
+        ? riegosRes.data
+            .filter((r) => r.fecha >= fechaInicioEstado)
+            .reduce((s, r) => s + (Number(r.litros_aplicados) || 0), 0)
+        : null
+      const riegosEquivalentes = superficieHa && litrosEstado != null
+        ? litrosEstado / (MM_RIEGO_ESTANDAR * superficieHa * LITROS_POR_MM_HA)
+        : null
       const riegoCount = riegosRes.data.length
       const tareaMap = new Map<string, string>()
       for (const t of tareasRes.data) {
@@ -898,9 +918,9 @@ export default function MapaScreen() {
       const tareas = Array.from(tareaMap.entries()).map(([tarea, fecha]) => ({ tarea, fecha }))
         .sort((a, b) => b.fecha.localeCompare(a.fecha))
       const fitos = [...fitosRes.data].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5)
-      return { mmTotal, m3Total, riegoCount, tareas, fitos }
+      return { mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos }
     } catch {
-      return { mmTotal: 0, m3Total: 0, riegoCount: 0, tareas: [], fitos: [] }
+      return { mmTotal: null, m3Total: 0, riegoCount: 0, riegosEquivalentes: null, tareas: [], fitos: [] }
     }
   }
 
@@ -913,10 +933,13 @@ export default function MapaScreen() {
       : null
     setPanel({
       parcela, estadoCampana: estadoInfo, fenologia: fase,
-      mmTotal: null, m3Total: null, riegoCount: null, tareas: [], fitos: [], loadingExtra: true,
+      mmTotal: null, m3Total: null, riegoCount: null, riegosEquivalentes: null, tareas: [], fitos: [], loadingExtra: true,
     })
-    const { mmTotal, m3Total, riegoCount, tareas, fitos } = await fetchPanelExtras(parcela.id)
-    setPanel((prev) => prev ? { ...prev, mmTotal, m3Total, riegoCount, tareas, fitos, loadingExtra: false } : null)
+    const ha = Number(parcela.superficie_ha)
+    const { mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos } = await fetchPanelExtras(
+      parcela.id, Number.isFinite(ha) && ha > 0 ? ha : null, estadoInfo?.fecha_inicio ?? null,
+    )
+    setPanel((prev) => prev ? { ...prev, mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos, loadingExtra: false } : null)
   }
 
   function handleMessage(event: WebViewMessageEvent) {
