@@ -112,7 +112,8 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/produccion/plan-fitosanitario', label: 'Plan Fitosanitario',    group: 'Planificación' },
       // Seguimiento: tableros y lectura, no se carga nada.
       { href: '/dashboard/produccion/dashboard',          label: 'Dashboard',             group: 'Seguimiento' },
-      { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento',  group: 'Seguimiento' },
+      { href: '/dashboard/produccion/cumplimiento-fitosanitario', label: 'Cumplimiento Fito',  group: 'Seguimiento' },
+      { href: '/dashboard/produccion/cumplimiento-riego',        label: 'Cumplimiento Riego',    group: 'Seguimiento' },
       { href: '/dashboard/produccion/clima',              label: 'Clima',                 group: 'Seguimiento' },
     ],
   },

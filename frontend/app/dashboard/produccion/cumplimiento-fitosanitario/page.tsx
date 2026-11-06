@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
 import { getAvance, type AvanceItem, type EstadoAvance } from '@/lib/api/planFitosanitario'
-import { VARIEDAD_LABELS } from '@/lib/api/produccion'
+import { getParcelas, VARIEDAD_LABELS } from '@/lib/api/produccion'
 import { MESES, formatNum } from '@/components/produccion/formato'
 import { useCampanaAnio, buildCampanas, campanaToAnio } from '@/store/contextStore'
 
@@ -37,10 +37,37 @@ export default function CumplimientoFitosanitarioPage() {
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null)
 
-  const { data: avance = [], isLoading, isError } = useQuery({
-    queryKey: ['plan-avance', temporada, 'todo'],
-    queryFn: () => getAvance(temporada),
+  // '' = Todas. Filters sent to the API; the parcela select depends on the variety.
+  const [variedadFiltro, setVariedadFiltro] = useState('')
+  const [parcelaFiltro, setParcelaFiltro] = useState('')
+
+  const { data: parcelas = [] } = useQuery({
+    queryKey: ['parcelas'],
+    queryFn: getParcelas,
+    staleTime: 300_000,
   })
+
+  const { data: avance = [], isLoading, isError } = useQuery({
+    queryKey: ['plan-avance', temporada, 'todo', variedadFiltro, parcelaFiltro],
+    queryFn: () => getAvance(temporada, undefined, variedadFiltro || undefined, parcelaFiltro || undefined),
+  })
+
+  // Only productive parcelas (parral/potrero) of the chosen variety.
+  const parcelasDeVariedad = useMemo(
+    () =>
+      parcelas
+        .filter((p) => p.is_active && (p.tipo === 'parral' || p.tipo === 'potrero') && p.variedad === variedadFiltro)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [parcelas, variedadFiltro],
+  )
+
+  const variedadesFiltrables = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of parcelas) {
+      if (p.is_active && p.variedad && (p.tipo === 'parral' || p.tipo === 'potrero')) set.add(p.variedad)
+    }
+    return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
+  }, [parcelas])
 
   const variedades = useMemo(() => {
     const set = new Set<string>(avance.map((a) => a.variedad))
@@ -83,7 +110,7 @@ export default function CumplimientoFitosanitarioPage() {
         <div>
           <div className="flex items-center gap-2">
             <ClipboardCheck size={20} className="text-gray-700" />
-            <h1 className="text-2xl font-semibold text-gray-900">Cumplimiento Fitosanitario</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Cumplimiento Fito</h1>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
             Dosis por hectárea planificada vs. aplicada, por variedad, producto y mes
@@ -94,13 +121,34 @@ export default function CumplimientoFitosanitarioPage() {
             </p>
           )}
         </div>
-        <select
-          value={temporada}
-          onChange={(e) => { setTemporada(Number(e.target.value)); setSeleccion(null) }}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Variedad"
+            value={variedadFiltro}
+            onChange={(e) => { setVariedadFiltro(e.target.value); setParcelaFiltro(''); setSeleccion(null) }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las variedades</option>
+            {variedadesFiltrables.map((v) => <option key={v} value={v}>{VARIEDAD_LABELS[v] ?? v}</option>)}
+          </select>
+          <select
+            aria-label="Parral o potrero"
+            value={parcelaFiltro}
+            disabled={!variedadFiltro}
+            onChange={(e) => { setParcelaFiltro(e.target.value); setSeleccion(null) }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            <option value="">Todas</option>
+            {parcelasDeVariedad.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <select
+            value={temporada}
+            onChange={(e) => { setTemporada(Number(e.target.value)); setSeleccion(null) }}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {AVAILABLE_YEARS.map((y) => <option key={y} value={y}>Campaña {y}/{y + 1}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600" data-testid="leyenda-avance">
@@ -121,6 +169,8 @@ export default function CumplimientoFitosanitarioPage() {
         </div>
       ) : (
         <>
+          {/* Per-variety tabs are redundant once the variedad filter is set. */}
+          {!variedadFiltro && (
           <div className="flex flex-wrap gap-1.5">
             {variedades.map((v) => (
               <button
@@ -138,6 +188,7 @@ export default function CumplimientoFitosanitarioPage() {
               </button>
             ))}
           </div>
+          )}
 
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm" data-testid="matriz-avance">

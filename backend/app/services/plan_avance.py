@@ -208,7 +208,10 @@ def _agregar(parcelas: list[AvanceParcela], dosis_plan: Decimal | None) -> tuple
 
 async def calcular_avance(
     db: AsyncSession, temporada: int, mes: int | None = None, variedad: VariedadUva | None = None,
+    parcela_id: str | None = None,
 ) -> list[AvanceClave]:
+    """`parcela_id` narrows the applied side to one parcel; plan targets are per
+    variety (dose/ha), so they stay as-is and only its own variety's rows survive."""
     planes_stmt = (
         select(PlanFitosanitario)
         .options(selectinload(PlanFitosanitario.insumo))
@@ -230,6 +233,8 @@ async def calcular_avance(
     parcelas_stmt = select(Parcela).where(Parcela.is_active.is_(True), Parcela.variedad.is_not(None))
     if variedad is not None:
         parcelas_stmt = parcelas_stmt.where(Parcela.variedad == variedad)
+    if parcela_id is not None:
+        parcelas_stmt = parcelas_stmt.where(Parcela.id == parcela_id)
     parcelas = {p.id: p for p in (await db.execute(parcelas_stmt.order_by(Parcela.nombre, Parcela.id))).scalars()}
     por_variedad: dict[VariedadUva, list[Parcela]] = defaultdict(list)
     for parcela in parcelas.values():
@@ -243,8 +248,8 @@ async def calcular_avance(
 
     # Products applied with no plan row for that variety and month.
     sin_plan: set[tuple[VariedadUva, int, str]] = set()
-    for (parcela_id, m, insumo_id) in dosis:
-        clave = (parcelas[parcela_id].variedad, m, insumo_id)
+    for (pid, m, insumo_id) in dosis:
+        clave = (parcelas[pid].variedad, m, insumo_id)
         if clave not in objetivo:
             sin_plan.add(clave)
     faltantes = {i for _v, _m, i in sin_plan} - nombres.keys()

@@ -373,3 +373,39 @@ async def test_producto_ajeno_en_orden_del_plan_sigue_no_planificado(
     por_producto = {i.insumo_nombre: i for i in items}
     assert por_producto["Azufre"].estado == EstadoAvance.no_planificado
     assert por_producto["Mancozeb"].estado == EstadoAvance.pendiente
+
+
+async def test_avance_filtra_por_parcela(
+    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
+):
+    headers, uid, parcela, _v, insumo = await _escenario(
+        client, create_user, create_parcela, create_valvula, create_insumo)
+    otra = await create_parcela(nombre="Parral 3", variedad=VariedadUva.flame, superficie_ha=4.0)
+    await _registro(db_session, uid, parcela.id, insumo.id, date(2026, 10, 10), 2.0)  # ok
+    await _registro(db_session, uid, otra.id, insumo.id, date(2026, 10, 10), 1.0)  # bajo
+
+    resp = await client.get(
+        "/plan-fitosanitario/avance",
+        params={"temporada": 2026, "mes": 10, "parcela_id": parcela.id}, headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    [item] = resp.json()
+    assert [p["id"] for p in item["parcelas"]] == [parcela.id]
+    assert item["estado"] == "ok"
+    assert Decimal(item["dosis_aplicada_promedio"]) == Decimal("2")
+
+
+async def test_avance_parcela_de_otra_variedad_no_se_filtra_a_la_variedad(
+    client, db_session, create_user, create_parcela, create_valvula, create_insumo,
+):
+    headers, uid, _parcela, _v, insumo = await _escenario(
+        client, create_user, create_parcela, create_valvula, create_insumo)
+    bonarda = await create_parcela(nombre="Bonarda 1", variedad=VariedadUva.bonarda, superficie_ha=5.0)
+    await _registro(db_session, uid, bonarda.id, insumo.id, date(2026, 10, 10), 2.0)
+
+    resp = await client.get(
+        "/plan-fitosanitario/avance",
+        params={"temporada": 2026, "variedad": "flame", "parcela_id": bonarda.id}, headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []

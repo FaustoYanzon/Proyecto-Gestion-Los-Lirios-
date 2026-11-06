@@ -163,15 +163,6 @@ export interface CicloCampanaItem {
   observaciones: string | null
 }
 
-export interface EstadoActualItem {
-  id: string | null
-  parcela_id: string
-  parcela_nombre: string
-  anio: number | null
-  estado_fenologico: string | null
-  fecha_estado: string | null
-}
-
 export interface ResumenTrabajadorItem {
   trabajador_nombre: string
   total_jornales: number
@@ -196,11 +187,6 @@ export interface ResumenTrabajoPorParcelaItem {
 
 export async function getCiclosCampana(params?: { parcela_id?: string; anio?: number }): Promise<CicloCampanaItem[]> {
   const { data } = await api.get('/produccion/campana/', { params })
-  return data
-}
-
-export async function getEstadoActual(): Promise<EstadoActualItem[]> {
-  const { data } = await api.get('/produccion/campana/estado-actual/')
   return data
 }
 
@@ -409,6 +395,22 @@ export interface EstadoActualVariedadItem {
 export async function getEstadoCampanaActual(): Promise<EstadoActualVariedadItem[]> {
   const { data } = await api.get<EstadoActualVariedadItem[]>('/produccion/estado-campana/actual')
   return data
+}
+
+export interface EstadoVariedadCampanaPayload {
+  variedad: string
+  anio: number
+  estado_campana: EstadoCampana
+  fecha_confirmacion: string
+  observaciones?: string | null
+}
+
+// One manual override per variedad (store shared with mobile + map +
+// notifications). Requires gerencial or above.
+export async function postEstadoVariedadCampana(
+  payload: EstadoVariedadCampanaPayload,
+): Promise<void> {
+  await api.post('/produccion/estado-campana/', payload)
 }
 
 export interface CumplimientoRiegoParcela {

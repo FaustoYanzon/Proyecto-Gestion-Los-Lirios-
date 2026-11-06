@@ -9,10 +9,10 @@ import {
   getCumplimientoRiego, getEstadoCampanaActual,
   getResumenTrabajoPorParcela,
 } from '@/lib/api/produccion'
-import { getRiegosEnCurso, getRiegos } from '@/lib/api/riego'
+import { getRiegosEnCurso } from '@/lib/api/riego'
 import { getFitosanitarios } from '@/lib/api/fitosanitarios'
 import { useContextStore, campanaToAnio } from '@/store/contextStore'
-import type { FenologiaMapaInfo, EstadoCampanaMapaInfo, RiegoMapaInfo } from './FincaMapInner'
+import type { FenologiaMapaInfo, EstadoCampanaMapaInfo } from './FincaMapInner'
 
 const Inner = dynamic(() => import('./FincaMapInner'), {
   ssr: false,
@@ -70,29 +70,8 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
     [costoData],
   )
 
-  // Riego y fitosanitarios por parcela de la temporada seleccionada — se
-  // agregan acá en el cliente (listados chicos, sin endpoint de resumen
-  // dedicado todavía) en vez de en el backend, mismo criterio que costo de
-  // arriba pero sin vista SQL propia.
-  const { data: riegoData = [] } = useQuery({
-    queryKey: ['riego-mapa', campanaFechaDesde, campanaFechaHasta],
-    queryFn: () => getRiegos({ fecha_desde: campanaFechaDesde, fecha_hasta: campanaFechaHasta, limit: 1000 }),
-    staleTime: 300_000,
-    retry: false,
-  })
-
-  const riegoByParcelaId = useMemo((): Record<string, RiegoMapaInfo> => {
-    const map: Record<string, RiegoMapaInfo> = {}
-    for (const r of riegoData) {
-      const prev = map[r.parcela_id] ?? { litros: 0, mm: 0, nRiegos: 0 }
-      prev.litros += r.litros_aplicados ?? 0
-      prev.mm += r.mm_aplicados ?? 0
-      prev.nRiegos += 1
-      map[r.parcela_id] = prev
-    }
-    return map
-  }, [riegoData])
-
+  // Fitosanitarios por parcela de la temporada seleccionada — se agregan acá
+  // en el cliente (listado chico, sin endpoint de resumen dedicado todavía).
   const { data: fitoData = [] } = useQuery({
     queryKey: ['fito-mapa', campanaFechaDesde, campanaFechaHasta],
     queryFn: () => getFitosanitarios({ fecha_desde: campanaFechaDesde, fecha_hasta: campanaFechaHasta, limit: 1000 }),
@@ -128,6 +107,7 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
         tareas_recomendadas: item.tareas_recomendadas,
         proxima_fase_label: item.proxima_fase_label,
         proxima_fase_fecha: item.proxima_fase_fecha,
+        fuente: item.fuente,
       }
     }
     return map
@@ -213,7 +193,6 @@ export default function FincaMap({ compact, height }: { compact?: boolean; heigh
       estadoCampanaByVariedad={estadoCampanaByVariedad}
       costoByParcelaId={costoByParcelaId}
       costoGeneral={costoGeneral}
-      riegoByParcelaId={riegoByParcelaId}
       fitoByParcelaId={fitoByParcelaId}
       parcelasEnRiego={parcelasEnRiego}
       valvulasEnRiego={valvulasEnRiego}

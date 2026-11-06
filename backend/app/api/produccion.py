@@ -1,7 +1,9 @@
 import logging
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -77,6 +79,9 @@ from app.schemas.produccion import (
     EstadoVariedadCampanaResponse,
     FaseCalendarioResponse,
     FaseVariedadResponse,
+    PlanillaRiegoCelda,
+    PlanillaRiegoFila,
+    PlanillaRiegoResponse,
     RegistroCargaMasiva,
     RegistroCosechaCreate,
     RegistroCosechaResponse,
@@ -820,8 +825,8 @@ async def _normalizar_riego(
         and data.get("parcela_id") == riego.parcela_id
     ):
         if riego.n_valvulas_manto is None:
-            # Historical manto keeps its stored valves and the legacy 40% factor:
-            # only a change of tipo or parcela moves it onto the current rules.
+            # Historical manto keeps its stored valves (CSV count; the 4x factor is
+            # shared): only a change of tipo or parcela moves it to surface rules.
             return data
         # n_valvulas_manto is frozen at creation so later superficie edits (or a
         # cleared superficie) never rewrite past litros nor block unrelated edits.
@@ -859,8 +864,8 @@ async def _normalizar_riego(
     data["valvula"] = None
     data["n_valvulas_manto"] = RegistroRiego.valvulas_manto_de(parcela.superficie_ha)
     if riego is None:
-        # Pre-manto web clients send mm computed with the legacy 40% rate; drop
-        # it so RegistroRiego.__init__ recalculates it with the current factor.
+        # Pre-manto web clients send mm computed with an old rate; drop it so
+        # RegistroRiego.__init__ recalculates it with the current factor.
         data["mm_aplicados"] = None
     return data
 
@@ -886,6 +891,98 @@ async def list_riego_en_curso(
 ) -> list[RegistroRiego]:
     stmt = select(RegistroRiego).where(RegistroRiego.fin.is_(None)).order_by(RegistroRiego.inicio.desc())
     return list((await db.execute(stmt)).scalars().all())
+
+
+_TZ_CAMPO = ZoneInfo("America/Argentina/San_Juan")
+_DOS_DECIMALES = Decimal("0.01")
+
+
+def _natural_key(nombre: str) -> list[tuple[int, int, str]]:
+    """Sort key so 'Parral 2' < 'Parral 10' (numeric chunks compare as numbers)."""
+    return [
+        (0, int(chunk), "") if chunk.isdigit() else (1, 0, chunk.lower())
+        for chunk in re.findall(r"\d+|\D+", nombre)
+    ]
+
+
+def _a_decimal_2(valor: float | None) -> Decimal | None:
+    # Via str() so float noise (51.2000000001) never leaks into the Decimal.
+    return None if valor is None else Decimal(str(valor)).quantize(_DOS_DECIMALES)
+
+
+@router.get("/riego/planilla", response_model=PlanillaRiegoResponse)
+async def get_planilla_riego(
+    desde: date | None = Query(None),
+    hasta: date | None = Query(None),
+    tipo: Literal["goteo", "manto", "ambos"] = Query("ambos"),
+    parcela_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> PlanillaRiegoResponse:
+    """Parcela x month grid (paper sheet): each riego lands in the month of its `fecha`."""
+    # Missing bounds default to the campaña (May 1 -> Apr 30, not the calendar year)
+    # of the other bound, or of today when both are missing.
+    if desde is None and hasta is None:
+        anio = _campana_actual(datetime.now(_TZ_CAMPO).date())
+        desde, hasta = date(anio, 5, 1), date(anio + 1, 4, 30)
+    elif hasta is None:
+        hasta = date(_campana_actual(desde) + 1, 4, 30)
+    elif desde is None:
+        desde = date(_campana_actual(hasta), 5, 1)
+    if desde > hasta:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'desde' must not be after 'hasta'.",
+        )
+
+    meses: list[str] = []
+    y, m = desde.year, desde.month
+    while (y, m) <= (hasta.year, hasta.month):
+        meses.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+
+    parcelas_stmt = select(Parcela).where(
+        Parcela.is_active.is_(True), Parcela.tipo.in_(_PARCELAS_CON_MANTO)
+    )
+    if parcela_id is not None:
+        parcelas_stmt = parcelas_stmt.where(Parcela.id == parcela_id)
+    parcelas = sorted(
+        (await db.execute(parcelas_stmt)).scalars().all(), key=lambda p: _natural_key(p.nombre)
+    )
+
+    # `fecha` (indexed) is the date every other riego view uses; bounds are inclusive.
+    riegos_stmt = select(RegistroRiego).where(
+        RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
+        RegistroRiego.fecha >= desde,
+        RegistroRiego.fecha <= hasta,
+    ).order_by(RegistroRiego.fecha, RegistroRiego.inicio)
+    if tipo != "ambos":
+        riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
+
+    celdas_por_parcela: dict[str, dict[str, list[PlanillaRiegoCelda]]] = defaultdict(dict)
+    for riego in (await db.execute(riegos_stmt)).scalars().all():
+        en_curso = riego.fin is None
+        celdas_por_parcela[riego.parcela_id].setdefault(riego.fecha.strftime("%Y-%m"), []).append(
+            PlanillaRiegoCelda(
+                fecha_inicio=riego.fecha,
+                horas=None if en_curso else _a_decimal_2(riego.duracion_horas),
+                mm=None if en_curso else _a_decimal_2(riego.mm_aplicados),
+                tipo=riego.tipo,
+                en_curso=en_curso,
+            )
+        )
+
+    return PlanillaRiegoResponse(
+        meses=meses,
+        filas=[
+            PlanillaRiegoFila(
+                parcela_id=p.id,
+                parcela_nombre=p.nombre,
+                celdas=celdas_por_parcela.get(p.id, {}),
+            )
+            for p in parcelas
+        ],
+    )
 
 
 @router.post("/riego/iniciar", response_model=RegistroRiegoEnCursoResponse, status_code=status.HTTP_201_CREATED)
@@ -1303,11 +1400,17 @@ async def list_campana(
 
 
 # Must be before /campana/{campana_id} — same method (GET) + same path depth
-@router.get("/campana/estado-actual/", response_model=list[EstadoActualResponse])
+@router.get(
+    "/campana/estado-actual/",
+    response_model=list[EstadoActualResponse],
+    deprecated=True,
+    description="Deprecated: use GET /fenologia/estado-actual. Nothing writes CicloCampana any more.",
+)
 async def estado_actual(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[EstadoActualResponse]:
+    """Deprecated: per-parcela CicloCampana state; superseded by /fenologia/estado-actual."""
     # Subquery: latest cycle date per parcel
     subq = (
         select(
@@ -1351,7 +1454,7 @@ async def estado_actual(
 
 
 
-# Una confirmación manual (CicloCampana) pisa el cálculo automático mientras
+# Una confirmación manual (EstadoVariedadCampana) pisa el cálculo automático mientras
 # sea "reciente" — pasado ese umbral se la considera vieja y el motor
 # automático vuelve a tomar el control (evita que quede congelada para
 # siempre en un estado que ya se pasó de fecha).
@@ -1369,58 +1472,20 @@ async def fenologia_estado_actual(
 
     Agrupa los parrales activos por variedad. El estado "de hoy" es el mismo
     para todas (un solo calendario), pero cada variedad puede tener su
-    propia confirmación manual (CicloCampana) que lo reemplaza mientras esté
+    propia confirmación manual (EstadoVariedadCampana) que lo reemplaza mientras esté
     vigente (últimos `UMBRAL_VIGENCIA_MANUAL_DIAS` días) — y las tareas
     recomendadas sí varían por variedad (app.core.fenologia). Alimenta las
     notificaciones de inicio (mobile y web), el modo "Fenología" del mapa, y
     la página Ciclo de Campaña.
     """
-    parcelas = list(
-        (await db.execute(
-            select(Parcela).where(
-                Parcela.is_active.is_(True),
-                Parcela.tipo == TipoParcela.parral,
-                Parcela.variedad.is_not(None),
-            )
-        )).scalars().all()
-    )
-
-    parcelas_por_variedad: dict[VariedadUva, list[str]] = defaultdict(list)
-    for p in parcelas:
-        if p.variedad is not None:
-            parcelas_por_variedad[p.variedad].append(p.nombre)
-
-    # Confirmación manual más reciente por variedad (join CicloCampana ->
-    # Parcela, ordenado desc: la primera fila vista por variedad ya es la
-    # más nueva).
-    parcela_ids = [p.id for p in parcelas]
-    ciclos_rows = (await db.execute(
-        select(CicloCampana, Parcela.variedad)
-        .join(Parcela, CicloCampana.parcela_id == Parcela.id)
-        .where(Parcela.id.in_(parcela_ids))
-        .order_by(CicloCampana.fecha_estado.desc())
-    )).all()
-    manual_por_variedad: dict[VariedadUva, CicloCampana] = {}
-    for ciclo, variedad in ciclos_rows:
-        if variedad is not None and variedad not in manual_por_variedad:
-            manual_por_variedad[variedad] = ciclo
-
-    hoy = date.today()
-    estado_auto = ciclo_campana.calcular_estado_actual(hoy)
-    proxima_auto = ciclo_campana.calcular_proximo_estado(hoy)
+    # Single source of truth: the per-variedad store (EstadoVariedadCampana)
+    # shared with /estado-campana/actual. CicloCampana is not read here.
+    estados = await _estados_actuales_por_variedad(db)
 
     items: list[FaseVariedadResponse] = []
-    for variedad, nombres in parcelas_por_variedad.items():
-        fuente = "automatico"
-        estado_fenologico = EstadoFenologico(estado_auto.value)
-        fecha_confirmacion: date | None = None
-
-        manual = manual_por_variedad.get(variedad)
-        if manual is not None and (hoy - manual.fecha_estado).days <= UMBRAL_VIGENCIA_MANUAL_DIAS:
-            fuente = "manual"
-            estado_fenologico = manual.estado_fenologico
-            fecha_confirmacion = manual.fecha_estado
-
+    for variedad, info in estados.items():
+        # EstadoCampana and EstadoFenologico share the same 7 values.
+        estado_fenologico = EstadoFenologico(info.estado_campana.value)
         items.append(FaseVariedadResponse(
             variedad=variedad.value,
             tipo_uso=fenologia.TIPO_USO_POR_VARIEDAD.get(variedad, fenologia.TipoUso.otro).value,
@@ -1429,12 +1494,12 @@ async def fenologia_estado_actual(
             estado_fenologico=estado_fenologico,
             riesgo_oidio=fenologia.RIESGO_OIDIO_POR_VARIEDAD.get(variedad, fenologia.RiesgoSanitario.medio).value,
             tareas_recomendadas=fenologia.tareas_recomendadas(variedad, estado_fenologico),
-            proxima_fase=proxima_auto[0].value,
-            proxima_fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[proxima_auto[0]],
-            proxima_fase_fecha=proxima_auto[1],
-            parcelas=sorted(nombres),
-            fuente=fuente,
-            fecha_confirmacion=fecha_confirmacion,
+            proxima_fase=info.proxima_estado_campana.value,
+            proxima_fase_label=ciclo_campana.ESTADO_CAMPANA_LABELS[info.proxima_estado_campana],
+            proxima_fase_fecha=info.proxima_fecha,
+            parcelas=info.parcelas,
+            fuente=info.fuente,
+            fecha_confirmacion=info.fecha_confirmacion,
         ))
 
     items.sort(key=lambda x: x.variedad)
@@ -1464,20 +1529,16 @@ async def fenologia_calendario(
 @router.delete("/fenologia/overrides")
 async def limpiar_overrides_fenologicos(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> dict[str, int]:
-    """Elimina las confirmaciones manuales de CicloCampana usadas como
-    override de fenología (fase de pruebas: estados cargados a mano en
-    parrales al azar para validar el motor automático).
-
-    Solo borra registros SIN `rendimiento_kg_ha` — ese campo es el historial
-    real de cosecha (usado por RendimientoHistoricoParcela y el dashboard de
-    rendimiento) y nunca se toca acá. Después de esto, `estado-actual` vuelve
-    a depender 100% del calendario automático hasta que se cargue una nueva
-    confirmación manual real.
+    """Elimina los overrides manuales por variedad (EstadoVariedadCampana) de
+    la campaña actual, para que `estado-actual` vuelva al calendario
+    automático. CicloCampana (rendimiento/historial por parcela) no se toca.
     """
     result = await db.execute(
-        select(CicloCampana).where(CicloCampana.rendimiento_kg_ha.is_(None))
+        select(EstadoVariedadCampana).where(
+            EstadoVariedadCampana.anio == _campana_actual()
+        )
     )
     registros = list(result.scalars().all())
     for r in registros:

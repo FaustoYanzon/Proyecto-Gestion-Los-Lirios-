@@ -173,7 +173,7 @@ class RegistroRiegoResponse(RegistroRiegoBase):
     id: str
     duracion_horas: float
     n_valvulas: int
-    # Caudal factor of this record (1.0 goteo, 0.25 manto, 0.4 historical manto).
+    # Caudal factor of this record (1.0 goteo, 4.0 manto).
     factor_aplicado: float
     litros_aplicados: float
     created_by: str
@@ -638,7 +638,7 @@ class EstadoActualResponse(BaseModel):
 class FaseVariedadResponse(BaseModel):
     """Estado fenológico de una variedad, calculado automáticamente por
     fecha (ver app.core.fenologia) salvo que exista una confirmación manual
-    reciente (CicloCampana) para alguna de sus parcelas, en cuyo caso esa
+    reciente (EstadoVariedadCampana) para la variedad, en cuyo caso esa
     confirmación tiene prioridad (`fuente="manual"`). Agrupa todos los
     parrales activos de esa variedad."""
     variedad: str
@@ -715,6 +715,25 @@ class CumplimientoRiegoParcela(BaseModel):
     mm_aplicados: float
     riegos_equivalentes: float
     cumplimiento_pct: float
+
+
+class PlanillaRiegoCelda(BaseModel):
+    fecha_inicio: date
+    horas: Decimal | None
+    mm: Decimal | None
+    tipo: TipoRiego
+    en_curso: bool
+
+
+class PlanillaRiegoFila(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    celdas: dict[str, list[PlanillaRiegoCelda]]
+
+
+class PlanillaRiegoResponse(BaseModel):
+    meses: list[str]
+    filas: list[PlanillaRiegoFila]
 
 
 # ── Dashboard schemas ─────────────────────────────────────────────────────────

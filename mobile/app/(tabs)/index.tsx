@@ -350,7 +350,11 @@ export default function InicioScreen() {
     finally { setLoadingFases(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { loadFenologia() }, [loadFenologia])
+  // Refetch on every focus (also covers first mount) so a state change made
+  // in the campana tab shows up without restarting the app.
+  useFocusEffect(
+    useCallback(() => { loadFenologia() }, [loadFenologia]),
+  )
 
   // Rota la notificación fenológica mostrada: avanza cada vez que esta
   // pestaña gana foco (login, volver de otra pestaña) y además cada 15 min

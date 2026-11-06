@@ -5,11 +5,14 @@ CABEZAL_VALVULAS (frontend/lib/api/riego.ts, mobile/lib/types.ts) por el
 catalogo real, cruzado espacialmente contra los poligonos de Parral del KML
 (ver scripts/auditoria_valvulas_geojson.py para el reporte completo).
 
-La asignacion parcela<-valvula es automatica por point-in-polygon salvo 3
-excepciones confirmadas por Fausto el 2026-08-18 (los puntos del GeoJSON
-quedaron digitalizados corridos, o la valvula riega un potrero sin parral):
-  - "41","42" -> Parral 4  (el punto cae del lado de Parral 5, error de digitalizacion)
+La asignacion parcela<-valvula es automatica por point-in-polygon salvo
+excepciones confirmadas manualmente (OVERRIDES_PARCELA):
   - "31","32" -> Potrero 3 (riegan un potrero sin cuadrante/parral asociado)
+  - "43","44" -> Parral 5 (los puntos del GeoJSON estan dibujados dentro del
+    poligono norte por error de digitalizacion; el override corrige la asignacion)
+Parral 4/5: el KML trae las etiquetas cruzadas (Parral 4 es el NORTE); se
+corrige por latitud en fix_parral_4_5_labels, por eso 41-42 caen en Parral 4
+sin override. 43-44 caen tambien en Parral 4 por polygon y se fuerzan a Parral 5.
 
 Usage (desde la venv del backend):
   cd C:\\claude-projects\\los-lirios
@@ -42,10 +45,12 @@ KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
 # Excepciones confirmadas manualmente (ver docstring) -- nombre de valvula -> nombre de parcela real.
 OVERRIDES_PARCELA: dict[str, str] = {
-    "41": "Parral 4",
-    "42": "Parral 4",
     "31": "Potrero 3",
     "32": "Potrero 3",
+    # GeoJSON points 43/44 are digitized inside the north polygon (Parral 4),
+    # but physically they irrigate Parral 5.
+    "43": "Parral 5",
+    "44": "Parral 5",
 }
 
 
@@ -74,6 +79,13 @@ def point_in_polygon(pt: tuple[float, float], poly: list[tuple[float, float]]) -
     return inside
 
 
+def fix_parral_4_5_labels(parrales: dict[str, list[tuple[float, float]]]) -> None:
+    """The KML labels Parral 4/5 swapped: Parral 4 is the NORTH one (higher lat)."""
+    a, b = parrales.get("Parral 4"), parrales.get("Parral 5")
+    if a and b and sum(p[1] for p in a) / len(a) < sum(p[1] for p in b) / len(b):
+        parrales["Parral 4"], parrales["Parral 5"] = b, a
+
+
 def load_kml_parrales() -> dict[str, list[tuple[float, float]]]:
     root = ET.parse(KML_FILE).getroot()
     parrales: dict[str, list[tuple[float, float]]] = {}
@@ -90,6 +102,7 @@ def load_kml_parrales() -> dict[str, list[tuple[float, float]]]:
             for chunk in coords_el.text.split()
         ]
         parrales[name] = pts
+    fix_parral_4_5_labels(parrales)
     return parrales
 
 

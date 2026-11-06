@@ -34,11 +34,11 @@ export const LITROS_POR_HORA_VALVULA = 16_000
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
 // Riego a manto por superficie: se riega la parcela completa (parral o
-// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas al 25% del
+// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas a 4 veces el
 // caudal de goteo (litros y mm). Mismo criterio que el backend. Los manto
-// históricos (con válvulas) usan factor 0.4 y vienen en `factor_aplicado`.
+// históricos (con válvulas) usan el mismo factor 4 y vienen en `factor_aplicado`.
 export type TipoRiego = 'goteo' | 'manto'
-export const FACTOR_MANTO_SUPERFICIE = 0.25
+export const FACTOR_MANTO_SUPERFICIE = 4
 export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = { goteo: 'Goteo', manto: 'Manto' }
 
 // Rounding to 4 decimals avoids ceil() bumping 1.00000001 ha to 2 valves.
@@ -242,4 +242,38 @@ export async function iniciarRiego(data: RiegoIniciarInput): Promise<RiegoEnCurs
 export async function terminarRiego(id: string, fin?: string): Promise<RiegoResponse> {
   const { data: res } = await api.post(`/produccion/riego/${id}/terminar`, fin ? { fin } : {})
   return withFactor(res)
+}
+
+// Planilla de cumplimiento de riego: parcelas (filas) x meses (columnas). Cada
+// riego cae en el mes de su fecha (hora de Argentina). Los Decimal llegan como
+// string (o null si el riego sigue en curso): pasar por Number() antes de formatear.
+export type PlanillaTipo = TipoRiego | 'ambos'
+
+export interface PlanillaRiegoCelda {
+  fecha_inicio: string
+  horas: string | null
+  mm: string | null
+  tipo: TipoRiego
+  en_curso: boolean
+}
+
+export interface PlanillaRiegoFila {
+  parcela_id: string
+  parcela_nombre: string
+  celdas: Record<string, PlanillaRiegoCelda[]>
+}
+
+export interface PlanillaRiegoResponse {
+  meses: string[]
+  filas: PlanillaRiegoFila[]
+}
+
+export async function getPlanillaRiego(params: {
+  desde?: string
+  hasta?: string
+  tipo?: PlanillaTipo
+  parcela_id?: string
+}): Promise<PlanillaRiegoResponse> {
+  const { data } = await api.get('/produccion/riego/planilla', { params })
+  return data
 }

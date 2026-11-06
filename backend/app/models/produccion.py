@@ -239,10 +239,10 @@ class RegistroRiego(Base):
     cabezal: Mapped[str | None] = mapped_column(String(20), nullable=True)
     valvula: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Cantidad de valvulas equivalentes (ceil de la superficie) en manto nuevo.
-    # NULL = registro historico (goteo, o manto viejo que usa FACTOR_MANTO_LEGACY).
+    # NULL = registro historico (goteo, o manto viejo que cuenta las valvulas del CSV).
     n_valvulas_manto: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Goteo o manto. En manto el caudal se estima por superficie (FACTOR_MANTO);
-    # los manto historicos (n_valvulas_manto NULL) conservan FACTOR_MANTO_LEGACY.
+    # Goteo o manto. En manto el caudal es FACTOR_MANTO veces el de goteo, tanto
+    # en registros nuevos como historicos (estos cuentan valvulas por el CSV).
     tipo: Mapped[TipoRiego] = mapped_column(
         SAEnum(TipoRiego), default=TipoRiego.goteo, server_default=TipoRiego.goteo.value, nullable=False
     )
@@ -299,17 +299,16 @@ class RegistroRiego(Base):
     LITROS_POR_HORA_VALVULA: float = 16_000.0
     # Referencia agronomica para el suelo de Media Agua: 6,000,000 L/ha/anio.
     LITROS_OBJETIVO_ANUAL_POR_HA: float = 6_000_000.0
-    # Manto historico (sin n_valvulas_manto): 40% del caudal. Nunca se recalcula.
-    FACTOR_MANTO_LEGACY: float = 0.4
-    # Manto por superficie: 25% del caudal de las valvulas equivalentes.
-    FACTOR_MANTO: float = 0.25
+    # Manto entrega 4x el caudal de goteo (owner decision, 2026-11-05); aplica
+    # a manto nuevo e historico por igual.
+    FACTOR_MANTO: float = 4.0
 
     @classmethod
     def factor_caudal(cls, tipo: TipoRiego | str | None, n_valvulas_manto: int | None = None) -> float:
         if tipo not in (TipoRiego.manto, TipoRiego.manto.value):
             return 1.0
-        # n_valvulas_manto marks the new surface-based rule; NULL keeps old records stable.
-        return cls.FACTOR_MANTO_LEGACY if n_valvulas_manto is None else cls.FACTOR_MANTO
+        # n_valvulas_manto only changes the valve count, never the factor.
+        return cls.FACTOR_MANTO
 
     @staticmethod
     def valvulas_manto_de(superficie_ha: float) -> int:

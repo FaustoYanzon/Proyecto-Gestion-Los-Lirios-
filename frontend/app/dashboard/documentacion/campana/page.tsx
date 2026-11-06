@@ -4,11 +4,12 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Sprout, Save, X, Sparkles, PenLine, RotateCcw } from 'lucide-react'
 import {
-  getFenologiaEstadoActual, createCicloCampana, getParcelasMapa, VARIEDAD_LABELS,
+  getFenologiaEstadoActual, postEstadoVariedadCampana, getParcelasMapa, VARIEDAD_LABELS,
   limpiarOverridesFenologia,
   type FaseVariedadItem,
 } from '@/lib/api/produccion'
 import { useContextStore } from '@/store/contextStore'
+import { useAuthStore } from '@/store/authStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -114,28 +115,22 @@ function UpdateModal({
   const [error, setError] = useState('')
 
   async function handleSave() {
-    if (parcelaIds.length === 0) {
-      setError('No hay parrales activos para esta variedad.')
-      return
-    }
     setSaving(true)
     setError('')
     try {
       const anio = new Date().getMonth() >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
-      const fecha_estado = new Date().toISOString().split('T')[0]
-      // Confirma el estado para TODOS los parrales de la variedad a la vez
-      // (la campaña ahora se gestiona por variedad, no parral por parral).
-      await Promise.all(
-        parcelaIds.map((parcela_id) =>
-          createCicloCampana({
-            parcela_id,
-            anio,
-            estado_fenologico: estado,
-            fecha_estado,
-            observaciones: obs.trim() || null,
-          })
-        )
-      )
+      const hoy = new Date()
+      // Local date parts (not toISOString/UTC) to stay consistent with anio.
+      const fecha_confirmacion = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+      // One override for the whole variedad (shared with mobile, map and
+      // notifications); CicloCampana is only for rendimiento/historial.
+      await postEstadoVariedadCampana({
+        variedad: item.variedad,
+        anio,
+        estado_campana: estado,
+        fecha_confirmacion,
+        observaciones: obs.trim() || null,
+      })
       onSaved()
       onClose()
     } catch (e: unknown) {
@@ -235,6 +230,9 @@ export default function CampanaPage() {
   const campanaGlobal = useContextStore((s) => s.campana)
   const [editing, setEditing] = useState<FaseVariedadItem | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const currentUser = useAuthStore((s) => s.user)
+  const isGerencialUp = currentUser?.role === 'super_admin' || currentUser?.role === 'gerencial'
   const qc = useQueryClient()
 
   const { data: fases = [], isLoading } = useQuery({
@@ -275,20 +273,24 @@ export default function CampanaPage() {
     qc.invalidateQueries({ queryKey: ['fenologia-campana'] })
     qc.invalidateQueries({ queryKey: ['fenologia-mapa'] })
     qc.invalidateQueries({ queryKey: ['fenologia-notificaciones'] })
+    qc.invalidateQueries({ queryKey: ['estado-campana-actual-mapa'] })
   }
 
   const hasManual = fases.some((f) => f.fuente === 'manual')
 
   async function handleReset() {
     if (!confirm(
-      'Esto borra las confirmaciones manuales de fenología cargadas para probar el sistema ' +
-      '(no toca el historial real de cosecha) y deja el estado de cada variedad 100% gobernado ' +
-      'por el calendario automático. ¿Continuar?'
+      'Borra los estados confirmados a mano de la campaña actual (todas las variedades) ' +
+      'y vuelve al calendario automático.'
     )) return
     setResetting(true)
+    setResetError('')
     try {
       await limpiarOverridesFenologia()
       onSaved()
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setResetError(typeof detail === 'string' ? detail : 'No se pudo resetear a automático.')
     } finally {
       setResetting(false)
     }
@@ -312,7 +314,7 @@ export default function CampanaPage() {
             Estado fenológico por variedad · Campaña {campanaGlobal}
           </p>
         </div>
-        {hasManual && (
+        {isGerencialUp && hasManual && (
           <button
             onClick={handleReset}
             disabled={resetting}
@@ -323,6 +325,8 @@ export default function CampanaPage() {
           </button>
         )}
       </div>
+
+      {resetError && <p className="text-sm text-red-600">{resetError}</p>}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-2">
@@ -406,12 +410,14 @@ export default function CampanaPage() {
                     ))}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => setEditing(item)}
-                      className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"
-                    >
-                      Actualizar
-                    </button>
+                    {isGerencialUp && (
+                      <button
+                        onClick={() => setEditing(item)}
+                        className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"
+                      >
+                        Actualizar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

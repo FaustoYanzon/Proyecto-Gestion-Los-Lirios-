@@ -15,7 +15,7 @@ import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 import LayerControl, { type LayerVisibility } from './LayerControl'
 
-type ColorMode = 'type' | 'variedad' | 'cosecha' | 'costo' | 'riego' | 'fito' | 'cumplimiento' | 'fenologia'
+type ColorMode = 'type' | 'variedad' | 'cosecha' | 'costo' | 'fito' | 'cumplimiento' | 'fenologia'
 
 // Modos que sólo tienen sentido con la campaña actual seleccionada (no hay
 // snapshot histórico guardado por temporada para fenología ni para el
@@ -67,17 +67,6 @@ function costoColor(monto: number, maxMonto: number): string {
   return `rgb(${r},${g},${b})`
 }
 
-// Escala clara → oscura (celeste pálido → azul de marca): mm de riego
-// aplicados en la temporada, por parral. Mismo criterio que costoColor.
-function riegoTotalColor(mm: number, maxMm: number): string {
-  if (mm <= 0 || maxMm <= 0) return '#f3f4f6'
-  const ratio = Math.min(mm / maxMm, 1)
-  const r = Math.round(224 - ratio * (224 - 30))
-  const g = Math.round(242 - ratio * (242 - 64))
-  const b = Math.round(254 - ratio * (254 - 175))
-  return `rgb(${r},${g},${b})`
-}
-
 // Escala clara → oscura (lila pálido → violeta): cantidad de aplicaciones
 // fitosanitarias en la temporada, por parral.
 function fitoColor(n: number, maxN: number): string {
@@ -99,20 +88,13 @@ function riegoColor(pct: number | null): string {
   return '#3d6b86'
 }
 
-// Riego total de la temporada seleccionada, por parral (agregado en
-// FincaMap.tsx a partir del listado de riegos filtrado por fecha).
-export interface RiegoMapaInfo {
-  litros: number
-  mm: number
-  nRiegos: number
-}
-
 export interface FenologiaMapaInfo {
   estado_fenologico: string
   fase_label: string
   tareas_recomendadas: string[]
   proxima_fase_label: string | null
   proxima_fase_fecha: string | null
+  fuente: 'automatico' | 'manual'
 }
 
 // Ciclo de Campaña nuevo (calendario único por variedad, /produccion/estado-campana/*).
@@ -140,8 +122,6 @@ function getPolyStyle(
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>,
   costoByParcelaId?: Record<string, number>,
   maxCosto?: number,
-  riegoByParcelaId?: Record<string, RiegoMapaInfo>,
-  maxRiego?: number,
   fitoByParcelaId?: Record<string, number>,
   maxFito?: number,
 ): L.PathOptions {
@@ -160,16 +140,6 @@ function getPolyStyle(
     const fill = costoColor(monto, maxCosto ?? 0)
     return {
       color: '#5a1320',
-      weight: selected ? 3 : 1.5,
-      fillColor: fill,
-      fillOpacity: selected ? 0.75 : 0.6,
-    }
-  }
-  if (mode === 'riego') {
-    const mm = (p?.id != null && riegoByParcelaId?.[p.id]) ? riegoByParcelaId[p.id].mm : 0
-    const fill = riegoTotalColor(mm, maxRiego ?? 0)
-    return {
-      color: '#1e3a8a',
       weight: selected ? 3 : 1.5,
       fillColor: fill,
       fillOpacity: selected ? 0.75 : 0.6,
@@ -470,7 +440,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                   <Sprout size={14} className="text-purple-600 flex-shrink-0" />
                   <p className="text-xs font-medium text-purple-800">
                     {fenologiaByVariedad[parcela.variedad].fase_label}
-                    <span className="text-purple-500 font-normal"> · estimado automático</span>
+                    <span className="text-purple-500 font-normal"> · {fenologiaByVariedad[parcela.variedad].fuente === 'manual' ? 'confirmado a mano' : 'estimado automático'}</span>
                   </p>
                 </div>
                 {fenologiaByVariedad[parcela.variedad].proxima_fase_label && (
@@ -625,7 +595,6 @@ interface Props {
   estadoCampanaByVariedad?: Record<string, EstadoCampanaMapaInfo>
   costoByParcelaId?: Record<string, number>
   costoGeneral?: number
-  riegoByParcelaId?: Record<string, RiegoMapaInfo>
   fitoByParcelaId?: Record<string, number>
   parcelasEnRiego?: Set<string>
   valvulasEnRiego?: Set<string>
@@ -688,7 +657,7 @@ const INFRA_LEGEND = [
 export default function FincaMapInner({
   compact = false, height = '100%', anio, esTemporadaActual = true, cosechaByParcelaId, fenologiaByVariedad,
   cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, costoGeneral,
-  riegoByParcelaId, fitoByParcelaId, parcelasEnRiego, valvulasEnRiego,
+  fitoByParcelaId, parcelasEnRiego, valvulasEnRiego,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -794,11 +763,6 @@ export default function FincaMapInner({
     return vals.length > 0 ? Math.max(...vals) : 0
   }, [costoByParcelaId])
 
-  const maxRiegoLegend = useMemo(() => {
-    const vals = Object.values(riegoByParcelaId ?? {}).map((r) => r.mm)
-    return vals.length > 0 ? Math.max(...vals) : 0
-  }, [riegoByParcelaId])
-
   const maxFitoLegend = useMemo(() => {
     const vals = Object.values(fitoByParcelaId ?? {})
     return vals.length > 0 ? Math.max(...vals) : 0
@@ -812,14 +776,14 @@ export default function FincaMapInner({
       const f = features.find(feat => feat.name === name)
       const p = parcelas.find(parc => parc.nombre === name)
       if (!f) return
-      const style = getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCosto, riegoByParcelaId, maxRiegoLegend, fitoByParcelaId, maxFitoLegend)
+      const style = getPolyStyle(f, p, name === selected, colorMode, cosechaByParcelaId, maxKg, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCosto, fitoByParcelaId, maxFitoLegend)
       // Riego en curso: se compone encima del modo de color elegido (no lo
       // reemplaza) — borde celeste punteado, mismo criterio en las dos
       // plataformas. Ver docs/sistema, sesión de mejoras al mapa.
       const enRiego = p?.id != null && parcelasEnRiego?.has(p.id)
       poly.setStyle(enRiego ? { ...style, color: '#0ea5e9', weight: 3, dashArray: '6,4' } : style)
     })
-  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCostoLegend, riegoByParcelaId, maxRiegoLegend, fitoByParcelaId, maxFitoLegend, parcelasEnRiego])
+  }, [features, parcelas, selected, colorMode, cosechaByParcelaId, maxKgLegend, fenologiaByVariedad, cumplimientoByParcelaId, estadoCampanaByVariedad, costoByParcelaId, maxCostoLegend, fitoByParcelaId, maxFitoLegend, parcelasEnRiego])
 
   // ── Load GeoJSON layer data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -961,9 +925,8 @@ export default function FincaMapInner({
             { mode: 'variedad', label: 'Variedad' },
             { mode: 'cosecha',  label: 'Cosecha'  },
             { mode: 'costo',    label: 'Costo'    },
-            { mode: 'riego',    label: 'Riego'    },
             { mode: 'fito',     label: 'Fitosanitarios' },
-            { mode: 'cumplimiento', label: 'Cumpl. riego' },
+            { mode: 'cumplimiento', label: 'Cumplimiento riego' },
             { mode: 'fenologia', label: 'Fenología' },
           ] as { mode: ColorMode; label: string }[]).map(({ mode, label }) => {
             const disabled = !esTemporadaActual && MODOS_SOLO_ACTUAL.includes(mode)
@@ -1000,10 +963,9 @@ export default function FincaMapInner({
               : colorMode === 'variedad' ? 'Variedad'
               : colorMode === 'cosecha' ? `Cosecha (${campanaLabel})`
               : colorMode === 'costo' ? `Costo laboral (${campanaLabel})`
-              : colorMode === 'riego' ? `Riego aplicado, mm (${campanaLabel})`
               : colorMode === 'fito' ? `Aplicaciones fito (${campanaLabel})`
               : colorMode === 'fenologia' ? 'Ciclo de Campaña (estado actual)'
-              : 'Cumpl. riego (estado actual)'}
+              : 'Cumplimiento riego (estado actual)'}
           </p>
           {colorMode === 'cosecha' ? (
             <div className="w-full">
@@ -1025,15 +987,6 @@ export default function FincaMapInner({
                   + {formatARS(costoGeneral)} en tareas generales, sin ubicación
                 </p>
               )}
-            </div>
-          ) : colorMode === 'riego' ? (
-            <div className="w-full">
-              <div className="h-3 rounded mb-1" style={{ background: 'linear-gradient(to right, #e0f2fe, #1e3a8a)' }} />
-              <div className="flex justify-between text-xs text-gray-500 gap-2">
-                <span>0</span>
-                <span className="text-right">{maxRiegoLegend > 0 ? `${maxRiegoLegend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} mm` : '—'}</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1.5">Riegos del estado: ver detalle de la parcela</p>
             </div>
           ) : colorMode === 'fito' ? (
             <div className="w-full">

@@ -770,7 +770,7 @@
 			</Polygon>
 		</Placemark>
 		<Placemark id="0EB85BF1FF3F7B2CA22C">
-			<name>Parral 4</name>
+			<name>Parral 5</name>
 			<LookAt>
 				<longitude>-68.39496084332016</longitude>
 				<latitude>-32.02234487507993</latitude>
@@ -816,7 +816,7 @@
 			</Polygon>
 		</Placemark>
 		<Placemark id="0B348764233F7B2D97F3">
-			<name>Parral 5</name>
+			<name>Parral 4</name>
 			<LookAt>
 				<longitude>-68.39584796725102</longitude>
 				<latitude>-32.02257498613927</latitude>
