@@ -680,7 +680,7 @@ class EstadoVariedadCampanaCreate(BaseModel):
     anio: int
     estado_campana: EstadoCampana
     fecha_confirmacion: date
-    observaciones: str | None = None
+    observaciones: str | None = Field(None, max_length=1000)
 
 
 class EstadoVariedadCampanaResponse(EstadoVariedadCampanaCreate):

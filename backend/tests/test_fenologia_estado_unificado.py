@@ -160,3 +160,25 @@ async def test_reset_overrides_clears_store_b_and_keeps_ciclo_campana(
 
     ciclos = (await db_session.execute(select(CicloCampana))).scalars().all()
     assert len(ciclos) == 2
+
+
+async def test_estado_campana_observaciones_limite_1000(client, create_user, create_parcela):
+    headers = await _setup(client, create_user, create_parcela)
+    hoy = date.today()
+    base = {
+        "variedad": "syrah",
+        "anio": _campana_actual(hoy),
+        "estado_campana": EstadoCampana.brotacion.value,
+        "fecha_confirmacion": hoy.isoformat(),
+    }
+
+    ok = await client.post(
+        "/produccion/estado-campana/", json={**base, "observaciones": "x" * 1000}, headers=headers
+    )
+    assert ok.status_code == 201
+
+    # Over the String(1000) column: must be a validation error, not a DB 500.
+    largo = await client.post(
+        "/produccion/estado-campana/", json={**base, "observaciones": "x" * 1001}, headers=headers
+    )
+    assert largo.status_code == 422
