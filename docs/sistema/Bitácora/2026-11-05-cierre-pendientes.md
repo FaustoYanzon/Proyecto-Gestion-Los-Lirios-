@@ -59,7 +59,7 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
 - Se corre con las variables de prod inyectadas por Railway CLI, porque `backend/.env` local no tiene las `CLOUDINARY_*`: `npx @railway/cli run "backend\\venv\\Scripts\\python.exe" scripts/migracion/reporte_huerfanos_cloudinary.py` (desde Git Bash; las barras normales fallan en `cmd`).
 - **Resultado en prod (cloud `swj5zkyq`):** 0 filas con URL en las tres tablas, 0 assets bajo los tres prefijos, 0 huérfanos, 0 filas con archivo faltante. Todavía no se subió ninguna foto o informe en prod, así que no hay nada que limpiar.
 
-### 4. Orden Del plan / Fuera del plan (frente A, rama feat/orden-fuera-de-plan, sin deployar)
+### 4. Orden Del plan / Fuera del plan (frente A, desplegado)
 - **Qué se construyó:**
   - Columna `ordenes_aplicacion.fuera_de_plan` (NOT NULL, default false). Migración `91b7e7904993` sobre `0861ea1414eb`.
   - Filtro único en `plan_avance._dosis_por_grupo`: excluye los registros de órdenes fuera de plan y conserva las cargas a mano con `orden_id` NULL. Lo heredan avance, banner, necesidad de stock y contraste.
@@ -70,9 +70,32 @@ Se revisan uno por uno los pendientes que dejó la bitácora del 2026-10-31. Cad
   - No son rondas.
   - Los productos ajenos al plan dentro de una orden Del plan siguen como «no planificado».
 - **Verificación:** pytest 480 passed; tsc, lint y build OK; `alembic check` limpio; click real manual de Fausto OK.
-- **Falta para cerrar:** backup, merge a `main` + push (Railway migra), `npx vercel --prod` desde `frontend/`, regenerar `Modelo de Datos.md` (lo corre Fausto).
+- **Deploy (verificado):**
+  - Backup `los_lirios_prod_20261105_2124.dump`. Un dump de las 21:00 salió de 0 bytes por timeouts de red hacia el proxy de la base; se repitió desde la red de Fausto y salió OK.
+  - Merge `f4d8db8` a `main` y push. Railway deploy `e9e5bbde` SUCCESS con la migración `91b7e7904993` aplicada.
+  - Verificación directa en prod: `alembic_version 91b7e7904993`, columna `fuera_de_plan` boolean NOT NULL default false, 3 órdenes en false.
+  - Web desplegada en Vercel (READY, alias `frontend-six-jade-79.vercel.app`).
+- **Pendiente de Fausto:** regenerar `Modelo de Datos.md`.
+
+### 5. Aplicadas en mobile como en la web (frente B, rama feat/aplicadas-mobile-agrupadas, sin publicar)
+- La pestaña «Realizadas» de mobile pasa de los últimos 10 registros planos al árbol orden > parcela > válvula, con chip de carencia (rojo ≥ 15 días, ámbar ≥ 7, amarillo menos, «Habilitado» en verde). Solo lectura.
+- Carga la campaña completa (mayo→abril) paginada de a 1000, más las órdenes de la campaña. Caché de 15 min con claves `fitosanitarios:<temporada>` y `ordenes-campania:<temporada>`.
+- El agrupador se portó de la web a `mobile/lib/fitosanitariosAgrupar.ts` y se verificó contra el de la web con `scripts/verificar_agrupador_mobile.mjs` (12 checks, fecha fija, tsx@4).
+- Regador y obrero ven «Esta vista es para encargados.» sin cargar nada: los endpoints exigen encargado o más (antes veían la lista vacía por el 403).
+- Sin backend, migración ni cambios en `eas.json`/`app.json`/`package.json`. Los fingerprints locales son iguales a los builds vigentes (Android `1ccf455d…`, iOS `07054827…`), así que va por OTA.
+- **Verificación:** tsc OK, script OK, dos revisiones sin hallazgos Critical/Important. NO probado en dispositivo.
+- **Seguimientos menores diferidos:**
+  - Texto «Sin conexión» en vez de «Sin aplicaciones» cuando no hay red ni caché.
+  - Tope de páginas en el bucle de paginación.
+  - Nombre de parcelas dadas de baja («Sin parcela»).
+  - Refrescar solo al estar en Realizadas.
+  - Límite de ~2 MB por valor de AsyncStorage con miles de registros.
 
 ## Abiertos
-- Frente B pendiente: aplicadas agrupadas en mobile, en rama aparte, OTA al final. Ver `docs/superpowers/specs/2026-11-05-orden-fuera-de-plan-y-aplicadas-mobile-design.md` y `docs/superpowers/plans/2026-11-05-orden-fuera-de-plan-y-aplicadas-mobile.md`.
-- Click-through en prod de órdenes y A revisar (requiere sesión de Fausto).
-- Plan vs aplicado, cuentas de operarios, testers, Ingresos vs dashboard, Alta de Producción (ver bitácora del 2026-10-31 y memoria del proyecto).
+- Publicar el OTA del frente B (merge a main, `eas update` con EXPO_PUBLIC_API_URL explícita) y probar «Realizadas» en el dispositivo
+- Regenerar Modelo de Datos.md (Fausto)
+- Plan vs aplicado (Mancozeb, Super folpan, Karathane) con el ingeniero: Fausto lo retoma
+- Alta de Producción: lo define Fausto el lunes
+- Cuentas de usuario: ya existen las de los 5 operarios de la capacitación, Rafael (encargado), Fausto (admin) y Camilo y Nicolás (ingenieros); revisar si falta alguien
+- Play Store: 12 verificadores aceptados; la prueba cerrada de 14 días cuenta desde el 2026-11-05, primer día posible para pedir producción: 2026-11-19
+- Ingresos vs dashboard: resuelto
