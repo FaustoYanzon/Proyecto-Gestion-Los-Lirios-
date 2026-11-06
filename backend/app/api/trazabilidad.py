@@ -165,26 +165,26 @@ def _cumplimiento_riego_por_estado(
     Compara VOLUMENES (litros aplicados vs esperados para la superficie de la
     parcela), no la suma de `mm_aplicados` por registro: ese mm es por hectarea
     de cada valvula y se infla con la cantidad de valvulas. Sin superficie no hay
-    forma de derivar mm/equivalentes/%, asi que se devuelven en 0 (los litros
+    forma de derivar mm/equivalentes/%, asi que se devuelven None (los litros
     siguen siendo reales)."""
     items: list[CumplimientoEstadoItem] = []
     for estado, v_desde, v_hasta in ciclo_campana.ventanas_en_rango(desde, hasta):
         litros = sum(r.litros_aplicados for r in riegos if v_desde <= r.fecha <= v_hasta)
         esperados = ciclo_campana.riegos_esperados(estado)
-        lamina = cumplimiento_riego.lamina_mm(litros, superficie_ha) or 0.0
-        equivalentes = round(cumplimiento_riego.riegos_equivalentes(litros, superficie_ha) or 0.0, 2)
-        pct = round(cumplimiento_riego.cumplimiento_pct(litros, esperados, superficie_ha) or 0.0, 1)
+        lamina = cumplimiento_riego.lamina_mm(litros, superficie_ha)
+        equivalentes = cumplimiento_riego.riegos_equivalentes(litros, superficie_ha)
+        pct = cumplimiento_riego.cumplimiento_pct(litros, esperados, superficie_ha)
         items.append(CumplimientoEstadoItem(
             estado_campana=estado,
             estado_campana_label=ciclo_campana.ESTADO_CAMPANA_LABELS[estado],
             fecha_inicio=v_desde,
             fecha_fin=v_hasta,
             riegos_esperados=esperados,
-            mm_aplicados=round(lamina, 1),
-            riegos_equivalentes=equivalentes,
-            cumplimiento_pct=pct,
+            mm_aplicados=None if lamina is None else round(lamina, 1),
+            riegos_equivalentes=None if equivalentes is None else round(equivalentes, 2),
+            cumplimiento_pct=None if pct is None else round(pct, 1),
             litros_aplicados=round(litros, 2),
-            cumplido=pct >= 100,
+            cumplido=None if pct is None else round(pct, 1) >= 100,
         ))
     return items
 
@@ -390,7 +390,7 @@ def _resumen_publico(data: HistorialData) -> ResumenPublicoItem:
     kg_total = sum(c.kg_total for c in data.cosechas)
     # Equivalent depth over the parcela (litres / ha), not the per-valve mm sum.
     litros_total = sum(r.litros_aplicados for r in data.riegos)
-    mm_riego_total = cumplimiento_riego.lamina_mm(litros_total, data.parcela.superficie_ha) or 0.0
+    mm_riego_total = cumplimiento_riego.lamina_mm(litros_total, data.parcela.superficie_ha)
     cumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "cumplido")
     pendientes = sum(1 for c in data.compliance_fitosanitarios if c.estado == "pendiente")
     incumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "incumplido")
@@ -401,11 +401,12 @@ def _resumen_publico(data: HistorialData) -> ResumenPublicoItem:
             round(kg_total / data.meta_produccion_kg * 100, 1)
             if data.meta_produccion_kg else None
         ),
-        mm_riego_total=round(mm_riego_total, 1),
+        mm_riego_total=None if mm_riego_total is None else round(mm_riego_total, 1),
+        litros_riego_total=round(litros_total),
         mm_objetivo_anual=MM_OBJETIVO_ANUAL,
         pct_objetivo_riego=(
             round(mm_riego_total / MM_OBJETIVO_ANUAL * 100, 1)
-            if MM_OBJETIVO_ANUAL and data.parcela.superficie_ha else None
+            if MM_OBJETIVO_ANUAL and mm_riego_total is not None else None
         ),
         horas_de_frio=data.horas_de_frio,
         fitos_cumplidos=cumplidos,

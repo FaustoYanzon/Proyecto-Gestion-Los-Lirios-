@@ -204,11 +204,17 @@ export default function TrazabilidadPublicaPage({
             }
           />
           <Card
-            valor={`${r.mm_riego_total} mm`}
+            valor={
+              r.mm_riego_total != null
+                ? `${r.mm_riego_total} mm`
+                : `${(r.litros_riego_total / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} m³`
+            }
             label={
               r.pct_objetivo_riego != null
                 ? `Riego — ${r.pct_objetivo_riego}% del objetivo anual`
-                : 'Riego aplicado'
+                : r.mm_riego_total != null
+                  ? 'Riego aplicado'
+                  : 'Riego aplicado (sin superficie cargada)'
             }
           />
           <Card

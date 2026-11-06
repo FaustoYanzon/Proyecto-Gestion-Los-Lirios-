@@ -183,6 +183,8 @@ export default function CumplimientoRiegoPage() {
             {vista === 'riegos'
               ? 'Riegos por parcela y mes: fecha de inicio, horas y mm aplicados'
               : 'Volumen aplicado (m³) vs. esperado por parcela y mes, según el calendario de campaña'}
+            {tipo !== 'ambos' &&
+              ` · Filtrando por ${tipo}: el % es el aporte de ese tipo sobre el volumen esperado total.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

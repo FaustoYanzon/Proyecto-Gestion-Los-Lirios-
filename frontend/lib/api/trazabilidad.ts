@@ -146,10 +146,12 @@ export interface CumplimientoEstadoItem {
   fecha_inicio: string
   fecha_fin: string
   riegos_esperados: number
-  mm_aplicados: number
-  riegos_equivalentes: number
-  cumplimiento_pct: number
-  cumplido: boolean
+  // null when the parcela has no surface (volume cannot be turned into mm / %)
+  mm_aplicados: number | null
+  riegos_equivalentes: number | null
+  cumplimiento_pct: number | null
+  cumplido: boolean | null
+  litros_aplicados: number
 }
 
 export interface ResumenDestinoItem {
@@ -282,7 +284,8 @@ export interface ResumenPublicoItem {
   kg_total: number
   meta_produccion_kg: number | null
   pct_meta_produccion: number | null
-  mm_riego_total: number
+  mm_riego_total: number | null
+  litros_riego_total: number
   mm_objetivo_anual: number
   pct_objetivo_riego: number | null
   horas_de_frio: number | null
