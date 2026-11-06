@@ -85,6 +85,9 @@ class CumplimientoEstadoItem(BaseModel):
     riegos_equivalentes: float
     cumplimiento_pct: float
     cumplido: bool
+    # Real volume applied in the window; mm/equivalentes/pct fall back to 0 when the
+    # parcela has no surface (they cannot be derived from volume).
+    litros_aplicados: float = 0.0
 
 
 class ResumenDestinoItem(BaseModel):

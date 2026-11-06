@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 
-from app.core import labels
+from app.core import cumplimiento_riego, labels
 from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCIAL
 from app.core.qr import generar_qr_data_uri
 
@@ -103,7 +103,8 @@ def generar_pdf_carta(
 
     kg_total = sum(c.kg_total for c in cosechas)
     litros_riego_total = sum(r.litros_aplicados for r in riegos)
-    mm_riego_total = sum(r.mm_aplicados or 0 for r in riegos)
+    # Equivalent depth over the parcela (litres / ha), not the per-valve mm sum.
+    mm_riego_total = cumplimiento_riego.lamina_mm(litros_riego_total, parcela.superficie_ha) or 0.0
     fitos_cumplidos = sum(1 for c in compliance if c.estado == "cumplido")
     fitos_pendientes = sum(1 for c in compliance if c.estado == "pendiente")
     fitos_incumplidos = sum(1 for c in compliance if c.estado == "incumplido")
@@ -146,7 +147,8 @@ def generar_pdf_carta(
             "mm_riego_total": round(mm_riego_total, 1),
             "mm_objetivo_anual": mm_objetivo_anual,
             "pct_objetivo_riego": (
-                round(mm_riego_total / mm_objetivo_anual * 100, 1) if mm_objetivo_anual else None
+                round(mm_riego_total / mm_objetivo_anual * 100, 1)
+                if mm_objetivo_anual and parcela.superficie_ha else None
             ),
             "horas_de_frio": horas_de_frio,
             "fitos_cumplidos": fitos_cumplidos,

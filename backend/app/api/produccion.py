@@ -18,7 +18,7 @@ from app.api.deps import (
     require_encargado_up,
     require_gerencial_up,
 )
-from app.core import ciclo_campana, fenologia
+from app.core import ciclo_campana, cumplimiento_riego, fenologia
 from app.api.remitos import remito_response_completo
 from app.models.alta_produccion import Comprador, IngresoPasero, Productor, RemitoLinea
 from app.services.alta_produccion import remitos_por_cosecha, saldo_cosecha, saldos_cosecha
@@ -291,18 +291,6 @@ async def dashboard_eficiencia_hidrica(
     )
     parcela_ids = [p.id for p in parcelas]
 
-    riego_rows = (await db.execute(
-        select(RegistroRiego.parcela_id, func.sum(RegistroRiego.mm_aplicados).label("mm_total"))
-        .where(
-            RegistroRiego.parcela_id.in_(parcela_ids),
-            RegistroRiego.fecha >= start,
-            RegistroRiego.fecha <= end,
-            RegistroRiego.mm_aplicados.is_not(None),
-        )
-        .group_by(RegistroRiego.parcela_id)
-    )).all()
-    mm_por_parcela: dict[str, float] = {row.parcela_id: float(row.mm_total) for row in riego_rows}
-
     # litros_aplicados depends on each record's valve count, which comes from
     # RegistroRiego.contar_valvulas (n_valvulas_manto when present, else the
     # `valvula` CSV) and its caudal factor; neither can be summed with func.sum
@@ -321,10 +309,8 @@ async def dashboard_eficiencia_hidrica(
     )).all()
     litros_por_parcela: dict[str, float] = defaultdict(float)
     for row in litros_rows:
-        litros_por_parcela[row.parcela_id] += (
-            row.duracion_horas * RegistroRiego.LITROS_POR_HORA_VALVULA
-            * RegistroRiego.factor_caudal(row.tipo, row.n_valvulas_manto)
-            * RegistroRiego.contar_valvulas(row.valvula, row.n_valvulas_manto)
+        litros_por_parcela[row.parcela_id] += cumplimiento_riego.litros_de_registro(
+            row.duracion_horas, row.tipo, row.valvula, row.n_valvulas_manto
         )
 
     ciclos = list(
@@ -343,8 +329,10 @@ async def dashboard_eficiencia_hidrica(
 
     items: list[EficienciaHidricaParcela] = []
     for p in parcelas:
-        mm = mm_por_parcela.get(p.id, 0.0)
         litros = round(litros_por_parcela.get(p.id, 0.0), 2)
+        # Equivalent depth over the whole parcela (per-record mm is per valve-ha and
+        # would be inflated by the valve count).
+        mm = cumplimiento_riego.lamina_mm(litros, p.superficie_ha) or 0.0
         if mm == 0.0 and litros == 0.0:
             continue
         rend = best_rend.get(p.id)
@@ -1032,7 +1020,7 @@ async def get_planilla_cumplimiento_riego(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> PlanillaCumplimientoRiegoResponse:
-    """Parcela x month grid of applied vs expected mm (calendar windows, standard riego).
+    """Parcela x month grid of applied vs expected VOLUME (calendar windows, standard riego).
 
     Expected and applied are both clipped to [desde, hasta]; the current month is
     prorated up to today and later months have no expected nor percentage.
@@ -1043,18 +1031,21 @@ async def get_planilla_cumplimiento_riego(
     hoy = _hoy_campo()
 
     riegos_stmt = select(
-        RegistroRiego.parcela_id, RegistroRiego.fecha, RegistroRiego.mm_aplicados
+        RegistroRiego.parcela_id, RegistroRiego.fecha, RegistroRiego.duracion_horas,
+        RegistroRiego.tipo, RegistroRiego.valvula, RegistroRiego.n_valvulas_manto,
     ).where(
         RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
         RegistroRiego.fecha >= desde,
         RegistroRiego.fecha <= hasta,
-        RegistroRiego.mm_aplicados.is_not(None),  # in-progress riegos have no mm yet
+        RegistroRiego.duracion_horas.is_not(None),  # in-progress riegos have no volume yet
     )
     if tipo != "ambos":
         riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
-    mm_por_parcela_mes: dict[tuple[str, str], float] = defaultdict(float)
-    for pid, fecha, mm in (await db.execute(riegos_stmt)).all():
-        mm_por_parcela_mes[(pid, fecha.strftime("%Y-%m"))] += mm
+    litros_por_parcela_mes: dict[tuple[str, str], float] = defaultdict(float)
+    for pid, fecha, horas, tipo_riego, valvula, n_manto in (await db.execute(riegos_stmt)).all():
+        litros_por_parcela_mes[(pid, fecha.strftime("%Y-%m"))] += (
+            cumplimiento_riego.litros_de_registro(horas, tipo_riego, valvula, n_manto)
+        )
 
     # Expected is the same for every parcela: compute it once per month.
     esperados: dict[str, float] = {}
@@ -1068,21 +1059,23 @@ async def get_planilla_cumplimiento_riego(
             max(inicio_mes, desde), min(fin_mes, hasta, hoy)
         )
 
-    estandar = ciclo_campana.MM_POR_RIEGO_ESTANDAR
     filas: list[PlanillaCumplimientoRiegoFila] = []
     for p in parcelas:
         celdas: dict[str, PlanillaCumplimientoRiegoCelda] = {}
         for mes in meses:
-            mm_aplicados = mm_por_parcela_mes.get((p.id, mes), 0.0)
+            litros = litros_por_parcela_mes.get((p.id, mes), 0.0)
             riegos_esp = esperados[mes]
-            mm_esp = riegos_esp * estandar
-            pct = round(mm_aplicados / mm_esp * 100, 1) if mm_esp > 0 else None
+            litros_esp = cumplimiento_riego.litros_esperados(riegos_esp, p.superficie_ha)
+            pct = cumplimiento_riego.cumplimiento_pct(litros, riegos_esp, p.superficie_ha)
+            lamina = cumplimiento_riego.lamina_mm(litros, p.superficie_ha)
+            equivalentes = cumplimiento_riego.riegos_equivalentes(litros, p.superficie_ha)
             celdas[mes] = PlanillaCumplimientoRiegoCelda(
-                mm_aplicados=_a_decimal_2(mm_aplicados),
-                mm_esperados=_a_decimal_2(mm_esp),
-                riegos_equivalentes=_a_decimal_2(mm_aplicados / estandar),
+                m3_aplicados=_a_decimal_2(litros / 1000),
+                m3_esperados=_a_decimal_2(None if litros_esp is None else litros_esp / 1000),
+                lamina_aplicada_mm=_a_decimal_2(lamina),
+                riegos_equivalentes=_a_decimal_2(equivalentes),
                 riegos_esperados=_a_decimal_2(riegos_esp),
-                cumplimiento_pct=None if pct is None else Decimal(str(pct)),
+                cumplimiento_pct=None if pct is None else Decimal(str(round(pct, 1))),
             )
         filas.append(
             PlanillaCumplimientoRiegoFila(parcela_id=p.id, parcela_nombre=p.nombre, celdas=celdas)
@@ -1818,28 +1811,39 @@ async def estado_campana_cumplimiento_riego(
         estado_info = estados_por_variedad.get(p.variedad) if p.variedad else None
         if estado_info is None:
             continue
-        mm_total = await db.scalar(
-            select(func.coalesce(func.sum(RegistroRiego.mm_aplicados), 0.0)).where(
+        # Volumes, not the sum of per-valve mm: see app/core/cumplimiento_riego.py.
+        riego_rows = (await db.execute(
+            select(
+                RegistroRiego.duracion_horas, RegistroRiego.tipo,
+                RegistroRiego.valvula, RegistroRiego.n_valvulas_manto,
+            ).where(
                 RegistroRiego.parcela_id == p.id,
                 RegistroRiego.fecha >= estado_info.fecha_inicio,
                 RegistroRiego.fecha <= hoy,
+                RegistroRiego.duracion_horas.is_not(None),  # riegos en curso no aportan aun
             )
+        )).all()
+        litros = sum(
+            cumplimiento_riego.litros_de_registro(r.duracion_horas, r.tipo, r.valvula, r.n_valvulas_manto)
+            for r in riego_rows
         )
-        mm_total = float(mm_total or 0.0)
-        riegos_equivalentes = round(mm_total / ciclo_campana.MM_POR_RIEGO_ESTANDAR, 2)
-        cumplimiento_pct = round(
-            riegos_equivalentes / estado_info.riegos_esperados * 100, 1
-        )
+        esperados = estado_info.riegos_esperados
+        lamina = cumplimiento_riego.lamina_mm(litros, p.superficie_ha)
+        equivalentes = cumplimiento_riego.riegos_equivalentes(litros, p.superficie_ha)
+        pct = cumplimiento_riego.cumplimiento_pct(litros, esperados, p.superficie_ha)
+        litros_esp = cumplimiento_riego.litros_esperados(esperados, p.superficie_ha)
         items.append(CumplimientoRiegoParcela(
             parcela_id=p.id,
             parcela_nombre=p.nombre,
             variedad=p.variedad,
             estado_campana=estado_info.estado_campana,
             estado_campana_label=estado_info.estado_campana_label,
-            riegos_esperados=estado_info.riegos_esperados,
-            mm_aplicados=round(mm_total, 2),
-            riegos_equivalentes=riegos_equivalentes,
-            cumplimiento_pct=cumplimiento_pct,
+            riegos_esperados=esperados,
+            mm_aplicados=None if lamina is None else round(lamina, 2),
+            riegos_equivalentes=None if equivalentes is None else round(equivalentes, 2),
+            cumplimiento_pct=None if pct is None else round(pct, 1),
+            litros_aplicados=round(litros, 2),
+            litros_esperados=None if litros_esp is None else round(litros_esp, 2),
         ))
     return items
 
