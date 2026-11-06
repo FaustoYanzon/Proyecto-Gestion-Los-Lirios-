@@ -1,7 +1,7 @@
 // Pestaña Fito: ya no se cargan aplicaciones libres desde el celular -- cada
 // aplicación nace de una orden armada en la web (Producción → Órdenes de
 // Aplicación) que el operario confirma acá. Abajo queda el historial reciente
-// de lo aplicado, de solo lectura (las correcciones se hacen en la web).
+// de lo aplicado en la campaña (agrupado por orden/parcela/válvula), de solo lectura (las correcciones se hacen en la web).
 import { useState, useEffect, useCallback } from 'react'
 import {
   View,
@@ -13,54 +13,20 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
-import api from '../lib/api'
+import api, { getRegistrosCampania, getOrdenesCampania } from '../lib/api'
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import { OfflineQueueBanner } from '../components/OfflineQueueBanner'
 import OrdenesPendientes from '../components/OrdenesPendientes'
+import AplicacionesAgrupadas from '../components/AplicacionesAgrupadas'
+import EmptyState from '../components/ui/EmptyState'
+import { useAuthStore } from '../store/authStore'
+import { hoyLocalISO } from '../lib/fitosanitariosAgrupar'
 import { colors } from '../lib/theme'
-import type { Parcela, RegistroFitosanitario } from '../lib/types'
+import type { OrdenAplicacion, Parcela, RegistroFitosanitario } from '../lib/types'
 
-function formatDateDisplay(iso: string) {
-  const [y, mo, d] = iso.split('-')
-  return `${d}/${mo}/${y}`
-}
-
-// ─── Recent registros ─────────────────────────────────────────────────────────
-
-function RecentList({
-  registros, parcelas,
-}: {
-  registros: RegistroFitosanitario[]
-  parcelas: Parcela[]
-}) {
-  if (registros.length === 0) {
-    return (
-      <View style={styles.emptyState}>
-        <ICONS.fitosanitario size={36} color={colors.hueso} strokeWidth={ICON_STROKE} />
-        <Text style={styles.emptyStateTitle}>Sin aplicaciones recientes</Text>
-      </View>
-    )
-  }
-
-  return (
-    <View>
-      <Text style={styles.sectionLabel}>APLICACIONES RECIENTES</Text>
-      {registros.map((r) => {
-        const parcela = parcelas.find((p) => p.id === r.parcela_id)
-        return (
-          <View key={r.id} style={styles.registroCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.registroNombre}>{r.producto_nombre}</Text>
-              <Text style={styles.registroSub}>
-                {parcela?.nombre ?? 'Sin parcela'} · {formatDateDisplay(r.fecha)}
-              </Text>
-              <Text style={styles.registroDetalle}>{r.motivo} · {r.dosis_por_ha} {r.unidad ?? ''}/ha</Text>
-            </View>
-          </View>
-        )
-      })}
-    </View>
-  )
+// Campaign runs May -> April, so Jan-Apr still belong to the previous year's.
+function temporadaActual(now: Date = new Date()): number {
+  return now.getMonth() + 1 >= 5 ? now.getFullYear() : now.getFullYear() - 1
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -68,6 +34,11 @@ function RecentList({
 export default function FitoScreen() {
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [registros, setRegistros] = useState<RegistroFitosanitario[]>([])
+  const [ordenes, setOrdenes] = useState<OrdenAplicacion[]>([])
+  const [sinPermiso, setSinPermiso] = useState(false)
+  const role = useAuthStore((s) => s.user?.role)
+  // Same roles as the Deshacer check: below encargado the backend refuses the list.
+  const esEncargado = role === 'super_admin' || role === 'gerencial' || role === 'encargado'
   const [loadingRegistros, setLoadingRegistros] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -85,15 +56,29 @@ export default function FitoScreen() {
   }, [])
 
   const loadRegistros = useCallback(async () => {
-    const cached = await getCache<RegistroFitosanitario[]>('fitosanitarios', CACHE_TTL.fitosanitarios)
-    if (cached) { setRegistros(cached); setLoadingRegistros(false) }
+    if (!esEncargado) { setLoadingRegistros(false); setRefreshing(false); return }
+    const temporada = temporadaActual()
+    const cacheKey = `fitosanitarios:${temporada}`
+    const cacheKeyOrdenes = `ordenes-campania:${temporada}`
+    const [cachedReg, cachedOrd] = await Promise.all([
+      getCache<RegistroFitosanitario[]>(cacheKey, CACHE_TTL.fitosanitarios),
+      getCache<OrdenAplicacion[]>(cacheKeyOrdenes, CACHE_TTL.fitosanitarios),
+    ])
+    if (cachedReg && cachedOrd) { setRegistros(cachedReg); setOrdenes(cachedOrd); setLoadingRegistros(false) }
     try {
-      const { data } = await api.get<RegistroFitosanitario[]>('/produccion/fitosanitarios/?limit=10')
-      setRegistros(data)
-      await setCache('fitosanitarios', data)
-    } catch { /* offline */ }
-    finally { setLoadingRegistros(false); setRefreshing(false) }
-  }, [])
+      const [regs, ords] = await Promise.all([
+        getRegistrosCampania(temporada),
+        getOrdenesCampania(temporada),
+      ])
+      setRegistros(regs)
+      setOrdenes(ords)
+      setSinPermiso(false)
+      await Promise.all([setCache(cacheKey, regs), setCache(cacheKeyOrdenes, ords)])
+    } catch (e) {
+      // A network error keeps whatever is on screen (stale cache); only a 403 is shown.
+      if ((e as { response?: { status?: number } })?.response?.status === 403) setSinPermiso(true)
+    } finally { setLoadingRegistros(false); setRefreshing(false) }
+  }, [esEncargado])
 
   useEffect(() => {
     loadParcelas(); loadRegistros()
@@ -142,10 +127,17 @@ export default function FitoScreen() {
             key={refreshKey}
             onConfirmado={() => { loadRegistros(); setToast('Aplicación confirmada ✓') }}
           />
+        ) : !esEncargado || sinPermiso ? (
+          <EmptyState icon="candado" title="Esta vista es para encargados." />
         ) : loadingRegistros ? (
           <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />
         ) : (
-          <RecentList registros={registros} parcelas={parcelas} />
+          <AplicacionesAgrupadas
+            registros={registros}
+            ordenes={ordenes}
+            parcelas={parcelas}
+            hoy={hoyLocalISO()}
+          />
         )}
       </ScrollView>
     </View>
@@ -154,10 +146,6 @@ export default function FitoScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.hueso },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: colors.niebla,
-    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10,
-  },
 
   // segmented tabs
   segment: {
@@ -168,19 +156,6 @@ const styles = StyleSheet.create({
   segmentBtnActive: { backgroundColor: colors.tierra },
   segmentText: { fontSize: 14, fontWeight: '700', color: colors.ink60 },
   segmentTextActive: { color: colors.blanco },
-
-  // recent
-  registroCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.blanco, borderRadius: 14, padding: 14, marginBottom: 8,
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
-  },
-  registroNombre: { fontSize: 15, fontWeight: '700', color: colors.ink },
-  registroSub: { fontSize: 12, color: colors.ink60, marginTop: 2 },
-  registroDetalle: { fontSize: 12, color: colors.tierra, fontWeight: '600', marginTop: 5 },
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyStateTitle: { fontSize: 15, fontWeight: '600', color: colors.ink60, marginTop: 12 },
 
   // toast
   toast: {
