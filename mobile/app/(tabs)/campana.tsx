@@ -8,6 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { useRouter } from 'expo-router'
@@ -165,6 +168,8 @@ function StepConfirmar({
   onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  // Local state: this step unmounts on back/cancel/success, so it resets on every open
+  const [observaciones, setObservaciones] = useState('')
   const submittingRef = useRef(false)
   const color = ESTADO_CAMPANA_COLORES[estado]
   const today = isoToday()
@@ -179,6 +184,7 @@ function StepConfirmar({
         anio: anioCampanaActual(),
         estado_campana: estado,
         fecha_confirmacion: today,
+        observaciones: observaciones.trim() || null,
       })
       onSuccess()
     } catch (e: unknown) {
@@ -191,9 +197,16 @@ function StepConfirmar({
   }
 
   return (
-    <View style={styles.stepContainer}>
+    <KeyboardAvoidingView
+      style={styles.stepContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StepIndicator current={1} onCancel={onCancelar} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.stepTitle}>Confirmar</Text>
 
         <View style={styles.summaryCard}>
@@ -213,6 +226,19 @@ function StepConfirmar({
             </View>
           </View>
         </View>
+
+        <Text style={styles.fieldLabel}>OBSERVACIONES — OPCIONAL</Text>
+        <TextInput
+          style={styles.obsInput}
+          value={observaciones}
+          onChangeText={setObservaciones}
+          placeholder="Notas adicionales..."
+          placeholderTextColor={colors.niebla}
+          multiline
+          numberOfLines={3}
+          maxLength={1000}
+          textAlignVertical="top"
+        />
 
         <Text style={styles.warningText}>
           Se va a aplicar a TODAS las parcelas de {variedadLabel}.
@@ -238,7 +264,7 @@ function StepConfirmar({
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -439,6 +465,15 @@ const styles = StyleSheet.create({
   estadoBadgeLg: {
     flexDirection: 'row', alignItems: 'center', gap: 7,
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1,
+  },
+  fieldLabel: {
+    fontSize: 11, fontWeight: '700', color: colors.ink60, letterSpacing: 0.5,
+    marginTop: 16, marginBottom: 6,
+  },
+  obsInput: {
+    minHeight: 84, backgroundColor: colors.blanco, borderRadius: 12,
+    borderWidth: 1.5, borderColor: colors.hueso, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: colors.ink,
   },
   estadoLabelLg: { fontSize: 13, fontWeight: '700' },
 

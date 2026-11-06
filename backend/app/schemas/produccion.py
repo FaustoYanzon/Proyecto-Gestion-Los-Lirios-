@@ -680,7 +680,7 @@ class EstadoVariedadCampanaCreate(BaseModel):
     anio: int
     estado_campana: EstadoCampana
     fecha_confirmacion: date
-    observaciones: str | None = None
+    observaciones: str | None = Field(None, max_length=1000)
 
 
 class EstadoVariedadCampanaResponse(EstadoVariedadCampanaCreate):
@@ -734,6 +734,25 @@ class PlanillaRiegoFila(BaseModel):
 class PlanillaRiegoResponse(BaseModel):
     meses: list[str]
     filas: list[PlanillaRiegoFila]
+
+
+class PlanillaCumplimientoRiegoCelda(BaseModel):
+    mm_aplicados: Decimal
+    mm_esperados: Decimal
+    riegos_equivalentes: Decimal
+    riegos_esperados: Decimal
+    cumplimiento_pct: Decimal | None
+
+
+class PlanillaCumplimientoRiegoFila(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    celdas: dict[str, PlanillaCumplimientoRiegoCelda]
+
+
+class PlanillaCumplimientoRiegoResponse(BaseModel):
+    meses: list[str]
+    filas: list[PlanillaCumplimientoRiegoFila]
 
 
 # ── Dashboard schemas ─────────────────────────────────────────────────────────

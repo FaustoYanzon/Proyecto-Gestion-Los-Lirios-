@@ -79,6 +79,9 @@ from app.schemas.produccion import (
     EstadoVariedadCampanaResponse,
     FaseCalendarioResponse,
     FaseVariedadResponse,
+    PlanillaCumplimientoRiegoCelda,
+    PlanillaCumplimientoRiegoFila,
+    PlanillaCumplimientoRiegoResponse,
     PlanillaRiegoCelda,
     PlanillaRiegoFila,
     PlanillaRiegoResponse,
@@ -910,20 +913,16 @@ def _a_decimal_2(valor: float | None) -> Decimal | None:
     return None if valor is None else Decimal(str(valor)).quantize(_DOS_DECIMALES)
 
 
-@router.get("/riego/planilla", response_model=PlanillaRiegoResponse)
-async def get_planilla_riego(
-    desde: date | None = Query(None),
-    hasta: date | None = Query(None),
-    tipo: Literal["goteo", "manto", "ambos"] = Query("ambos"),
-    parcela_id: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
-) -> PlanillaRiegoResponse:
-    """Parcela x month grid (paper sheet): each riego lands in the month of its `fecha`."""
-    # Missing bounds default to the campaña (May 1 -> Apr 30, not the calendar year)
-    # of the other bound, or of today when both are missing.
+def _hoy_campo() -> date:
+    """Today in the farm's timezone; module-level so tests can pin it."""
+    return datetime.now(_TZ_CAMPO).date()
+
+
+def _resolver_rango_planilla(desde: date | None, hasta: date | None) -> tuple[date, date]:
+    """Missing bounds default to the campaña (May 1 -> Apr 30, not the calendar year)
+    of the other bound, or of today when both are missing."""
     if desde is None and hasta is None:
-        anio = _campana_actual(datetime.now(_TZ_CAMPO).date())
+        anio = _campana_actual(_hoy_campo())
         desde, hasta = date(anio, 5, 1), date(anio + 1, 4, 30)
     elif hasta is None:
         hasta = date(_campana_actual(desde) + 1, 4, 30)
@@ -934,21 +933,60 @@ async def get_planilla_riego(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="'desde' must not be after 'hasta'.",
         )
+    return desde, hasta
 
+
+def _meses_del_rango(desde: date, hasta: date) -> list[str]:
     meses: list[str] = []
     y, m = desde.year, desde.month
     while (y, m) <= (hasta.year, hasta.month):
         meses.append(f"{y:04d}-{m:02d}")
         y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return meses
 
-    parcelas_stmt = select(Parcela).where(
+
+async def _parcelas_planilla(db: AsyncSession, parcela_id: str | None) -> list[Parcela]:
+    """Active parral/potrero parcelas in natural order ('Parral 2' before 'Parral 10')."""
+    stmt = select(Parcela).where(
         Parcela.is_active.is_(True), Parcela.tipo.in_(_PARCELAS_CON_MANTO)
     )
     if parcela_id is not None:
-        parcelas_stmt = parcelas_stmt.where(Parcela.id == parcela_id)
-    parcelas = sorted(
-        (await db.execute(parcelas_stmt)).scalars().all(), key=lambda p: _natural_key(p.nombre)
+        stmt = stmt.where(Parcela.id == parcela_id)
+    return sorted((await db.execute(stmt)).scalars().all(), key=lambda p: _natural_key(p.nombre))
+
+
+def _riegos_esperados_en(inicio: date, fin: date) -> float:
+    """Standard riegos expected in [inicio, fin]: each calendar window contributes its
+    riegos_esperados prorated by the share of its FULL length that overlaps the range."""
+    if fin < inicio:
+        return 0.0
+    # Wide range so no window is clipped to the query and its full length is known.
+    ventanas = ciclo_campana.ventanas_en_rango(
+        inicio - timedelta(days=366), fin + timedelta(days=366)
     )
+    total = 0.0
+    for estado, v_inicio, v_fin in ventanas:
+        solape = (min(v_fin, fin) - max(v_inicio, inicio)).days + 1
+        if solape > 0:
+            total += (
+                ciclo_campana.RIEGOS_ESPERADOS[estado] * solape / ((v_fin - v_inicio).days + 1)
+            )
+    return total
+
+
+@router.get("/riego/planilla", response_model=PlanillaRiegoResponse)
+async def get_planilla_riego(
+    desde: date | None = Query(None),
+    hasta: date | None = Query(None),
+    tipo: Literal["goteo", "manto", "ambos"] = Query("ambos"),
+    parcela_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> PlanillaRiegoResponse:
+    """Parcela x month grid (paper sheet): each riego lands in the month of its `fecha`."""
+    desde, hasta = _resolver_rango_planilla(desde, hasta)
+    meses = _meses_del_rango(desde, hasta)
+    parcelas = await _parcelas_planilla(db, parcela_id)
 
     # `fecha` (indexed) is the date every other riego view uses; bounds are inclusive.
     riegos_stmt = select(RegistroRiego).where(
@@ -983,6 +1021,73 @@ async def get_planilla_riego(
             for p in parcelas
         ],
     )
+
+
+@router.get("/riego/planilla/cumplimiento", response_model=PlanillaCumplimientoRiegoResponse)
+async def get_planilla_cumplimiento_riego(
+    desde: date | None = Query(None),
+    hasta: date | None = Query(None),
+    tipo: Literal["goteo", "manto", "ambos"] = Query("ambos"),
+    parcela_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> PlanillaCumplimientoRiegoResponse:
+    """Parcela x month grid of applied vs expected mm (calendar windows, standard riego).
+
+    Expected and applied are both clipped to [desde, hasta]; the current month is
+    prorated up to today and later months have no expected nor percentage.
+    """
+    desde, hasta = _resolver_rango_planilla(desde, hasta)
+    meses = _meses_del_rango(desde, hasta)
+    parcelas = await _parcelas_planilla(db, parcela_id)
+    hoy = _hoy_campo()
+
+    riegos_stmt = select(
+        RegistroRiego.parcela_id, RegistroRiego.fecha, RegistroRiego.mm_aplicados
+    ).where(
+        RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
+        RegistroRiego.fecha >= desde,
+        RegistroRiego.fecha <= hasta,
+        RegistroRiego.mm_aplicados.is_not(None),  # in-progress riegos have no mm yet
+    )
+    if tipo != "ambos":
+        riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
+    mm_por_parcela_mes: dict[tuple[str, str], float] = defaultdict(float)
+    for pid, fecha, mm in (await db.execute(riegos_stmt)).all():
+        mm_por_parcela_mes[(pid, fecha.strftime("%Y-%m"))] += mm
+
+    # Expected is the same for every parcela: compute it once per month.
+    esperados: dict[str, float] = {}
+    for mes in meses:
+        anio, num = int(mes[:4]), int(mes[5:])
+        inicio_mes = date(anio, num, 1)
+        fin_mes = (
+            date(anio + 1, 1, 1) if num == 12 else date(anio, num + 1, 1)
+        ) - timedelta(days=1)
+        esperados[mes] = _riegos_esperados_en(
+            max(inicio_mes, desde), min(fin_mes, hasta, hoy)
+        )
+
+    estandar = ciclo_campana.MM_POR_RIEGO_ESTANDAR
+    filas: list[PlanillaCumplimientoRiegoFila] = []
+    for p in parcelas:
+        celdas: dict[str, PlanillaCumplimientoRiegoCelda] = {}
+        for mes in meses:
+            mm_aplicados = mm_por_parcela_mes.get((p.id, mes), 0.0)
+            riegos_esp = esperados[mes]
+            mm_esp = riegos_esp * estandar
+            pct = round(mm_aplicados / mm_esp * 100, 1) if mm_esp > 0 else None
+            celdas[mes] = PlanillaCumplimientoRiegoCelda(
+                mm_aplicados=_a_decimal_2(mm_aplicados),
+                mm_esperados=_a_decimal_2(mm_esp),
+                riegos_equivalentes=_a_decimal_2(mm_aplicados / estandar),
+                riegos_esperados=_a_decimal_2(riegos_esp),
+                cumplimiento_pct=None if pct is None else Decimal(str(pct)),
+            )
+        filas.append(
+            PlanillaCumplimientoRiegoFila(parcela_id=p.id, parcela_nombre=p.nombre, celdas=celdas)
+        )
+    return PlanillaCumplimientoRiegoResponse(meses=meses, filas=filas)
 
 
 @router.post("/riego/iniciar", response_model=RegistroRiegoEnCursoResponse, status_code=status.HTTP_201_CREATED)
