@@ -717,6 +717,25 @@ class CumplimientoRiegoParcela(BaseModel):
     cumplimiento_pct: float
 
 
+class PlanillaRiegoCelda(BaseModel):
+    fecha_inicio: date
+    horas: Decimal | None
+    mm: Decimal | None
+    tipo: TipoRiego
+    en_curso: bool
+
+
+class PlanillaRiegoFila(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    celdas: dict[str, list[PlanillaRiegoCelda]]
+
+
+class PlanillaRiegoResponse(BaseModel):
+    meses: list[str]
+    filas: list[PlanillaRiegoFila]
+
+
 # ── Dashboard schemas ─────────────────────────────────────────────────────────
 
 class RendimientoAnio(BaseModel):

@@ -1,7 +1,9 @@
 import logging
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -77,6 +79,9 @@ from app.schemas.produccion import (
     EstadoVariedadCampanaResponse,
     FaseCalendarioResponse,
     FaseVariedadResponse,
+    PlanillaRiegoCelda,
+    PlanillaRiegoFila,
+    PlanillaRiegoResponse,
     RegistroCargaMasiva,
     RegistroCosechaCreate,
     RegistroCosechaResponse,
@@ -886,6 +891,101 @@ async def list_riego_en_curso(
 ) -> list[RegistroRiego]:
     stmt = select(RegistroRiego).where(RegistroRiego.fin.is_(None)).order_by(RegistroRiego.inicio.desc())
     return list((await db.execute(stmt)).scalars().all())
+
+
+_TZ_CAMPO = ZoneInfo("America/Argentina/San_Juan")
+_DOS_DECIMALES = Decimal("0.01")
+
+
+def _natural_key(nombre: str) -> list[tuple[int, int, str]]:
+    """Sort key so 'Parral 2' < 'Parral 10' (numeric chunks compare as numbers)."""
+    return [
+        (0, int(chunk), "") if chunk.isdigit() else (1, 0, chunk.lower())
+        for chunk in re.findall(r"\d+|\D+", nombre)
+    ]
+
+
+def _a_decimal_2(valor: float | None) -> Decimal | None:
+    # Via str() so float noise (51.2000000001) never leaks into the Decimal.
+    return None if valor is None else Decimal(str(valor)).quantize(_DOS_DECIMALES)
+
+
+@router.get("/riego/planilla", response_model=PlanillaRiegoResponse)
+async def get_planilla_riego(
+    desde: date | None = Query(None),
+    hasta: date | None = Query(None),
+    tipo: Literal["goteo", "manto", "ambos"] = Query("ambos"),
+    parcela_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_up),
+) -> PlanillaRiegoResponse:
+    """Parcela x month grid (paper sheet): each riego lands in the month of its local start date."""
+    if desde is None or hasta is None:
+        # Default window = current campaña (May 1 -> Apr 30), not the calendar year.
+        anio = _campana_actual(datetime.now(_TZ_CAMPO).date())
+        desde = desde or date(anio, 5, 1)
+        hasta = hasta or date(anio + 1, 4, 30)
+    if desde > hasta:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'desde' must not be after 'hasta'.",
+        )
+
+    meses: list[str] = []
+    y, m = desde.year, desde.month
+    while (y, m) <= (hasta.year, hasta.month):
+        meses.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+
+    parcelas_stmt = select(Parcela).where(
+        Parcela.is_active.is_(True), Parcela.tipo.in_(_PARCELAS_CON_MANTO)
+    )
+    if parcela_id is not None:
+        parcelas_stmt = parcelas_stmt.where(Parcela.id == parcela_id)
+    parcelas = sorted(
+        (await db.execute(parcelas_stmt)).scalars().all(), key=lambda p: _natural_key(p.nombre)
+    )
+
+    # Local-date filtering happens in Python; the SQL window is padded by a day each
+    # side so the UTC-vs-local offset never drops a boundary riego.
+    inicio_min = datetime.combine(desde - timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+    inicio_max = datetime.combine(hasta + timedelta(days=2), datetime.min.time(), tzinfo=timezone.utc)
+    riegos_stmt = select(RegistroRiego).where(
+        RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
+        RegistroRiego.inicio >= inicio_min,
+        RegistroRiego.inicio < inicio_max,
+    ).order_by(RegistroRiego.inicio)
+    if tipo != "ambos":
+        riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
+
+    celdas_por_parcela: dict[str, dict[str, list[PlanillaRiegoCelda]]] = defaultdict(dict)
+    for riego in (await db.execute(riegos_stmt)).scalars().all():
+        inicio = riego.inicio if riego.inicio.tzinfo else riego.inicio.replace(tzinfo=timezone.utc)
+        local = inicio.astimezone(_TZ_CAMPO).date()
+        if not desde <= local <= hasta:
+            continue
+        en_curso = riego.fin is None
+        celdas_por_parcela[riego.parcela_id].setdefault(local.strftime("%Y-%m"), []).append(
+            PlanillaRiegoCelda(
+                fecha_inicio=local,
+                horas=None if en_curso else _a_decimal_2(riego.duracion_horas),
+                mm=None if en_curso else _a_decimal_2(riego.mm_aplicados),
+                tipo=riego.tipo,
+                en_curso=en_curso,
+            )
+        )
+
+    return PlanillaRiegoResponse(
+        meses=meses,
+        filas=[
+            PlanillaRiegoFila(
+                parcela_id=p.id,
+                parcela_nombre=p.nombre,
+                celdas=celdas_por_parcela.get(p.id, {}),
+            )
+            for p in parcelas
+        ],
+    )
 
 
 @router.post("/riego/iniciar", response_model=RegistroRiegoEnCursoResponse, status_code=status.HTTP_201_CREATED)

@@ -243,3 +243,37 @@ export async function terminarRiego(id: string, fin?: string): Promise<RiegoResp
   const { data: res } = await api.post(`/produccion/riego/${id}/terminar`, fin ? { fin } : {})
   return withFactor(res)
 }
+
+// Planilla de cumplimiento de riego: parcelas (filas) x meses (columnas). Cada
+// riego cae en el mes de su inicio (hora de Argentina). Los Decimal llegan como
+// string (o null si el riego sigue en curso): pasar por Number() antes de formatear.
+export type PlanillaTipo = TipoRiego | 'ambos'
+
+export interface PlanillaRiegoCelda {
+  fecha_inicio: string
+  horas: string | null
+  mm: string | null
+  tipo: TipoRiego
+  en_curso: boolean
+}
+
+export interface PlanillaRiegoFila {
+  parcela_id: string
+  parcela_nombre: string
+  celdas: Record<string, PlanillaRiegoCelda[]>
+}
+
+export interface PlanillaRiegoResponse {
+  meses: string[]
+  filas: PlanillaRiegoFila[]
+}
+
+export async function getPlanillaRiego(params: {
+  desde?: string
+  hasta?: string
+  tipo?: PlanillaTipo
+  parcela_id?: string
+}): Promise<PlanillaRiegoResponse> {
+  const { data } = await api.get('/produccion/riego/planilla', { params })
+  return data
+}
