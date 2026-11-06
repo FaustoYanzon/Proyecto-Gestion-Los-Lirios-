@@ -114,3 +114,49 @@ async def test_stale_override_falls_back_to_automatic(client, create_user, creat
     fen = _por_variedad((await client.get("/produccion/fenologia/estado-actual", headers=headers)).json())
     assert fen["syrah"]["estado_fenologico"] == auto.value
     assert fen["syrah"]["fuente"] == "automatico"
+
+
+async def test_reset_overrides_clears_store_b_and_keeps_ciclo_campana(
+    client, create_user, create_parcela, db_session
+):
+    from sqlalchemy import select
+
+    from app.models.produccion import CicloCampana
+
+    headers = await _auth(client, create_user)
+    parcela = await create_parcela(nombre="P1", variedad=VariedadUva.syrah)
+    hoy = date.today()
+    auto = ciclo_campana.calcular_estado_actual(hoy)
+    anio = _campana_actual(hoy)
+
+    await client.post(
+        "/produccion/estado-campana/",
+        json={
+            "variedad": "syrah", "anio": anio,
+            "estado_campana": _otro_estado(auto).value,
+            "fecha_confirmacion": hoy.isoformat(),
+        },
+        headers=headers,
+    )
+    for extra in ({"rendimiento_kg_ha": 1234}, {}):
+        r = await client.post(
+            "/produccion/campana/",
+            json={
+                "parcela_id": parcela.id, "anio": anio,
+                "estado_fenologico": auto.value, "fecha_estado": hoy.isoformat(),
+                **extra,
+            },
+            headers=headers,
+        )
+        assert r.status_code == 201
+
+    resp = await client.delete("/produccion/fenologia/overrides", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["eliminados"] == 1
+
+    fen = _por_variedad((await client.get("/produccion/fenologia/estado-actual", headers=headers)).json())
+    assert fen["syrah"]["fuente"] == "automatico"
+    assert fen["syrah"]["estado_fenologico"] == auto.value
+
+    ciclos = (await db_session.execute(select(CicloCampana))).scalars().all()
+    assert len(ciclos) == 2

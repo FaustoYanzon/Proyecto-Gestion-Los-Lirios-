@@ -1426,20 +1426,16 @@ async def fenologia_calendario(
 @router.delete("/fenologia/overrides")
 async def limpiar_overrides_fenologicos(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_encargado_up),
+    _: User = Depends(require_gerencial_up),
 ) -> dict[str, int]:
-    """Elimina las confirmaciones manuales de CicloCampana usadas como
-    override de fenología (fase de pruebas: estados cargados a mano en
-    parrales al azar para validar el motor automático).
-
-    Solo borra registros SIN `rendimiento_kg_ha` — ese campo es el historial
-    real de cosecha (usado por RendimientoHistoricoParcela y el dashboard de
-    rendimiento) y nunca se toca acá. Después de esto, `estado-actual` vuelve
-    a depender 100% del calendario automático hasta que se cargue una nueva
-    confirmación manual real.
+    """Elimina los overrides manuales por variedad (EstadoVariedadCampana) de
+    la campaña actual, para que `estado-actual` vuelva al calendario
+    automático. CicloCampana (rendimiento/historial por parcela) no se toca.
     """
     result = await db.execute(
-        select(CicloCampana).where(CicloCampana.rendimiento_kg_ha.is_(None))
+        select(EstadoVariedadCampana).where(
+            EstadoVariedadCampana.anio == _campana_actual()
+        )
     )
     registros = list(result.scalars().all())
     for r in registros:

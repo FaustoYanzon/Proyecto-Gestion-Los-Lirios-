@@ -118,7 +118,9 @@ function UpdateModal({
     setError('')
     try {
       const anio = new Date().getMonth() >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
-      const fecha_confirmacion = new Date().toISOString().split('T')[0]
+      const hoy = new Date()
+      // Local date parts (not toISOString/UTC) to stay consistent with anio.
+      const fecha_confirmacion = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
       // One override for the whole variedad (shared with mobile, map and
       // notifications); CicloCampana is only for rendimiento/historial.
       await postEstadoVariedadCampana({
