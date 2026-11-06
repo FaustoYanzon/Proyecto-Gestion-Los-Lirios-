@@ -278,13 +278,15 @@ export async function getPlanillaRiego(params: {
   return data
 }
 
-// Cumplimiento por parcela y mes: mm aplicados vs esperados (calendario de
-// campaña, riego estándar de 38,4 mm). Decimal -> string; cumplimiento_pct es
-// null cuando el mes todavía no tiene riegos esperados (meses futuros).
+// Cumplimiento por parcela y mes, por VOLUMEN: m3 aplicados vs esperados
+// (calendario de campaña, riego estándar de 38,4 mm sobre la superficie).
+// Decimal -> string. Sin superficie: m3_esperados, lámina, equivalentes y pct
+// son null. cumplimiento_pct también es null en meses sin riegos esperados.
 export interface PlanillaCumplimientoCelda {
-  mm_aplicados: string
-  mm_esperados: string
-  riegos_equivalentes: string
+  m3_aplicados: string
+  m3_esperados: string | null
+  lamina_aplicada_mm: string | null
+  riegos_equivalentes: string | null
   riegos_esperados: string
   cumplimiento_pct: string | null
 }
