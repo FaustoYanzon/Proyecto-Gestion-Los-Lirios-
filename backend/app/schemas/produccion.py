@@ -736,6 +736,25 @@ class PlanillaRiegoResponse(BaseModel):
     filas: list[PlanillaRiegoFila]
 
 
+class PlanillaCumplimientoRiegoCelda(BaseModel):
+    mm_aplicados: Decimal
+    mm_esperados: Decimal
+    riegos_equivalentes: Decimal
+    riegos_esperados: Decimal
+    cumplimiento_pct: Decimal | None
+
+
+class PlanillaCumplimientoRiegoFila(BaseModel):
+    parcela_id: str
+    parcela_nombre: str
+    celdas: dict[str, PlanillaCumplimientoRiegoCelda]
+
+
+class PlanillaCumplimientoRiegoResponse(BaseModel):
+    meses: list[str]
+    filas: list[PlanillaCumplimientoRiegoFila]
+
+
 # ── Dashboard schemas ─────────────────────────────────────────────────────────
 
 class RendimientoAnio(BaseModel):
