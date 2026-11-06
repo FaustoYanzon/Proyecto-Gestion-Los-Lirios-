@@ -9,6 +9,7 @@ import {
   type FaseVariedadItem,
 } from '@/lib/api/produccion'
 import { useContextStore } from '@/store/contextStore'
+import { useAuthStore } from '@/store/authStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,9 @@ export default function CampanaPage() {
   const campanaGlobal = useContextStore((s) => s.campana)
   const [editing, setEditing] = useState<FaseVariedadItem | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const currentUser = useAuthStore((s) => s.user)
+  const isGerencialUp = currentUser?.role === 'super_admin' || currentUser?.role === 'gerencial'
   const qc = useQueryClient()
 
   const { data: fases = [], isLoading } = useQuery({
@@ -276,14 +280,17 @@ export default function CampanaPage() {
 
   async function handleReset() {
     if (!confirm(
-      'Esto borra las confirmaciones manuales de fenología cargadas para probar el sistema ' +
-      '(no toca el historial real de cosecha) y deja el estado de cada variedad 100% gobernado ' +
-      'por el calendario automático. ¿Continuar?'
+      'Borra los estados confirmados a mano de la campaña actual (todas las variedades) ' +
+      'y vuelve al calendario automático.'
     )) return
     setResetting(true)
+    setResetError('')
     try {
       await limpiarOverridesFenologia()
       onSaved()
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setResetError(typeof detail === 'string' ? detail : 'No se pudo resetear a automático.')
     } finally {
       setResetting(false)
     }
@@ -307,7 +314,7 @@ export default function CampanaPage() {
             Estado fenológico por variedad · Campaña {campanaGlobal}
           </p>
         </div>
-        {hasManual && (
+        {isGerencialUp && hasManual && (
           <button
             onClick={handleReset}
             disabled={resetting}
@@ -318,6 +325,8 @@ export default function CampanaPage() {
           </button>
         )}
       </div>
+
+      {resetError && <p className="text-sm text-red-600">{resetError}</p>}
 
       {/* Summary */}
       <div className="flex flex-wrap gap-2">
@@ -401,12 +410,14 @@ export default function CampanaPage() {
                     ))}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => setEditing(item)}
-                      className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"
-                    >
-                      Actualizar
-                    </button>
+                    {isGerencialUp && (
+                      <button
+                        onClick={() => setEditing(item)}
+                        className="text-xs text-[#7a1f2c] hover:text-[#5a1320] font-semibold hover:underline transition-colors"
+                      >
+                        Actualizar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
