@@ -3,7 +3,7 @@ Run with: pytest
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.models.parcela import TipoParcela, TipoRiego
 from app.models.produccion import RegistroRiego
@@ -25,12 +25,13 @@ async def _riego(
     inicio: datetime,
     horas: float | None,
     tipo: TipoRiego = TipoRiego.manto,
+    fecha: date | None = None,
 ) -> None:
     """Insert through the model so mm_aplicados is computed by RegistroRiego itself."""
     fin = None if horas is None else inicio + timedelta(hours=horas)
     session.add(
         RegistroRiego(
-            fecha=inicio.date(),
+            fecha=fecha or inicio.date(),
             parcela_id=parcela_id,
             tipo=tipo,
             cabezal="1" if tipo == TipoRiego.goteo else None,
@@ -130,20 +131,57 @@ async def test_planilla_mm_manto_usa_factor_4(client, create_user, create_parcel
 async def test_planilla_limites_de_mes_y_rango(client, create_user, create_parcela, db_session):
     headers, uid = await _auth(client, create_user)
     p = await create_parcela(nombre="Parral 2", superficie_ha=0.5)
-    # 2026-10-01 02:00 UTC is 2026-09-30 23:00 in Argentina (UTC-3): belongs to September.
-    await _riego(db_session, p.id, uid, _utc(2026, 10, 1, 2), 1)
-    # Local 2026-10-01 00:30 (03:30 UTC): October.
-    await _riego(db_session, p.id, uid, _utc(2026, 10, 1, 3), 1)
-    # Before desde and after hasta: excluded.
-    await _riego(db_session, p.id, uid, _utc(2026, 7, 31, 12), 1)
-    await _riego(db_session, p.id, uid, _utc(2027, 1, 5, 12), 1)
+    inicio = _utc(2026, 9, 15)  # arbitrary: only `fecha` drives the planilla
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2026, 9, 30))
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2026, 10, 1))
+    # Inclusive bounds: desde and hasta days themselves are included.
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2026, 8, 1))
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2026, 12, 31))
+    # Outside the range: excluded.
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2026, 7, 31))
+    await _riego(db_session, p.id, uid, inicio, 1, fecha=date(2027, 1, 1))
 
     resp = await client.get(URL, params=RANGO, headers=headers)
 
     celdas = resp.json()["filas"][0]["celdas"]
     assert [c["fecha_inicio"] for c in celdas["2026-09"]] == ["2026-09-30"]
     assert [c["fecha_inicio"] for c in celdas["2026-10"]] == ["2026-10-01"]
-    assert sum(len(v) for v in celdas.values()) == 2
+    assert [c["fecha_inicio"] for c in celdas["2026-08"]] == ["2026-08-01"]
+    assert [c["fecha_inicio"] for c in celdas["2026-12"]] == ["2026-12-31"]
+    assert sum(len(v) for v in celdas.values()) == 4
+
+
+async def test_planilla_sigue_fecha_aunque_difiera_de_inicio(client, create_user, create_parcela, db_session):
+    headers, uid = await _auth(client, create_user)
+    p = await create_parcela(nombre="Parral 2", superficie_ha=0.5)
+    # inicio is 2026-10-01 00:00 UTC (= 2026-09-30 local) but fecha says October.
+    await _riego(db_session, p.id, uid, _utc(2026, 10, 1, 0), 1, fecha=date(2026, 10, 1))
+
+    resp = await client.get(URL, params=RANGO, headers=headers)
+
+    celdas = resp.json()["filas"][0]["celdas"]
+    assert list(celdas) == ["2026-10"]
+    assert celdas["2026-10"][0]["fecha_inicio"] == "2026-10-01"
+
+
+async def test_planilla_desde_mayor_que_hasta_es_422(client, create_user):
+    headers, _ = await _auth(client, create_user)
+
+    resp = await client.get(URL, params={"desde": "2026-12-01", "hasta": "2026-08-01"}, headers=headers)
+
+    assert resp.status_code == 422
+
+
+async def test_planilla_un_solo_limite_usa_la_campana_que_lo_contiene(client, create_user):
+    headers, _ = await _auth(client, create_user)
+
+    resp = await client.get(URL, params={"desde": "2026-08-01"}, headers=headers)
+    meses = resp.json()["meses"]
+    assert meses[0] == "2026-08" and meses[-1] == "2027-04"
+
+    resp = await client.get(URL, params={"hasta": "2027-02-15"}, headers=headers)
+    meses = resp.json()["meses"]
+    assert meses[0] == "2026-05" and meses[-1] == "2027-02"
 
 
 async def test_planilla_filtra_parcela_y_ordena_natural(client, create_user, create_parcela, db_session):

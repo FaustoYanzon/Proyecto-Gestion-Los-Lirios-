@@ -919,12 +919,16 @@ async def get_planilla_riego(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> PlanillaRiegoResponse:
-    """Parcela x month grid (paper sheet): each riego lands in the month of its local start date."""
-    if desde is None or hasta is None:
-        # Default window = current campaña (May 1 -> Apr 30), not the calendar year.
+    """Parcela x month grid (paper sheet): each riego lands in the month of its `fecha`."""
+    # Missing bounds default to the campaña (May 1 -> Apr 30, not the calendar year)
+    # of the other bound, or of today when both are missing.
+    if desde is None and hasta is None:
         anio = _campana_actual(datetime.now(_TZ_CAMPO).date())
-        desde = desde or date(anio, 5, 1)
-        hasta = hasta or date(anio + 1, 4, 30)
+        desde, hasta = date(anio, 5, 1), date(anio + 1, 4, 30)
+    elif hasta is None:
+        hasta = date(_campana_actual(desde) + 1, 4, 30)
+    elif desde is None:
+        desde = date(_campana_actual(hasta), 5, 1)
     if desde > hasta:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -946,28 +950,21 @@ async def get_planilla_riego(
         (await db.execute(parcelas_stmt)).scalars().all(), key=lambda p: _natural_key(p.nombre)
     )
 
-    # Local-date filtering happens in Python; the SQL window is padded by a day each
-    # side so the UTC-vs-local offset never drops a boundary riego.
-    inicio_min = datetime.combine(desde - timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
-    inicio_max = datetime.combine(hasta + timedelta(days=2), datetime.min.time(), tzinfo=timezone.utc)
+    # `fecha` (indexed) is the date every other riego view uses; bounds are inclusive.
     riegos_stmt = select(RegistroRiego).where(
         RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
-        RegistroRiego.inicio >= inicio_min,
-        RegistroRiego.inicio < inicio_max,
-    ).order_by(RegistroRiego.inicio)
+        RegistroRiego.fecha >= desde,
+        RegistroRiego.fecha <= hasta,
+    ).order_by(RegistroRiego.fecha, RegistroRiego.inicio)
     if tipo != "ambos":
         riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
 
     celdas_por_parcela: dict[str, dict[str, list[PlanillaRiegoCelda]]] = defaultdict(dict)
     for riego in (await db.execute(riegos_stmt)).scalars().all():
-        inicio = riego.inicio if riego.inicio.tzinfo else riego.inicio.replace(tzinfo=timezone.utc)
-        local = inicio.astimezone(_TZ_CAMPO).date()
-        if not desde <= local <= hasta:
-            continue
         en_curso = riego.fin is None
-        celdas_por_parcela[riego.parcela_id].setdefault(local.strftime("%Y-%m"), []).append(
+        celdas_por_parcela[riego.parcela_id].setdefault(riego.fecha.strftime("%Y-%m"), []).append(
             PlanillaRiegoCelda(
-                fecha_inicio=local,
+                fecha_inicio=riego.fecha,
                 horas=None if en_curso else _a_decimal_2(riego.duracion_horas),
                 mm=None if en_curso else _a_decimal_2(riego.mm_aplicados),
                 tipo=riego.tipo,
