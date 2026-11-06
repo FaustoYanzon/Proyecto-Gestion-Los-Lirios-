@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Sprout, Save, X, Sparkles, PenLine, RotateCcw } from 'lucide-react'
 import {
-  getFenologiaEstadoActual, createCicloCampana, getParcelasMapa, VARIEDAD_LABELS,
+  getFenologiaEstadoActual, postEstadoVariedadCampana, getParcelasMapa, VARIEDAD_LABELS,
   limpiarOverridesFenologia,
   type FaseVariedadItem,
 } from '@/lib/api/produccion'
@@ -114,28 +114,20 @@ function UpdateModal({
   const [error, setError] = useState('')
 
   async function handleSave() {
-    if (parcelaIds.length === 0) {
-      setError('No hay parrales activos para esta variedad.')
-      return
-    }
     setSaving(true)
     setError('')
     try {
       const anio = new Date().getMonth() >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1
-      const fecha_estado = new Date().toISOString().split('T')[0]
-      // Confirma el estado para TODOS los parrales de la variedad a la vez
-      // (la campaña ahora se gestiona por variedad, no parral por parral).
-      await Promise.all(
-        parcelaIds.map((parcela_id) =>
-          createCicloCampana({
-            parcela_id,
-            anio,
-            estado_fenologico: estado,
-            fecha_estado,
-            observaciones: obs.trim() || null,
-          })
-        )
-      )
+      const fecha_confirmacion = new Date().toISOString().split('T')[0]
+      // One override for the whole variedad (shared with mobile, map and
+      // notifications); CicloCampana is only for rendimiento/historial.
+      await postEstadoVariedadCampana({
+        variedad: item.variedad,
+        anio,
+        estado_campana: estado,
+        fecha_confirmacion,
+        observaciones: obs.trim() || null,
+      })
       onSaved()
       onClose()
     } catch (e: unknown) {
@@ -275,6 +267,7 @@ export default function CampanaPage() {
     qc.invalidateQueries({ queryKey: ['fenologia-campana'] })
     qc.invalidateQueries({ queryKey: ['fenologia-mapa'] })
     qc.invalidateQueries({ queryKey: ['fenologia-notificaciones'] })
+    qc.invalidateQueries({ queryKey: ['estado-campana-actual-mapa'] })
   }
 
   const hasManual = fases.some((f) => f.fuente === 'manual')

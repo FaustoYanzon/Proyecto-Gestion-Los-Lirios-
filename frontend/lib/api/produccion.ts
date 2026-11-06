@@ -411,6 +411,22 @@ export async function getEstadoCampanaActual(): Promise<EstadoActualVariedadItem
   return data
 }
 
+export interface EstadoVariedadCampanaPayload {
+  variedad: string
+  anio: number
+  estado_campana: EstadoCampana
+  fecha_confirmacion: string
+  observaciones?: string | null
+}
+
+// One manual override per variedad (store shared with mobile + map +
+// notifications). Requires gerencial or above.
+export async function postEstadoVariedadCampana(
+  payload: EstadoVariedadCampanaPayload,
+): Promise<void> {
+  await api.post('/produccion/estado-campana/', payload)
+}
+
 export interface CumplimientoRiegoParcela {
   parcela_id: string
   parcela_nombre: string
