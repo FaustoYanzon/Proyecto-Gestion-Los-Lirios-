@@ -41,7 +41,7 @@ const VAR_COLORS: Record<string, string> = {
   aspirant: '#06b6d4', alfalfa: '#84cc16', otro: '#94a3b8',
 }
 
-// ── Cosecha / Riego (modos de color nuevos, mismos endpoints que el mapa web) ──
+// ── Cosecha / Cumplimiento riego (color modes, same endpoints as the web map) ──
 
 interface CosechaResumenPorParcela {
   parcela_id: string | null
@@ -348,7 +348,7 @@ function updateLegend() {
       '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG*0.3, MAX_KG)+'"></div><span class="legend-label">Bajo</span></div>' +
       '<div class="legend-item"><div class="legend-dot" style="background:'+cosechaColor(MAX_KG, MAX_KG)+'"></div><span class="legend-label">Alto</span></div>';
   } else if (colorMode === 'cumplimiento') {
-    title.textContent = 'Cumpl. riego (estado)';
+    title.textContent = 'Cumplimiento riego (estado)';
     const niveles = [{c:'#dc2626',label:'Déficit severo'},{c:'#f59e0b',label:'Déficit'},{c:'#16a34a',label:'En objetivo'},{c:'#3d6b86',label:'Posible exceso'}];
     items.innerHTML = niveles.map(n => '<div class="legend-item"><div class="legend-dot" style="background:'+n.c+'"></div><span class="legend-label">'+n.label+'</span></div>').join('');
   } else {
@@ -367,7 +367,7 @@ function updateStyles() {
 
 const MODE_LABELS = {
   type: '&#9632; Por tipo', variedad: '&#9632; Por variedad',
-  cosecha: '&#9632; Cosecha', cumplimiento: '&#9632; Cumpl. riego',
+  cosecha: '&#9632; Cosecha', cumplimiento: '&#9632; Cumplimiento riego',
   fenologia: '&#9632; Fenología',
 };
 const MODE_ORDER = ['type', 'variedad', 'cosecha', 'cumplimiento', 'fenologia'];
