@@ -216,3 +216,67 @@ async def test_un_solo_limite_usa_la_campana_y_ruta_no_es_capturada(
 
     resp = await client.get(URL, params={"desde": "2026-12-01", "hasta": "2026-08-01"}, headers=headers)
     assert resp.status_code == 422
+
+
+async def test_enero_envuelve_cierre_racimo_y_envero(client, create_user, create_parcela, fijar_hoy):
+    fijar_hoy(date(2027, 6, 10))
+    headers, _ = await _auth(client, create_user)
+    await create_parcela(nombre="Parral 2")
+
+    resp = await client.get(
+        URL, params={"desde": "2027-01-01", "hasta": "2027-01-31"}, headers=headers
+    )
+
+    celda = resp.json()["filas"][0]["celdas"]["2027-01"]
+    # cierre_racimo wraps Dec 5 -> Jan 4: 4/31 * 4 = 0.5161 ; envero Jan 5-31: 27/27 * 4 = 4
+    assert celda["riegos_esperados"] == "4.52"
+    assert celda["mm_esperados"] == "173.42"  # 4.516129 * 38.4
+
+
+async def test_septiembre_post_cosecha_y_brotacion(client, create_user, create_parcela, fijar_hoy):
+    fijar_hoy(date(2027, 6, 10))
+    headers, _ = await _auth(client, create_user)
+    await create_parcela(nombre="Parral 2")
+
+    resp = await client.get(
+        URL, params={"desde": "2026-09-01", "hasta": "2026-09-30"}, headers=headers
+    )
+
+    celda = resp.json()["filas"][0]["celdas"]["2026-09"]
+    # post_cosecha May 1 -> Sep 19 (142 d): 19/142 * 1 ; brotacion Sep 20-30: 11/30 * 1
+    assert celda["riegos_esperados"] == "0.50"  # 0.1338 + 0.3667 = 0.5005
+    assert celda["mm_esperados"] == "19.22"  # 0.500469 * 38.4
+
+
+async def test_desde_a_mitad_de_mes_recorta_la_ventana(
+    client, create_user, create_parcela, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, _ = await _auth(client, create_user)
+    await create_parcela(nombre="Parral 2")
+
+    resp = await client.get(
+        URL, params={"desde": "2026-12-15", "hasta": "2026-12-31"}, headers=headers
+    )
+
+    celda = resp.json()["filas"][0]["celdas"]["2026-12"]
+    # cuaje ends Dec 4 (out of range); cierre_racimo Dec 15-31 = 17 of 31 days * 4 riegos
+    assert celda["riegos_esperados"] == "2.19"  # 17/31 * 4 = 2.1935
+    assert celda["mm_esperados"] == "84.23"  # 2.193548 * 38.4
+
+
+async def test_rango_y_parcela_sin_coincidencias_devuelve_filas_vacias(
+    client, create_user, create_parcela, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, _ = await _auth(client, create_user)
+    await create_parcela(nombre="Parral 2")
+
+    resp = await client.get(
+        URL,
+        params={**MARZO_2027, "parcela_id": "00000000-0000-0000-0000-000000000000"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["filas"] == []
