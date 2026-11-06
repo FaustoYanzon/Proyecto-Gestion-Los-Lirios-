@@ -234,9 +234,46 @@ async def test_ficha_sin_superficie_no_rompe(client, create_user, create_parcela
         e for e in resp.json()["cumplimiento_riego_por_estado"]
         if e["estado_campana"] == "post_cosecha"
     )
-    assert estado["riegos_equivalentes"] == 0.0
-    assert estado["cumplimiento_pct"] == 0.0
-    assert estado["cumplido"] is False
+    # No surface: compliance is unknown (None), never a misleading 0 % / incumplido.
+    assert estado["mm_aplicados"] is None
+    assert estado["riegos_equivalentes"] is None
+    assert estado["cumplimiento_pct"] is None
+    assert estado["cumplido"] is None
+    assert estado["litros_aplicados"] == pytest.approx(768_000)
+
+
+async def test_carta_pdf_sin_superficie_no_imprime_none(
+    client, create_user, create_parcela, db_session, monkeypatch
+):
+    from xhtml2pdf import pisa
+
+    from app.core import pdf_carta
+
+    headers, uid = await _auth(client, create_user, UserRole.super_admin)
+    p = await create_parcela(nombre="Parral 2", superficie_ha=None)
+    await _sembrar_dos_valvulas_24h(db_session, p.id, uid)
+
+    # Capture the rendered HTML: the PDF stream is compressed, so text is not greppable.
+    captured: list[str] = []
+    real_create_pdf = pisa.CreatePDF
+
+    def spy(html, *args, **kwargs):
+        captured.append(html)
+        return real_create_pdf(html, *args, **kwargs)
+
+    monkeypatch.setattr(pdf_carta.pisa, "CreatePDF", spy)
+
+    resp = await client.get(
+        f"/trazabilidad/parcela/{p.id}/carta-pdf",
+        params={"desde": DESDE, "hasta": HASTA}, headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "application/pdf"
+    html = captured[0]
+    assert "None" not in html
+    assert "768000" in html  # real litres shown instead of 0.0 mm
+    assert "fila-incumplido" not in html.split("Cumplimiento de riego por estado")[1].split("<h2>")[0]
 
 
 async def test_resumen_publico_mm_riego_total_es_lamina(
@@ -258,3 +295,26 @@ async def test_resumen_publico_mm_riego_total_es_lamina(
     assert resumen["mm_riego_total"] == 38.4  # 768 000 L / (2 ha * 10 000), not 76.8
     assert resumen["mm_objetivo_anual"] == 600.0
     assert resumen["pct_objetivo_riego"] == 6.4  # 38.4 / 600
+
+
+# ── Single litres formula ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("horas", "tipo", "valvula", "n_manto"),
+    [
+        (24, TipoRiego.goteo, "1,2", None),
+        (8, TipoRiego.manto, None, 2),  # manto new: n_valvulas_manto
+        (8, TipoRiego.manto, "1,2,3", None),  # manto historical: n NULL
+        (None, TipoRiego.goteo, "1", None),  # en curso
+        (1.37, TipoRiego.goteo, "1", None),  # rounding must stay per record
+    ],
+)
+def test_litros_aplicados_y_helper_comparten_formula(horas, tipo, valvula, n_manto):
+    registro = RegistroRiego(
+        parcela_id="p", created_by="u", fecha=date(2026, 6, 15), tipo=tipo,
+        valvula=valvula, n_valvulas_manto=n_manto, duracion_horas=horas,
+    )
+    helper = cumplimiento_riego.litros_de_registro(horas, tipo, valvula, n_manto)
+    assert registro.litros_aplicados == pytest.approx(helper, abs=0.005)
+    assert helper == RegistroRiego.litros_de(horas, tipo, valvula, n_manto)

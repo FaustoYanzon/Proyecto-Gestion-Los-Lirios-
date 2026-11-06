@@ -1024,6 +1024,10 @@ async def get_planilla_cumplimiento_riego(
 
     Expected and applied are both clipped to [desde, hasta]; the current month is
     prorated up to today and later months have no expected nor percentage.
+
+    The `tipo` filter only narrows APPLIED litres; the expected volume is always the
+    full standard-riego volume. With tipo=goteo (or manto) the percentage is therefore
+    that type's contribution over the full expected volume, not a per-type compliance.
     """
     desde, hasta = _resolver_rango_planilla(desde, hasta)
     meses = _meses_del_rango(desde, hasta)

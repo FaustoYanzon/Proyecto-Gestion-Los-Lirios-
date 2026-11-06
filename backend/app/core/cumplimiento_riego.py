@@ -11,6 +11,7 @@ parcela surface) removes that distortion.
 from __future__ import annotations
 
 from app.core import ciclo_campana
+from app.models.parcela import TipoRiego
 from app.models.produccion import RegistroRiego
 
 # 1 mm over 1 ha = 10 m3 = 10 000 L.
@@ -19,23 +20,16 @@ LITROS_POR_MM_HA: float = 10_000.0
 
 def litros_de_registro(
     duracion_horas: float | None,
-    tipo: object,
+    tipo: TipoRiego | str | None,
     valvula: str | None,
     n_valvulas_manto: int | None,
 ) -> float:
     """Litres delivered by one riego record (0.0 while it is still in progress).
 
-    Same formula as RegistroRiego.litros_aplicados, usable on raw columns so SQL
+    Delegates to RegistroRiego.litros_de (one formula), usable on raw columns so SQL
     rows do not need to be hydrated into ORM objects.
     """
-    if duracion_horas is None:
-        return 0.0
-    return (
-        duracion_horas
-        * RegistroRiego.LITROS_POR_HORA_VALVULA
-        * RegistroRiego.factor_caudal(tipo, n_valvulas_manto)
-        * RegistroRiego.contar_valvulas(valvula, n_valvulas_manto)
-    )
+    return RegistroRiego.litros_de(duracion_horas, tipo, valvula, n_valvulas_manto)
 
 
 def _superficie_valida(superficie_ha: float | None) -> bool:

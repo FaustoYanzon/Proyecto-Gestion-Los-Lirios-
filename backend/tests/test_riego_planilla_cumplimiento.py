@@ -178,7 +178,7 @@ async def test_filtra_por_tipo(client, create_user, create_parcela, db_session, 
 
     goteo, manto, ambos = await m3("goteo"), await m3("manto"), await m3("ambos")
     assert goteo == 160.0  # 10 h * 16 m3/h * 1 valve
-    assert manto > 0
+    assert manto == 512.0  # 8 h * 16 m3/h * 4 (manto factor) * 1 valve
     assert ambos == pytest.approx(goteo + manto)
 
 
