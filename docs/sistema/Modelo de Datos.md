@@ -918,6 +918,7 @@ erDiagram
         varchar(36) created_by FK
         timestamptz created_at
         timestamptz updated_at
+        boolean fuera_de_plan
     }
     ordenes_aplicacion_parcelas {
         varchar(36) id PK
@@ -1046,6 +1047,7 @@ erDiagram
 | `created_by` | varchar(36) | NOT NULL | FK → `users.id` |
 | `created_at` | timestamptz | NOT NULL |  |
 | `updated_at` | timestamptz | NOT NULL |  |
+| `fuera_de_plan` | boolean | NOT NULL |  |
 
 ### `ordenes_aplicacion_parcelas`
 
