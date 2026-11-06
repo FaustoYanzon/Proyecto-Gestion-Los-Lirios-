@@ -17,7 +17,7 @@ interface Props {
 const TIPOS: TipoRiego[] = ['goteo', 'manto']
 
 // First step of the irrigation forms: goteo (pick valves) or manto (whole
-// parcel, no valves; litros and mm are estimated at 25% of the valve flow).
+// parcel, no valves; litros and mm are estimated at 4x the valve flow).
 export default function TipoRiegoSelector({ value, onChange, disabled = false }: Props) {
   return (
     <div>
@@ -39,7 +39,7 @@ export default function TipoRiegoSelector({ value, onChange, disabled = false }:
       </div>
       {value === 'manto' && (
         <p className="mt-1 text-xs text-gray-500">
-          Se riega la parcela completa, sin elegir válvulas. Litros y mm se calculan al {FACTOR_MANTO_SUPERFICIE * 100}% del caudal de la válvula.
+          Se riega la parcela completa, sin elegir válvulas. Litros y mm se calculan a {FACTOR_MANTO_SUPERFICIE} veces el caudal de la válvula.
         </p>
       )}
     </div>

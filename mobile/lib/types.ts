@@ -204,7 +204,7 @@ export interface RegistroRiego {
   duracion_horas: number
   mm_aplicados: number | null
   n_valvulas: number
-  // 1.0 goteo, 0.25 manto by area, 0.4 historical manto with valves.
+  // 1.0 goteo, 4.0 manto (new and historical).
   factor_aplicado: number
   litros_aplicados: number
   fertilizante_nombre: string | null
@@ -459,11 +459,11 @@ export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 export const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
 
 // Riego a manto por superficie: se riega la parcela completa (parral o
-// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas al 25% del
+// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas a 4 veces el
 // caudal de goteo (litros y mm). Mismo criterio que el backend. Los manto
-// históricos (con válvulas) usan factor 0.4 y vienen en `factor_aplicado`.
+// históricos (con válvulas) usan el mismo factor 4 y vienen en `factor_aplicado`.
 export type TipoRiego = 'goteo' | 'manto'
-export const FACTOR_MANTO_SUPERFICIE = 0.25
+export const FACTOR_MANTO_SUPERFICIE = 4
 
 // Rounding to 4 decimals avoids ceil() bumping 1.00000001 ha to 2 valves.
 export function valvulasManto(superficieHa: number): number {

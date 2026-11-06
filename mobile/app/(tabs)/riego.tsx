@@ -467,7 +467,7 @@ function StepParcelaManto({
         {haSel != null && (
           <Text style={styles.hintText}>
             {plural(valvulasManto(haSel), 'válvula', 'válvulas')} · {formatHa(haSel)} ha
-            {` · litros al ${FACTOR_MANTO_SUPERFICIE * 100}% del caudal`}
+            {` · litros a ${FACTOR_MANTO_SUPERFICIE}x el caudal`}
           </Text>
         )}
 
@@ -915,7 +915,7 @@ type DraftUbicacion = Pick<
   RiegoDraft, 'tipo' | 'cabezal' | 'parcela' | 'valvulas' | 'conFertirriego' | 'producto' | 'dosis'
 >
 
-// Manto counts as ceil(ha) valves at 25% of the drip flow; goteo counts the
+// Manto counts as ceil(ha) valves at 4x the drip flow; goteo counts the
 // valves actually opened at full flow. Mirrors the backend calculation.
 function caudalDraft(d: DraftUbicacion): { nValvulas: number; factor: number } {
   if (d.tipo === 'manto') {
@@ -1261,7 +1261,7 @@ function RecentRiegos({
       {tab === 'curso' && riegosEnCurso.length > 0 && (
         <>
           {riegosEnCurso.map((r) => {
-            // factor_aplicado comes from the server (0.25 / 0.4 / 1), so the
+            // factor_aplicado comes from the server (4 / 1), so the
             // chronometer matches what the backend will store on "Terminar".
             const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.factor_aplicado)
               ?? { horas: 0, litros: 0 }

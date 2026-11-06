@@ -88,7 +88,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
   )
   const [valvulasError, setValvulasError] = useState<string | null>(null)
   const [tipo, setTipo] = useState<TipoRiego>(riego?.tipo ?? 'goteo')
-  // Historical manto (valves + cabezal, factor 0.4) keeps today's form and is
+  // Historical manto (valves + cabezal, factor 4) keeps today's form and is
   // never re-converted; new-style manto is whole-parcel with no valves.
   const historico = isEdit && riego.tipo === 'manto' && riego.cabezal != null
   const modoManto = tipo === 'manto' && !historico
