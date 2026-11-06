@@ -1,6 +1,7 @@
 """Riego a manto por superficie (2026-10-26): la parcela entera, sin cabezal ni
-valvulas; caudal = ceil(superficie_ha) valvulas equivalentes al 25%. Los manto
-historicos (n_valvulas_manto NULL) conservan el 40% sobre sus valvulas.
+valvulas; caudal = ceil(superficie_ha) valvulas equivalentes a 4x el goteo. Los
+manto historicos (n_valvulas_manto NULL) tambien usan 4x, sobre las valvulas de
+su CSV (vacio = 1).
 Run with: pytest
 """
 from __future__ import annotations
@@ -73,11 +74,11 @@ async def test_manto_calcula_por_superficie(client, create_user, create_parcela)
     data = resp.json()
     assert data["tipo"] == "manto"
     assert data["n_valvulas"] == 3
-    assert data["litros_aplicados"] == 120_000
-    assert data["mm_aplicados"] == 4.0
+    assert data["litros_aplicados"] == 10 * 16_000 * 4 * 3
+    assert data["mm_aplicados"] == 64.0
     assert data["cabezal"] is None
     assert data["valvula"] == ""
-    assert data["factor_aplicado"] == 0.25
+    assert data["factor_aplicado"] == 4.0
 
 
 async def test_manto_parcela_menor_a_una_ha(client, create_user, create_parcela):
@@ -89,7 +90,7 @@ async def test_manto_parcela_menor_a_una_ha(client, create_user, create_parcela)
 
     assert resp.status_code == 201
     assert resp.json()["n_valvulas"] == 1
-    assert resp.json()["litros_aplicados"] == 40_000
+    assert resp.json()["litros_aplicados"] == 10 * 16_000 * 4 * 1
 
 
 async def test_manto_ignora_cabezal_y_valvula_de_cliente_viejo(client, create_user, create_parcela):
@@ -106,7 +107,7 @@ async def test_manto_ignora_cabezal_y_valvula_de_cliente_viejo(client, create_us
     assert data["cabezal"] is None
     assert data["valvula"] == ""
     assert data["n_valvulas"] == 3
-    assert data["litros_aplicados"] == 120_000
+    assert data["litros_aplicados"] == 1_920_000
 
 
 async def test_manto_rechaza_fertirriego(client, create_user, create_parcela):
@@ -186,7 +187,7 @@ async def test_iniciar_y_terminar_manto(client, create_user, create_parcela):
     assert iniciado.status_code == 201
     assert iniciado.json()["tipo"] == "manto"
     assert iniciado.json()["n_valvulas"] == 3
-    assert iniciado.json()["factor_aplicado"] == 0.25
+    assert iniciado.json()["factor_aplicado"] == 4.0
     assert iniciado.json()["cabezal"] is None
 
     en_curso = await client.get("/produccion/riego/en-curso", headers=headers)
@@ -200,8 +201,8 @@ async def test_iniciar_y_terminar_manto(client, create_user, create_parcela):
     )
 
     assert terminado.status_code == 200
-    assert terminado.json()["mm_aplicados"] == 2.0
-    assert terminado.json()["litros_aplicados"] == 60_000
+    assert terminado.json()["mm_aplicados"] == 32.0
+    assert terminado.json()["litros_aplicados"] == 5 * 16_000 * 4 * 3
 
 
 async def test_segundo_manto_en_curso_misma_parcela_409(client, create_user, create_parcela):
@@ -262,7 +263,7 @@ async def test_manto_en_curso_en_otra_parcela_ok(client, create_user, create_par
     assert (await client.post("/produccion/riego/iniciar", json=_iniciar(b.id), headers=headers)).status_code == 201
 
 
-async def test_put_manto_historico_conserva_factor_04(client, create_user, create_parcela, db_session):
+async def test_put_manto_historico_usa_factor_4(client, create_user, create_parcela, db_session):
     headers, user = await _login(client, create_user, role=UserRole.gerencial)
     parcela = await create_parcela(superficie_ha=2.3)
     historico = RegistroRiego(
@@ -286,10 +287,10 @@ async def test_put_manto_historico_conserva_factor_04(client, create_user, creat
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["litros_aplicados"] == 12 * 16_000 * 0.4 * 2 == 153_600.0
-    assert data["mm_aplicados"] == 7.68
+    assert data["litros_aplicados"] == 12 * 16_000 * 4 * 2 == 1_536_000.0
+    assert data["mm_aplicados"] == 76.8
     assert data["n_valvulas"] == 2
-    assert data["factor_aplicado"] == 0.4
+    assert data["factor_aplicado"] == 4.0
     assert data["valvula"] == "1,2"
     await db_session.refresh(historico)
     assert historico.n_valvulas_manto is None
@@ -305,11 +306,11 @@ async def test_put_goteo_a_manto_fija_n_valvulas(client, create_user, create_par
     assert resp.status_code == 200
     data = resp.json()
     assert data["n_valvulas"] == 3
-    assert data["mm_aplicados"] == 4.0
-    assert data["litros_aplicados"] == 120_000
+    assert data["mm_aplicados"] == 64.0
+    assert data["litros_aplicados"] == 1_920_000
     assert data["cabezal"] is None
     assert data["valvula"] == ""
-    assert data["factor_aplicado"] == 0.25
+    assert data["factor_aplicado"] == 4.0
 
 
 async def test_put_manto_a_goteo_sin_cabezal_422(client, create_user, create_parcela):
@@ -360,7 +361,7 @@ async def test_put_manto_nuevo_cambia_parcela_recalcula_n(client, create_user, c
 
     assert resp.status_code == 200
     assert resp.json()["n_valvulas"] == 1
-    assert resp.json()["litros_aplicados"] == 40_000
+    assert resp.json()["litros_aplicados"] == 640_000
 
 
 # --- Model rules: manto by surface (no DB) ---
@@ -381,20 +382,68 @@ def _registro(**extra) -> RegistroRiego:
     )
 
 
-def test_manto_nuevo_usa_factor_025_y_n_guardado() -> None:
+def test_factor_manto_es_4() -> None:
+    assert RegistroRiego.FACTOR_MANTO == 4.0
+    assert not hasattr(RegistroRiego, "FACTOR_MANTO_LEGACY")
+    assert RegistroRiego.factor_caudal("manto", None) == 4.0
+    assert RegistroRiego.factor_caudal("manto", 3) == 4.0
+    assert RegistroRiego.factor_caudal(TipoRiego.manto, None) == 4.0
+    assert RegistroRiego.factor_caudal("goteo", None) == 1.0
+    assert RegistroRiego.factor_caudal("goteo", 3) == 1.0
+    assert RegistroRiego.factor_caudal(None, None) == 1.0
+
+
+def _manto_8h(**extra) -> RegistroRiego:
+    return RegistroRiego(
+        tipo=TipoRiego.manto,
+        inicio=datetime(2026, 10, 5, 8, tzinfo=timezone.utc),
+        fin=datetime(2026, 10, 5, 16, tzinfo=timezone.utc),
+        **extra,
+    )
+
+
+def test_mm_manto_8h() -> None:
+    assert _manto_8h(n_valvulas_manto=2).mm_aplicados == 51.2
+
+
+def test_litros_manto_2_valvulas_8h() -> None:
+    assert _manto_8h(n_valvulas_manto=2).litros_aplicados == 8 * 16_000 * 4 * 2 == 1_024_000
+
+
+def test_manto_nuevo_usa_factor_4_y_n_guardado() -> None:
     r = _registro(tipo=TipoRiego.manto, n_valvulas_manto=3, cabezal=None, valvula=None)
-    assert r.litros_aplicados == 120_000.0
-    assert r.mm_aplicados == 4.0
+    assert r.litros_aplicados == 1_920_000.0
+    assert r.mm_aplicados == 64.0
     assert r.n_valvulas == 3
-    assert r.factor_aplicado == 0.25
+    assert r.factor_aplicado == 4.0
 
 
-def test_manto_historico_conserva_factor_04() -> None:
+def test_manto_historico_usa_factor_4() -> None:
     r = _registro(tipo=TipoRiego.manto, valvula="1,2", n_valvulas_manto=None)
-    assert r.litros_aplicados == 128_000.0
-    assert r.mm_aplicados == 6.4
+    assert r.litros_aplicados == 1_280_000.0
+    assert r.mm_aplicados == 64.0
     assert r.n_valvulas == 2
-    assert r.factor_aplicado == 0.4
+    assert r.factor_aplicado == 4.0
+
+
+@pytest.mark.parametrize("valvula", [None, "", " , "])
+def test_manto_historico_sin_valvula_cuenta_1(valvula) -> None:
+    r = _registro(tipo=TipoRiego.manto, valvula=valvula, n_valvulas_manto=None)
+    assert r.n_valvulas == 1
+    assert r.litros_aplicados == 10 * 16_000 * 4 * 1 == 640_000.0
+    assert r.mm_aplicados == 64.0
+
+
+def test_manto_en_curso_sin_duracion_no_rompe() -> None:
+    # Riego still running: fin and duracion_horas are NULL until /terminar.
+    r = RegistroRiego(
+        tipo=TipoRiego.manto,
+        n_valvulas_manto=2,
+        inicio=datetime(2026, 10, 5, 8, tzinfo=timezone.utc),
+    )
+    assert r.mm_aplicados is None
+    assert r.factor_aplicado == 4.0
+    assert not r.litros_aplicados
 
 
 def test_goteo_no_cambia() -> None:
@@ -437,7 +486,7 @@ async def test_put_manto_nuevo_no_recalcula_n_si_cambia_superficie(
 
     assert resp.status_code == 200
     assert resp.json()["n_valvulas"] == 3
-    assert resp.json()["litros_aplicados"] == creado["litros_aplicados"] == 120_000
+    assert resp.json()["litros_aplicados"] == creado["litros_aplicados"] == 1_920_000
     assert resp.json()["responsable"] == "X"
 
 
@@ -456,7 +505,7 @@ async def test_put_manto_nuevo_editable_si_se_borra_superficie(
 
         assert resp.status_code == 200, nueva
         assert resp.json()["n_valvulas"] == 3
-        assert resp.json()["litros_aplicados"] == 120_000
+        assert resp.json()["litros_aplicados"] == 1_920_000
 
 
 async def test_put_manto_nuevo_sigue_rechazando_fertirriego(client, create_user, create_parcela, db_session):
@@ -517,7 +566,7 @@ async def test_manto_nuevo_ignora_mm_de_cliente_viejo(client, create_user, creat
     )
 
     assert resp.status_code == 201
-    assert resp.json()["mm_aplicados"] == 4.0
+    assert resp.json()["mm_aplicados"] == 64.0
 
 
 # --- Mixed goteo / historical manto / new manto ---
@@ -562,9 +611,9 @@ async def test_eficiencia_hidrica_suma_goteo_manto_historico_y_nuevo(
         historico.litros_aplicados,
         nuevo.json()["litros_aplicados"],
     ]
-    assert litros_registros == [320_000, 128_000, 120_000]
-    assert fila["litros_totales"] == sum(litros_registros) == 568_000
-    assert fila["mm_aplicados_total"] == 16.0 + 6.4 + 4.0
+    assert litros_registros == [320_000, 1_280_000, 1_920_000]
+    assert fila["litros_totales"] == sum(litros_registros) == 3_520_000
+    assert fila["mm_aplicados_total"] == 16.0 + 64.0 + 64.0
 
 
 async def test_iniciar_manto_desde_cliente_viejo_con_cabezal_y_valvula(client, create_user, create_parcela):
@@ -581,7 +630,7 @@ async def test_iniciar_manto_desde_cliente_viejo_con_cabezal_y_valvula(client, c
     assert data["cabezal"] is None
     assert data["valvula"] == ""
     assert data["n_valvulas"] == 3
-    assert data["factor_aplicado"] == 0.25
+    assert data["factor_aplicado"] == 4.0
 
 
 async def test_en_curso_expone_factor_aplicado(client, create_user, create_parcela, db_session):
@@ -604,8 +653,8 @@ async def test_en_curso_expone_factor_aplicado(client, create_user, create_parce
     assert resp.status_code == 200
     por_id = {r["id"]: r for r in resp.json()}
     assert por_id[goteo.json()["id"]]["factor_aplicado"] == 1.0
-    assert por_id[nuevo.json()["id"]]["factor_aplicado"] == 0.25
-    assert por_id[historico.id]["factor_aplicado"] == 0.4
+    assert por_id[nuevo.json()["id"]]["factor_aplicado"] == 4.0
+    assert por_id[historico.id]["factor_aplicado"] == 4.0
     assert por_id[historico.id]["n_valvulas"] == 2
     assert por_id[historico.id]["valvula"] == "1,2"
 
@@ -633,9 +682,9 @@ async def test_put_manto_historico_con_payload_de_la_web(client, create_user, cr
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["litros_aplicados"] == 12 * 16_000 * 0.4 * 2 == 153_600.0
-    assert data["mm_aplicados"] == 7.68
-    assert data["factor_aplicado"] == 0.4
+    assert data["litros_aplicados"] == 12 * 16_000 * 4 * 2 == 1_536_000.0
+    assert data["mm_aplicados"] == 76.8
+    assert data["factor_aplicado"] == 4.0
     assert data["n_valvulas"] == 2
     assert data["cabezal"] == "1"
     assert data["valvula"] == "1,2"

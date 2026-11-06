@@ -820,8 +820,8 @@ async def _normalizar_riego(
         and data.get("parcela_id") == riego.parcela_id
     ):
         if riego.n_valvulas_manto is None:
-            # Historical manto keeps its stored valves and the legacy 40% factor:
-            # only a change of tipo or parcela moves it onto the current rules.
+            # Historical manto keeps its stored valves (CSV count; the 4x factor is
+            # shared): only a change of tipo or parcela moves it to surface rules.
             return data
         # n_valvulas_manto is frozen at creation so later superficie edits (or a
         # cleared superficie) never rewrite past litros nor block unrelated edits.
@@ -859,8 +859,8 @@ async def _normalizar_riego(
     data["valvula"] = None
     data["n_valvulas_manto"] = RegistroRiego.valvulas_manto_de(parcela.superficie_ha)
     if riego is None:
-        # Pre-manto web clients send mm computed with the legacy 40% rate; drop
-        # it so RegistroRiego.__init__ recalculates it with the current factor.
+        # Pre-manto web clients send mm computed with an old rate; drop it so
+        # RegistroRiego.__init__ recalculates it with the current factor.
         data["mm_aplicados"] = None
     return data
 

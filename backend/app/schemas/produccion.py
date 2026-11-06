@@ -173,7 +173,7 @@ class RegistroRiegoResponse(RegistroRiegoBase):
     id: str
     duracion_horas: float
     n_valvulas: int
-    # Caudal factor of this record (1.0 goteo, 0.25 manto, 0.4 historical manto).
+    # Caudal factor of this record (1.0 goteo, 4.0 manto).
     factor_aplicado: float
     litros_aplicados: float
     created_by: str
