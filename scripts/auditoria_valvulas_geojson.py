@@ -52,6 +52,11 @@ CABEZAL_PARRALES_HARDCODED: dict[str, list[str]] = {
     "4": ["8", "BV", "BN", "SYR-RG"],
 }
 
+# Documented exception (mirrors seed_valvulas.OVERRIDES_PARCELA): GeoJSON points 43/44
+# are digitized inside the north polygon (Parral 4) but belong to Parral 5.
+# Potrero 3 overrides (31/32) are not parral polygons, so they stay ambiguous here.
+OVERRIDES_PARRAL: dict[str, str] = {"43": "Parral 5", "44": "Parral 5"}
+
 EPS_BBOX = 0.0002  # ~20m de margen para detectar candidatos "casi adentro" (casos límite)
 
 
@@ -200,7 +205,10 @@ async def main() -> None:
     # = más negativo = menor valor numérico, así que orden ascendente de lon YA es oeste->este).
     por_parral: dict[str, list[dict]] = {}
     for r in resultados:
-        parral = r["pip_matches"][0] if len(r["pip_matches"]) == 1 else "AMBIGUO"
+        if r["nombre"] in OVERRIDES_PARRAL:
+            parral = OVERRIDES_PARRAL[r["nombre"]]
+        else:
+            parral = r["pip_matches"][0] if len(r["pip_matches"]) == 1 else "AMBIGUO"
         por_parral.setdefault(parral, []).append(r)
     for parral, lst in por_parral.items():
         lst.sort(key=lambda r: r["lon"])

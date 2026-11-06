@@ -5,13 +5,14 @@ CABEZAL_VALVULAS (frontend/lib/api/riego.ts, mobile/lib/types.ts) por el
 catalogo real, cruzado espacialmente contra los poligonos de Parral del KML
 (ver scripts/auditoria_valvulas_geojson.py para el reporte completo).
 
-La asignacion parcela<-valvula es automatica por point-in-polygon salvo 2
-excepciones confirmadas por Fausto el 2026-08-18 (la valvula riega un potrero
-sin parral):
+La asignacion parcela<-valvula es automatica por point-in-polygon salvo
+excepciones confirmadas manualmente (OVERRIDES_PARCELA):
   - "31","32" -> Potrero 3 (riegan un potrero sin cuadrante/parral asociado)
+  - "43","44" -> Parral 5 (los puntos del GeoJSON estan dibujados dentro del
+    poligono norte por error de digitalizacion; el override corrige la asignacion)
 Parral 4/5: el KML trae las etiquetas cruzadas (Parral 4 es el NORTE); se
-corrige por latitud en fix_parral_4_5_labels, por eso 41-44 caen en Parral 4
-y ya no hace falta el override de 41/42.
+corrige por latitud en fix_parral_4_5_labels, por eso 41-42 caen en Parral 4
+sin override. 43-44 caen tambien en Parral 4 por polygon y se fuerzan a Parral 5.
 
 Usage (desde la venv del backend):
   cd C:\\claude-projects\\los-lirios
@@ -46,6 +47,10 @@ KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 OVERRIDES_PARCELA: dict[str, str] = {
     "31": "Potrero 3",
     "32": "Potrero 3",
+    # GeoJSON points 43/44 are digitized inside the north polygon (Parral 4),
+    # but physically they irrigate Parral 5.
+    "43": "Parral 5",
+    "44": "Parral 5",
 }
 
 
