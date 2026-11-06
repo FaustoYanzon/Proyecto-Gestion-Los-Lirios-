@@ -77,7 +77,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 62 (head: `91b7e7904993_orden_fuera_de_plan.py`)
+**Migraciones de Alembic:** 63 (head: `7d2c5e9a41b8_vw_kpi_manto_factor_4.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -189,6 +189,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`
 - `cleanup_contaminacion_jornales_hist.py`
+- `corregir_parral_4_5.py`
 - `migrate_bd_cobros.py`
 - `migrate_cosecha_2024_2026.py`
 - `migrate_excels.py`
@@ -198,6 +199,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `pregate_ordenes_multiproducto.py`
 - `pregate_quitar_shims_orden.py`
 - `pregate_riego_manto_unico.py`
+- `recalcular_manto_x4.py`
 - `reporte_huerfanos_cloudinary.py`
 
 ---
