@@ -277,3 +277,35 @@ export async function getPlanillaRiego(params: {
   const { data } = await api.get('/produccion/riego/planilla', { params })
   return data
 }
+
+// Cumplimiento por parcela y mes: mm aplicados vs esperados (calendario de
+// campaña, riego estándar de 38,4 mm). Decimal -> string; cumplimiento_pct es
+// null cuando el mes todavía no tiene riegos esperados (meses futuros).
+export interface PlanillaCumplimientoCelda {
+  mm_aplicados: string
+  mm_esperados: string
+  riegos_equivalentes: string
+  riegos_esperados: string
+  cumplimiento_pct: string | null
+}
+
+export interface PlanillaCumplimientoFila {
+  parcela_id: string
+  parcela_nombre: string
+  celdas: Record<string, PlanillaCumplimientoCelda>
+}
+
+export interface PlanillaCumplimientoResponse {
+  meses: string[]
+  filas: PlanillaCumplimientoFila[]
+}
+
+export async function getPlanillaCumplimientoRiego(params: {
+  desde?: string
+  hasta?: string
+  tipo?: PlanillaTipo
+  parcela_id?: string
+}): Promise<PlanillaCumplimientoResponse> {
+  const { data } = await api.get('/produccion/riego/planilla/cumplimiento', { params })
+  return data
+}
