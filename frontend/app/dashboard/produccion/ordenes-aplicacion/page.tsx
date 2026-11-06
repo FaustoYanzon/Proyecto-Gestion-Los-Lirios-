@@ -437,7 +437,7 @@ function OrdenesAplicacion() {
             plan en {variedadesFaltantes} {variedadesFaltantes === 1 ? 'variedad' : 'variedades'}
           </span>
           <Link href="/dashboard/produccion/cumplimiento-fitosanitario" className="font-medium underline">
-            Ver cumplimiento
+            Ver Cumplimiento Fito
           </Link>
         </div>
       )}

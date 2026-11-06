@@ -265,6 +265,9 @@ export default function PlanFitosanitarioPage() {
 
   const currentUser = useAuthStore((s) => s.user)
   const isGerencialUp = currentUser?.role === 'super_admin' || currentUser?.role === 'gerencial'
+  // Read-only presentation by default; the create/edit/delete UI is revealed on demand.
+  const [editando, setEditando] = useState(false)
+  const puedeEditar = isGerencialUp && editando
 
   const [variedadActiva, setVariedadActiva] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalState>(null)
@@ -351,7 +354,7 @@ export default function PlanFitosanitarioPage() {
             className="flex items-center gap-1.5 text-sm font-medium text-[#7a1f2c] hover:underline"
           >
             <ClipboardCheck size={15} />
-            Ver cumplimiento →
+            Ver Cumplimiento Fito →
           </Link>
           <select
             value={temporada}
@@ -391,13 +394,25 @@ export default function PlanFitosanitarioPage() {
               {activa && <> de {VARIEDAD_LABELS[activa] ?? activa}</>}
             </p>
             {isGerencialUp && (
-              <button
-                onClick={() => setModal({ create: null })}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
-              >
-                <Plus size={16} />
-                Agregar al plan
-              </button>
+              <div className="flex items-center gap-2">
+                {puedeEditar && (
+                  <button
+                    onClick={() => setModal({ create: null })}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#7a1f2c] rounded-md hover:bg-[#5a1320] transition-colors"
+                  >
+                    <Plus size={16} />
+                    Agregar al plan
+                  </button>
+                )}
+                <button
+                  onClick={() => setEditando((v) => !v)}
+                  aria-pressed={editando}
+                  data-testid="toggle-editar-plan"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  {editando ? 'Terminar edición' : 'Editar plan'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -422,7 +437,7 @@ export default function PlanFitosanitarioPage() {
                         <span className="ml-2 rounded-full bg-[#7a1f2c] px-2 py-0.5 text-[10px] font-medium text-white">Mes actual</span>
                       )}
                     </h2>
-                    {isGerencialUp && (
+                    {puedeEditar && (
                       <button
                         onClick={() => setModal({ create: mes })}
                         className="flex items-center gap-1 text-xs font-medium text-[#7a1f2c] hover:underline"
@@ -439,7 +454,7 @@ export default function PlanFitosanitarioPage() {
                           <th className="px-3 py-2 font-medium">Objetivo</th>
                           <th className="px-3 py-2 font-medium text-right">Dosis/ha</th>
                           <th className="px-3 py-2 font-medium">Avance del mes</th>
-                          {isGerencialUp && <th className="px-4 py-2 font-medium text-center">Acciones</th>}
+                          {puedeEditar && <th className="px-4 py-2 font-medium text-center">Acciones</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -469,7 +484,7 @@ export default function PlanFitosanitarioPage() {
                                   <span className="text-xs text-gray-300">–</span>
                                 )}
                               </td>
-                              {isGerencialUp && (
+                              {puedeEditar && (
                                 <td className="px-4 py-2.5">
                                   <div className="flex items-center justify-center gap-1">
                                     <button

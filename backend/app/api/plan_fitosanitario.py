@@ -70,11 +70,13 @@ async def avance_plan_fitosanitario(
     temporada: int = Query(...),
     mes: int | None = Query(None, ge=1, le=12),
     variedad: VariedadUva | None = Query(None),
+    parcela_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_up),
 ) -> list[AvanceItem]:
-    """Plan vs applied by variety, month and product (all months without `mes`)."""
-    claves = await calcular_avance(db, temporada, mes, variedad)
+    """Plan vs applied by variety, month and product (all months without `mes`).
+    `parcela_id` restricts to one parcel (empty if its variety differs from `variedad`)."""
+    claves = await calcular_avance(db, temporada, mes, variedad, parcela_id)
     return [
         AvanceItem(
             variedad=c.variedad, mes=c.mes, insumo_id=c.insumo_id, insumo_nombre=c.insumo_nombre,

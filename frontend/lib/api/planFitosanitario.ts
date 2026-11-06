@@ -105,9 +105,16 @@ export interface AvanceItem {
   parcelas: AvanceParcela[]
 }
 
-export async function getAvance(temporada: number, mes?: number, variedad?: string): Promise<AvanceItem[]> {
+export async function getAvance(
+  temporada: number, mes?: number, variedad?: string, parcelaId?: string,
+): Promise<AvanceItem[]> {
   const { data } = await api.get('/plan-fitosanitario/avance', {
-    params: { temporada, ...(mes ? { mes } : {}), ...(variedad ? { variedad } : {}) },
+    params: {
+      temporada,
+      ...(mes ? { mes } : {}),
+      ...(variedad ? { variedad } : {}),
+      ...(parcelaId ? { parcela_id: parcelaId } : {}),
+    },
   })
   return data
 }
