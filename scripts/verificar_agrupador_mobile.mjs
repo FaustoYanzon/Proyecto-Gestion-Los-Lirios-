@@ -10,7 +10,7 @@
 // the built-in synthetic fixtures are used.
 //
 // The two modules are TypeScript, so the script re-launches itself through
-// `npx --yes tsx` (fetched on demand; nothing is added to any package.json).
+// `npx --yes tsx@4` (fetched on demand; nothing is added to any package.json).
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 const self = fileURLToPath(import.meta.url)
 
 if (!process.env.VERIFICAR_AGRUPADOR_TSX) {
-  const r = spawnSync('npx', ['--yes', 'tsx', self, ...process.argv.slice(2)], {
+  const r = spawnSync('npx', ['--yes', 'tsx@4', self, ...process.argv.slice(2)], {
     stdio: 'inherit',
     shell: true,
     env: { ...process.env, VERIFICAR_AGRUPADOR_TSX: '1' },
@@ -105,8 +105,17 @@ if (archivo) {
   assert.ok(Array.isArray(datos.registros) && Array.isArray(datos.ordenes), 'JSON needs { registros: [], ordenes: [] }')
   console.log(`datos: ${archivo} (${datos.registros.length} registros, ${datos.ordenes.length} ordenes)`)
 }
-const hoy = web.hoyLocalISO()
+// Synthetic fixtures use a fixed date so the carencia comparison is not vacuous
+// (their habilitacion dates are 2026-09/10); real data uses the real clock.
+const hoy = archivo ? web.hoyLocalISO() : '2026-10-05'
 compara(archivo ? 'datos reales' : 'sinteticos', datos.registros, datos.ordenes, hoy)
+
+if (!archivo) {
+  check('sinteticos: la comparacion de carencia no es vacia', () => {
+    assert.ok(web.carenciaPorParcela(datos.registros, hoy).size > 0)
+    assert.ok(mobile.carenciaPorParcela(datos.registros, hoy).size > 0)
+  })
+}
 
 check('helpers de fecha identicos', () => {
   assert.equal(mobile.hoyLocalISO(new Date(2026, 0, 5)), web.hoyLocalISO(new Date(2026, 0, 5)))
