@@ -89,7 +89,26 @@ function CeldaRiego({ riego }: { riego: PlanillaRiegoCelda }) {
   )
 }
 
+// No decimals above 100 m3, one decimal below.
+function formatM3(value: number | string): string {
+  return formatNum(value, Math.abs(Number(value)) >= 100 ? 0 : 1)
+}
+
 function CeldaCumplimiento({ celda }: { celda: PlanillaCumplimientoCelda | undefined }) {
+  // No expected volume = parcela without surface: neutral, never a false 0 %.
+  if (celda && celda.m3_esperados === null) {
+    return (
+      <div
+        data-testid="cumplimiento-celda-sin-superficie"
+        className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-center text-gray-500"
+      >
+        <span className="block text-[11px]">Sin superficie</span>
+        <span className="block text-[10px] opacity-80 whitespace-nowrap">
+          {formatM3(celda.m3_aplicados)} m³ aplicados
+        </span>
+      </div>
+    )
+  }
   // No pct = month with nothing expected yet (future) or missing cell.
   if (!celda || celda.cumplimiento_pct === null) {
     return <span className="block text-center text-gray-300" data-testid="cumplimiento-celda-vacia">—</span>
@@ -106,7 +125,7 @@ function CeldaCumplimiento({ celda }: { celda: PlanillaCumplimientoCelda | undef
       <span className="block text-sm font-semibold">{formatNum(pct, 0)} %</span>
       <span className="block text-[11px]">{ui.label}</span>
       <span className="block text-[10px] opacity-80 whitespace-nowrap">
-        {formatNum(celda.mm_aplicados, 0)} / {formatNum(celda.mm_esperados, 0)} mm
+        {formatM3(celda.m3_aplicados)} / {formatM3(celda.m3_esperados ?? 0)} m³
       </span>
     </div>
   )
@@ -163,7 +182,9 @@ export default function CumplimientoRiegoPage() {
           <p className="text-sm text-gray-500 mt-0.5">
             {vista === 'riegos'
               ? 'Riegos por parcela y mes: fecha de inicio, horas y mm aplicados'
-              : 'mm aplicados vs. esperados por parcela y mes, según el calendario de campaña'}
+              : 'Volumen aplicado (m³) vs. esperado por parcela y mes, según el calendario de campaña'}
+            {tipo !== 'ambos' &&
+              ` · Filtrando por ${tipo}: el % es el aporte de ese tipo sobre el volumen esperado total.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

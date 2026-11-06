@@ -81,10 +81,14 @@ class CumplimientoEstadoItem(BaseModel):
     fecha_inicio: date
     fecha_fin: date
     riegos_esperados: int
-    mm_aplicados: float
-    riegos_equivalentes: float
-    cumplimiento_pct: float
-    cumplido: bool
+    # None (not 0) when the parcela has no surface: mm/equivalentes/pct/cumplido
+    # cannot be derived from volume, and 0/False would read as "not irrigated".
+    mm_aplicados: float | None = None
+    riegos_equivalentes: float | None = None
+    cumplimiento_pct: float | None = None
+    cumplido: bool | None = None
+    # Real volume applied in the window; always populated.
+    litros_aplicados: float = 0.0
 
 
 class ResumenDestinoItem(BaseModel):
@@ -173,7 +177,8 @@ class ResumenPublicoItem(BaseModel):
     kg_total: float
     meta_produccion_kg: float | None = None
     pct_meta_produccion: float | None = None
-    mm_riego_total: float
+    mm_riego_total: float | None = None
+    litros_riego_total: float = 0.0
     mm_objetivo_anual: float
     pct_objetivo_riego: float | None = None
     horas_de_frio: float | None = None

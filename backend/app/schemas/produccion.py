@@ -712,9 +712,12 @@ class CumplimientoRiegoParcela(BaseModel):
     estado_campana: EstadoCampana
     estado_campana_label: str
     riegos_esperados: int
-    mm_aplicados: float
-    riegos_equivalentes: float
-    cumplimiento_pct: float
+    # Equivalent depth over the whole parcela (litres / (ha * 10 000)), not a per-valve sum.
+    mm_aplicados: float | None
+    riegos_equivalentes: float | None
+    cumplimiento_pct: float | None
+    litros_aplicados: float
+    litros_esperados: float | None
 
 
 class PlanillaRiegoCelda(BaseModel):
@@ -737,9 +740,16 @@ class PlanillaRiegoResponse(BaseModel):
 
 
 class PlanillaCumplimientoRiegoCelda(BaseModel):
-    mm_aplicados: Decimal
-    mm_esperados: Decimal
-    riegos_equivalentes: Decimal
+    """Volumetric compliance of one parcela-month.
+
+    Fields that need the parcela surface (lamina, equivalentes, m3_esperados, pct)
+    are None when the parcela has no surface.
+    """
+
+    m3_aplicados: Decimal
+    m3_esperados: Decimal | None
+    lamina_aplicada_mm: Decimal | None
+    riegos_equivalentes: Decimal | None
     riegos_esperados: Decimal
     cumplimiento_pct: Decimal | None
 

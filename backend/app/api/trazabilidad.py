@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app.api.deps import get_db, require_any_role, require_encargado_up, require_gerencial_up
-from app.core import ciclo_campana, labels, termografo_metrics
+from app.core import ciclo_campana, cumplimiento_riego, labels, termografo_metrics
 from app.core.cloudinary_client import (
     encolar_borrado,
     upload_foto_parcela,
@@ -70,7 +70,7 @@ def _url_publica(token: str) -> str:
 # 1mm sobre 1ha = 10.000 L -- el objetivo en mm no depende de la superficie.
 # Mismo valor que ya usan el mapa web/mobile (LITROS_OBJETIVO_ANUAL_POR_HA /
 # 10_000), derivado de la constante del modelo en vez de un numero suelto.
-MM_OBJETIVO_ANUAL = RegistroRiego.LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
+MM_OBJETIVO_ANUAL = RegistroRiego.LITROS_OBJETIVO_ANUAL_POR_HA / cumplimiento_riego.LITROS_POR_MM_HA
 
 
 # ── Aggregador ──────────────────────────────────────────────────────────────
@@ -155,28 +155,36 @@ async def _calcular_compliance(
 
 
 def _cumplimiento_riego_por_estado(
-    riegos: list[RegistroRiego], desde: date, hasta: date,
+    riegos: list[RegistroRiego], desde: date, hasta: date, superficie_ha: float | None,
 ) -> list[CumplimientoEstadoItem]:
     """Cumplimiento de riego por CADA estado de campaña que cayo dentro del
     rango elegido -- a diferencia de /produccion/estado-campana/cumplimiento-riego,
     que solo resuelve el estado vigente hoy. Reusa los `riegos` ya traidos por
-    _fetch_historial, no dispara queries nuevas."""
+    _fetch_historial, no dispara queries nuevas.
+
+    Compara VOLUMENES (litros aplicados vs esperados para la superficie de la
+    parcela), no la suma de `mm_aplicados` por registro: ese mm es por hectarea
+    de cada valvula y se infla con la cantidad de valvulas. Sin superficie no hay
+    forma de derivar mm/equivalentes/%, asi que se devuelven None (los litros
+    siguen siendo reales)."""
     items: list[CumplimientoEstadoItem] = []
     for estado, v_desde, v_hasta in ciclo_campana.ventanas_en_rango(desde, hasta):
-        mm = sum(r.mm_aplicados or 0.0 for r in riegos if v_desde <= r.fecha <= v_hasta)
+        litros = sum(r.litros_aplicados for r in riegos if v_desde <= r.fecha <= v_hasta)
         esperados = ciclo_campana.riegos_esperados(estado)
-        equivalentes = round(mm / ciclo_campana.MM_POR_RIEGO_ESTANDAR, 2)
-        pct = round(equivalentes / esperados * 100, 1) if esperados else 0.0
+        lamina = cumplimiento_riego.lamina_mm(litros, superficie_ha)
+        equivalentes = cumplimiento_riego.riegos_equivalentes(litros, superficie_ha)
+        pct = cumplimiento_riego.cumplimiento_pct(litros, esperados, superficie_ha)
         items.append(CumplimientoEstadoItem(
             estado_campana=estado,
             estado_campana_label=ciclo_campana.ESTADO_CAMPANA_LABELS[estado],
             fecha_inicio=v_desde,
             fecha_fin=v_hasta,
             riegos_esperados=esperados,
-            mm_aplicados=round(mm, 1),
-            riegos_equivalentes=equivalentes,
-            cumplimiento_pct=pct,
-            cumplido=pct >= 100,
+            mm_aplicados=None if lamina is None else round(lamina, 1),
+            riegos_equivalentes=None if equivalentes is None else round(equivalentes, 2),
+            cumplimiento_pct=None if pct is None else round(pct, 1),
+            litros_aplicados=round(litros, 2),
+            cumplido=None if pct is None else round(pct, 1) >= 100,
         ))
     return items
 
@@ -365,7 +373,9 @@ async def _fetch_historial(
         parcela_centroide=centroide_poligono(parcela.coordenadas),
         parcela_tipo_riego=tipo_riego_label,
         parcela_cobertura_invierno=cobertura_invierno,
-        cumplimiento_riego_por_estado=_cumplimiento_riego_por_estado(list(riegos), desde, hasta),
+        cumplimiento_riego_por_estado=_cumplimiento_riego_por_estado(
+            list(riegos), desde, hasta, parcela.superficie_ha,
+        ),
         resumen_destino=_resumen_destino(list(cosechas)),
         tareas_resumen=_tareas_resumen(list(trabajos)),
         horas_de_frio=horas_de_frio,
@@ -378,7 +388,9 @@ def _resumen_publico(data: HistorialData) -> ResumenPublicoItem:
     (app/core/pdf_carta.py) -- kg cosechados, mm de riego, horas de frio y
     conteo del semaforo de carencia. Sin nombres ni datos comerciales."""
     kg_total = sum(c.kg_total for c in data.cosechas)
-    mm_riego_total = sum(r.mm_aplicados or 0 for r in data.riegos)
+    # Equivalent depth over the parcela (litres / ha), not the per-valve mm sum.
+    litros_total = sum(r.litros_aplicados for r in data.riegos)
+    mm_riego_total = cumplimiento_riego.lamina_mm(litros_total, data.parcela.superficie_ha)
     cumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "cumplido")
     pendientes = sum(1 for c in data.compliance_fitosanitarios if c.estado == "pendiente")
     incumplidos = sum(1 for c in data.compliance_fitosanitarios if c.estado == "incumplido")
@@ -389,10 +401,12 @@ def _resumen_publico(data: HistorialData) -> ResumenPublicoItem:
             round(kg_total / data.meta_produccion_kg * 100, 1)
             if data.meta_produccion_kg else None
         ),
-        mm_riego_total=round(mm_riego_total, 1),
+        mm_riego_total=None if mm_riego_total is None else round(mm_riego_total, 1),
+        litros_riego_total=round(litros_total),
         mm_objetivo_anual=MM_OBJETIVO_ANUAL,
         pct_objetivo_riego=(
-            round(mm_riego_total / MM_OBJETIVO_ANUAL * 100, 1) if MM_OBJETIVO_ANUAL else None
+            round(mm_riego_total / MM_OBJETIVO_ANUAL * 100, 1)
+            if MM_OBJETIVO_ANUAL and mm_riego_total is not None else None
         ),
         horas_de_frio=data.horas_de_frio,
         fitos_cumplidos=cumplidos,

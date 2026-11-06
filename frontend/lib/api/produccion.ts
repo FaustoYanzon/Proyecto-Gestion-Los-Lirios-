@@ -420,9 +420,12 @@ export interface CumplimientoRiegoParcela {
   estado_campana: EstadoCampana
   estado_campana_label: string
   riegos_esperados: number
-  mm_aplicados: number
-  riegos_equivalentes: number
-  cumplimiento_pct: number
+  // Equivalent depth over the whole parcela; null fields = parcela without surface.
+  mm_aplicados: number | null
+  riegos_equivalentes: number | null
+  cumplimiento_pct: number | null
+  litros_aplicados: number
+  litros_esperados: number | null
 }
 
 export async function getCumplimientoRiego(): Promise<CumplimientoRiegoParcela[]> {

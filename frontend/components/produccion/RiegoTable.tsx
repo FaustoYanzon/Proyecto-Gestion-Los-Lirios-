@@ -167,10 +167,6 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
           <span className="font-medium text-gray-700">
             Total:{' '}
             <span className="font-mono text-blue-700">
-              {riegos.reduce((s, r) => s + (r.mm_aplicados ?? 0), 0).toFixed(1)} mm
-            </span>
-            {' · '}
-            <span className="font-mono text-blue-700">
               {riegos.reduce((s, r) => s + (r.litros_aplicados ?? 0), 0).toLocaleString('es-AR')} L acumulados
             </span>
           </span>

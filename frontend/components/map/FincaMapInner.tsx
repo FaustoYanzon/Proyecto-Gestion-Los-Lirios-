@@ -24,6 +24,8 @@ const MODOS_SOLO_ACTUAL: ColorMode[] = ['cumplimiento', 'fenologia']
 
 // Objetivo agronómico: 6.000.000 L/ha/año (suelo de Media Agua)
 const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
+const LITROS_POR_MM_HA = 10_000 // 1 mm over 1 ha
+const MM_RIEGO_ESTANDAR = 38.4
 // 1mm sobre 1ha = 10.000 L — el objetivo en mm no depende de la superficie
 // de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
 const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
@@ -270,20 +272,23 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
   })
 
   const costoTotal = useMemo(() => trabajos.reduce((s, t) => s + Number(t.monto_total), 0), [trabajos])
-  const mmTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.mm_aplicados), 0), [riegos])
-  // Litros totales entregados al parral (ya contempla la cantidad de válvulas
-  // abiertas en cada riego, calculado en el backend) vs. objetivo anual.
+  // Per-record mm_aplicados is the depth over ONE valve hectare, so summing it
+  // inflates compliance; use litros and convert over the parcela surface.
   const litrosTotal = useMemo(() => riegos.reduce((s, r) => s + Number(r.litros_aplicados ?? 0), 0), [riegos])
-  // Riegos registrados dentro del estado de campaña vigente (desde que empezó)
-  // vs. los esperados para ese estado. Solo con la campaña actual: el estado
-  // es del presente, no hay snapshot histórico.
+  const superficieHa = Number(parcela?.superficie_ha) > 0 ? Number(parcela?.superficie_ha) : null
+  const laminaMm = superficieHa ? litrosTotal / (superficieHa * LITROS_POR_MM_HA) : null
+  // Riegos equivalentes dentro del estado de campaña vigente (litros desde que
+  // empezó / litros de un riego estándar de 38,4 mm) vs. los esperados. Solo con
+  // la campaña actual: el estado es del presente, no hay snapshot histórico.
   const riegosEstado = useMemo(() => {
-    if (!esTemporadaActual || !estadoCampana) return null
-    const n = riegos.filter((r) => r.fecha >= estadoCampana.fecha_inicio).length
-    return { n, esperados: estadoCampana.riegos_esperados, label: estadoCampana.estado_campana_label }
-  }, [riegos, estadoCampana, esTemporadaActual])
-  const objetivoAnual = parcela?.superficie_ha ? parcela.superficie_ha * LITROS_OBJETIVO_ANUAL_POR_HA : null
-  const porcentajeCumplimiento = objetivoAnual ? (litrosTotal / objetivoAnual) * 100 : null
+    if (!esTemporadaActual || !estadoCampana || !superficieHa) return null
+    const litrosEstado = riegos
+      .filter((r) => r.fecha >= estadoCampana.fecha_inicio)
+      .reduce((s, r) => s + Number(r.litros_aplicados ?? 0), 0)
+    const equivalentes = litrosEstado / (MM_RIEGO_ESTANDAR * superficieHa * LITROS_POR_MM_HA)
+    return { n: equivalentes, esperados: estadoCampana.riegos_esperados, label: estadoCampana.estado_campana_label }
+  }, [riegos, estadoCampana, esTemporadaActual, superficieHa])
+  const porcentajeCumplimiento = laminaMm != null ? (laminaMm / MM_OBJETIVO_ANUAL_POR_HA) * 100 : null
   const lastFitos = useMemo(() => [...fitos].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5), [fitos])
   const lastTareas = useMemo(() => {
     const m = new Map<string, string>()
@@ -467,19 +472,24 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                 <>
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-[#3d6b86]">
-                      {mmTotal.toLocaleString('es-AR', { maximumFractionDigits: 1 })} mm
+                      {laminaMm != null
+                        ? `${laminaMm.toLocaleString('es-AR', { maximumFractionDigits: 1 })} mm`
+                        : 'Sin superficie'}
                     </span>
-                    {!riegosEstado && (
-                      <span className="text-xs text-gray-400">{riegos.length} riego{riegos.length !== 1 ? 's' : ''}</span>
-                    )}
+                    <span className="text-xs text-gray-400">
+                      {(litrosTotal / 1000).toLocaleString('es-AR', { maximumFractionDigits: litrosTotal >= 100_000 ? 0 : 1 })} m³
+                      {!riegosEstado && ` · ${riegos.length} riego${riegos.length !== 1 ? 's' : ''}`}
+                    </span>
                   </div>
                   {riegosEstado && (
                     <p className="text-xs text-gray-500 mt-1">
-                      <span className="font-semibold text-[#3d6b86]">{riegosEstado.n} de {riegosEstado.esperados}</span>
+                      <span className="font-semibold text-[#3d6b86]">
+                        {riegosEstado.n.toLocaleString('es-AR', { maximumFractionDigits: 1 })} de {riegosEstado.esperados}
+                      </span>
                       {' '}riego{riegosEstado.esperados !== 1 ? 's' : ''} esperado{riegosEstado.esperados !== 1 ? 's' : ''} en {riegosEstado.label}
                     </p>
                   )}
-                  {objetivoAnual != null && porcentajeCumplimiento != null && (
+                  {porcentajeCumplimiento != null && (
                     <div className="mt-1.5">
                       <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div

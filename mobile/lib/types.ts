@@ -422,9 +422,12 @@ export interface CumplimientoRiegoParcela {
   estado_campana: EstadoCampana
   estado_campana_label: string
   riegos_esperados: number
-  mm_aplicados: number
-  riegos_equivalentes: number
-  cumplimiento_pct: number
+  // Equivalent depth over the whole parcela; null fields = parcela without surface.
+  mm_aplicados: number | null
+  riegos_equivalentes: number | null
+  cumplimiento_pct: number | null
+  litros_aplicados: number
+  litros_esperados: number | null
 }
 
 export interface EstadoVariedadCampanaPayload {
@@ -457,6 +460,9 @@ export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 // 1mm sobre 1ha = 10.000 L — el objetivo en mm no depende de la superficie
 // de la parcela (a diferencia del objetivo en litros, que sí escala con ha).
 export const MM_OBJETIVO_ANUAL_POR_HA = LITROS_OBJETIVO_ANUAL_POR_HA / 10_000
+// Standard irrigation depth (mm) used to turn litros into equivalent riegos.
+export const MM_RIEGO_ESTANDAR = 38.4
+export const LITROS_POR_MM_HA = 10_000
 
 // Riego a manto por superficie: se riega la parcela completa (parral o
 // potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas a 4 veces el

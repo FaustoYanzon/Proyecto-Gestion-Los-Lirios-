@@ -1,4 +1,4 @@
-"""Planilla de cumplimiento de riego: mm aplicados vs mm esperados por parcela y mes.
+"""Planilla de cumplimiento de riego: volumen aplicado vs esperado por parcela y mes.
 
 Expected values are computed by hand from CALENDARIO_CAMPANA (windows run from one
 anchor to the day before the next; riegos_esperados per window):
@@ -6,7 +6,9 @@ anchor to the day before the next; riegos_esperados per window):
   floracion    Oct 20 -> Nov 9  (21 d, 1)   cuaje      Nov 10 -> Dec 4  (25 d, 3)
   cierre_racimo Dec 5 -> Jan 4  (31 d, 4)   envero     Jan 5  -> Jan 31 (27 d, 4)
   cosecha      Feb 1 -> Apr 30  (89 d in 2027, 3)
-1 standard riego = 24 h * 1.6 = 38.4 mm.
+1 standard riego = 24 h * 1.6 = 38.4 mm over the WHOLE parcela = 38.4 * ha * 10 000 L.
+Applied volume = hours * 16 000 L/h * caudal factor * n valvulas (never the per-record mm sum).
+Tests default to a 1.0 ha parcela so 1 ha = 384 m3 per standard riego.
 Run with: pytest
 """
 from __future__ import annotations
@@ -73,7 +75,7 @@ async def test_mes_pasado_dentro_de_una_ventana(
 ):
     fijar_hoy(date(2027, 6, 10))
     headers, uid = await _auth(client, create_user)
-    p = await create_parcela(nombre="Parral 2")
+    p = await create_parcela(nombre="Parral 2", superficie_ha=1.0)
     await _riego(db_session, p.id, uid, date(2027, 3, 10), 10)  # goteo: 10 h * 1.6 = 16 mm
 
     resp = await client.get(URL, params=MARZO_2027, headers=headers)
@@ -84,8 +86,9 @@ async def test_mes_pasado_dentro_de_una_ventana(
     celda = data["filas"][0]["celdas"]["2027-03"]
     # cosecha: 3 riegos * 31 / 89 = 1.04494 -> 1.04 ; * 38.4 = 40.1258 -> 40.13
     assert celda["riegos_esperados"] == "1.04"
-    assert celda["mm_esperados"] == "40.13"
-    assert celda["mm_aplicados"] == "16.00"
+    assert celda["m3_esperados"] == "401.26"  # 1.044944 * 384 m3
+    assert celda["m3_aplicados"] == "160.00"  # 10 h * 16 000 L/h
+    assert celda["lamina_aplicada_mm"] == "16.00"  # 160 000 L / (1 ha * 10 000)
     assert celda["riegos_equivalentes"] == "0.42"  # 16 / 38.4
     assert celda["cumplimiento_pct"] == "39.9"  # 16 / 40.1258 * 100
 
@@ -95,7 +98,7 @@ async def test_mes_a_caballo_de_dos_ventanas(
 ):
     fijar_hoy(date(2027, 6, 10))
     headers, uid = await _auth(client, create_user)
-    p = await create_parcela(nombre="Parral 2")
+    p = await create_parcela(nombre="Parral 2", superficie_ha=1.0)
     await _riego(db_session, p.id, uid, date(2026, 11, 12), 24)  # 38.4 mm
 
     resp = await client.get(
@@ -105,19 +108,19 @@ async def test_mes_a_caballo_de_dos_ventanas(
     celdas = resp.json()["filas"][0]["celdas"]
     # Nov: floracion 9/21 * 1 = 0.42857 + cuaje 21/25 * 3 = 2.52 -> 2.94857
     assert celdas["2026-11"]["riegos_esperados"] == "2.95"
-    assert celdas["2026-11"]["mm_esperados"] == "113.23"  # 2.948571 * 38.4
+    assert celdas["2026-11"]["m3_esperados"] == "1132.25"  # 2.948571 * 384
     assert celdas["2026-11"]["cumplimiento_pct"] == "33.9"  # 38.4 / 113.2251
     # Dec: cuaje 4/25 * 3 = 0.48 + cierre_racimo 27/31 * 4 = 3.48387 -> 3.96387
     assert celdas["2026-12"]["riegos_esperados"] == "3.96"
-    assert celdas["2026-12"]["mm_esperados"] == "152.21"
-    assert celdas["2026-12"]["mm_aplicados"] == "0.00"
+    assert celdas["2026-12"]["m3_esperados"] == "1522.13"  # 3.963871 * 384
+    assert celdas["2026-12"]["m3_aplicados"] == "0.00"
     assert celdas["2026-12"]["cumplimiento_pct"] == "0.0"
 
 
 async def test_mes_futuro_sin_porcentaje(client, create_user, create_parcela, fijar_hoy):
     fijar_hoy(date(2026, 11, 6))
     headers, _ = await _auth(client, create_user)
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
 
     resp = await client.get(
         URL, params={"desde": "2026-12-01", "hasta": "2026-12-31"}, headers=headers
@@ -125,7 +128,7 @@ async def test_mes_futuro_sin_porcentaje(client, create_user, create_parcela, fi
 
     celda = resp.json()["filas"][0]["celdas"]["2026-12"]
     assert celda["cumplimiento_pct"] is None
-    assert celda["mm_esperados"] == "0.00"
+    assert celda["m3_esperados"] == "0.00"
     assert celda["riegos_esperados"] == "0.00"
 
 
@@ -134,7 +137,7 @@ async def test_mes_actual_prorrateado_hasta_hoy(
 ):
     fijar_hoy(date(2026, 11, 20))
     headers, uid = await _auth(client, create_user)
-    p = await create_parcela(nombre="Parral 2")
+    p = await create_parcela(nombre="Parral 2", superficie_ha=1.0)
     await _riego(db_session, p.id, uid, date(2026, 11, 12), 24)  # 38.4 mm
 
     resp = await client.get(
@@ -144,20 +147,20 @@ async def test_mes_actual_prorrateado_hasta_hoy(
     celda = resp.json()["filas"][0]["celdas"]["2026-11"]
     # floracion Nov 1-9: 9/21 = 0.42857 ; cuaje Nov 10-20 only: 11/25 * 3 = 1.32
     assert celda["riegos_esperados"] == "1.75"
-    assert celda["mm_esperados"] == "67.15"  # 1.748571 * 38.4
+    assert celda["m3_esperados"] == "671.45"  # 1.748571 * 384
     assert celda["cumplimiento_pct"] == "57.2"  # 38.4 / 67.1451
 
 
 async def test_riego_en_curso_se_ignora(client, create_user, create_parcela, db_session, fijar_hoy):
     fijar_hoy(date(2027, 6, 10))
     headers, uid = await _auth(client, create_user)
-    p = await create_parcela(nombre="Parral 2")
+    p = await create_parcela(nombre="Parral 2", superficie_ha=1.0)
     await _riego(db_session, p.id, uid, date(2027, 3, 5), None)
 
     resp = await client.get(URL, params=MARZO_2027, headers=headers)
 
     celda = resp.json()["filas"][0]["celdas"]["2027-03"]
-    assert celda["mm_aplicados"] == "0.00"
+    assert celda["m3_aplicados"] == "0.00"
     assert celda["riegos_equivalentes"] == "0.00"
     assert celda["cumplimiento_pct"] == "0.0"
 
@@ -169,13 +172,13 @@ async def test_filtra_por_tipo(client, create_user, create_parcela, db_session, 
     await _riego(db_session, p.id, uid, date(2027, 3, 10), 10, TipoRiego.goteo)
     await _riego(db_session, p.id, uid, date(2027, 3, 12), 8, TipoRiego.manto)
 
-    async def mm(tipo: str) -> float:
+    async def m3(tipo: str) -> float:
         resp = await client.get(URL, params={**MARZO_2027, "tipo": tipo}, headers=headers)
-        return float(resp.json()["filas"][0]["celdas"]["2027-03"]["mm_aplicados"])
+        return float(resp.json()["filas"][0]["celdas"]["2027-03"]["m3_aplicados"])
 
-    goteo, manto, ambos = await mm("goteo"), await mm("manto"), await mm("ambos")
-    assert goteo == 16.0
-    assert manto > 0
+    goteo, manto, ambos = await m3("goteo"), await m3("manto"), await m3("ambos")
+    assert goteo == 160.0  # 10 h * 16 m3/h * 1 valve
+    assert manto == 512.0  # 8 h * 16 m3/h * 4 (manto factor) * 1 valve
     assert ambos == pytest.approx(goteo + manto)
 
 
@@ -185,7 +188,7 @@ async def test_filas_parcelas_activas_y_filtro_parcela(
     fijar_hoy(date(2027, 6, 10))
     headers, _ = await _auth(client, create_user)
     a = await create_parcela(nombre="Parral 10")
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
     await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero)
     inactiva = await create_parcela(nombre="Parral 3")
     row = await db_session.get(Parcela, inactiva.id)
@@ -221,7 +224,7 @@ async def test_un_solo_limite_usa_la_campana_y_ruta_no_es_capturada(
 async def test_enero_envuelve_cierre_racimo_y_envero(client, create_user, create_parcela, fijar_hoy):
     fijar_hoy(date(2027, 6, 10))
     headers, _ = await _auth(client, create_user)
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
 
     resp = await client.get(
         URL, params={"desde": "2027-01-01", "hasta": "2027-01-31"}, headers=headers
@@ -230,13 +233,13 @@ async def test_enero_envuelve_cierre_racimo_y_envero(client, create_user, create
     celda = resp.json()["filas"][0]["celdas"]["2027-01"]
     # cierre_racimo wraps Dec 5 -> Jan 4: 4/31 * 4 = 0.5161 ; envero Jan 5-31: 27/27 * 4 = 4
     assert celda["riegos_esperados"] == "4.52"
-    assert celda["mm_esperados"] == "173.42"  # 4.516129 * 38.4
+    assert celda["m3_esperados"] == "1734.19"  # 4.516129 * 384
 
 
 async def test_septiembre_post_cosecha_y_brotacion(client, create_user, create_parcela, fijar_hoy):
     fijar_hoy(date(2027, 6, 10))
     headers, _ = await _auth(client, create_user)
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
 
     resp = await client.get(
         URL, params={"desde": "2026-09-01", "hasta": "2026-09-30"}, headers=headers
@@ -245,7 +248,7 @@ async def test_septiembre_post_cosecha_y_brotacion(client, create_user, create_p
     celda = resp.json()["filas"][0]["celdas"]["2026-09"]
     # post_cosecha May 1 -> Sep 19 (142 d): 19/142 * 1 ; brotacion Sep 20-30: 11/30 * 1
     assert celda["riegos_esperados"] == "0.50"  # 0.1338 + 0.3667 = 0.5005
-    assert celda["mm_esperados"] == "19.22"  # 0.500469 * 38.4
+    assert celda["m3_esperados"] == "192.18"  # 0.500469 * 384
 
 
 async def test_desde_a_mitad_de_mes_recorta_la_ventana(
@@ -253,7 +256,7 @@ async def test_desde_a_mitad_de_mes_recorta_la_ventana(
 ):
     fijar_hoy(date(2027, 6, 10))
     headers, _ = await _auth(client, create_user)
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
 
     resp = await client.get(
         URL, params={"desde": "2026-12-15", "hasta": "2026-12-31"}, headers=headers
@@ -262,7 +265,7 @@ async def test_desde_a_mitad_de_mes_recorta_la_ventana(
     celda = resp.json()["filas"][0]["celdas"]["2026-12"]
     # cuaje ends Dec 4 (out of range); cierre_racimo Dec 15-31 = 17 of 31 days * 4 riegos
     assert celda["riegos_esperados"] == "2.19"  # 17/31 * 4 = 2.1935
-    assert celda["mm_esperados"] == "84.23"  # 2.193548 * 38.4
+    assert celda["m3_esperados"] == "842.32"  # 2.193548 * 384
 
 
 async def test_rango_y_parcela_sin_coincidencias_devuelve_filas_vacias(
@@ -270,7 +273,7 @@ async def test_rango_y_parcela_sin_coincidencias_devuelve_filas_vacias(
 ):
     fijar_hoy(date(2027, 6, 10))
     headers, _ = await _auth(client, create_user)
-    await create_parcela(nombre="Parral 2")
+    await create_parcela(nombre="Parral 2", superficie_ha=1.0)
 
     resp = await client.get(
         URL,
@@ -280,3 +283,97 @@ async def test_rango_y_parcela_sin_coincidencias_devuelve_filas_vacias(
 
     assert resp.status_code == 200
     assert resp.json()["filas"] == []
+
+
+# -- Volumetric rule: the sum of per-valve mm must never be used -------------------
+
+# March 2027 expects 1.044944 riegos (see test 1), so pct = riegos_equivalentes / 1.044944.
+async def _celda_marzo(client, headers, parcela_id: str) -> dict:
+    resp = await client.get(
+        URL, params={**MARZO_2027, "parcela_id": parcela_id}, headers=headers
+    )
+    return resp.json()["filas"][0]["celdas"]["2027-03"]
+
+
+async def test_dos_valvulas_24h_en_parcela_de_2ha_es_un_riego_estandar(
+    client, create_user, create_parcela, db_session, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, uid = await _auth(client, create_user)
+    p = await create_parcela(nombre="Parral 2", superficie_ha=2.0)
+    for valvula in ("1", "2"):
+        inicio = datetime(2027, 3, 10, 8, tzinfo=timezone.utc)
+        db_session.add(RegistroRiego(
+            fecha=date(2027, 3, 10), parcela_id=p.id, tipo=TipoRiego.goteo, cabezal="1",
+            valvula=valvula, inicio=inicio, fin=inicio + timedelta(hours=24),
+            duracion_horas=24, responsable="Juan", created_by=uid,
+        ))
+    await db_session.commit()
+
+    celda = await _celda_marzo(client, headers, p.id)
+
+    assert celda["m3_aplicados"] == "768.00"  # 2 * 24 h * 16 m3/h
+    assert celda["lamina_aplicada_mm"] == "38.40"  # 768 000 / (2 ha * 10 000)
+    assert celda["riegos_equivalentes"] == "1.00"  # NOT 2.00 as the mm sum gave
+    # 1.044944 riegos expected in March -> 768 / (1.044944 * 768) = 95.7 %
+    assert celda["cumplimiento_pct"] == "95.7"
+
+
+async def test_una_sola_valvula_de_dos_es_medio_riego(
+    client, create_user, create_parcela, db_session, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, uid = await _auth(client, create_user)
+    p = await create_parcela(nombre="Parral 2", superficie_ha=2.0)
+    await _riego(db_session, p.id, uid, date(2027, 3, 10), 24)  # 1 valve only
+
+    celda = await _celda_marzo(client, headers, p.id)
+
+    assert celda["m3_aplicados"] == "384.00"
+    assert celda["riegos_equivalentes"] == "0.50"
+    assert celda["cumplimiento_pct"] == "47.8"  # 0.5 / 1.044944
+
+
+async def test_manto_8h_en_2ha_con_2_valvulas_es_133_por_ciento_de_un_riego(
+    client, create_user, create_parcela, db_session, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, uid = await _auth(client, create_user)
+    p = await create_parcela(nombre="Parral 2", superficie_ha=2.0)
+    inicio = datetime(2027, 3, 10, 8, tzinfo=timezone.utc)
+    db_session.add(RegistroRiego(
+        fecha=date(2027, 3, 10), parcela_id=p.id, tipo=TipoRiego.manto, n_valvulas_manto=2,
+        inicio=inicio, fin=inicio + timedelta(hours=8), duracion_horas=8,
+        responsable="Juan", created_by=uid,
+    ))
+    await db_session.commit()
+
+    celda = await _celda_marzo(client, headers, p.id)
+
+    assert celda["m3_aplicados"] == "1024.00"  # 8 h * 16 m3/h * 4 * 2 valves
+    assert celda["lamina_aplicada_mm"] == "51.20"
+    assert celda["riegos_equivalentes"] == "1.33"  # 1 024 000 / 768 000
+    assert celda["cumplimiento_pct"] == "127.6"  # 1.3333 / 1.044944
+
+
+async def test_parcela_sin_superficie_no_rompe_y_no_da_porcentaje(
+    client, create_user, create_parcela, db_session, fijar_hoy
+):
+    fijar_hoy(date(2027, 6, 10))
+    headers, uid = await _auth(client, create_user)
+    sin = await create_parcela(nombre="Parral 2", superficie_ha=None)
+    cero = await create_parcela(nombre="Parral 3", superficie_ha=0)
+    await _riego(db_session, sin.id, uid, date(2027, 3, 10), 10)
+
+    resp = await client.get(URL, params=MARZO_2027, headers=headers)
+
+    assert resp.status_code == 200
+    celdas = {f["parcela_nombre"]: f["celdas"]["2027-03"] for f in resp.json()["filas"]}
+    for nombre in ("Parral 2", "Parral 3"):
+        celda = celdas[nombre]
+        assert celda["cumplimiento_pct"] is None
+        assert celda["lamina_aplicada_mm"] is None
+        assert celda["riegos_equivalentes"] is None
+        assert celda["m3_esperados"] is None
+        assert celda["riegos_esperados"] == "1.04"
+    assert celdas["Parral 2"]["m3_aplicados"] == "160.00"

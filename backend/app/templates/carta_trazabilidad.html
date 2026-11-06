@@ -202,8 +202,13 @@
         </div>
       </td>
       <td>
+        {% if resumen.mm_riego_total is not none %}
         <div class="resumen-valor">{{ resumen.mm_riego_total }} mm</div>
-        <div class="resumen-label">Riego aplicado ({{ resumen.litros_riego_total }} L) — {{ resumen.pct_objetivo_riego }}% de {{ resumen.mm_objetivo_anual }} mm/año objetivo</div>
+        <div class="resumen-label">Riego aplicado ({{ resumen.litros_riego_total }} L){% if resumen.pct_objetivo_riego is not none %} — {{ resumen.pct_objetivo_riego }}% de {{ resumen.mm_objetivo_anual }} mm/año objetivo{% endif %}</div>
+        {% else %}
+        <div class="resumen-valor">{{ resumen.litros_riego_total }} L</div>
+        <div class="resumen-label">Riego aplicado (sin superficie cargada: lámina y cumplimiento no calculables)</div>
+        {% endif %}
       </td>
       <td>
         <div class="resumen-valor">{{ resumen.horas_de_frio if resumen.horas_de_frio is not none else '—' }}</div>
@@ -254,12 +259,13 @@
   <h2>Cumplimiento de riego por estado de campaña</h2>
   {% if riego_por_estado %}
   <table class="datos">
-    <tr><th>Estado</th><th>Desde</th><th>Hasta</th><th>Riegos esperados</th><th>mm aplicados</th><th>Cumplimiento</th></tr>
+    <tr><th>Estado</th><th>Desde</th><th>Hasta</th><th>Riegos esperados</th><th>mm aplicados</th><th>Litros</th><th>Cumplimiento</th></tr>
     {% for e in riego_por_estado %}
     <tr class="{{ e.row_class }}">
       <td>{{ e.estado_label }}</td><td>{{ e.fecha_inicio }}</td><td>{{ e.fecha_fin }}</td>
-      <td>{{ e.riegos_esperados }}</td><td>{{ e.mm_aplicados }}</td>
-      <td><strong>{{ e.cumplimiento_pct }}%</strong></td>
+      <td>{{ e.riegos_esperados }}</td><td>{{ e.mm_aplicados if e.mm_aplicados is not none else '—' }}</td>
+      <td>{{ e.litros_aplicados }}</td>
+      <td><strong>{% if e.cumplimiento_pct is not none %}{{ e.cumplimiento_pct }}%{% else %}—{% endif %}</strong></td>
     </tr>
     {% endfor %}
   </table>

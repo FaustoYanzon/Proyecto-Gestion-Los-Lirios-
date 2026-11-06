@@ -613,7 +613,9 @@ async def test_eficiencia_hidrica_suma_goteo_manto_historico_y_nuevo(
     ]
     assert litros_registros == [320_000, 1_280_000, 1_920_000]
     assert fila["litros_totales"] == sum(litros_registros) == 3_520_000
-    assert fila["mm_aplicados_total"] == 16.0 + 64.0 + 64.0
+    # Equivalent depth over the 2.3 ha parcela: 3 520 000 L / (2.3 * 10 000) = 153.04 mm
+    # (the old per-record mm sum, 144.0, ignored the valve count and the surface).
+    assert fila["mm_aplicados_total"] == pytest.approx(3_520_000 / 23_000)
 
 
 async def test_iniciar_manto_desde_cliente_viejo_con_cabezal_y_valvula(client, create_user, create_parcela):

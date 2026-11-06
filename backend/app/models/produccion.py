@@ -356,19 +356,36 @@ class RegistroRiego(Base):
         """Factor de caudal que corresponde a este registro (tipo + regla vigente)."""
         return self.factor_caudal(self.tipo, self.n_valvulas_manto)
 
+    @staticmethod
+    def litros_de(
+        horas: float | None,
+        tipo: TipoRiego | str | None,
+        valvula: str | None,
+        n_valvulas_manto: int | None,
+    ) -> float:
+        """Single source of truth for the litres formula (unrounded).
+
+        horas * litros/h/valvula * caudal factor * number of valves; 0.0 while the
+        riego is still in progress (horas is None).
+        """
+        if horas is None:
+            return 0.0
+        return (
+            horas
+            * RegistroRiego.LITROS_POR_HORA_VALVULA
+            * RegistroRiego.factor_caudal(tipo, n_valvulas_manto)
+            * RegistroRiego.contar_valvulas(valvula, n_valvulas_manto)
+        )
+
     @property
     def litros_aplicados(self) -> float:
-        """Litros totales entregados en este registro.
-
-        horas * litros/h/valvula * factor de caudal * cantidad de valvulas.
+        """Litros totales entregados en este registro (redondeado a 2 decimales).
 
         0.0 mientras el riego está en curso (duracion_horas todavía None) —
         se completa recién al terminar.
         """
-        if self.duracion_horas is None:
-            return 0.0
         return round(
-            self.duracion_horas * self.LITROS_POR_HORA_VALVULA * self.factor_aplicado * self.n_valvulas, 2
+            self.litros_de(self.duracion_horas, self.tipo, self.valvula, self.n_valvulas_manto), 2
         )
 
     parcela: Mapped[Parcela] = relationship(
