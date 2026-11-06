@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-11-05
+> Última generación: 2026-11-06
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -90,7 +90,7 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (49):**
+**Rutas (50):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
@@ -129,6 +129,7 @@ repo/
 - `/dashboard/produccion/clima`
 - `/dashboard/produccion/cosecha`
 - `/dashboard/produccion/cumplimiento-fitosanitario`
+- `/dashboard/produccion/cumplimiento-riego`
 - `/dashboard/produccion/dashboard`
 - `/dashboard/produccion/fitosanitarios`
 - `/dashboard/produccion/metas`
