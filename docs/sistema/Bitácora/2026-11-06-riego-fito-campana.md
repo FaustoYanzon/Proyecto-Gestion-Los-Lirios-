@@ -46,16 +46,20 @@ Seis pedidos resueltos en la rama (HEAD `6873a09`). **Nada desplegado todavía**
 - `Modelo de Datos.md` **no se regeneró**: esta rama no cambia tablas ni columnas (solo el cuerpo de una vista), y `generate_modelo_datos.py` resuelve la base por `scripts/migracion/.env.prod`, que apunta a producción.
 - Ningún doc de `Decisiones/` ni `Bugs Conocidos.md` contradice estas decisiones. `Arquitectura.md` (línea sobre `app.core.fenologia`) todavía dice que `estado-actual` se alimenta del calendario viejo y de `CicloCampana`; queda desactualizada respecto del punto 2.
 
-## Orden de producción (NO ejecutado)
-1. Backup.
-2. `corregir_parral_4_5.py` en dry-run, luego `--apply`.
-3. Push a `main`: Railway corre `alembic upgrade head` al arrancar y aplica `7d2c5e9a41b8` solo.
-4. Inmediatamente después, `recalcular_manto_x4.py` en dry-run → revisar → `--apply`. (Entre 3 y 4 la vista ya usa x4 sobre datos viejos.)
-5. Deploy de Vercel (manual).
-6. EAS OTA según `mobile/AGENTS.md`.
+## Producción (ejecutado el 2026-11-06)
+1. Backup `los_lirios_prod_20261106_0949.dump` (1,7 MB, con copia en OneDrive).
+2. `corregir_parral_4_5.py --apply`: Parral 4 y 5 pasan de 2,85 a 2,0 ha (0 riegos en ambos) y se intercambiaron `parcelas.coordenadas` (estaban cruzadas: Parral 4 al sur). Verificado idempotente.
+3. Merge del PR #1 a `main` (`39d9095`): deploy de Railway `28b6ce3a`, `alembic upgrade head` aplicó `7d2c5e9a41b8`.
+4. `recalcular_manto_x4.py --apply`: 5 registros de manto actualizados (3 en curso sin duración se omiten; `n_valvulas_manto` no cambió en ninguno). Parral 8 queda en 2.028,8 mm por un riego de 317 h (dato original dudoso).
+5. Vercel `--prod` desde `main` (el primer intento falló por una descarga intermitente de Google Fonts; el segundo salió bien). Alias `frontend-six-jade-79.vercel.app`.
+6. EAS OTA en la rama `production` (Android e iOS, commit `39d9095`). No se pudo verificar el contenido del bundle publicado (el CDN responde 403 sin autenticación).
+
+## Hallazgos de la verificación local
+- El mapa web dibuja los polígonos leyendo `frontend/public/Los Lirios 2026.kml` en vivo; mobile los dibuja desde `parcelas.coordenadas` (API). Regenerar `finca-map.ts` (landing) no mueve el mapa real. Se corrigieron los nombres en el KML y se intercambiaron las coordenadas en prod.
+- La tarjeta de fenología del panel del mapa tenía "estimado automático" fijo; ahora usa `fuente`.
 
 ## Abiertos
-- Click real en local no hecho.
+- Probado en local: web (click real) y mobile (dispositivo). No probado: botón "Resetear a automático" y las pantallas internas de producción.
 - Los puntos GeoJSON de las válvulas 43/44 caen dentro del polígono norte: faltan coordenadas reales.
 - `generate_modelo_datos.py` apunta a prod por defecto; conviene un guard o un default local.
 - Menores diferidos:
