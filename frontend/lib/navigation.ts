@@ -137,14 +137,17 @@ export const SUB_NAVS: SubNav[] = [
   {
     prefix: '/dashboard/finanzas',
     items: [
-      { href: '/dashboard/finanzas/egresos',     label: 'Egresos'     },
-      { href: '/dashboard/finanzas/ingresos',    label: 'Ingresos'    },
-      { href: '/dashboard/finanzas/cheques',      label: 'Cheques'      },
-      { href: '/dashboard/finanzas/presupuesto',  label: 'Presupuesto'  },
-      { href: '/dashboard/finanzas/dashboard',    label: 'Dashboard'    },
-      { href: '/dashboard/finanzas/mano-de-obra', label: 'Mano de Obra' },
-      { href: '/dashboard/finanzas/flujo',        label: 'Flujo Anual'  },
-      { href: '/dashboard/finanzas/a-pagar',       label: 'A pagar'      },
+      // Registro: lo que se carga día a día.
+      { href: '/dashboard/finanzas/egresos',      label: 'Egresos',      group: 'Registro' },
+      { href: '/dashboard/finanzas/ingresos',     label: 'Ingresos',     group: 'Registro' },
+      { href: '/dashboard/finanzas/cheques',      label: 'Cheques',      group: 'Registro' },
+      { href: '/dashboard/finanzas/a-pagar',      label: 'A pagar',      group: 'Registro' },
+      // Planificación: lo que se define antes o durante la campaña.
+      { href: '/dashboard/finanzas/presupuesto',  label: 'Presupuesto',  group: 'Planificación' },
+      // Seguimiento: tableros y lectura, no se carga nada.
+      { href: '/dashboard/finanzas/mano-de-obra', label: 'Mano de Obra', group: 'Seguimiento' },
+      { href: '/dashboard/finanzas/dashboard',    label: 'Dashboard',    group: 'Seguimiento' },
+      { href: '/dashboard/finanzas/flujo',        label: 'Flujo Anual',  group: 'Seguimiento' },
     ],
   },
   {
