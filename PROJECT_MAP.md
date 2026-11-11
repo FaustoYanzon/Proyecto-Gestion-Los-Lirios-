@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-11-06
+> Última generación: 2026-11-11
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,7 +26,7 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 44 clases ORM
+**Modelos:** 17 archivos, 50 clases ORM
 
 | Archivo | Clases |
 |---|---|
@@ -35,6 +35,7 @@ repo/
 | `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
 | `clima_cache.py` | ClimaCache |
 | `insumo.py` | Insumo, MovimientoStock |
+| `maquinaria.py` | Maquina, OrdenMaquinaria, FotoOrdenMaquinaria, PresupuestoMaquinaria, PagoMaquinaria, EventoOrdenMaquinaria |
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
 | `presupuesto.py` | Presupuesto, MetaProduccion |
@@ -47,7 +48,7 @@ repo/
 | `valvula.py` | Valvula |
 | `whatsapp.py` | TelefonoUsuarioWhatsapp, MensajeWhatsappPendiente |
 
-**Routers:** 25
+**Routers:** 26
 
 | Archivo | Prefix | Tags |
 |---|---|---|
@@ -60,6 +61,7 @@ repo/
 | `kpis.py` | `/kpis` | "KPIs" |
 | `lotes_pasa.py` | `/lotes-pasa` | "Lotes de pasa" |
 | `maestros_produccion.py` | `/alta-produccion` | "Alta de Producción — maestros" |
+| `maquinaria.py` | `/maquinaria` | "Maquinaria" |
 | `notificaciones.py` | `/notificaciones` | "notificaciones" |
 | `ordenes_aplicacion.py` | `/ordenes-aplicacion` | "Ordenes Aplicacion" |
 | `parcelas.py` | `/parcelas` | "Parcelas" |
@@ -77,7 +79,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 63 (head: `7d2c5e9a41b8_vw_kpi_manto_factor_4.py`)
+**Migraciones de Alembic:** 64 (head: `60332c8268d5_maquinaria_module_tables.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int

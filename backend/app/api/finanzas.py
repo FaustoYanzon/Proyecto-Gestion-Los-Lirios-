@@ -179,6 +179,11 @@ async def update_egreso(
     egreso = result.scalar_one_or_none()
     if egreso is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Egreso not found")
+    if egreso.fuente == "maquinaria":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este egreso proviene de una orden de Maquinaria: gestionalo desde la orden.",
+        )
     cambios = egreso_data.model_dump(exclude_unset=True)
     if "f_pago" in cambios and cambios["f_pago"] != egreso.f_pago:
         # Nueva Fecha de Pago -> que el aviso de cheque vuelva a salir.
@@ -200,6 +205,11 @@ async def delete_egreso(
     egreso = result.scalar_one_or_none()
     if egreso is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Egreso not found")
+    if egreso.fuente == "maquinaria":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este egreso proviene de una orden de Maquinaria: gestionalo desde la orden.",
+        )
     await db.delete(egreso)
     await db.flush()
 

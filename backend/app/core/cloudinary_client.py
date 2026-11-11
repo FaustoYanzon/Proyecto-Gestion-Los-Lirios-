@@ -205,6 +205,53 @@ async def upload_foto_orden_aplicacion(raw: bytes, content_type: str, orden_parc
     return response.json()["secure_url"]
 
 
+async def upload_foto_maquinaria_orden(raw: bytes, content_type: str, orden_id: str) -> str:
+    """Sube una foto de una falla reportada en una orden de maquinaria. Mismo
+    criterio que upload_foto_orden_aplicacion: álbum (no pisa fotos anteriores),
+    levanta la excepción en vez de tragarla."""
+    if content_type not in FOTO_ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de imagen no soportado (usar JPEG, PNG o WEBP).",
+        )
+    if len(raw) > MAX_FOTO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="La imagen supera el tamaño máximo de 8 MB.",
+        )
+
+    try:
+        cloud_name, api_key, api_secret = _require_config()
+    except CloudinaryNotConfigured as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Subida de fotos no disponible (Cloudinary sin configurar).",
+        ) from exc
+
+    public_id = f"fotos_maquinaria/{orden_id}/{uuid.uuid4()}"
+    timestamp = int(time.time())
+    params_to_sign = f"public_id={public_id}&timestamp={timestamp}"
+    signature = hashlib.sha1((params_to_sign + api_secret).encode()).hexdigest()
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload",
+            data={
+                "public_id": public_id,
+                "timestamp": timestamp,
+                "api_key": api_key,
+                "signature": signature,
+            },
+            files={"file": ("foto", raw, content_type)},
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Cloudinary rechazó la subida: {response.text}",
+        )
+    return response.json()["secure_url"]
+
+
 async def upload_informe_analisis(raw: bytes, content_type: str, analisis_id: str) -> str:
     """Sube el informe adjunto de un analisis de calidad (imagen o PDF, un
     laboratorio/bodega compradora suele mandar el resultado en PDF). Usa el
@@ -313,7 +360,12 @@ MEDIA_A_BORRAR_KEY = "cloudinary_a_borrar"
 
 # Solo se destruye lo que esta app sube como álbum/informe. Avatares (se pisan
 # solos) y comprobantes de WhatsApp quedan fuera a propósito.
-_PREFIJOS_BORRABLES = ("fotos_parcela/", "fotos_ordenes_aplicacion/", "informes_analisis/")
+_PREFIJOS_BORRABLES = (
+    "fotos_parcela/",
+    "fotos_ordenes_aplicacion/",
+    "fotos_maquinaria/",
+    "informes_analisis/",
+)
 _URL_MEDIA_RE = re.compile(
     r"^https://res\.cloudinary\.com/(?P<cloud>[^/]+)/(?P<tipo>image|raw|video)/upload/"
     r"(?:v\d+/)?(?P<public_id>.+)$"
