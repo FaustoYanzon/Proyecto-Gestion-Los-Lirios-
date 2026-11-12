@@ -44,6 +44,11 @@ export function GravedadBadge({ gravedad }: { gravedad: GravedadFalla }) {
   )
 }
 
+// Order number shown to users: OM-0012.
+export function fmtOM(numero: number): string {
+  return `OM-${String(numero).padStart(4, '0')}`
+}
+
 const MS_DAY = 86_400_000
 
 // Days an order has been open (closed/cancelled ones stop counting at their last update).

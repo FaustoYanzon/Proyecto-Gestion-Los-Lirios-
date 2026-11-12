@@ -18,6 +18,7 @@ import {
 } from '@/lib/api/maquinaria'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { useAuthStore } from '@/store/authStore'
+import MaquinaIcon from '@/components/maquinaria/MaquinaIcon'
 import EstadoMaquinaBadge from '@/components/maquinaria/EstadoMaquinaBadge'
 import Drawer from '@/components/maquinaria/Drawer'
 import MaquinaForm from '@/components/maquinaria/MaquinaForm'
@@ -164,8 +165,9 @@ export default function MaquinariaPage() {
                     <td className="px-3 py-3 whitespace-nowrap">
                       <Link
                         href={`/dashboard/maquinaria/${m.id}`}
-                        className="font-medium text-[#7a1f2c] hover:underline"
+                        className="inline-flex items-center gap-1.5 font-medium text-[#7a1f2c] hover:underline"
                       >
+                        <MaquinaIcon icono={m.icono} size={16} className="shrink-0" />
                         {m.marca} {m.modelo}
                       </Link>
                       {m.anio && <span className="text-gray-400"> · {m.anio}</span>}

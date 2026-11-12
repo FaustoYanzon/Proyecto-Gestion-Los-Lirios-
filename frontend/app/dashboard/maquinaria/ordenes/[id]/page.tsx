@@ -10,28 +10,14 @@ import {
   getOrden,
 } from '@/lib/api/maquinaria'
 import { ESTADOS_ABIERTOS } from '@/lib/maquinariaTransiciones'
-import { useAuthStore } from '@/store/authStore'
-import OrdenAcciones from '@/components/maquinaria/OrdenAcciones'
-import OrdenFotos from '@/components/maquinaria/OrdenFotos'
-import OrdenTimeline from '@/components/maquinaria/OrdenTimeline'
-import PagoPanel from '@/components/maquinaria/PagoPanel'
-import PresupuestoPanel from '@/components/maquinaria/PresupuestoPanel'
-import { GravedadBadge, OrdenEstadoBadge, diasAbierta, fmtDate, fmtDateTime } from '@/components/maquinaria/ordenUi'
+import MaquinaIcon from '@/components/maquinaria/MaquinaIcon'
+import OrdenDetalleBody from '@/components/maquinaria/OrdenDetalleBody'
+import { GravedadBadge, OrdenEstadoBadge, diasAbierta, fmtDate, fmtDateTime, fmtOM } from '@/components/maquinaria/ordenUi'
 import EmptyState from '@/components/ui/EmptyState'
 import FormError from '@/components/ui/FormError'
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-3">
-      <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-      {children}
-    </section>
-  )
-}
-
 export default function OrdenDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const userRole = useAuthStore((s) => s.user?.role)
 
   const { data: orden, isLoading, error } = useQuery({
     queryKey: ['maquinaria', 'orden', id],
@@ -44,7 +30,7 @@ export default function OrdenDetallePage({ params }: { params: Promise<{ id: str
       href="/dashboard/maquinaria/ordenes"
       className="inline-flex items-center gap-1 text-sm text-[#7a1f2c] hover:underline"
     >
-      <ArrowLeft size={14} /> Volver al tablero
+      <ArrowLeft size={14} /> Volver a órdenes
     </Link>
   )
 
@@ -79,7 +65,6 @@ export default function OrdenDetallePage({ params }: { params: Promise<{ id: str
 
   const abierta = ESTADOS_ABIERTOS.includes(orden.estado)
   const dias = diasAbierta(orden.created_at, orden.updated_at, abierta)
-  const esGerencial = userRole === 'gerencial' || userRole === 'super_admin'
 
   return (
     <div className="space-y-5">
@@ -88,7 +73,9 @@ export default function OrdenDetallePage({ params }: { params: Promise<{ id: str
       {/* Header */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 space-y-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900">
+            <span className="font-mono text-lg text-[#7a1f2c]">{fmtOM(orden.numero)}</span>
+            <MaquinaIcon icono={orden.maquina.icono} size={22} className="text-gray-500" />
             {orden.maquina.marca} {orden.maquina.modelo}
           </h1>
           <OrdenEstadoBadge estado={orden.estado} />
@@ -105,37 +92,7 @@ export default function OrdenDetallePage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          <Section title="Acciones">
-            {/* Remount when the saved taller/fecha/estado change so the inline inputs resync */}
-            <OrdenAcciones
-              key={`${orden.estado}|${orden.taller ?? ''}|${orden.fecha_estimada_entrega ?? ''}`}
-              orden={orden}
-            />
-          </Section>
-
-          <Section title="Presupuestos">
-            <PresupuestoPanel presupuestos={orden.presupuestos} />
-          </Section>
-
-          {(esGerencial || orden.pago) && (
-            <Section title="Pago">
-              <PagoPanel pago={orden.pago} />
-            </Section>
-          )}
-
-          <Section title="Fotos">
-            <OrdenFotos ordenId={orden.id} fotos={orden.fotos} abierta={abierta} />
-          </Section>
-        </div>
-
-        <div>
-          <Section title="Historial">
-            <OrdenTimeline eventos={orden.eventos} />
-          </Section>
-        </div>
-      </div>
+      <OrdenDetalleBody orden={orden} />
     </div>
   )
 }

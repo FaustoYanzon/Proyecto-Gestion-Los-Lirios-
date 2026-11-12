@@ -12,8 +12,13 @@ import {
   getMaquinariaErrorMessage,
   TIPO_MAQUINA_VALUES,
   TIPO_MAQUINA_LABELS,
+  ICONO_MAQUINA_VALUES,
+  ICONO_MAQUINA_LABELS,
+  ICONO_POR_TIPO,
   type FincaMaquinaria,
+  type IconoMaquina,
 } from '@/lib/api/maquinaria'
+import MaquinaIcon from './MaquinaIcon'
 import { useContextStore } from '@/store/contextStore'
 
 // Caucete is no longer offered for new records (same rule as IngresoForm).
@@ -72,7 +77,11 @@ export default function MaquinaForm({ onSuccess, onCancel }: Props) {
     },
   })
 
-  const esImplemento = watch('tipo') === 'implemento'
+  const tipoSel = watch('tipo')
+  const esImplemento = tipoSel === 'implemento'
+  // Follows the tipo until the user picks an icon explicitly.
+  const [iconoElegido, setIconoElegido] = useState<IconoMaquina | null>(null)
+  const iconoActual: IconoMaquina | null = iconoElegido ?? (tipoSel ? ICONO_POR_TIPO[tipoSel] : null)
 
   // Only active tractors can be assigned (backend validates the same rule).
   const { data: tractores = [] } = useQuery({
@@ -92,6 +101,7 @@ export default function MaquinaForm({ onSuccess, onCancel }: Props) {
         patente_serie: data.patente_serie || null,
         finca: data.finca,
         tractor_id: esImplemento && data.tractor_id ? data.tractor_id : null,
+        icono: iconoActual ?? ICONO_POR_TIPO[data.tipo],
       })
       queryClient.invalidateQueries({ queryKey: ['maquinaria'] })
       onSuccess()
@@ -147,6 +157,32 @@ export default function MaquinaForm({ onSuccess, onCancel }: Props) {
           <label className={lbl}>Patente / N° de serie <span className="text-gray-400 font-normal">(opcional)</span></label>
           <input type="text" {...register('patente_serie')} className={field} />
           {errors.patente_serie && <p className={err}>{errors.patente_serie.message}</p>}
+        </div>
+
+        <div className="md:col-span-2">
+          <label className={lbl}>Ícono</label>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Ícono de la máquina">
+            {ICONO_MAQUINA_VALUES.map((i) => {
+              const selected = iconoActual === i
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setIconoElegido(i)}
+                  className={`flex flex-col items-center gap-1 rounded-md border px-3 py-2.5 text-sm transition-colors ${
+                    selected
+                      ? 'border-[#7a1f2c] bg-[#7a1f2c]/5 text-[#7a1f2c] font-medium'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <MaquinaIcon icono={i} size={26} />
+                  {ICONO_MAQUINA_LABELS[i]}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {esImplemento && (

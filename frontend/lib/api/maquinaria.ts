@@ -12,6 +12,23 @@ export const TIPO_MAQUINA_LABELS: Record<TipoMaquina, string> = {
   implemento: 'Implemento',
 }
 
+export const ICONO_MAQUINA_VALUES = ['tractor', 'carro', 'implemento'] as const
+export type IconoMaquina = (typeof ICONO_MAQUINA_VALUES)[number]
+
+export const ICONO_MAQUINA_LABELS: Record<IconoMaquina, string> = {
+  tractor: 'Tractor',
+  carro: 'Carro',
+  implemento: 'Implemento',
+}
+
+// Default icon suggested for each tipo (the backend resolves the same way when icono is omitted).
+export const ICONO_POR_TIPO: Record<TipoMaquina, IconoMaquina> = {
+  tractor: 'tractor',
+  implemento: 'implemento',
+  cosechadora: 'carro',
+  enfardadora: 'carro',
+}
+
 export const ESTADO_MAQUINA_VALUES = [
   'operativa',
   'operativa_con_observaciones',
@@ -93,6 +110,7 @@ export interface MaquinaResponse {
   finca: FincaMaquinaria
   tractor_id: string | null
   foto_url: string | null
+  icono: IconoMaquina
   is_active: boolean
   created_at: string
   updated_at: string
@@ -112,6 +130,7 @@ export interface MaquinaCreate {
   finca: FincaMaquinaria
   tractor_id?: string | null
   foto_url?: string | null
+  icono?: IconoMaquina
 }
 
 // PATCH uses exclude_unset: send only the changed fields (null clears the nullable ones).
@@ -133,10 +152,12 @@ export interface MaquinaResumen {
   modelo: string
   patente_serie: string | null
   finca: FincaMaquinaria
+  icono: IconoMaquina
 }
 
 export interface OrdenResponse {
   id: string
+  numero: number
   maquina_id: string
   maquina: MaquinaResumen
   finca: FincaMaquinaria
@@ -201,6 +222,7 @@ export interface OrdenDetalleResponse extends OrdenResponse {
 }
 
 export interface OrdenesFilter {
+  numero?: number
   estado?: EstadoOrden
   maquina_id?: string
   finca?: FincaMaquinaria
@@ -253,6 +275,7 @@ export interface PagoCreate {
 
 export interface HistorialOrden {
   id: string
+  numero: number
   estado: EstadoOrden
   gravedad: GravedadFalla
   descripcion: string
@@ -260,10 +283,14 @@ export interface HistorialOrden {
   created_at: string
   costo: number | null
   dias_fuera_servicio: number
+  fecha_pago: string | null
+  cerrada_at: string | null
 }
 
 export interface HistorialMaquinaResponse {
   maquina_id: string
+  temporada: number
+  ordenes_count: number
   costo_total: number | null
   dias_fuera_servicio_total: number
   ordenes: HistorialOrden[]
@@ -349,8 +376,11 @@ export async function updateMaquina(id: string, payload: MaquinaUpdate): Promise
   return normalizeMaquina(data)
 }
 
-export async function getHistorialMaquina(id: string): Promise<HistorialMaquinaResponse> {
-  const { data } = await api.get<HistorialWire>(`/maquinaria/maquinas/${id}/historial`)
+// temporada = starting year of the campaña (May -> April); omitted = current campaña.
+export async function getHistorialMaquina(id: string, temporada?: number): Promise<HistorialMaquinaResponse> {
+  const { data } = await api.get<HistorialWire>(`/maquinaria/maquinas/${id}/historial`, {
+    params: temporada === undefined ? undefined : { temporada },
+  })
   return normalizeHistorial(data)
 }
 
