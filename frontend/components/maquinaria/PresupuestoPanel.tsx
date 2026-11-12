@@ -1,6 +1,5 @@
 import type { PresupuestoResponse, EstadoPresupuesto } from '@/lib/api/maquinaria'
-import { formatARS } from '@/lib/theme'
-import { fmtDateTime } from './ordenUi'
+import { fmtDateTime, fmtMonto } from './ordenUi'
 
 const ESTADO_STYLES: Record<EstadoPresupuesto, { label: string; cls: string }> = {
   pendiente: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -31,7 +30,7 @@ export default function PresupuestoPanel({ presupuestos }: { presupuestos: Presu
               </span>
             </div>
             {p.monto !== null && (
-              <p className="font-mono text-sm text-gray-800">{formatARS(p.monto)}</p>
+              <p className="font-mono text-sm text-gray-800">{fmtMonto(p.monto)}</p>
             )}
             {p.detalle && <p className="text-sm text-gray-600">{p.detalle}</p>}
             {p.adjunto_url && (

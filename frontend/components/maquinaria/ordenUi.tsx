@@ -68,6 +68,18 @@ export function fmtDate(isoDate: string): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// Whole amounts without ",00"; centavos only when present (shared lib/theme formatARS rounds to pesos).
+const ARS_FORMAT = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+
+export function fmtMonto(n: number): string {
+  return ARS_FORMAT.format(n)
+}
+
 export const inputCls =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#7a1f2c] focus:border-transparent'
 export const labelCls = 'block text-sm font-medium text-gray-700 mb-1'

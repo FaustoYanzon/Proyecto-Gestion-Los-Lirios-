@@ -20,13 +20,12 @@ import {
   viaPresupuesto,
   type TransicionDef,
 } from '@/lib/maquinariaTransiciones'
-import { formatARS } from '@/lib/theme'
 import { useAuthStore } from '@/store/authStore'
 import ActionDialog from './ActionDialog'
 import Drawer from './Drawer'
 import PagoForm from './PagoForm'
 import PresupuestoForm from './PresupuestoForm'
-import { btnDanger, btnPrimary, btnSecondary, inputCls, labelCls } from './ordenUi'
+import { btnDanger, btnPrimary, btnSecondary, fmtMonto, inputCls, labelCls } from './ordenUi'
 
 // Button copy per transition (keyed by "desde>hacia"; falls back to the target state).
 const TRANSICION_LABELS: Record<string, string> = {
@@ -261,7 +260,7 @@ export default function OrdenAcciones({ orden }: { orden: OrdenDetalleResponse }
           title="Aprobar presupuesto"
           description={
             dialog.monto !== null
-              ? `Se aprueba el presupuesto por ${formatARS(dialog.monto)}.`
+              ? `Se aprueba el presupuesto por ${fmtMonto(dialog.monto)}.`
               : 'Se aprueba el presupuesto.'
           }
           confirmLabel="Aprobar"

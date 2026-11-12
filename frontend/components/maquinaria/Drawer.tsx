@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 // Right-side drawer, same look as the Sheet in finanzas/ingresos/page.tsx.
@@ -30,7 +31,9 @@ export default function Drawer({
 
   if (!open) return null
 
-  return (
+  // Portal to <body>: inside <main> (isolate) the header/sidebar (z-20/30 in the root
+  // stacking context) painted over the top of the drawer and hid its title.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative ml-auto w-full max-w-[480px] bg-white shadow-xl flex flex-col h-full">
@@ -46,6 +49,7 @@ export default function Drawer({
         </div>
         <div className="flex-1 overflow-y-auto p-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

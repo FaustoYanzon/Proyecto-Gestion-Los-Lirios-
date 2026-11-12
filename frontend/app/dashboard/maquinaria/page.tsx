@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus, Tractor, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Tractor } from 'lucide-react'
 import {
   getMaquinas,
   getMaquinariaErrorMessage,
@@ -19,64 +19,12 @@ import {
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { useAuthStore } from '@/store/authStore'
 import EstadoMaquinaBadge from '@/components/maquinaria/EstadoMaquinaBadge'
+import Drawer from '@/components/maquinaria/Drawer'
 import MaquinaForm from '@/components/maquinaria/MaquinaForm'
 import EmptyState from '@/components/ui/EmptyState'
 import FormError from '@/components/ui/FormError'
 
 const PAGE_SIZE = 10
-
-// ─── Sheet ────────────────────────────────────────────────────────────────────
-// Same drawer as finanzas/ingresos/page.tsx.
-
-function Sheet({
-  open,
-  onClose,
-  title,
-  children,
-}: {
-  open: boolean
-  onClose: () => void
-  title: string
-  children: React.ReactNode
-}) {
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    },
-    [onClose]
-  )
-
-  useEffect(() => {
-    if (!open) return
-    document.addEventListener('keydown', handleKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', handleKey)
-      document.body.style.overflow = ''
-    }
-  }, [open, handleKey])
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative ml-auto w-full max-w-[480px] bg-white shadow-xl flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +37,7 @@ export default function MaquinariaPage() {
   // Only gerencial+ can filter by finca: the API pins the encargado to their own.
   const [finca, setFinca] = useState<FincaMaquinaria | ''>('')
   const [sheetOpen, setSheetOpen] = useState(false)
+  const closeSheet = useCallback(() => setSheetOpen(false), [])
 
   const filter = {
     tipo: tipo || undefined,
@@ -219,7 +168,7 @@ export default function MaquinariaPage() {
                       >
                         {m.marca} {m.modelo}
                       </Link>
-                      {m.anio && <span className="ml-2 text-xs text-gray-400">{m.anio}</span>}
+                      {m.anio && <span className="text-gray-400"> · {m.anio}</span>}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap font-mono text-gray-700">{m.patente_serie || '—'}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-gray-700">{FINCA_LABELS[m.finca]}</td>
@@ -256,9 +205,9 @@ export default function MaquinariaPage() {
       </div>
 
       {esGerencial && (
-        <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Nueva máquina">
-          <MaquinaForm onSuccess={() => setSheetOpen(false)} onCancel={() => setSheetOpen(false)} />
-        </Sheet>
+        <Drawer open={sheetOpen} onClose={closeSheet} title="Nueva máquina">
+          {sheetOpen && <MaquinaForm onSuccess={closeSheet} onCancel={closeSheet} />}
+        </Drawer>
       )}
     </div>
   )
