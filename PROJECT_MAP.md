@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-11-11
+> Última generación: 2026-11-12
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -79,7 +79,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 64 (head: `60332c8268d5_maquinaria_module_tables.py`)
+**Migraciones de Alembic:** 65 (head: `07acdb0d401f_maquinaria_orden_numero_e_icono_de_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -157,7 +157,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
-- `maquinaria/`: ActionDialog.tsx · Drawer.tsx · EstadoMaquinaBadge.tsx · MaquinaForm.tsx · OrdenAcciones.tsx · OrdenCard.tsx · OrdenFotos.tsx · OrdenTimeline.tsx · PagoForm.tsx · PagoPanel.tsx · PresupuestoForm.tsx · PresupuestoPanel.tsx · ReportarFallaForm.tsx · ordenUi.tsx
+- `maquinaria/`: ActionDialog.tsx · Drawer.tsx · EstadoMaquinaBadge.tsx · MaquinaForm.tsx · MaquinaIcon.tsx · OrdenAcciones.tsx · OrdenDetalleBody.tsx · OrdenFila.tsx · OrdenFotos.tsx · OrdenProgreso.tsx · OrdenTimeline.tsx · PagoForm.tsx · PagoPanel.tsx · PresupuestoForm.tsx · PresupuestoPanel.tsx · ReportarFallaForm.tsx · ordenUi.tsx
 - `produccion/`: ARevisarPanel.tsx · AplicacionesAgrupadas.tsx · AplicacionesRealizadas.tsx · CarenciaParrales.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · NuevaOrdenAplicacion.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
@@ -196,6 +196,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `_alembic_prod.py`
 - `_audit_jornales_historicos.py`
 - `_prod_db.py`
+- `asignar_finca_parcelas.py`
 - `auditar_avance_plan.py`
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`

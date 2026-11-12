@@ -66,3 +66,13 @@ Módulo nuevo de gestión de maquinaria: alta de equipos, reporte de falla desde
 - Decidir cuándo se suman los tractoristas como reportantes (`require_encargado_estricto` hoy).
 - Ficha de máquina y edición/baja, cuando llegue la ficha técnica.
 - Cámara en mobile (build nativo con `expo-image-picker`).
+
+## Actualización 2026-11-12: numeración, iconos, historial y filtro por finca
+
+- **Órdenes con número:** `maquinaria_ordenes.numero` (secuencia Postgres `maquinaria_orden_numero_seq`, se muestra `OM-0012`). Migración `07acdb0d401f` (backfill por `created_at, id`, luego NOT NULL + UNIQUE). Filtro `GET /maquinaria/ordenes?numero=`.
+- **Icono de máquina:** `maquinas.icono` (tractor / carro / implemento), se elige al alta; si es null se deriva del `tipo` (cosechadora y enfardadora → carro). Web y mobile.
+- **Historial por temporada:** `GET /maquinaria/maquinas/{id}/historial?temporada=`. Campaña mayo→abril con corte a medianoche de Argentina (UTC-3, sin horario de verano). El costo solo lo ve gerencial+.
+- **Web:** pestaña Órdenes como lista vertical con estado, 9 pasos de avance, filtro Pendientes/Terminadas y detalle desplegable; historial en la ficha de la máquina.
+- **Mobile (UX):** selector de finca y campaña fija en el header, racimo abre el menú de módulos (drawer desde la izquierda), perfil desde la derecha, formularios de tareas/riego como los de cosecha (`FormModal`), sin "(tabs)" en el botón de volver. Gerencial ve todas las máquinas con etiqueta de finca.
+- **Filtro por finca (mobile):** estricto. Todas las parcelas son de Media Agua (Los Mimbres sin parcelas cargadas; Caucete ya no es finca, solo queda el valor en el enum por datos históricos). Script `scripts/migracion/asignar_finca_parcelas.py`: aplicado en local; en producción ya estaban las 37 parcelas con finca (dry run 2026-11-12), nada que aplicar.
+- **Deploy:** ahora son dos migraciones pendientes en producción: `60332c8268d5` y luego `07acdb0d401f`. Cargar la flota real sigue pospuesto.
