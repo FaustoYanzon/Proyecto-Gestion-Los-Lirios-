@@ -1,7 +1,7 @@
 # Gestión de Maquinaria — Design
 
 **Fecha:** 2026-11-11 · **Fuente:** `Los Lirios — Sistema de Gestión de Maquinaria.md` (especificación funcional) + decisiones del 2026-11-11.
-**Estado:** borrador para aprobación. No hay código escrito.
+**Estado:** implementado en rama `feat/maquinaria-backend`, sin deploy. Decisiones registradas en `docs/sistema/Decisiones/2026-11-11-modulo-maquinaria.md` (si hay diferencia con este spec, manda la decisión). Sesión: `docs/sistema/Bitácora/2026-11-11-modulo-maquinaria.md`.
 
 ## 1. Decisiones ya tomadas (Fausto, 2026-11-11)
 

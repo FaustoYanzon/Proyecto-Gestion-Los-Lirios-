@@ -92,7 +92,7 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (50):**
+**Rutas (54):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
@@ -126,6 +126,10 @@ repo/
 - `/dashboard/inventarios/insumos`
 - `/dashboard/inventarios/producto-terminado`
 - `/dashboard/mapa`
+- `/dashboard/maquinaria/[id]`
+- `/dashboard/maquinaria/ordenes/[id]`
+- `/dashboard/maquinaria/ordenes`
+- `/dashboard/maquinaria`
 - `/dashboard`
 - `/dashboard/produccion/campana`
 - `/dashboard/produccion/clima`
@@ -145,7 +149,7 @@ repo/
 - `/privacy`
 - `/trazabilidad/publica/[token]`
 
-**Módulos de API client** (`frontend/lib/api/`, 26): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
+**Módulos de API client** (`frontend/lib/api/`, 27): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `maquinaria.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
 
 **Componentes por carpeta:**
 
@@ -153,6 +157,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
+- `maquinaria/`: ActionDialog.tsx · Drawer.tsx · EstadoMaquinaBadge.tsx · MaquinaForm.tsx · OrdenAcciones.tsx · OrdenCard.tsx · OrdenFotos.tsx · OrdenTimeline.tsx · PagoForm.tsx · PagoPanel.tsx · PresupuestoForm.tsx · PresupuestoPanel.tsx · ReportarFallaForm.tsx · ordenUi.tsx
 - `produccion/`: ARevisarPanel.tsx · AplicacionesAgrupadas.tsx · AplicacionesRealizadas.tsx · CarenciaParrales.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · NuevaOrdenAplicacion.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
@@ -161,7 +166,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (15):**
+**Pantallas (18):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -178,6 +183,9 @@ repo/
 - `alta-produccion/pasero.tsx`
 - `estado-campana.tsx`
 - `fito.tsx`
+- `maquinaria/index.tsx`
+- `maquinaria/orden/[id].tsx`
+- `maquinaria/reportar.tsx`
 
 ---
 

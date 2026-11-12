@@ -42,6 +42,7 @@ repo/
 | `insumos.py` | `/insumos` | Desde 2026-09-08. Catálogo de productos (`Insumo`) con stock (`stock_actual`) y reposición manual (`POST /{id}/movimientos`, tabla `movimientos_stock`). El descuento automático por aplicación real vive en `produccion.py` (fitosanitarios), no acá. Ver sección dedicada abajo. |
 | `plan_fitosanitario.py` | `/plan-fitosanitario` | Desde 2026-09-08. Plan de aplicación por temporada (`PlanFitosanitario`, cargado a mano, variedad real por variedad) + `GET /avance`, `POST /contraste` y `GET /necesidad-stock`. Desde 2026-10-28 el plan es una dosis objetivo por hectárea por (temporada, variedad, mes, producto); el avance se mide por fecha de los `RegistroFitosanitario` del mes calendario, sin vínculo con órdenes ni rondas. Ver [[2026-10-28-plan-mensual-avance]]. Ver sección dedicada abajo. |
 | `ordenes_aplicacion.py` | `/ordenes-aplicacion` | Desde 2026-09-17 (deploy 2026-09-19). Órdenes ejecutables (desde una fila del plan o "extra") que el operario confirma desde mobile con su propio usuario — `POST /desde-plan`, `POST /` (extra), `GET /pendientes` (scope por finca), `POST /{orden}/parcelas/{item}/confirmar`, `POST /parcelas/{item}/fotos`. Ver sección dedicada abajo. |
+| `maquinaria.py` | `/maquinaria` | Desde 2026-11-11 (pendiente de deploy). Máquinas, órdenes de falla con máquina de estados (`services/maquinaria.py`), presupuestos, pago (genera `Egreso`) y fotos. Ver sección dedicada abajo. |
 
 ## Ciclo de Campaña — dos sistemas separados a propósito (desde 2026-07-22)
 
@@ -49,6 +50,14 @@ repo/
 - **`app.core.ciclo_campana`** (nuevo): calendario **único, igual para todas las variedades** — Brotación (20/9), Floración (20/10), Cuaje (10/11), Cierre de Racimo (5/12), Envero (5/1), Cosecha (1/2), Post-Cosecha (1/5) — cada uno con una cantidad de riegos esperados (1/1/3/4/4/3/1) para medir cumplimiento. Enum `EstadoCampana` y tabla `EstadoVariedadCampana` (override manual **por variedad entera**, no por parcela) son independientes del sistema viejo — a propósito, para no romper `fenologia.py` ni migrar el enum viejo con datos reales. Endpoints: `GET /produccion/estado-campana/actual` y `/cumplimiento-riego` (ver: cualquier usuario autenticado), `POST /produccion/estado-campana/` (editar: solo `gerencial`/`super_admin`).
 - 1 riego "estándar" = 24h × `RegistroRiego.MM_POR_HORA` (1.6mm/h) = 38.4mm = 384.000 L/ha. El mapa (mobile y web, ambos desde 2026-07-27) colorea por `cumplimiento_pct` = riegos equivalentes aplicados ÷ riegos esperados del estado actual. Desde 2026-11-06 se mide por **volumen** (el modo "Riego" por mm se quitó del mapa): aplicado = Σ horas × 16.000 L/h × factor (×4 manto) × n.º de válvulas (`RegistroRiego.litros_de`); esperado = riegos esperados × 38,4 mm × `superficie_ha` × 10.000 L. Sumar `mm_aplicados` por registro es incorrecto (cada registro es la lámina de la hectárea de una válvula). Objetivo anual de referencia: 6M L/ha/año (600 mm).
 - Detalle completo de la sesión original: [[2026-07-20-login-mobile-y-ciclo-campana]]. Espejo web completado: [[2026-07-27-duplicados-web-mapa-mobile-y-cumplimiento-riego]].
+
+## Maquinaria (desde 2026-11-11, pendiente de deploy)
+
+- Tablas: `maquinas`, `maquinaria_ordenes` (con `finca` snapshot e `idempotency_key`), `maquinaria_orden_fotos`, `maquinaria_presupuestos`, `maquinaria_pagos`, `maquinaria_orden_eventos`. Migración `60332c8268d5`.
+- El estado de la máquina no se guarda: se deriva de sus órdenes abiertas (ver [[2026-11-11-modulo-maquinaria]]).
+- Pago → `Egreso` con `fuente=maquinaria`, que Finanzas no puede editar ni borrar.
+- Acceso: encargado y superiores (`require_encargado_estricto`); aprobar presupuestos y pagar, `gerencial` o `super_admin`.
+- Decisión completa: [[2026-11-11-modulo-maquinaria]] (en `Decisiones/`). Spec: `docs/superpowers/specs/2026-11-11-maquinaria-design.md`.
 
 ## Trazabilidad y generación de PDF (desde 2026-09-02)
 
