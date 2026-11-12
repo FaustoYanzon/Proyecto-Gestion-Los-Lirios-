@@ -5,13 +5,22 @@ import { getQueue, removeFromQueue, incrementRetry, markFailed, type OfflineQueu
 
 let syncing = false
 
+const TRANSIENT_STATUS = new Set([408, 429, 502, 503, 504])
+
 async function processItem(item: OfflineQueueItem): Promise<void> {
   try {
     await api.post(item.endpoint, item.payload)
     await removeFromQueue(item.id)
   } catch (e: unknown) {
     const err = e as { response?: { status?: number } }
-    if (err.response) {
+    const status = err.response?.status
+    // Maquinaria reports carry an idempotency_key, so retrying after a transient
+    // gateway error (e.g. Railway restart) cannot duplicate the order. Other
+    // endpoints may not be idempotent: they keep the strict behavior below.
+    const transient = status !== undefined && TRANSIENT_STATUS.has(status)
+    if (err.response && transient && item.endpoint.startsWith('/maquinaria/')) {
+      await incrementRetry(item.id, `HTTP ${status}`)
+    } else if (err.response) {
       // El servidor respondió con un error real (ej. la parcela referenciada
       // ya no existe) — reintentar no lo va a arreglar solo, necesita
       // revisión manual.

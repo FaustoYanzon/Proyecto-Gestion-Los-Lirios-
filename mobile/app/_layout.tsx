@@ -58,10 +58,13 @@ function PushNavigator() {
   const readyRef = useRef(false)
   const flushRef = useRef<(() => void) | null>(null)
 
-  const ready = !!user && segments[0] === '(tabs)'
+  // Ready once AuthGuard has moved the user out of the login stack; from then
+  // on a tap navigates immediately, even from a stack screen.
+  const ready = !!user && segments[0] !== '(auth)'
 
   useEffect(() => {
-    if (!user) return
+    // Logout: drop any pending order so another user is never sent to it.
+    if (!user) { pendingOrden.current = null; return }
     const consume = (response: Notifications.NotificationResponse | null) => {
       const ordenId = ordenIdFromResponse(response)
       const key = response?.notification.request.identifier

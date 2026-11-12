@@ -1,7 +1,7 @@
 // Reportar falla: machine, description, severity and up to 2 gallery photos.
 // Works without signal: when the server gives NO response the report is queued
 // (JSON only, no photos) and sent by offlineSync when signal returns.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, StyleSheet,
@@ -14,6 +14,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
 import { elegirImagenDeGaleria } from '../../lib/imagePicker'
 import { enqueue } from '../../lib/offlineQueue'
+import { newIdempotencyKey } from '../../lib/idempotency'
 import SelectField from '../../components/SelectField'
 import {
   puedeVerMaquinaria, buildReportePayload, crearOrden, subirFotoOrden, errorDetail,
@@ -40,6 +41,11 @@ export default function ReportarFallaScreen() {
   const [gravedad, setGravedad] = useState<GravedadFalla>('sigue_trabajando')
   const [fotos, setFotos] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
+  // Sync guard: state updates are async, so two taps in one frame would both pass.
+  const enviandoRef = useRef(false)
+  // One key per screen mount, reused by every submit attempt: a double submit
+  // dedupes server-side. Renewed only after a successful submit.
+  const idempotencyKeyRef = useRef(newIdempotencyKey())
 
   // Cache first (works offline), then refresh when there is signal.
   useEffect(() => {
@@ -79,17 +85,20 @@ export default function ReportarFallaScreen() {
     const texto = descripcion.trim()
     if (!maquinaId) { Alert.alert('Falta la máquina', 'Elegí qué máquina tiene la falla.'); return }
     if (!texto) { Alert.alert('Falta la descripción', 'Contá brevemente qué le pasa a la máquina.'); return }
-    if (enviando) return
+    if (enviandoRef.current) return
+    enviandoRef.current = true
     setEnviando(true)
 
     // The idempotency key is created once here: a retry or the queued replay
     // of this same report cannot create a second order.
     const { endpoint, payload } = buildReportePayload({
       maquina_id: maquinaId, descripcion: texto, gravedad,
+      idempotency_key: idempotencyKeyRef.current,
     })
 
     try {
       const orden = await crearOrden(payload)
+      idempotencyKeyRef.current = newIdempotencyKey()
       let fotosFallidas = 0
       for (const uri of fotos) {
         try { await subirFotoOrden(orden.id, uri) } catch { fotosFallidas += 1 }
@@ -119,6 +128,7 @@ export default function ReportarFallaScreen() {
         Alert.alert('No se pudo enviar', errorDetail(e, 'No se pudo enviar el reporte'))
       }
     } finally {
+      enviandoRef.current = false
       setEnviando(false)
     }
   }
