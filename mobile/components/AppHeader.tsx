@@ -5,6 +5,7 @@ import { useFincaStore } from '../store/fincaStore'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import { colors } from '../lib/theme'
 import { UserBadge, type UserBadgeHandle } from './UserBadge'
+import { FincaModulosButton } from './FincaModulosSheet'
 
 // Campaña vigente (Mayo→Abril), calculada por fecha — mismo criterio que
 // CampanaSwitcher en web. Mobile no tiene selector propio de campaña (se
@@ -42,7 +43,11 @@ export const AppHeader = forwardRef<
   return (
     <View style={[styles.header, { paddingTop: insets.top }]} onLayout={handleLayout}>
       <View style={styles.row}>
-        <Image source={require('../assets/logo-glifo.png')} style={styles.glifo} resizeMode="contain" />
+        {/* Pin only renders for roles with access to modules (encargado+). */}
+        <View style={styles.left}>
+          <FincaModulosButton />
+          <Image source={require('../assets/logo-glifo.png')} style={styles.glifo} resizeMode="contain" />
+        </View>
 
         <View style={styles.center}>
           <Text style={styles.finca} numberOfLines={1}>{finca.label}</Text>
@@ -74,6 +79,7 @@ const styles = StyleSheet.create({
     height: 41, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, gap: 10,
   },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   glifo: { width: 20, height: 20 },
   center: { flex: 1, alignItems: 'center' },
   finca: { fontSize: 11, fontWeight: '700', color: colors.ink },
