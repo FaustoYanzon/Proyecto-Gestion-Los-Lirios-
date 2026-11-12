@@ -11,14 +11,16 @@ import { colors } from '../../lib/theme'
 import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
 import EmptyState from '../../components/ui/EmptyState'
+import { FincaTag } from '../../components/FincaTag'
+import MaquinaIcon from '../../components/MaquinaIcon'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import {
-  puedeVerMaquinaria, errorDetail, TIPO_MAQUINA_LABELS, ESTADO_MAQUINA_LABELS,
+  puedeVerMaquinaria, errorDetail, fmtNumeroOrden, TIPO_MAQUINA_LABELS, ESTADO_MAQUINA_LABELS,
   ESTADO_ORDEN_LABELS, GRAVEDAD_FALLA_LABELS, ESTADO_MAQUINA_SEMAFORO,
-  type MaquinaResponse, type OrdenResponse, type FincaMaquinaria,
+  type MaquinaResponse, type OrdenResponse,
 } from '../../lib/maquinaria'
 import {
-  SEMAFORO_COLORS, COLOR_REPORTAR, colorEstadoOrden, fmtFechaHora, nombreMaquina,
+  SEMAFORO_COLORS, COLOR_REPORTAR, colorEstadoOrden, fmtFechaHora, nombreMaquina, alcanceMaquinaria,
   readFlotaCache, fetchFlota, readOrdenesCache, fetchOrdenesAbiertas,
 } from '../../lib/maquinariaUi'
 
@@ -29,7 +31,8 @@ export default function MaquinariaIndexScreen() {
   const insets = useSafeAreaInsets()
   const role = useAuthStore((s) => s.user?.role)
   const finca = useFincaStore((s) => s.active)
-  const fincaKey = finca.key as FincaMaquinaria
+  // gerencial+ sees every finca (each card is tagged); the encargado only their own.
+  const alcance = alcanceMaquinaria(role, finca.key)
 
   const [seccion, setSeccion] = useState<Seccion>('flota')
   const [maquinas, setMaquinas] = useState<MaquinaResponse[]>([])
@@ -37,18 +40,18 @@ export default function MaquinariaIndexScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Avoids a slow response for a previous finca overwriting the current one.
+  // Avoids a slow response for a previous scope overwriting the current one.
   const reqId = useRef(0)
 
   const load = useCallback(async () => {
     const id = ++reqId.current
-    const [cm, co] = await Promise.all([readFlotaCache(fincaKey), readOrdenesCache(fincaKey)])
+    const [cm, co] = await Promise.all([readFlotaCache(alcance), readOrdenesCache(alcance)])
     if (id !== reqId.current) return
     if (cm) setMaquinas(cm)
     if (co) setOrdenes(co)
     if (cm || co) setLoading(false)
     try {
-      const [m, o] = await Promise.all([fetchFlota(fincaKey), fetchOrdenesAbiertas(fincaKey)])
+      const [m, o] = await Promise.all([fetchFlota(alcance), fetchOrdenesAbiertas(alcance)])
       if (id !== reqId.current) return
       setMaquinas(m)
       setOrdenes(o)
@@ -59,7 +62,7 @@ export default function MaquinariaIndexScreen() {
     } finally {
       if (id === reqId.current) { setLoading(false); setRefreshing(false) }
     }
-  }, [fincaKey])
+  }, [alcance])
 
   // Refetch on every focus so returning from a report/detail shows fresh data.
   useFocusEffect(useCallback(() => { load() }, [load]))
@@ -104,7 +107,7 @@ export default function MaquinariaIndexScreen() {
         }
       >
         <OfflineQueueBanner />
-        <Text style={styles.fincaLabel}>{finca.label}</Text>
+        <Text style={styles.fincaLabel}>{alcance ? finca.label : 'Todas las fincas'}</Text>
 
         {error && hayDatos && (
           <View style={styles.warn}>
@@ -128,7 +131,7 @@ export default function MaquinariaIndexScreen() {
           />
         ) : seccion === 'flota' ? (
           maquinas.length === 0 ? (
-            <EmptyState icon="tractor" title="Sin máquinas" description={`No hay máquinas cargadas en ${finca.label}.`} />
+            <EmptyState icon="tractor" title="Sin máquinas" description={alcance ? `No hay máquinas cargadas en ${finca.label}.` : 'No hay máquinas cargadas.'} />
           ) : (
             maquinas.map((m) => (
               <TouchableOpacity
@@ -140,7 +143,10 @@ export default function MaquinariaIndexScreen() {
               >
                 <View style={[styles.dot, { backgroundColor: SEMAFORO_COLORS[ESTADO_MAQUINA_SEMAFORO[m.estado]] }]} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{nombreMaquina(m)}</Text>
+                  <View style={styles.titleRow}>
+                    <MaquinaIcon icono={m.icono} size={20} color={colors.ink} />
+                    <Text style={[styles.cardTitle, { flex: 1 }]} numberOfLines={1}>{nombreMaquina(m)}</Text>
+                  </View>
                   <Text style={styles.cardSub}>
                     {TIPO_MAQUINA_LABELS[m.tipo]}{m.patente_serie ? ` · ${m.patente_serie}` : ''}
                   </Text>
@@ -150,6 +156,7 @@ export default function MaquinariaIndexScreen() {
                       ? ` · ${m.ordenes_abiertas} ${m.ordenes_abiertas === 1 ? 'orden abierta' : 'órdenes abiertas'}`
                       : ''}
                   </Text>
+                  {!alcance && <FincaTag finca={m.finca} />}
                 </View>
                 <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
               </TouchableOpacity>
@@ -164,15 +171,19 @@ export default function MaquinariaIndexScreen() {
               style={styles.card}
               activeOpacity={0.7}
               onPress={() => router.push(`/maquinaria/orden/${o.id}`)}
+              accessibilityLabel={`Orden ${fmtNumeroOrden(o.numero)}, ${nombreMaquina(o.maquina)}, ${ESTADO_ORDEN_LABELS[o.estado]}`}
             >
               <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.cardNumero}>{fmtNumeroOrden(o.numero)}</Text>
                 <View style={styles.rowBetween}>
+                  <MaquinaIcon icono={o.maquina.icono} size={20} color={colors.ink} />
                   <Text style={[styles.cardTitle, { flex: 1 }]} numberOfLines={1}>{nombreMaquina(o.maquina)}</Text>
                   <View style={[styles.chip, { backgroundColor: colorEstadoOrden(o.estado) }]}>
                     <Text style={styles.chipText}>{ESTADO_ORDEN_LABELS[o.estado]}</Text>
                   </View>
                 </View>
                 <Text style={styles.cardSub} numberOfLines={2}>{o.descripcion}</Text>
+                {!alcance && <FincaTag finca={o.finca} />}
                 <Text style={styles.cardMeta}>
                   {GRAVEDAD_FALLA_LABELS[o.gravedad]} · {fmtFechaHora(o.created_at)}
                 </Text>
@@ -223,6 +234,8 @@ const styles = StyleSheet.create({
   dot: { width: 14, height: 14, borderRadius: 7 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
   cardSub: { fontSize: 13, color: colors.ink60 },
+  cardNumero: { fontSize: 11, fontWeight: '800', color: colors.niebla, letterSpacing: 0.6 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardMeta: { fontSize: 11, color: colors.niebla },
   rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   chip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },

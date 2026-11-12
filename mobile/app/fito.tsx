@@ -2,7 +2,7 @@
 // aplicación nace de una orden armada en la web (Producción → Órdenes de
 // Aplicación) que el operario confirma acá. Abajo queda el historial reciente
 // de lo aplicado en la campaña (agrupado por orden/parcela/válvula), de solo lectura (las correcciones se hacen en la web).
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import OrdenesPendientes from '../components/OrdenesPendientes'
 import AplicacionesAgrupadas from '../components/AplicacionesAgrupadas'
 import EmptyState from '../components/ui/EmptyState'
 import { useAuthStore } from '../store/authStore'
+import { useFincaStore } from '../store/fincaStore'
+import { filtrarPorFinca } from '../lib/finca'
 import { hoyLocalISO } from '../lib/fitosanitariosAgrupar'
 import { colors } from '../lib/theme'
 import type { OrdenAplicacion, Parcela, RegistroFitosanitario } from '../lib/types'
@@ -33,7 +35,14 @@ function temporadaActual(now: Date = new Date()): number {
 
 export default function FitoScreen() {
   const [parcelas, setParcelas] = useState<Parcela[]>([])
-  const [registros, setRegistros] = useState<RegistroFitosanitario[]>([])
+  const [todosRegistros, setRegistros] = useState<RegistroFitosanitario[]>([])
+  const fincaKey = useFincaStore((s) => s.active.key)
+  // Applications on a parcela assigned to another finca are hidden; parcelas with no finca stay.
+  const registros = useMemo(() => {
+    const visibles = new Set(filtrarPorFinca(parcelas, fincaKey).map((p) => p.id))
+    const conocidas = new Set(parcelas.map((p) => p.id))
+    return todosRegistros.filter((r) => !conocidas.has(r.parcela_id) || visibles.has(r.parcela_id))
+  }, [todosRegistros, parcelas, fincaKey])
   const [ordenes, setOrdenes] = useState<OrdenAplicacion[]>([])
   const [sinPermiso, setSinPermiso] = useState(false)
   const role = useAuthStore((s) => s.user?.role)

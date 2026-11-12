@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import {
   View,
   Text,
@@ -18,8 +18,11 @@ import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
+import { FormModal } from '../../components/FormModal'
 import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { colors, parcelaColors, parcelaLabels } from '../../lib/theme'
+import { useFincaStore } from '../../store/fincaStore'
+import { filtrarPorFinca } from '../../lib/finca'
 import type { Parcela, RegistroTrabajo, UnidadMedida, Trabajador as TrabajadorDb, PrecioTarea } from '../../lib/types'
 import { TAREAS_POR_TEMPORADA, UNIDAD_LABELS, temporadaDeFecha, buscarPrecio } from '../../lib/types'
 
@@ -51,7 +54,7 @@ function formatMonto(v: string | number) {
 
 const STEP_LABELS = ['Tarea', 'Detalle', 'Trabajadores', 'Confirmar']
 
-function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel: () => void }) {
+function StepIndicator({ current }: { current: 0 | 1 | 2 | 3 }) {
   return (
     <View style={si.row}>
       {STEP_LABELS.map((label, idx) => {
@@ -73,13 +76,6 @@ function StepIndicator({ current, onCancel }: { current: 0 | 1 | 2 | 3; onCancel
           </View>
         )
       })}
-      <TouchableOpacity
-        style={si.cancelBtn}
-        onPress={onCancel}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-      </TouchableOpacity>
     </View>
   )
 }
@@ -231,10 +227,9 @@ const dp = StyleSheet.create({
 // ─── Step 1: Tarea + Fecha ────────────────────────────────────────────────────
 
 function StepTareaFecha({
-  onNext, onCancelar,
+  onNext,
 }: {
   onNext: (tarea: string, fecha: string, clasificacion?: string) => void
-  onCancelar: () => void
 }) {
   const [selTarea, setSelTarea] = useState('')
   const [selClasificacion, setSelClasificacion] = useState<string | undefined>(undefined)
@@ -269,7 +264,7 @@ function StepTareaFecha({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} onCancel={onCancelar} />
+      <StepIndicator current={0} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>¿Qué tarea?</Text>
 
@@ -416,14 +411,13 @@ function StepTareaFecha({
 // ─── Step 2: Detalle (ubicación + unidad + precio) ────────────────────────────
 
 function StepDetalle({
-  tarea, fecha, parcelas, onNext, onBack, onCancelar,
+  tarea, fecha, parcelas, onNext, onBack,
 }: {
   tarea: string
   fecha: string
   parcelas: Parcela[]
   onNext: (parcela: Parcela | null, unidad: UnidadMedida, precio: number, detalle: string) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [search, setSearch] = useState('')
   const [parcela, setParcela] = useState<Parcela | null>(null)
@@ -477,7 +471,7 @@ function StepDetalle({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} onCancel={onCancelar} />
+      <StepIndicator current={1} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Detalle</Text>
         <Text style={styles.stepSubtitle}>{tarea}</Text>
@@ -637,13 +631,12 @@ type Trabajador = { nombre: string; cantidad: number; trabajadorId?: string }
 type WorkerInput = { nombre: string; cantidad: string; trabajadorId?: string }
 
 function StepTrabajadores({
-  precio, trabajadoresDb, onNext, onBack, onCancelar,
+  precio, trabajadoresDb, onNext, onBack,
 }: {
   precio: number
   trabajadoresDb: TrabajadorDb[]
   onNext: (trabajadores: Trabajador[]) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [workers, setWorkers] = useState<WorkerInput[]>([{ nombre: '', cantidad: '1' }])
 
@@ -692,7 +685,7 @@ function StepTrabajadores({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} onCancel={onCancelar} />
+      <StepIndicator current={2} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Trabajadores</Text>
 
@@ -766,7 +759,7 @@ function StepTrabajadores({
 
 function StepConfirmar({
   tarea, fecha, parcela, unidad, precio, detalle, clasificacion, trabajadores,
-  onSuccess, onBack, onCancelar,
+  onSuccess, onBack,
 }: {
   tarea: string
   fecha: string
@@ -778,7 +771,6 @@ function StepConfirmar({
   trabajadores: Trabajador[]
   onSuccess: () => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
@@ -838,7 +830,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={3} onCancel={onCancelar} />
+      <StepIndicator current={3} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar</Text>
 
@@ -961,7 +953,9 @@ type Step = 'list' | 'tarea_fecha' | 'detalle' | 'trabajadores' | 'confirmar'
 
 export default function TareasScreen() {
   const [step, setStep] = useState<Step>('list')
-  const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [todasParcelas, setParcelas] = useState<Parcela[]>([])
+  const fincaKey = useFincaStore((s) => s.active.key)
+  const parcelas = useMemo(() => filtrarPorFinca(todasParcelas, fincaKey), [todasParcelas, fincaKey])
   const [registros, setRegistros] = useState<RegistroTrabajo[]>([])
   const [loadingParcelas, setLoadingParcelas] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -1023,53 +1017,39 @@ export default function TareasScreen() {
     setStep('list')
   }
 
-  function handleCancelar() {
-    Alert.alert(
-      'Cancelar carga',
-      'Se van a perder los datos ingresados. ¿Querés salir?',
-      [
-        { text: 'Seguir cargando', style: 'cancel' },
-        { text: 'Salir', style: 'destructive', onPress: resetWizard },
-      ],
-    )
+  // Header arrow: previous step; on the first step it closes the form.
+  const ATRAS: Record<Step, Step> = {
+    list: 'list', tarea_fecha: 'list', detalle: 'tarea_fecha', trabajadores: 'detalle', confirmar: 'trabajadores',
   }
 
+  let wizard: ReactNode = null
   if (step === 'tarea_fecha') {
-    return (
+    wizard = (
       <StepTareaFecha
         onNext={(t, f, c) => { setSelTarea(t); setSelFecha(f); setSelClasificacion(c); setStep('detalle') }}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'detalle') {
-    return (
+  } else if (step === 'detalle') {
+    wizard = (
       <StepDetalle
         tarea={selTarea}
         fecha={selFecha}
         parcelas={parcelas}
         onNext={(p, u, pr, d) => { setSelParcela(p); setSelUnidad(u); setSelPrecio(pr); setSelDetalle(d); setStep('trabajadores') }}
         onBack={() => setStep('tarea_fecha')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'trabajadores') {
-    return (
+  } else if (step === 'trabajadores') {
+    wizard = (
       <StepTrabajadores
         precio={selPrecio}
         trabajadoresDb={trabajadoresDb}
         onNext={(t) => { setSelTrabajadores(t); setStep('confirmar') }}
         onBack={() => setStep('detalle')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'confirmar') {
-    return (
+  } else if (step === 'confirmar') {
+    wizard = (
       <StepConfirmar
         tarea={selTarea}
         fecha={selFecha}
@@ -1081,9 +1061,13 @@ export default function TareasScreen() {
         trabajadores={selTrabajadores}
         onSuccess={() => { resetWizard(); loadRegistros(); loadTrabajadoresDb(); setToast('Tarea cargada ✓') }}
         onBack={() => setStep('trabajadores')}
-        onCancelar={handleCancelar}
       />
     )
+  }
+
+  function atras() {
+    if (ATRAS[step] === 'list') resetWizard()
+    else setStep(ATRAS[step])
   }
 
   return (
@@ -1114,6 +1098,8 @@ export default function TareasScreen() {
           <RecentList registros={registros} onRefresh={onRefresh} />
         )}
       </ScrollView>
+
+      <FormModal title="Nueva tarea" onBack={atras}>{wizard}</FormModal>
     </View>
   )
 }

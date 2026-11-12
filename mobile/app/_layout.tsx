@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Platform } from 'react-native'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import * as Notifications from 'expo-notifications'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -65,6 +66,8 @@ function PushNavigator() {
   useEffect(() => {
     // Logout: drop any pending order so another user is never sent to it.
     if (!user) { pendingOrden.current = null; return }
+    // expo-notifications response APIs do not exist on web (browser testing).
+    if (Platform.OS === 'web') return
     const consume = (response: Notifications.NotificationResponse | null) => {
       const ordenId = ordenIdFromResponse(response)
       const key = response?.notification.request.identifier
@@ -127,7 +130,8 @@ export default function RootLayout() {
       <ErrorBoundary>
         <AuthGuard />
         <PushNavigator />
-        <Stack screenOptions={{ headerShown: false }}>
+        {/* 'minimal' keeps only the arrow: iOS would otherwise show the parent route name, "(tabs)". */}
+        <Stack screenOptions={{ headerShown: false, headerBackButtonDisplayMode: 'minimal' }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen

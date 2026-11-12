@@ -93,6 +93,14 @@ export const ESTADO_PRESUPUESTO_LABELS: Record<EstadoPresupuesto, string> = {
   rechazado: 'Rechazado',
 }
 
+// Icon concept resolved by the backend (never null on the wire).
+export type IconoMaquina = 'tractor' | 'carro' | 'implemento'
+
+// Global sequential order number shown as OM-0012 (min. 4 digits, grows beyond).
+export function fmtNumeroOrden(n: number): string {
+  return `OM-${String(n).padStart(4, '0')}`
+}
+
 export type FincaMaquinaria = 'los_mimbres' | 'media_agua' | 'caucete'
 
 export const FINCA_LABELS: Record<FincaMaquinaria, string> = {
@@ -108,6 +116,7 @@ export const FINCA_LABELS: Record<FincaMaquinaria, string> = {
 export interface MaquinaResponse {
   id: string
   tipo: TipoMaquina
+  icono: IconoMaquina
   marca: string
   modelo: string
   anio: number | null
@@ -137,6 +146,7 @@ export interface MaquinasFilter {
 export interface MaquinaResumen {
   id: string
   tipo: TipoMaquina
+  icono: IconoMaquina
   marca: string
   modelo: string
   patente_serie: string | null
@@ -145,6 +155,7 @@ export interface MaquinaResumen {
 
 export interface OrdenResponse {
   id: string
+  numero: number
   maquina_id: string
   maquina: MaquinaResumen
   finca: FincaMaquinaria
@@ -331,6 +342,7 @@ export function accionesMobile(
 export interface MaquinaAveriada {
   id: string
   tipo: TipoMaquina
+  icono: IconoMaquina
   marca: string
   modelo: string
   estado: 'parada' | 'en_taller'
@@ -363,6 +375,7 @@ export function resumenFlota(maquinas: readonly MaquinaResponse[]): ResumenFlota
       averiadas.push({
         id: m.id,
         tipo: m.tipo,
+        icono: m.icono,
         marca: m.marca,
         modelo: m.modelo,
         estado: m.estado,

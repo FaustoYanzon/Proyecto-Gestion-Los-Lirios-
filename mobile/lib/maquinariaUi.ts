@@ -58,27 +58,35 @@ export function nombreMaquina(m: { marca: string; modelo: string }): string {
 
 // ─── Cache-first loading ──────────────────────────────────────────────────────
 
-export const flotaCacheKey = (finca: FincaMaquinaria) => `maquinas_${finca}`
-export const ordenesCacheKey = (finca: FincaMaquinaria) => `maquinaria_ordenes_abiertas_${finca}`
+// Scope of a fleet/orders query: gerencial+ always sees every finca (undefined =
+// no filter), the encargado only the finca assigned to them.
+export type AlcanceFinca = FincaMaquinaria | undefined
+
+export function alcanceMaquinaria(role: string | null | undefined, fincaActiva: string): AlcanceFinca {
+  return esGerencialUp(role) ? undefined : (fincaActiva as FincaMaquinaria)
+}
+
+export const flotaCacheKey = (finca: AlcanceFinca) => `maquinas_${finca ?? 'todas'}`
+export const ordenesCacheKey = (finca: AlcanceFinca) => `maquinaria_ordenes_abiertas_${finca ?? 'todas'}`
 
 export function readFlotaCache(
-  finca: FincaMaquinaria,
+  finca: AlcanceFinca,
   ttlMs: number = CACHE_TTL.maquinas,
 ): Promise<MaquinaResponse[] | null> {
   return getCache<MaquinaResponse[]>(flotaCacheKey(finca), ttlMs)
 }
 
-export async function fetchFlota(finca: FincaMaquinaria): Promise<MaquinaResponse[]> {
+export async function fetchFlota(finca: AlcanceFinca): Promise<MaquinaResponse[]> {
   const data = await listMaquinas({ finca })
   await setCache(flotaCacheKey(finca), data)
   return data
 }
 
-export function readOrdenesCache(finca: FincaMaquinaria): Promise<OrdenResponse[] | null> {
+export function readOrdenesCache(finca: AlcanceFinca): Promise<OrdenResponse[] | null> {
   return getCache<OrdenResponse[]>(ordenesCacheKey(finca), CACHE_TTL.maquinas)
 }
 
-export async function fetchOrdenesAbiertas(finca: FincaMaquinaria): Promise<OrdenResponse[]> {
+export async function fetchOrdenesAbiertas(finca: AlcanceFinca): Promise<OrdenResponse[]> {
   const data = await listOrdenes({ abiertas: true, finca })
   await setCache(ordenesCacheKey(finca), data)
   return data
@@ -88,7 +96,7 @@ export async function fetchOrdenesAbiertas(finca: FincaMaquinaria): Promise<Orde
 // validates the repair. Other roles have no module access (returns 0).
 export async function contarOrdenesPendientesDeAccion(
   role: string | null | undefined,
-  finca: FincaMaquinaria,
+  finca: AlcanceFinca,
 ): Promise<number> {
   if (esGerencialUp(role)) {
     return (await listOrdenes({ estado: 'presupuesto_pendiente', finca })).length

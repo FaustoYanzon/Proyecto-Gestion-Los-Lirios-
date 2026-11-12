@@ -52,6 +52,8 @@ export interface Parcela {
   variedad: VariedadUva | null
   superficie_ha: number | null
   cabezal_riego: string | null
+  // Every parcela has a finca (see lib/finca.ts); optional only for stale caches.
+  finca?: string | null
   tipo_riego?: TipoRiego | null
   coordenadas: [number, number][] | null
   is_active: boolean

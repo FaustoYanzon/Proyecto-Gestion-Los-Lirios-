@@ -16,12 +16,13 @@ import { elegirImagenDeGaleria } from '../../lib/imagePicker'
 import { enqueue } from '../../lib/offlineQueue'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import SelectField from '../../components/SelectField'
+import MaquinaIcon from '../../components/MaquinaIcon'
 import {
   puedeVerMaquinaria, buildReportePayload, crearOrden, subirFotoOrden, errorDetail,
   GRAVEDAD_FALLA_VALUES, GRAVEDAD_FALLA_LABELS, TIPO_MAQUINA_LABELS,
-  type GravedadFalla, type MaquinaResponse, type FincaMaquinaria,
+  FINCA_LABELS, type GravedadFalla, type MaquinaResponse,
 } from '../../lib/maquinaria'
-import { readFlotaCache, fetchFlota, nombreMaquina, COLOR_REPORTAR } from '../../lib/maquinariaUi'
+import { readFlotaCache, fetchFlota, nombreMaquina, alcanceMaquinaria, COLOR_REPORTAR } from '../../lib/maquinariaUi'
 
 const MAX_FOTOS = 2
 const MAX_DESCRIPCION = 2000
@@ -32,7 +33,7 @@ export default function ReportarFallaScreen() {
   const { maquinaId: maquinaIdParam } = useLocalSearchParams<{ maquinaId?: string }>()
   const role = useAuthStore((s) => s.user?.role)
   const finca = useFincaStore((s) => s.active)
-  const fincaKey = finca.key as FincaMaquinaria
+  const alcance = alcanceMaquinaria(role, finca.key)
 
   const [maquinas, setMaquinas] = useState<MaquinaResponse[]>([])
   const [loadingMaquinas, setLoadingMaquinas] = useState(true)
@@ -51,20 +52,20 @@ export default function ReportarFallaScreen() {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const cached = await readFlotaCache(fincaKey)
+      const cached = await readFlotaCache(alcance)
       if (alive && cached) { setMaquinas(cached); setLoadingMaquinas(false) }
       try {
-        const fresh = await fetchFlota(fincaKey)
+        const fresh = await fetchFlota(alcance)
         if (alive) setMaquinas(fresh)
       } catch { /* keep cached list; empty state explains if there is none */ }
       finally { if (alive) setLoadingMaquinas(false) }
     })()
     return () => { alive = false }
-  }, [fincaKey])
+  }, [alcance])
 
   const options = useMemo(
-    () => maquinas.map((m) => ({ value: m.id, label: nombreMaquina(m), sub: TIPO_MAQUINA_LABELS[m.tipo] })),
-    [maquinas],
+    () => maquinas.map((m) => ({ value: m.id, label: nombreMaquina(m), icon: <MaquinaIcon icono={m.icono} size={20} color={colors.ink60} />, sub: alcance ? TIPO_MAQUINA_LABELS[m.tipo] : `${TIPO_MAQUINA_LABELS[m.tipo]} · ${FINCA_LABELS[m.finca]}` })),
+    [maquinas, alcance],
   )
 
   if (!puedeVerMaquinaria(role)) {

@@ -17,8 +17,8 @@ import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
 import type { FaseVariedad } from '../../lib/types'
 import { VARIEDAD_LABELS } from '../../lib/types'
-import { puedeVerMaquinaria, resumenFlota, type FincaMaquinaria, type MaquinaAveriada } from '../../lib/maquinaria'
-import { readFlotaCache, fetchFlota, nombreMaquina, COLOR_REPORTAR } from '../../lib/maquinariaUi'
+import { puedeVerMaquinaria, resumenFlota, type MaquinaAveriada } from '../../lib/maquinaria'
+import { readFlotaCache, fetchFlota, nombreMaquina, alcanceMaquinaria, COLOR_REPORTAR } from '../../lib/maquinariaUi'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
 const NOTIF_ROTATION_INTERVAL_MS = 15 * 60 * 1000
@@ -57,7 +57,10 @@ function ActionButton({
 const BANNER_CACHE_TTL_MS = 60 * 60 * 1000
 
 function useMaquinasAveriadas(enabled: boolean): MaquinaAveriada[] {
-  const finca = useFincaStore((s) => s.active.key) as FincaMaquinaria
+  const fincaActiva = useFincaStore((s) => s.active.key)
+  const role = useAuthStore((s) => s.user?.role)
+  // gerencial+ sees the out-of-service machines of every finca.
+  const finca = alcanceMaquinaria(role, fincaActiva)
   const [averiadas, setAveriadas] = useState<MaquinaAveriada[]>([])
 
   useFocusEffect(

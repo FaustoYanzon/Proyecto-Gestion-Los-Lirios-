@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   StyleSheet,
@@ -15,6 +15,8 @@ import type { Parcela, FaseVariedad, CumplimientoRiegoParcela, EstadoActualVarie
 import { ESTADO_CAMPANA_LABELS, ESTADO_CAMPANA_COLORES, MM_OBJETIVO_ANUAL_POR_HA, MM_RIEGO_ESTANDAR, LITROS_POR_MM_HA } from '../../lib/types'
 import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 import { useAuthStore } from '../../store/authStore'
+import { useFincaStore } from '../../store/fincaStore'
+import { filtrarPorFinca } from '../../lib/finca'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
 // finca) — extraído una vez del KML real (frontend/public/Los Lirios 2026.kml,
@@ -801,7 +803,9 @@ const panelStyles = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function MapaScreen() {
-  const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const [todasParcelas, setParcelas] = useState<Parcela[]>([])
+  const fincaKey = useFincaStore((s) => s.active.key)
+  const parcelas = useMemo(() => filtrarPorFinca(todasParcelas, fincaKey), [todasParcelas, fincaKey])
   const [estadoCampana, setEstadoCampana] = useState<EstadoActualVariedad[]>([])
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
   const [cosecha, setCosecha] = useState<CosechaResumenPorParcela[]>([])

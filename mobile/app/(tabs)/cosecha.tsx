@@ -24,6 +24,8 @@ import { colors } from '../../lib/theme'
 import { getCosechas, deleteCosecha } from '../../lib/api'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { useAuthStore } from '../../store/authStore'
+import { useFincaStore } from '../../store/fincaStore'
+import { filtrarPorFinca } from '../../lib/finca'
 import { Wizard, type WizardStep } from '../../components/Wizard'
 import SelectField, { type SelectOption } from '../../components/SelectField'
 import {
@@ -624,6 +626,7 @@ export default function CosechaScreen() {
   const router = useRouter()
   const role = useAuthStore((s) => s.user?.role)
   const puedeDespachar = puedeAltaProduccion(role)
+  const fincaKey = useFincaStore((s) => s.active.key)
 
   const [registros, setRegistros] = useState<RegistroCosecha[]>([])
   const [loading, setLoading] = useState(true)
@@ -667,12 +670,13 @@ export default function CosechaScreen() {
   // montada y un comprador / productor dado de alta en la web no aparecería.
   const cargarMaestros = useCallback(() => {
     const merge = (patch: Partial<Maestros>) => setMaestros((prev) => ({ ...prev, ...patch }))
-    getParrales().then((parrales) => merge({ parrales })).catch(() => { /* sin lista no se puede elegir parral */ })
-    getPaseros().then((paseros) => merge({ paseros })).catch(() => { /* idem pasero */ })
+    // Only the active finca's parrales / paseros can be picked (parcelas with no finca stay).
+    getParrales().then((parrales) => merge({ parrales: filtrarPorFinca(parrales, fincaKey) })).catch(() => { /* sin lista no se puede elegir parral */ })
+    getPaseros().then((paseros) => merge({ paseros: filtrarPorFinca(paseros, fincaKey) })).catch(() => { /* idem pasero */ })
     getProductores().then((ps) => merge({ productores: ps.filter((p) => p.is_active) })).catch(() => { /* idem */ })
     getCompradores().then((cs) => merge({ compradores: cs.filter((c) => c.is_active) })).catch(() => { /* idem */ })
     getParametros().then((parametros) => merge({ parametros })).catch(() => { /* sin tara no se puede pesar un carro */ })
-  }, [])
+  }, [fincaKey])
 
   useEffect(() => { if (puedeDespachar) cargarMaestros() }, [puedeDespachar, cargarMaestros])
 

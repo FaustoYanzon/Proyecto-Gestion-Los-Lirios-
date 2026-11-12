@@ -2,7 +2,7 @@
 // al tocarlo, abre la lista pegada debajo del propio casillero (o arriba si abajo
 // no entra). Para listas largas (parrales, productores) donde los chips ocupan
 // toda la pantalla. No usa hoja inferior: los bordes redondeados del iPhone la tapaban.
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { View, Text, TouchableOpacity, Modal, FlatList, StyleSheet, useWindowDimensions } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import { colors } from '../lib/theme'
@@ -13,6 +13,8 @@ export interface SelectOption {
   value: string
   label: string
   sub?: string
+  /** Ícono opcional a la izquierda de la opción (y del casillero cuando está elegida). */
+  icon?: ReactNode
 }
 
 interface Props {
@@ -67,6 +69,7 @@ export default function SelectField({ label, value, options, onChange, placehold
         accessibilityRole="button"
         accessibilityLabel={label}
       >
+        {selected?.icon}
         <Text style={[styles.fieldText, !selected && styles.placeholder]} numberOfLines={1}>
           {selected ? selected.label : placeholder}
         </Text>
@@ -100,6 +103,7 @@ export default function SelectField({ label, value, options, onChange, placehold
                   style={[styles.option, item.value === value && styles.optionActive]}
                   onPress={() => pick(item.value)}
                 >
+                  {item.icon}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.optionText}>{item.label}</Text>
                     {item.sub ? <Text style={styles.optionSub}>{item.sub}</Text> : null}

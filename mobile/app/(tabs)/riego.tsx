@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import {
   View,
   Text,
@@ -16,9 +16,12 @@ import api, { getRiegosEnCurso, getValvulasReales, iniciarRiego, terminarRiego }
 import { getCache, setCache, CACHE_TTL } from '../../lib/cache'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import { enqueue } from '../../lib/offlineQueue'
+import { FormModal } from '../../components/FormModal'
 import { OfflineQueueBanner } from '../../components/OfflineQueueBanner'
 import TrabajadorPicker from '../../components/TrabajadorPicker'
 import { useAuthStore } from '../../store/authStore'
+import { useFincaStore } from '../../store/fincaStore'
+import { filtrarPorFinca } from '../../lib/finca'
 import { colors, fonts } from '../../lib/theme'
 import type {
   Parcela, RegistroRiego, RiegoEnCurso, RiegoIniciarPayload, RiegoPayload, Trabajador as TrabajadorDb, ValvulaReal,
@@ -70,9 +73,9 @@ function formatDatetime(iso: string) {
 const STEP_LABELS = ['Parcela', 'Horario', 'Detalle', 'Confirmar']
 
 function StepIndicator({
-  current, onCancel, disabled,
+  current,
 }: {
-  current: 0 | 1 | 2 | 3; onCancel: () => void; disabled?: boolean
+  current: 0 | 1 | 2 | 3
 }) {
   return (
     <View style={si.row}>
@@ -95,14 +98,6 @@ function StepIndicator({
           </View>
         )
       })}
-      <TouchableOpacity
-        style={[si.cancelBtn, disabled && { opacity: 0.4 }]}
-        onPress={onCancel}
-        disabled={disabled}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-      </TouchableOpacity>
     </View>
   )
 }
@@ -366,22 +361,14 @@ const tp = StyleSheet.create({
 // ─── Step 0: goteo vs. manto ──────────────────────────────────────────────────
 
 function StepTipo({
-  onElegir, onCancelar,
+  onElegir,
 }: {
   onElegir: (tipo: TipoRiego) => void
-  onCancelar: () => void
 }) {
   return (
     <View style={styles.stepContainer}>
       <View style={si.row}>
         <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>¿Qué tipo de riego?</Text>
-        <TouchableOpacity
-          style={si.cancelBtn}
-          onPress={onCancelar}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
       </View>
       <View style={{ padding: 16, gap: 12 }}>
         <TouchableOpacity style={styles.modoCard} onPress={() => onElegir('goteo')} activeOpacity={0.8}>
@@ -408,13 +395,12 @@ function StepTipo({
 // ─── Step 1 (manto): parcela completa ─────────────────────────────────────────
 
 function StepParcelaManto({
-  parcelas, initialParcelaId, onNext, onBack, onCancelar,
+  parcelas, initialParcelaId, onNext, onBack,
 }: {
   parcelas: Parcela[]
   initialParcelaId: string | null
   onNext: (parcela: Parcela) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
 
@@ -436,7 +422,7 @@ function StepParcelaManto({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} onCancel={onCancelar} />
+      <StepIndicator current={0} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>¿Qué parcela se riega a manto?</Text>
 
@@ -487,7 +473,7 @@ function StepParcelaManto({
 // ─── Step 1 (goteo): cabezal + parral + válvulas ──────────────────────────────
 
 function StepUbicacion({
-  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, onNext, onBack, onCancelar,
+  parcelas, valvulasReales, initialCabezal, initialParcelaId, initialValvulas, onNext, onBack,
 }: {
   parcelas: Parcela[]
   valvulasReales: ValvulaReal[]
@@ -496,7 +482,6 @@ function StepUbicacion({
   initialValvulas: string[]
   onNext: (cabezal: string, parcela: Parcela, valvulas: string[]) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [cabezal, setCabezal] = useState<string | null>(initialCabezal)
   const [parcelaId, setParcelaId] = useState<string | null>(initialParcelaId)
@@ -554,7 +539,7 @@ function StepUbicacion({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={0} onCancel={onCancelar} />
+      <StepIndicator current={0} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         <Text style={styles.fieldLabel}>1. CABEZAL</Text>
@@ -640,24 +625,16 @@ function StepUbicacion({
 // ─── Bifurcación: cargar ya hecho vs. iniciar ahora ───────────────────────────
 
 function StepModo({
-  onElegirRetroactivo, onElegirIniciar, onBack, onCancelar,
+  onElegirRetroactivo, onElegirIniciar, onBack,
 }: {
   onElegirRetroactivo: () => void
   onElegirIniciar: () => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   return (
     <View style={styles.stepContainer}>
       <View style={si.row}>
         <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>¿Qué querés hacer?</Text>
-        <TouchableOpacity
-          style={si.cancelBtn}
-          onPress={onCancelar}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
       </View>
       <View style={{ padding: 16, gap: 12 }}>
         <TouchableOpacity style={styles.modoCard} onPress={onElegirRetroactivo} activeOpacity={0.8}>
@@ -687,7 +664,7 @@ function StepModo({
 // ─── Step 2: horario ──────────────────────────────────────────────────────────
 
 function StepHorario({
-  initialFechaInicio, initialHoraInicio, initialFechaFin, initialHoraFin, onNext, onBack, onCancelar,
+  initialFechaInicio, initialHoraInicio, initialFechaFin, initialHoraFin, onNext, onBack,
 }: {
   initialFechaInicio: string
   initialHoraInicio: string
@@ -695,7 +672,6 @@ function StepHorario({
   initialHoraFin: string
   onNext: (fechaInicio: string, horaInicio: string, fechaFin: string, horaFin: string) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [fechaInicio, setFechaInicio] = useState(initialFechaInicio || isoToday())
   const [horaInicio, setHoraInicio] = useState(initialHoraInicio)
@@ -719,7 +695,7 @@ function StepHorario({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={1} onCancel={onCancelar} />
+      <StepIndicator current={1} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>¿Cuándo se regó?</Text>
 
@@ -789,7 +765,7 @@ function StepHorario({
 
 function StepDetalle({
   initialConFertirriego, initialProducto, initialDosis, initialResponsable, permitirFertirriego, trabajadoresDb,
-  onNext, onBack, onCancelar,
+  onNext, onBack,
 }: {
   initialConFertirriego: boolean
   initialProducto: string
@@ -800,7 +776,6 @@ function StepDetalle({
   trabajadoresDb: TrabajadorDb[]
   onNext: (conFertirriego: boolean, producto: string, dosis: string, responsable: string, responsableId?: string) => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [conFertirriegoState, setConFertirriego] = useState(initialConFertirriego)
   const conFertirriego = permitirFertirriego && conFertirriegoState
@@ -823,7 +798,7 @@ function StepDetalle({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={2} onCancel={onCancelar} />
+      <StepIndicator current={2} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>{permitirFertirriego ? 'Fertiriego y responsable' : 'Responsable'}</Text>
 
@@ -963,12 +938,11 @@ function fertirriegoRows(d: DraftUbicacion): { label: string; value: string }[] 
 }
 
 function StepConfirmar({
-  draft, onSuccess, onBack, onCancelar,
+  draft, onSuccess, onBack,
 }: {
   draft: RiegoDraft
   onSuccess: () => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
@@ -1030,7 +1004,7 @@ function StepConfirmar({
 
   return (
     <View style={styles.stepContainer}>
-      <StepIndicator current={3} onCancel={onCancelar} disabled={loading} />
+      <StepIndicator current={3} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <Text style={styles.stepTitle}>Confirmar riego</Text>
 
@@ -1095,12 +1069,11 @@ interface IniciarDraft {
 }
 
 function StepIniciarConfirmar({
-  draft, onSuccess, onBack, onCancelar,
+  draft, onSuccess, onBack,
 }: {
   draft: IniciarDraft
   onSuccess: () => void
   onBack: () => void
-  onCancelar: () => void
 }) {
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
@@ -1139,14 +1112,6 @@ function StepIniciarConfirmar({
     <View style={styles.stepContainer}>
       <View style={si.row}>
         <Text style={[styles.stepTitle, { flex: 1, marginBottom: 0 }]}>Iniciar riego</Text>
-        <TouchableOpacity
-          style={[si.cancelBtn, loading && { opacity: 0.4 }]}
-          onPress={onCancelar}
-          disabled={loading}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ICONS.cerrar size={18} color={colors.ink60} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={styles.previewCard}>
@@ -1356,6 +1321,9 @@ export default function RiegoScreen() {
   const [step, setStep] = useState<Step>('list')
   const [modo, setModo] = useState<Modo>('retroactivo')
   const [parcelas, setParcelas] = useState<Parcela[]>([])
+  const fincaKey = useFincaStore((s) => s.active.key)
+  // Wizard offers only the active finca's parcelas; `parcelas` stays whole for name lookups.
+  const parcelasFinca = useMemo(() => filtrarPorFinca(parcelas, fincaKey), [parcelas, fincaKey])
   const [valvulasReales, setValvulasReales] = useState<ValvulaReal[]>([])
   const [riegos, setRiegos] = useState<RegistroRiego[]>([])
   const [riegosEnCurso, setRiegosEnCurso] = useState<RiegoEnCurso[]>([])
@@ -1513,25 +1481,28 @@ export default function RiegoScreen() {
     setDraft(emptyDraft)
   }
 
-  function handleCancelar() {
-    Alert.alert(
-      'Cancelar carga',
-      'Se van a perder los datos ingresados. ¿Querés salir?',
-      [
-        { text: 'Seguir cargando', style: 'cancel' },
-        { text: 'Salir', style: 'destructive', onPress: resetWizard },
-      ],
-    )
+  // Header arrow: previous step; on the first step it closes the form.
+  function atras() {
+    switch (step) {
+      case 'tipo': resetWizard(); break
+      case 'ubicacion':
+      case 'parcela_manto': setStep('tipo'); break
+      case 'modo': setStep(stepUbicacion); break
+      case 'horario': setStep('modo'); break
+      case 'detalle': setStep(modo === 'iniciar' ? 'modo' : 'horario'); break
+      case 'confirmar':
+      case 'iniciar_confirmar': setStep('detalle'); break
+      default: resetWizard()
+    }
   }
 
+  let wizard: ReactNode = null
   if (step === 'tipo') {
-    return <StepTipo onElegir={elegirTipo} onCancelar={handleCancelar} />
-  }
-
-  if (step === 'ubicacion') {
-    return (
+    wizard = <StepTipo onElegir={elegirTipo} />
+  } else if (step === 'ubicacion') {
+    wizard = (
       <StepUbicacion
-        parcelas={parcelas}
+        parcelas={parcelasFinca}
         valvulasReales={valvulasReales}
         initialCabezal={draft.cabezal || null}
         initialParcelaId={draft.parcela?.id ?? null}
@@ -1541,15 +1512,12 @@ export default function RiegoScreen() {
           setStep('modo')
         }}
         onBack={() => setStep('tipo')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'parcela_manto') {
-    return (
+  } else if (step === 'parcela_manto') {
+    wizard = (
       <StepParcelaManto
-        parcelas={parcelas}
+        parcelas={parcelasFinca}
         initialParcelaId={draft.parcela?.id ?? null}
         onNext={(parcela) => {
           setDraft((d) => ({
@@ -1559,24 +1527,18 @@ export default function RiegoScreen() {
           setStep('modo')
         }}
         onBack={() => setStep('tipo')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'modo') {
-    return (
+  } else if (step === 'modo') {
+    wizard = (
       <StepModo
         onElegirRetroactivo={() => { setModo('retroactivo'); setStep('horario') }}
         onElegirIniciar={() => { setModo('iniciar'); setStep('detalle') }}
         onBack={() => setStep(stepUbicacion)}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'horario') {
-    return (
+  } else if (step === 'horario') {
+    wizard = (
       <StepHorario
         initialFechaInicio={draft.fechaInicio}
         initialHoraInicio={draft.horaInicio}
@@ -1587,13 +1549,10 @@ export default function RiegoScreen() {
           setStep('detalle')
         }}
         onBack={() => setStep('modo')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'detalle') {
-    return (
+  } else if (step === 'detalle') {
+    wizard = (
       <StepDetalle
         initialConFertirriego={draft.conFertirriego}
         initialProducto={draft.producto}
@@ -1606,29 +1565,22 @@ export default function RiegoScreen() {
           setStep(modo === 'iniciar' ? 'iniciar_confirmar' : 'confirmar')
         }}
         onBack={() => setStep(modo === 'iniciar' ? 'modo' : 'horario')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'confirmar' && draft.parcela) {
-    return (
+  } else if (step === 'confirmar' && draft.parcela) {
+    wizard = (
       <StepConfirmar
         draft={draft}
         onSuccess={() => { resetWizard(); loadData(); setToast('Riego cargado ✓') }}
         onBack={() => setStep('detalle')}
-        onCancelar={handleCancelar}
       />
     )
-  }
-
-  if (step === 'iniciar_confirmar' && draft.parcela) {
-    return (
+  } else if (step === 'iniciar_confirmar' && draft.parcela) {
+    wizard = (
       <StepIniciarConfirmar
         draft={draft}
         onSuccess={() => { resetWizard(); loadRiegosEnCurso(); setToast('Riego iniciado ✓') }}
         onBack={() => setStep('detalle')}
-        onCancelar={handleCancelar}
       />
     )
   }
@@ -1661,6 +1613,8 @@ export default function RiegoScreen() {
         onTerminar={handleTerminar}
         terminandoId={terminandoId}
       />
+
+      <FormModal title="Nuevo riego" onBack={atras} color={colors.cielo}>{wizard}</FormModal>
     </View>
   )
 }

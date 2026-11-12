@@ -1,7 +1,8 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Image,
+  View, Text, TouchableOpacity, StyleSheet, Switch, Image,
 } from 'react-native';
+import { SideDrawer } from './SideDrawer';
 import { useRouter } from 'expo-router';
 import { ICONS, ICON_STROKE, type IconKey } from '../lib/icons';
 import Badge from './ui/Badge';
@@ -58,7 +59,7 @@ function UserDrawer({ open, initialView, onClose }: {
   // Cada vez que se abre, arranca en la vista pedida (ej. la campanita del
   // header abre directo en "notif"); al cerrar vuelve a "main" para la
   // próxima vez que se abra desde el avatar.
-  useEffect(() => { if (open) setView(initialView); else setView('main') }, [open, initialView]);
+  useEffect(() => { if (open) setView(initialView) }, [open, initialView]);
 
   const handleLogout = async () => {
     onClose();
@@ -68,9 +69,8 @@ function UserDrawer({ open, initialView, onClose }: {
   };
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={styles.drawer}>
+    <SideDrawer open={open} side="right" onClose={onClose} onClosed={() => setView('main')}>
+      <>
         {view === 'main' && (
           <MainView
             user={user}
@@ -82,8 +82,8 @@ function UserDrawer({ open, initialView, onClose }: {
         )}
         {view === 'notif' && <NotifView onBack={() => setView('main')} />}
         {view === 'pref'  && <PrefView  onBack={() => setView('main')} />}
-      </View>
-    </Modal>
+      </>
+    </SideDrawer>
   );
 }
 
@@ -270,13 +270,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: colors.ink, fontWeight: '800', fontSize: 10 },
   badgeImg: { width: 26, height: 26 },
-
-  overlay: { flex: 1, backgroundColor: 'rgba(31,26,23,0.4)' },
-  drawer: {
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: '82%',
-    backgroundColor: colors.blanco, padding: space.s5,
-    borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg,
-  },
 
   userCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.s3,

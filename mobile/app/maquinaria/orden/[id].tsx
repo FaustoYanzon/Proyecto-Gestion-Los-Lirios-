@@ -13,8 +13,9 @@ import { colors, formatARS } from '../../../lib/theme'
 import { useAuthStore } from '../../../store/authStore'
 import { elegirImagenDeGaleria } from '../../../lib/imagePicker'
 import EmptyState from '../../../components/ui/EmptyState'
+import MaquinaIcon from '../../../components/MaquinaIcon'
 import {
-  puedeVerMaquinaria, accionesMobile, errorDetail, getOrden, transicionarOrden,
+  puedeVerMaquinaria, accionesMobile, errorDetail, fmtNumeroOrden, getOrden, transicionarOrden,
   resolverPresupuesto, subirFotoOrden,
   ESTADO_ORDEN_LABELS, ESTADO_PRESUPUESTO_LABELS, GRAVEDAD_FALLA_LABELS, TIPO_MAQUINA_LABELS,
   FINCA_LABELS, type OrdenDetalleResponse,
@@ -186,7 +187,9 @@ export default function OrdenDetalleScreen() {
         )}
 
         <View style={styles.card}>
+          <Text style={styles.numero} accessibilityRole="header">Orden {fmtNumeroOrden(orden.numero)}</Text>
           <View style={styles.rowBetween}>
+            <MaquinaIcon icono={orden.maquina.icono} size={24} color={colors.ink} />
             <Text style={[styles.title, { flex: 1 }]}>{nombreMaquina(orden.maquina)}</Text>
             <View style={[styles.chip, { backgroundColor: estadoColor }]}>
               <Text style={styles.chipText}>{ESTADO_ORDEN_LABELS[orden.estado]}</Text>
@@ -366,6 +369,7 @@ const styles = StyleSheet.create({
     padding: 14, gap: 6,
   },
   title: { fontSize: 17, fontWeight: '700', color: colors.ink },
+  numero: { fontSize: 12, fontWeight: '800', color: colors.niebla, letterSpacing: 0.8 },
   sub: { fontSize: 13, color: colors.ink60 },
   body: { fontSize: 14, color: colors.ink, lineHeight: 20 },
   meta: { fontSize: 12, color: colors.ink60 },

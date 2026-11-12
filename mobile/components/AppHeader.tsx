@@ -1,21 +1,11 @@
 import { forwardRef } from 'react'
-import { View, Text, Image, TouchableOpacity, StyleSheet, type LayoutChangeEvent } from 'react-native'
+import { View, TouchableOpacity, StyleSheet, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useFincaStore } from '../store/fincaStore'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import { colors } from '../lib/theme'
 import { UserBadge, type UserBadgeHandle } from './UserBadge'
-import { FincaModulosButton } from './FincaModulosSheet'
-
-// Campaña vigente (Mayo→Abril), calculada por fecha — mismo criterio que
-// CampanaSwitcher en web. Mobile no tiene selector propio de campaña (se
-// sacó el 2026-08-24, era decorativo), así que esto es sólo la etiqueta de
-// la campaña real actual, no un valor elegible.
-function campanaActual(): string {
-  const now = new Date()
-  const base = now.getMonth() + 1 >= 5 ? now.getFullYear() : now.getFullYear() - 1
-  return `${base}/${base + 1}`
-}
+import { ModulosButton } from './ModulosDrawer'
+import { FincaSelector } from './FincaSelector'
 
 // Header blanco de punta a punta — reemplaza el header burdeos por defecto
 // de Tabs (headerStyle/headerTitle/headerRight en _layout.tsx). Sin título
@@ -34,7 +24,6 @@ export const AppHeader = forwardRef<
   { onHeightChange?: (height: number) => void }
 >(({ onHeightChange }, ref) => {
   const insets = useSafeAreaInsets()
-  const finca = useFincaStore((s) => s.active)
 
   function handleLayout(e: LayoutChangeEvent) {
     onHeightChange?.(e.nativeEvent.layout.height)
@@ -43,16 +32,12 @@ export const AppHeader = forwardRef<
   return (
     <View style={[styles.header, { paddingTop: insets.top }]} onLayout={handleLayout}>
       <View style={styles.row}>
-        {/* Pin only renders for roles with access to modules (encargado+). */}
+        {/* Grape glyph opens the modules drawer (encargado+); center switches finca (gerencial+). */}
         <View style={styles.left}>
-          <FincaModulosButton />
-          <Image source={require('../assets/logo-glifo.png')} style={styles.glifo} resizeMode="contain" />
+          <ModulosButton />
         </View>
 
-        <View style={styles.center}>
-          <Text style={styles.finca} numberOfLines={1}>{finca.label}</Text>
-          <Text style={styles.campana}>{campanaActual()}</Text>
-        </View>
+        <FincaSelector />
 
         <View style={styles.right}>
           <TouchableOpacity
@@ -79,11 +64,7 @@ const styles = StyleSheet.create({
     height: 41, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, gap: 10,
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  glifo: { width: 20, height: 20 },
-  center: { flex: 1, alignItems: 'center' },
-  finca: { fontSize: 11, fontWeight: '700', color: colors.ink },
-  campana: { fontSize: 8, color: colors.ink60, marginTop: 1 },
+  left: { flexDirection: 'row', alignItems: 'center', minWidth: 26 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bellBtn: { justifyContent: 'center', alignItems: 'center' },
 })
