@@ -176,6 +176,8 @@ class EventoResponse(BaseModel):
     estado_desde: EstadoOrdenMaquinaria | None
     estado_hasta: EstadoOrdenMaquinaria
     usuario_id: str
+    # Filled by the router (a User lookup); None only if the user row is gone.
+    usuario_nombre: str | None = None
     nota: str | None
     created_at: datetime
 

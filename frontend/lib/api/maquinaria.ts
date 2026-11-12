@@ -188,6 +188,7 @@ export interface EventoResponse {
   estado_desde: EstadoOrden | null
   estado_hasta: EstadoOrden
   usuario_id: string
+  usuario_nombre: string | null
   nota: string | null
   created_at: string
 }

@@ -840,3 +840,18 @@ def test_tabla_transiciones_es_consistente():
     for t in svc.TRANSICIONES:
         assert UserRole.regador not in t.roles_permitidos
         assert UserRole.obrero not in t.roles_permitidos
+
+
+async def test_eventos_incluyen_nombre_del_usuario(ctx):
+    orden = await _reportar(ctx)
+    await _hasta_diagnosticada(ctx, orden["id"])
+    detalle = await _ok(await ctx.client.get(
+        f"/maquinaria/ordenes/{orden['id']}", headers=ctx.h_enc))
+    assert len(detalle["eventos"]) == 2
+    for evento in detalle["eventos"]:
+        assert evento["usuario_nombre"], evento
+    # The creation event belongs to the encargado, the diagnosis to the gerencial.
+    assert detalle["eventos"][0]["usuario_id"] == ctx.enc.id
+    assert detalle["eventos"][1]["usuario_id"] == ctx.ger.id
+    assert detalle["eventos"][0]["usuario_nombre"] == ctx.enc.full_name
+    assert detalle["eventos"][1]["usuario_nombre"] == ctx.ger.full_name

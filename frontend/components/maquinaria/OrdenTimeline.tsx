@@ -2,8 +2,8 @@ import { ESTADO_ORDEN_LABELS, type EventoResponse } from '@/lib/api/maquinaria'
 import { useAuthStore } from '@/store/authStore'
 import { fmtDateTime } from './ordenUi'
 
-// Vertical timeline, oldest first. The API only exposes user ids (the users
-// list is super_admin only), so the actor is shown as "Vos" or "Otro usuario".
+// Vertical timeline, oldest first. The API resolves the actor name (the users
+// list is super_admin only); "Vos" marks the logged-in user's own movements.
 export default function OrdenTimeline({ eventos }: { eventos: EventoResponse[] }) {
   const meId = useAuthStore((s) => s.user?.id)
   const sorted = [...eventos].sort(
@@ -28,7 +28,7 @@ export default function OrdenTimeline({ eventos }: { eventos: EventoResponse[] }
               : `Orden creada: ${ESTADO_ORDEN_LABELS[ev.estado_hasta]}`}
           </p>
           <p className="text-xs text-gray-500">
-            {ev.usuario_id === meId ? 'Vos' : 'Otro usuario'} · {fmtDateTime(ev.created_at)}
+            {ev.usuario_id === meId ? 'Vos' : (ev.usuario_nombre ?? 'Usuario eliminado')} · {fmtDateTime(ev.created_at)}
           </p>
           {ev.nota && <p className="mt-1 text-sm text-gray-700 bg-gray-50 rounded px-2 py-1">{ev.nota}</p>}
         </li>

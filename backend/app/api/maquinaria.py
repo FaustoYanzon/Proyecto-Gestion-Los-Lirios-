@@ -63,11 +63,21 @@ _ORDEN_DETALLE_OPTS = (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _serialize_orden(orden: OrdenMaquinaria, user: User) -> OrdenDetalleResponse:
+async def _serialize_orden(
+    db: AsyncSession, orden: OrdenMaquinaria, user: User
+) -> OrdenDetalleResponse:
     """Detail response with money fields nulled for roles below gerencial.
     Choice: rejection reasons (`motivo_rechazo`) and timeline notes stay visible
     to the encargado; amounts and attachments/invoices never do."""
     resp = OrdenDetalleResponse.model_validate(orden)
+    # One lookup for every actor in the timeline (users list is super_admin only,
+    # so the client cannot resolve names by itself).
+    ids = {ev.usuario_id for ev in resp.eventos}
+    if ids:
+        rows = await db.execute(select(User.id, User.full_name).where(User.id.in_(ids)))
+        nombres = {uid: nombre for uid, nombre in rows.all()}
+        for ev in resp.eventos:
+            ev.usuario_nombre = nombres.get(ev.usuario_id)
     if not svc.es_gerencial_up(user):
         for presupuesto in resp.presupuestos:
             presupuesto.monto = None
@@ -350,7 +360,7 @@ async def crear_orden(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Máquina no encontrada"
             )
-        return _serialize_orden(await _get_orden(db, orden.id, current_user), current_user)
+        return await _serialize_orden(db, await _get_orden(db, orden.id, current_user), current_user)
 
     # Offline retry of the same report: return what was already created.
     if key:
@@ -374,7 +384,7 @@ async def crear_orden(
         if existente is None:
             raise
         return await _replay(existente)
-    return _serialize_orden(await _get_orden(db, orden.id, current_user), current_user)
+    return await _serialize_orden(db, await _get_orden(db, orden.id, current_user), current_user)
 
 
 @router.get("/ordenes/{orden_id}", response_model=OrdenDetalleResponse)
@@ -383,7 +393,7 @@ async def obtener_orden(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_estricto),
 ) -> OrdenDetalleResponse:
-    return _serialize_orden(await _get_orden(db, orden_id, current_user), current_user)
+    return await _serialize_orden(db, await _get_orden(db, orden_id, current_user), current_user)
 
 
 @router.patch("/ordenes/{orden_id}", response_model=OrdenDetalleResponse)
@@ -407,7 +417,7 @@ async def actualizar_orden(
     for campo, valor in cambios.items():
         setattr(orden, campo, valor)
     await db.flush()
-    return _serialize_orden(await _get_orden(db, orden.id, current_user), current_user)
+    return await _serialize_orden(db, await _get_orden(db, orden.id, current_user), current_user)
 
 
 @router.post("/ordenes/{orden_id}/transicion", response_model=OrdenDetalleResponse)
@@ -419,7 +429,7 @@ async def transicionar_orden(
 ) -> OrdenDetalleResponse:
     orden = await _get_orden(db, orden_id, current_user)
     await svc.transicionar(db, orden, data.a_estado, current_user, data.nota)
-    return _serialize_orden(await _get_orden(db, orden.id, current_user), current_user)
+    return await _serialize_orden(db, await _get_orden(db, orden.id, current_user), current_user)
 
 
 @router.post(
@@ -437,7 +447,7 @@ async def cargar_presupuesto(
     await svc.registrar_presupuesto(
         db, orden, current_user, data.taller, data.monto, data.detalle, data.adjunto_url
     )
-    return _serialize_orden(await _get_orden(db, orden.id, current_user), current_user)
+    return await _serialize_orden(db, await _get_orden(db, orden.id, current_user), current_user)
 
 
 @router.post("/ordenes/{orden_id}/pago", response_model=PagoResponse, status_code=status.HTTP_201_CREATED)
