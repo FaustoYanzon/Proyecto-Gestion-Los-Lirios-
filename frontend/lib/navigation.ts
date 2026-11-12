@@ -138,8 +138,8 @@ export const SUB_NAVS: SubNav[] = [
   {
     prefix: '/dashboard/maquinaria',
     items: [
-      // More tabs (tablero de órdenes) are added here as those screens land.
       { href: '/dashboard/maquinaria', label: 'Máquinas', group: 'Flota' },
+      { href: '/dashboard/maquinaria/ordenes', label: 'Órdenes', group: 'Flota' },
     ],
   },
   {
