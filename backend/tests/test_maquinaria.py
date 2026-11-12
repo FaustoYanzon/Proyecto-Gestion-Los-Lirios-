@@ -855,3 +855,138 @@ async def test_eventos_incluyen_nombre_del_usuario(ctx):
     assert detalle["eventos"][1]["usuario_id"] == ctx.ger.id
     assert detalle["eventos"][0]["usuario_nombre"] == ctx.enc.full_name
     assert detalle["eventos"][1]["usuario_nombre"] == ctx.ger.full_name
+
+
+# ── Order number, machine icon, season history ───────────────────────────────
+
+async def test_numero_secuencial_y_replay_idempotente_conserva_numero(ctx):
+    key = "33333333-3333-3333-3333-333333333333"
+    o1 = await _reportar(ctx, key=key)
+    o2 = await _reportar(ctx)
+    replay = await _reportar(ctx, key=key)
+    assert (o1["numero"], o2["numero"]) == (1, 2)
+    assert replay["id"] == o1["id"] and replay["numero"] == 1
+    # A replay must not burn a number.
+    o3 = await _reportar(ctx)
+    assert o3["numero"] == 3
+    listado = await _ok(await ctx.client.get("/maquinaria/ordenes", headers=ctx.h_ger))
+    assert {o["numero"] for o in listado} == {1, 2, 3}
+    filtrado = await _ok(await ctx.client.get("/maquinaria/ordenes?numero=2", headers=ctx.h_ger))
+    assert [o["id"] for o in filtrado] == [o2["id"]]
+    det = await _ok(await ctx.client.get(f"/maquinaria/ordenes/{o2['id']}", headers=ctx.h_ger))
+    assert det["numero"] == 2
+
+
+async def test_backfill_de_numero_sigue_el_orden_de_creacion(ctx, db_session):
+    import importlib.util
+    from pathlib import Path
+
+    from sqlalchemy import text, update
+
+    from app.models.maquinaria import OrdenMaquinaria
+
+    ids = [(await _reportar(ctx))["id"] for _ in range(3)]
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    # Creation order is the reverse of the insertion order, numbers start scrambled.
+    for pos, oid in enumerate(reversed(ids)):
+        await db_session.execute(
+            update(OrdenMaquinaria).where(OrdenMaquinaria.id == oid)
+            .values(created_at=base + timedelta(days=pos), numero=100 + pos)
+        )
+    path = next(Path(__file__).parents[1].glob(
+        "app/core/migrations/versions/07acdb0d401f_*.py"))
+    spec = importlib.util.spec_from_file_location("mig_numero", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    await db_session.execute(text(mod.BACKFILL_SQL))
+    rows = (await db_session.execute(
+        select(OrdenMaquinaria.id, OrdenMaquinaria.numero))).all()
+    numero = dict(rows)
+    assert [numero[oid] for oid in reversed(ids)] == [1, 2, 3]
+
+
+async def test_icono_derivado_explicito_e_invalido(ctx):
+    base = {"marca": "X", "modelo": "Y", "finca": "media_agua"}
+    esperado = {"tractor": "tractor", "implemento": "implemento",
+                "cosechadora": "carro", "enfardadora": "carro"}
+    for tipo, icono in esperado.items():
+        m = await _ok(await ctx.client.post(
+            "/maquinaria/maquinas", json={**base, "tipo": tipo}, headers=ctx.h_ger), 201)
+        assert m["icono"] == icono
+    # Explicit value wins over the derived one.
+    m = await _ok(await ctx.client.post(
+        "/maquinaria/maquinas", json={**base, "tipo": "tractor", "icono": "carro"},
+        headers=ctx.h_ger), 201)
+    assert m["icono"] == "carro"
+    # PATCH: change, then null resets to the derived value.
+    m = await _ok(await ctx.client.patch(
+        f"/maquinaria/maquinas/{m['id']}", json={"icono": "implemento"}, headers=ctx.h_ger))
+    assert m["icono"] == "implemento"
+    m = await _ok(await ctx.client.patch(
+        f"/maquinaria/maquinas/{m['id']}", json={"icono": None}, headers=ctx.h_ger))
+    assert m["icono"] == "tractor"
+    # Invalid values are rejected on create and update.
+    bad = await ctx.client.post(
+        "/maquinaria/maquinas", json={**base, "tipo": "tractor", "icono": "avion"},
+        headers=ctx.h_ger)
+    assert bad.status_code == 422
+    bad = await ctx.client.patch(
+        f"/maquinaria/maquinas/{m['id']}", json={"icono": "avion"}, headers=ctx.h_ger)
+    assert bad.status_code == 422
+    # Embedded in orders and present in the list.
+    orden = await _reportar(ctx)
+    assert orden["maquina"]["icono"] == "tractor"
+    lista = await _ok(await ctx.client.get("/maquinaria/maquinas", headers=ctx.h_ger))
+    assert all(x["icono"] in ("tractor", "carro", "implemento") for x in lista)
+
+
+async def test_historial_por_temporada_limites_y_campos(ctx, db_session):
+    from sqlalchemy import update
+
+    from app.models.maquinaria import OrdenMaquinaria
+
+    antes = await _reportar(ctx)
+    despues = await _reportar(ctx)
+    # 23:59 Apr 30 and 00:00 May 1, Argentina local time (UTC-3).
+    for oid, fecha in ((antes["id"], datetime(2026, 5, 1, 2, 59, tzinfo=timezone.utc)),
+                       (despues["id"], datetime(2026, 5, 1, 3, 0, tzinfo=timezone.utc))):
+        await db_session.execute(
+            update(OrdenMaquinaria).where(OrdenMaquinaria.id == oid).values(created_at=fecha))
+    await db_session.commit()
+    url = f"/maquinaria/maquinas/{ctx.maquina['id']}/historial"
+    t2025 = await _ok(await ctx.client.get(f"{url}?temporada=2025", headers=ctx.h_ger))
+    t2026 = await _ok(await ctx.client.get(f"{url}?temporada=2026", headers=ctx.h_ger))
+    assert [o["id"] for o in t2025["ordenes"]] == [antes["id"]]
+    assert [o["id"] for o in t2026["ordenes"]] == [despues["id"]]
+    assert t2025["temporada"] == 2025 and t2025["ordenes_count"] == 1
+    assert t2026["ordenes"][0]["numero"] == despues["numero"]
+    # Open order: no payment, not closed.
+    assert t2026["ordenes"][0]["fecha_pago"] is None
+    assert t2026["ordenes"][0]["cerrada_at"] is None
+    # Default = current campaña (today is inside it for freshly created orders).
+    vacio = await _ok(await ctx.client.get(f"{url}?temporada=2030", headers=ctx.h_ger))
+    assert vacio["ordenes"] == [] and vacio["ordenes_count"] == 0
+
+
+async def test_historial_cerrada_fecha_pago_orden_y_costo_oculto(ctx):
+    vieja = await _reportar(ctx)
+    cerrada = await _reportar(ctx)
+    await _hasta_lista_retirar(ctx, cerrada["id"])
+    await _ok(await ctx.client.post(
+        f"/maquinaria/ordenes/{cerrada['id']}/pago",
+        json={"monto_real": "1000.00", "fecha": "2026-11-05"}, headers=ctx.h_ger), 201)
+    await _ok(await _transicion(ctx, cerrada["id"], "pendiente_validacion"))
+    await _ok(await _transicion(ctx, cerrada["id"], "cerrada", headers=ctx.h_enc))
+    url = f"/maquinaria/maquinas/{ctx.maquina['id']}/historial"
+    hist = await _ok(await ctx.client.get(url, headers=ctx.h_ger))
+    # Newest first, all states included.
+    assert [o["id"] for o in hist["ordenes"]] == [cerrada["id"], vieja["id"]]
+    assert hist["ordenes_count"] == 2
+    assert Decimal(hist["costo_total"]) == Decimal("1000.00")
+    item = hist["ordenes"][0]
+    assert item["fecha_pago"] == "2026-11-05" and item["cerrada_at"] is not None
+    # The encargado never sees money, but still sees dates/number.
+    enc = await _ok(await ctx.client.get(url, headers=ctx.h_enc))
+    assert enc["costo_total"] is None
+    assert all(o["costo"] is None for o in enc["ordenes"])
+    assert enc["ordenes"][0]["numero"] == cerrada["numero"]

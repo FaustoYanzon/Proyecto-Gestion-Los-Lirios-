@@ -35,6 +35,7 @@ from app.models.maquinaria import (
     EventoOrdenMaquinaria,
     GravedadFalla,
     Maquina,
+    ORDEN_NUMERO_SEQ,
     OrdenMaquinaria,
     PagoMaquinaria,
     PresupuestoMaquinaria,
@@ -367,6 +368,15 @@ async def lock_orden(db: AsyncSession, orden: OrdenMaquinaria) -> None:
     )
 
 
+async def siguiente_numero_orden(db: AsyncSession) -> int:
+    """Next global order number. Postgres: sequence (concurrency-safe, gaps on
+    rollback are fine). Other dialects (SQLite tests): max+1."""
+    if db.get_bind().dialect.name == "postgresql":
+        return (await db.execute(select(ORDEN_NUMERO_SEQ.next_value()))).scalar_one()
+    actual = (await db.execute(select(func.max(OrdenMaquinaria.numero)))).scalar_one()
+    return (actual or 0) + 1
+
+
 async def crear_orden(
     db: AsyncSession,
     maquina: Maquina,
@@ -386,6 +396,7 @@ async def crear_orden(
             detail="La máquina no pertenece a tu finca.",
         )
     orden = OrdenMaquinaria(
+        numero=await siguiente_numero_orden(db),
         maquina_id=maquina.id,
         finca=maquina.finca,
         reportada_por=usuario.id,

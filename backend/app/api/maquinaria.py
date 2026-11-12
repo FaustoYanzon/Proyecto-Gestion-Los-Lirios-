@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
@@ -91,6 +91,7 @@ async def _serialize_orden(
 def _maquina_response(maquina: Maquina, pares: list[tuple[E, GravedadFalla]]) -> MaquinaResponse:
     estado = svc.estado_maquina(pares)
     data = {c.key: getattr(maquina, c.key) for c in Maquina.__table__.columns}
+    data["icono"] = maquina.icono_resuelto
     return MaquinaResponse(
         **data,
         estado=estado,
@@ -206,20 +207,40 @@ async def crear_maquina(
     return _maquina_response(maquina, [])
 
 
+# Argentina is UTC-3 all year (no DST): campaign boundaries are local midnight.
+_AR_TZ = timezone(timedelta(hours=-3))
+
+
+def _temporada_de(fecha: date) -> int:
+    """Campaña mayo -> abril (same rule as lotes_pasa.temporada_de)."""
+    return fecha.year if fecha.month >= 5 else fecha.year - 1
+
+
 @router.get("/maquinas/{maquina_id}/historial", response_model=HistorialMaquinaResponse)
 async def historial_maquina(
     maquina_id: str,
+    temporada: int | None = Query(default=None, ge=2000, le=2100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_estricto),
 ) -> HistorialMaquinaResponse:
     maquina = await _get_maquina(db, maquina_id, current_user)
+    if temporada is None:
+        temporada = _temporada_de(datetime.now(_AR_TZ).date())
+    # Campaña [May 1 of `temporada`, May 1 of the next year), Argentina local time.
+    desde = datetime(temporada, 5, 1, tzinfo=_AR_TZ).astimezone(timezone.utc)
+    hasta = datetime(temporada + 1, 5, 1, tzinfo=_AR_TZ).astimezone(timezone.utc)
     stmt = (
         select(OrdenMaquinaria)
-        .where(OrdenMaquinaria.maquina_id == maquina.id)
+        .where(
+            OrdenMaquinaria.maquina_id == maquina.id,
+            OrdenMaquinaria.created_at >= desde,
+            OrdenMaquinaria.created_at < hasta,
+        )
         .options(selectinload(OrdenMaquinaria.eventos), selectinload(OrdenMaquinaria.pago))
         .order_by(OrdenMaquinaria.created_at.desc())
     )
-    if not svc.es_gerencial_up(current_user):
+    gerencial = svc.es_gerencial_up(current_user)
+    if not gerencial:
         # Orders keep the finca snapshot: after a transfer, the new finca's
         # encargado must not see the previous finca's history.
         stmt = stmt.where(OrdenMaquinaria.finca == current_user.finca)
@@ -234,21 +255,27 @@ async def historial_maquina(
         if costo is not None:
             costo_total += costo
         dias_total += dias
+        cierres = [ev.created_at for ev in orden.eventos if ev.estado_hasta == E.cerrada]
         items.append(
             HistorialOrden(
                 id=orden.id,
+                numero=orden.numero,
                 estado=orden.estado,
                 gravedad=orden.gravedad,
                 descripcion=orden.descripcion,
                 taller=orden.taller,
                 created_at=orden.created_at,
-                costo=costo if svc.es_gerencial_up(current_user) else None,
+                fecha_pago=orden.pago.fecha if orden.pago is not None else None,
+                cerrada_at=max(cierres) if cierres else None,
+                costo=costo if gerencial else None,
                 dias_fuera_servicio=dias,
             )
         )
     return HistorialMaquinaResponse(
         maquina_id=maquina.id,
-        costo_total=costo_total if svc.es_gerencial_up(current_user) else None,
+        temporada=temporada,
+        ordenes_count=len(items),
+        costo_total=costo_total if gerencial else None,
         dias_fuera_servicio_total=dias_total,
         ordenes=items,
     )
@@ -308,6 +335,7 @@ async def listar_ordenes(
     maquina_id: str | None = None,
     finca: Finca | None = None,
     abiertas: bool | None = None,
+    numero: int | None = Query(default=None, ge=1),
     limit: int = Query(default=200, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -329,6 +357,8 @@ async def listar_ordenes(
         stmt = stmt.where(OrdenMaquinaria.estado == estado)
     if maquina_id is not None:
         stmt = stmt.where(OrdenMaquinaria.maquina_id == maquina_id)
+    if numero is not None:
+        stmt = stmt.where(OrdenMaquinaria.numero == numero)
     if abiertas is True:
         stmt = stmt.where(OrdenMaquinaria.estado.in_(list(svc.ESTADOS_ABIERTOS)))
     elif abiertas is False:

@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, Numeric, String, Text, text,
+    Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, Numeric, Sequence, String, Text,
+    UniqueConstraint, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +58,21 @@ class EstadoPresupuestoMaquinaria(str, enum.Enum):
     rechazado = "rechazado"
 
 
+# Human-friendly global order number ("OM-0012" on the clients).
+ORDEN_NUMERO_SEQ = Sequence("maquinaria_orden_numero_seq")
+
+ICONOS_MAQUINA: tuple[str, ...] = ("tractor", "carro", "implemento")
+
+
+def icono_por_defecto(tipo: TipoMaquina) -> str:
+    """Icon derived from the machine type when none was chosen explicitly."""
+    if tipo == TipoMaquina.tractor:
+        return "tractor"
+    if tipo == TipoMaquina.implemento:
+        return "implemento"
+    return "carro"
+
+
 class Maquina(Base):
     __tablename__ = "maquinas"
 
@@ -79,6 +95,8 @@ class Maquina(Base):
         String(36), ForeignKey("maquinas.id"), nullable=True
     )
     foto_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 'tractor' | 'carro' | 'implemento'; null = derive from `tipo`. Plain string on purpose.
+    icono: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
@@ -91,6 +109,10 @@ class Maquina(Base):
         "OrdenMaquinaria", back_populates="maquina"
     )
 
+    @property
+    def icono_resuelto(self) -> str:
+        return self.icono or icono_por_defecto(self.tipo)
+
     __table_args__ = (Index("ix_maquinas_finca", "finca"),)
 
 
@@ -98,6 +120,8 @@ class OrdenMaquinaria(Base):
     __tablename__ = "maquinaria_ordenes"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # Assigned by the service (Postgres sequence; max+1 fallback on SQLite).
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
     maquina_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("maquinas.id"), nullable=False
     )
@@ -153,6 +177,7 @@ class OrdenMaquinaria(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint("numero", name="uq_maquinaria_ordenes_numero"),
         Index("ix_maquinaria_ordenes_maquina", "maquina_id"),
         Index("ix_maquinaria_ordenes_finca_estado", "finca", "estado"),
     )

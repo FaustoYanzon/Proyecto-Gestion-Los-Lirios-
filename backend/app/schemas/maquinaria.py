@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -13,6 +14,9 @@ from app.models.maquinaria import (
     TipoMaquina,
 )
 from app.services.maquinaria import EstadoMaquina
+
+
+IconoMaquina = Literal["tractor", "carro", "implemento"]
 
 
 # ── Máquinas ──────────────────────────────────────────────────────────────────
@@ -33,6 +37,7 @@ class MaquinaCreate(BaseModel):
     finca: Finca
     tractor_id: str | None = None
     foto_url: str | None = Field(default=None, max_length=500)
+    icono: IconoMaquina | None = None
 
 
 class MaquinaUpdate(BaseModel):
@@ -45,6 +50,7 @@ class MaquinaUpdate(BaseModel):
     finca: Finca | None = None
     tractor_id: str | None = None
     foto_url: str | None = Field(default=None, max_length=500)
+    icono: IconoMaquina | None = None
     is_active: bool | None = None
 
 
@@ -57,6 +63,8 @@ class MaquinaResumen(BaseModel):
     modelo: str
     patente_serie: str | None
     finca: Finca
+    # Resolved icon (stored value, else derived from `tipo`).
+    icono: str = Field(validation_alias="icono_resuelto")
 
 
 class MaquinaResponse(BaseModel):
@@ -72,6 +80,8 @@ class MaquinaResponse(BaseModel):
     finca: Finca
     tractor_id: str | None
     foto_url: str | None
+    # Always resolved: stored value, else derived from `tipo`.
+    icono: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -186,6 +196,7 @@ class OrdenResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    numero: int
     maquina_id: str
     maquina: MaquinaResumen
     finca: Finca
@@ -210,17 +221,23 @@ class OrdenDetalleResponse(OrdenResponse):
 
 class HistorialOrden(BaseModel):
     id: str
+    numero: int
     estado: EstadoOrdenMaquinaria
     gravedad: GravedadFalla
     descripcion: str
     taller: str | None
     created_at: datetime
+    # Payment date and timestamp of the move to `cerrada`; null while not applicable.
+    fecha_pago: date | None
+    cerrada_at: datetime | None
     costo: Decimal | None
     dias_fuera_servicio: Decimal
 
 
 class HistorialMaquinaResponse(BaseModel):
     maquina_id: str
+    temporada: int
+    ordenes_count: int
     # None for roles below gerencial (money data).
     costo_total: Decimal | None
     dias_fuera_servicio_total: Decimal
