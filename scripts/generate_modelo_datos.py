@@ -63,6 +63,10 @@ DOMINIOS: dict[str, list[str]] = {
     "Clima y termógrafo": [
         "clima_cache", "lecturas_termografo", "lotes_importacion_termografo",
     ],
+    "Maquinaria (máquinas y órdenes de taller)": [
+        "maquinas", "maquinaria_ordenes", "maquinaria_presupuestos", "maquinaria_pagos",
+        "maquinaria_orden_eventos", "maquinaria_orden_fotos",
+    ],
     "Trazabilidad pública": [
         "enlaces_publicos_trazabilidad", "fotos_parcela",
     ],
