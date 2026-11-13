@@ -81,6 +81,18 @@ from app.models.alta_produccion import (
     TipoRemito,
     UbicacionPasero,
 )
+from app.models.maquinaria import (
+    EstadoOrdenMaquinaria,
+    EstadoPresupuestoMaquinaria,
+    EventoOrdenMaquinaria,
+    FotoOrdenMaquinaria,
+    GravedadFalla,
+    Maquina,
+    OrdenMaquinaria,
+    PagoMaquinaria,
+    PresupuestoMaquinaria,
+    TipoMaquina,
+)
 
 __all__ = [
     "PushToken",
@@ -160,4 +172,14 @@ __all__ = [
     "TipoProductor",
     "TipoRemito",
     "UbicacionPasero",
+    "EstadoOrdenMaquinaria",
+    "EstadoPresupuestoMaquinaria",
+    "EventoOrdenMaquinaria",
+    "FotoOrdenMaquinaria",
+    "GravedadFalla",
+    "Maquina",
+    "OrdenMaquinaria",
+    "PagoMaquinaria",
+    "PresupuestoMaquinaria",
+    "TipoMaquina",
 ]

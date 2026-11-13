@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History, Warehouse, Boxes,
+  LayoutDashboard, Map, Sprout, DollarSign, Settings, BookOpen, History, Warehouse, Boxes, Tractor,
 } from 'lucide-react'
 import type { Role } from '@/lib/theme'
 
@@ -50,6 +50,14 @@ export const ALL_NAV: NavItem[] = [
     short: 'Alta',
     icon: Boxes,
     matchFn: (p) => p.startsWith('/dashboard/alta-produccion'),
+    allowedRoles: ['super_admin', 'gerencial', 'encargado'],
+  },
+  {
+    href: '/dashboard/maquinaria',
+    label: 'Maquinaria',
+    short: 'Maq.',
+    icon: Tractor,
+    matchFn: (p) => p.startsWith('/dashboard/maquinaria'),
     allowedRoles: ['super_admin', 'gerencial', 'encargado'],
   },
   {
@@ -125,6 +133,13 @@ export const SUB_NAVS: SubNav[] = [
       { href: '/dashboard/alta-produccion/lotes',   label: 'Lotes de pasa',     group: 'Pasa' },
       { href: '/dashboard/alta-produccion/remitos', label: 'Remitos',           group: 'Pasa' },
       { href: '/dashboard/alta-produccion/conciliacion', label: 'Conciliación', group: 'Bodega' },
+    ],
+  },
+  {
+    prefix: '/dashboard/maquinaria',
+    items: [
+      { href: '/dashboard/maquinaria', label: 'Máquinas', group: 'Flota' },
+      { href: '/dashboard/maquinaria/ordenes', label: 'Órdenes', group: 'Flota' },
     ],
   },
   {

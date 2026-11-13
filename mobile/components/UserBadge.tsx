@@ -1,17 +1,18 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Switch, Image,
+  View, Text, TouchableOpacity, StyleSheet, Switch, Image,
 } from 'react-native';
+import { SideDrawer } from './SideDrawer';
 import { useRouter } from 'expo-router';
 import { ICONS, ICON_STROKE, type IconKey } from '../lib/icons';
 import Badge from './ui/Badge';
 import { colors, space, radius, text, getInitials, ROLE_LABELS } from '../lib/theme';
 import { useAuthStore } from '../store/authStore';
-import { useFincaStore, FINCAS, loadFinca } from '../store/fincaStore';
+import { loadFinca } from '../store/fincaStore';
 import { logout } from '../lib/auth';
 
 // Drawer "views" — navigate within the drawer without stacking Modals
-type DrawerView = 'main' | 'finca' | 'notif' | 'pref'
+type DrawerView = 'main' | 'notif' | 'pref'
 
 export type UserBadgeHandle = { open: (view?: DrawerView) => void }
 
@@ -58,7 +59,7 @@ function UserDrawer({ open, initialView, onClose }: {
   // Cada vez que se abre, arranca en la vista pedida (ej. la campanita del
   // header abre directo en "notif"); al cerrar vuelve a "main" para la
   // próxima vez que se abra desde el avatar.
-  useEffect(() => { if (open) setView(initialView); else setView('main') }, [open, initialView]);
+  useEffect(() => { if (open) setView(initialView) }, [open, initialView]);
 
   const handleLogout = async () => {
     onClose();
@@ -68,9 +69,8 @@ function UserDrawer({ open, initialView, onClose }: {
   };
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={styles.drawer}>
+    <SideDrawer open={open} side="right" onClose={onClose} onClosed={() => setView('main')}>
+      <>
         {view === 'main' && (
           <MainView
             user={user}
@@ -80,11 +80,10 @@ function UserDrawer({ open, initialView, onClose }: {
             router={router}
           />
         )}
-        {view === 'finca' && <FincaView onBack={() => setView('main')} />}
         {view === 'notif' && <NotifView onBack={() => setView('main')} />}
         {view === 'pref'  && <PrefView  onBack={() => setView('main')} />}
-      </View>
-    </Modal>
+      </>
+    </SideDrawer>
   );
 }
 
@@ -97,12 +96,6 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
   onLogout: () => void
   router: ReturnType<typeof useRouter>
 }) {
-  const { active } = useFincaStore();
-  // encargado/regador/obrero ven la finca fija asignada por el gerencial al
-  // crearlos — sin picker propio. Gerencial/super_admin siguen pudiendo
-  // cambiarla libremente.
-  const puedeCambiarFinca = user?.role === 'gerencial' || user?.role === 'super_admin';
-
   return (
     <>
       {/* User card */}
@@ -122,17 +115,6 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
         </View>
       </View>
 
-      <SectionHeader>FINCA ACTIVA</SectionHeader>
-      <TouchableOpacity
-        style={styles.fincaCard}
-        onPress={puedeCambiarFinca ? () => onNav('finca') : undefined}
-        disabled={!puedeCambiarFinca}
-      >
-        <ICONS.ubicacion size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
-        <Text style={styles.fincaName}>{active.label}</Text>
-        {puedeCambiarFinca && <Text style={styles.fincaChevron}>cambiar ▾</Text>}
-      </TouchableOpacity>
-
       <View style={styles.divider} />
 
       <DrawerItem icon="usuario" label="Mi perfil" onPress={() => { onClose(); router.push('/(tabs)/perfil') }} />
@@ -149,49 +131,6 @@ function MainView({ user, onNav, onClose, onLogout, router }: {
       <View style={styles.footer}>
         <Text style={styles.footerText}>Los Lirios SA · v1.0.0</Text>
         <Text style={styles.footerText}>última sync · hace 2 min</Text>
-      </View>
-    </>
-  );
-}
-
-// ─── Finca picker view ────────────────────────────────────────────────────────
-
-function FincaView({ onBack }: { onBack: () => void }) {
-  const { active, setFinca } = useFincaStore();
-
-  return (
-    <>
-      <View style={styles.subHeader}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <ICONS.atras size={20} color={colors.ink} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
-        <Text style={styles.subTitle}>Cambiar Finca</Text>
-      </View>
-
-      <Text style={[styles.sectionHeader, { marginTop: space.s4 }]}>FINCAS DISPONIBLES</Text>
-
-      {FINCAS.map((f) => {
-        const isActive = f.key === active.key
-        return (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.fincaOption, isActive && styles.fincaOptionActive]}
-            onPress={() => { setFinca(f.key); onBack() }}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.fincaOptionDot, isActive && styles.fincaOptionDotActive]} />
-            <Text style={[styles.fincaOptionLabel, isActive && styles.fincaOptionLabelActive]}>
-              {f.label}
-            </Text>
-            {isActive && (
-              <ICONS.check size={18} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
-            )}
-          </TouchableOpacity>
-        )
-      })}
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>El cambio de finca actualiza los datos al recargar</Text>
       </View>
     </>
   );
@@ -303,10 +242,6 @@ function PrefView({ onBack }: { onBack: () => void }) {
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.sectionHeader}>{children}</Text>;
-}
-
 function DrawerItem({ icon, label, badge, badgeVariant = 'label', danger, onPress }: {
   icon: IconKey
   label: string
@@ -336,13 +271,6 @@ const styles = StyleSheet.create({
   badgeText: { color: colors.ink, fontWeight: '800', fontSize: 10 },
   badgeImg: { width: 26, height: 26 },
 
-  overlay: { flex: 1, backgroundColor: 'rgba(31,26,23,0.4)' },
-  drawer: {
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: '82%',
-    backgroundColor: colors.blanco, padding: space.s5,
-    borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg,
-  },
-
   userCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.s3,
     paddingBottom: space.s4, borderBottomWidth: 1, borderBottomColor: colors.hueso,
@@ -359,14 +287,6 @@ const styles = StyleSheet.create({
   userRole: { ...text.small, color: colors.ink60 },
 
   sectionHeader: { ...text.micro, color: colors.ink60, marginTop: space.s4, marginBottom: space.s2 },
-  fincaCard: {
-    flexDirection: 'row', alignItems: 'center', gap: space.s2,
-    paddingHorizontal: space.s3, paddingVertical: space.s3,
-    borderWidth: 1.5, borderColor: colors.burdeos[600], borderRadius: radius.md,
-    backgroundColor: colors.crema,
-  },
-  fincaName: { flex: 1, ...text.body, fontWeight: '700', color: colors.ink },
-  fincaChevron: { ...text.small, color: colors.ink60 },
 
   divider: { height: 1, backgroundColor: colors.hueso, marginVertical: space.s4 },
   drawerItem: {
@@ -391,24 +311,6 @@ const styles = StyleSheet.create({
   },
   subTitle: { flex: 1, ...text.h3, color: colors.ink },
   subAction: { ...text.small, color: colors.burdeos[600], fontWeight: '700' },
-
-  // Finca picker
-  fincaOption: {
-    flexDirection: 'row', alignItems: 'center', gap: space.s3,
-    paddingVertical: space.s3, paddingHorizontal: space.s3,
-    borderRadius: radius.md, borderWidth: 1, borderColor: colors.hueso,
-    backgroundColor: colors.blanco, marginBottom: space.s2,
-  },
-  fincaOptionActive: {
-    borderColor: colors.burdeos[600], backgroundColor: colors.crema,
-  },
-  fincaOptionDot: {
-    width: 10, height: 10, borderRadius: 5,
-    borderWidth: 2, borderColor: colors.niebla,
-  },
-  fincaOptionDotActive: { backgroundColor: colors.burdeos[600], borderColor: colors.burdeos[600] },
-  fincaOptionLabel: { flex: 1, ...text.body, color: colors.ink, fontWeight: '600' },
-  fincaOptionLabelActive: { color: colors.burdeos[600] },
 
   // Notifications
   notifRow: {

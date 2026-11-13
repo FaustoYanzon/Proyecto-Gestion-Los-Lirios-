@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import alertas, arca, auth, clima, finanzas, insumos, kpis, lotes_pasa, maestros_produccion, notificaciones, ordenes_aplicacion, parcelas, pasero, plan_fitosanitario, precios_tarea, presupuestos, produccion, remitos, telefonos_whatsapp, termografo, trabajadores, trazabilidad, users, whatsapp, whatsapp_webhook
+from app.api import alertas, arca, auth, clima, finanzas, insumos, kpis, lotes_pasa, maestros_produccion, maquinaria, notificaciones, ordenes_aplicacion, parcelas, pasero, plan_fitosanitario, precios_tarea, presupuestos, produccion, remitos, telefonos_whatsapp, termografo, trabajadores, trazabilidad, users, whatsapp, whatsapp_webhook
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import configure_logging
@@ -117,6 +117,7 @@ app.include_router(notificaciones.router)
 app.include_router(whatsapp_webhook.router)
 app.include_router(whatsapp.router)
 app.include_router(telefonos_whatsapp.router)
+app.include_router(maquinaria.router)
 
 
 @app.get("/", tags=["health"])

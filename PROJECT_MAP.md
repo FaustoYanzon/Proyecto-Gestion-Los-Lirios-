@@ -1,6 +1,6 @@
 # PROJECT MAP — Los Lirios Gestión Agrícola
 > Auto-generado por `scripts/generate_project_map.py`. Correr de nuevo tras cualquier cambio estructural (modelo/router/migración/pantalla nueva). **No editar a mano.**
-> Última generación: 2026-11-06
+> Última generación: 2026-11-12
 
 Para el esquema real de la base de datos (tablas/columnas/FKs/enums), ver `docs/sistema/Modelo de Datos.md` (`scripts/generate_modelo_datos.py`).
 
@@ -26,7 +26,7 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 16 archivos, 44 clases ORM
+**Modelos:** 17 archivos, 50 clases ORM
 
 | Archivo | Clases |
 |---|---|
@@ -35,6 +35,7 @@ repo/
 | `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
 | `clima_cache.py` | ClimaCache |
 | `insumo.py` | Insumo, MovimientoStock |
+| `maquinaria.py` | Maquina, OrdenMaquinaria, FotoOrdenMaquinaria, PresupuestoMaquinaria, PagoMaquinaria, EventoOrdenMaquinaria |
 | `parcela.py` | Parcela |
 | `precio_tarea.py` | PrecioTarea |
 | `presupuesto.py` | Presupuesto, MetaProduccion |
@@ -47,7 +48,7 @@ repo/
 | `valvula.py` | Valvula |
 | `whatsapp.py` | TelefonoUsuarioWhatsapp, MensajeWhatsappPendiente |
 
-**Routers:** 25
+**Routers:** 26
 
 | Archivo | Prefix | Tags |
 |---|---|---|
@@ -60,6 +61,7 @@ repo/
 | `kpis.py` | `/kpis` | "KPIs" |
 | `lotes_pasa.py` | `/lotes-pasa` | "Lotes de pasa" |
 | `maestros_produccion.py` | `/alta-produccion` | "Alta de Producción — maestros" |
+| `maquinaria.py` | `/maquinaria` | "Maquinaria" |
 | `notificaciones.py` | `/notificaciones` | "notificaciones" |
 | `ordenes_aplicacion.py` | `/ordenes-aplicacion` | "Ordenes Aplicacion" |
 | `parcelas.py` | `/parcelas` | "Parcelas" |
@@ -77,7 +79,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 63 (head: `7d2c5e9a41b8_vw_kpi_manto_factor_4.py`)
+**Migraciones de Alembic:** 65 (head: `07acdb0d401f_maquinaria_orden_numero_e_icono_de_.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -90,7 +92,7 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (50):**
+**Rutas (54):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
@@ -124,6 +126,10 @@ repo/
 - `/dashboard/inventarios/insumos`
 - `/dashboard/inventarios/producto-terminado`
 - `/dashboard/mapa`
+- `/dashboard/maquinaria/[id]`
+- `/dashboard/maquinaria/ordenes/[id]`
+- `/dashboard/maquinaria/ordenes`
+- `/dashboard/maquinaria`
 - `/dashboard`
 - `/dashboard/produccion/campana`
 - `/dashboard/produccion/clima`
@@ -143,7 +149,7 @@ repo/
 - `/privacy`
 - `/trazabilidad/publica/[token]`
 
-**Módulos de API client** (`frontend/lib/api/`, 26): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
+**Módulos de API client** (`frontend/lib/api/`, 27): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `maquinaria.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
 
 **Componentes por carpeta:**
 
@@ -151,6 +157,7 @@ repo/
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
 - `map/`: FincaMap.tsx · FincaMapInner.tsx · LayerControl.tsx
+- `maquinaria/`: ActionDialog.tsx · Drawer.tsx · EstadoMaquinaBadge.tsx · MaquinaForm.tsx · MaquinaIcon.tsx · OrdenAcciones.tsx · OrdenDetalleBody.tsx · OrdenFila.tsx · OrdenFotos.tsx · OrdenProgreso.tsx · OrdenTimeline.tsx · PagoForm.tsx · PagoPanel.tsx · PresupuestoForm.tsx · PresupuestoPanel.tsx · ReportarFallaForm.tsx · ordenUi.tsx
 - `produccion/`: ARevisarPanel.tsx · AplicacionesAgrupadas.tsx · AplicacionesRealizadas.tsx · CarenciaParrales.tsx · DespachoCosechaModal.tsx · FitosanitarioForm.tsx · IniciarRiegoForm.tsx · InsumoSelect.tsx · NuevaOrdenAplicacion.tsx · PronosticoExtendidoPanel.tsx · RiegoForm.tsx · RiegoTable.tsx · RiegosEnCurso.tsx · TareaForm.tsx · TareasTable.tsx · TermografoPanel.tsx · TipoRiegoSelector.tsx · TrabajadorSelect.tsx
 - `trazabilidad/`: AnalisisForm.tsx · AnalisisList.tsx · ComplianceBanner.tsx · DestinoResumen.tsx · EnlacesPublicos.tsx · FotoAlbum.tsx · FotoForm.tsx · ParcelaHeader.tsx · RiegoPorEstado.tsx · Timeline.tsx
 - `ui/`: Badge.tsx · EmptyState.tsx · FormError.tsx
@@ -159,7 +166,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (15):**
+**Pantallas (18):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -176,6 +183,9 @@ repo/
 - `alta-produccion/pasero.tsx`
 - `estado-campana.tsx`
 - `fito.tsx`
+- `maquinaria/index.tsx`
+- `maquinaria/orden/[id].tsx`
+- `maquinaria/reportar.tsx`
 
 ---
 
@@ -186,6 +196,7 @@ Ver `scripts/migracion/README.md` para el detalle de cada migración corrida (co
 - `_alembic_prod.py`
 - `_audit_jornales_historicos.py`
 - `_prod_db.py`
+- `asignar_finca_parcelas.py`
 - `auditar_avance_plan.py`
 - `backfill_egresos_abril.py`
 - `backfill_egresos_mayo_agosto_2025.py`

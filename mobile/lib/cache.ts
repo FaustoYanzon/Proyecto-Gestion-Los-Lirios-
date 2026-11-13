@@ -18,6 +18,9 @@ export const CACHE_TTL = {
   fitosanitarios: 15 * 60 * 1000,
   kpis: 15 * 60 * 1000,
   fenologia: 6 * 60 * 60 * 1000, // 6 horas: cambia una vez por día como mucho
+  // Flota: 7 dias a proposito. Es lo que permite elegir la maquina al reportar una falla
+  // sin senal; una lista vieja sirve mas que ninguna (el servidor valida igual).
+  maquinas: 7 * 24 * 60 * 60 * 1000,
   clima: 30 * 60 * 1000, // igual al TTL del cache del backend (Open-Meteo)
 }
 

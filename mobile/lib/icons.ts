@@ -12,7 +12,7 @@
 
 import {
   LayoutDashboard, Map, Sprout, DollarSign, BookOpen, Settings, LogOut, ClipboardList, Droplet, FlaskConical, Grape, Wheat, Bell, User, Search, Layers, BarChart3, AlertTriangle, Sun, Gauge, History,
-  X, Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Plus, Minus, Trash2, CheckCircle2, Leaf, Pencil, Fingerprint, AlertCircle, XCircle, MapPin, Camera, AtSign, Mail, ShieldCheck, Lock, Eye, EyeOff, Gift, CloudUpload, Clock, Play, RefreshCw, Wind, Zap, CloudOff, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, SquareCheck, Square,
+  X, Check, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, Plus, Minus, Trash2, CheckCircle2, Leaf, Pencil, Fingerprint, AlertCircle, XCircle, MapPin, Camera, AtSign, Mail, ShieldCheck, Lock, Eye, EyeOff, Gift, CloudUpload, Clock, Play, RefreshCw, Wind, Zap, CloudOff, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, SquareCheck, Square, Tractor,
 } from 'lucide-react-native'
 
 export const ICONS = {
@@ -83,6 +83,7 @@ export const ICONS = {
   tormenta:        CloudLightning,// thunderstorm-outline
   casillamarcada:  SquareCheck,   // checkbox (recordarme)
   casilla:         Square,        // square-outline (recordarme)
+  tractor:         Tractor,       // maquinaria
 } as const
 
 // Cinco tamaños, un solo grosor. Sin esta escala cada componente elige lo suyo

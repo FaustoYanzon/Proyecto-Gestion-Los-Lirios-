@@ -17,6 +17,8 @@ import { advanceRotation } from '../../lib/rotation'
 import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../lib/theme'
 import type { FaseVariedad } from '../../lib/types'
 import { VARIEDAD_LABELS } from '../../lib/types'
+import { puedeVerMaquinaria, resumenFlota, type MaquinaAveriada } from '../../lib/maquinaria'
+import { readFlotaCache, fetchFlota, nombreMaquina, alcanceMaquinaria, COLOR_REPORTAR } from '../../lib/maquinariaUi'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
 const NOTIF_ROTATION_INTERVAL_MS = 15 * 60 * 1000
@@ -28,22 +30,70 @@ function dateLabel() {
 }
 
 function ActionButton({
-  label, icon, bg, onPress,
+  label, icon, bg, onPress, compact = false,
 }: {
   label: string
   icon: IconKey
   bg: string
   onPress: () => void
+  // Two-per-row variant: icon over label so both fit on narrow phones.
+  compact?: boolean
 }) {
   const Icon = ICONS[icon]
   return (
     <TouchableOpacity
-      style={[styles.actionBtn, { backgroundColor: bg }]}
+      style={[styles.actionBtn, compact && styles.actionBtnCompact, { backgroundColor: bg }]}
       onPress={onPress}
       activeOpacity={0.85}
     >
       <Icon size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
-      <Text style={styles.actionBtnText}>{label}</Text>
+      <Text style={[styles.actionBtnText, compact && styles.actionBtnTextCompact]}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+// Machines out of service (parada / en_taller) in the active finca. Silent on
+// error: no signal and no recent cache means no banner, never a broken one.
+const BANNER_CACHE_TTL_MS = 60 * 60 * 1000
+
+function useMaquinasAveriadas(enabled: boolean): MaquinaAveriada[] {
+  const fincaActiva = useFincaStore((s) => s.active.key)
+  const role = useAuthStore((s) => s.user?.role)
+  // gerencial+ sees the out-of-service machines of every finca.
+  const finca = alcanceMaquinaria(role, fincaActiva)
+  const [averiadas, setAveriadas] = useState<MaquinaAveriada[]>([])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!enabled) { setAveriadas([]); return }
+      let alive = true
+      ;(async () => {
+        const cached = await readFlotaCache(finca, BANNER_CACHE_TTL_MS)
+        if (alive && cached) setAveriadas(resumenFlota(cached).averiadas)
+        try {
+          const fresh = await fetchFlota(finca)
+          if (alive) setAveriadas(resumenFlota(fresh).averiadas)
+        } catch { /* silent: keep cached (<=1h) or show nothing */ }
+      })()
+      return () => { alive = false }
+    }, [enabled, finca]),
+  )
+
+  return averiadas
+}
+
+function AveriadasBanner({ averiadas, onPress }: { averiadas: MaquinaAveriada[]; onPress: () => void }) {
+  if (averiadas.length === 0) return null
+  const nombres = averiadas.slice(0, 2).map(nombreMaquina).join(', ')
+  const resto = averiadas.length > 2 ? ', …' : ''
+  const n = averiadas.length
+  return (
+    <TouchableOpacity style={styles.averiadasBanner} onPress={onPress} activeOpacity={0.85}>
+      <ICONS.alerta size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
+      <Text style={styles.averiadasText} numberOfLines={2}>
+        {n} {n === 1 ? 'máquina fuera de servicio' : 'máquinas fuera de servicio'}: {nombres}{resto}
+      </Text>
+      <ICONS.avance size={18} color={colors.blanco} strokeWidth={ICON_STROKE} />
     </TouchableOpacity>
   )
 }
@@ -110,13 +160,8 @@ function weatherBgMini(code: number): string {
   return colors.cielo
 }
 
-function uvLevelMini(uv: number): { label: string; color: string } {
-  if (uv < 3) return { label: 'Bajo', color: colors.verdeCampo }
-  if (uv < 6) return { label: 'Moderado', color: '#b8860b' }
-  if (uv < 8) return { label: 'Alto', color: '#c96a1f' }
-  if (uv < 11) return { label: 'Muy alto', color: colors.sangre }
-  return { label: 'Extremo', color: colors.burdeos[600] }
-}
+// Compact card (~70px): temperature + sky on the left, the rest on the right.
+const CLIMATE_CARD_HEIGHT = 70
 
 function ClimateCardMini() {
   const finca = useFincaStore((s) => s.active.key)
@@ -137,65 +182,33 @@ function ClimateCardMini() {
   }, [finca])
 
   if (loading && !clima) {
-    return <View style={[styles.climateCard, { height: 150, backgroundColor: colors.cielo, borderColor: colors.cielo, opacity: 0.4 }]} />
+    return <View style={[styles.climateCard, { height: CLIMATE_CARD_HEIGHT, backgroundColor: colors.cielo, borderColor: colors.cielo, opacity: 0.4 }]} />
   }
   if (!clima) return null
 
   const temp = Math.round(clima.current.temperature_2m)
-  const feels = Math.round(clima.current.apparent_temperature)
   const max = clima.daily.temperature_2m_max[0] != null ? Math.round(clima.daily.temperature_2m_max[0]) : null
   const min = clima.daily.temperature_2m_min[0] != null ? Math.round(clima.daily.temperature_2m_min[0]) : null
   const wind = Math.round(clima.current.wind_speed_10m)
   const windDir = windDirectionLabelMini(clima.current.wind_direction_10m)
   const humidity = Math.round(clima.current.relative_humidity_2m)
-  const uv = clima.daily.uv_index_max[0] != null ? Math.round(clima.daily.uv_index_max[0]) : null
-  const uvInfo = uv !== null ? uvLevelMini(uv) : null
   const WeatherIcon = ICONS[wmoIconNameMini(clima.current.weather_code)]
 
   const bg = weatherBgMini(clima.current.weather_code)
+  const maxMin = max !== null && min !== null ? `Máx ${max}° · Mín ${min}°` : null
 
   return (
-    <View style={[styles.climateCard, { backgroundColor: bg, borderColor: bg }]}>
-      <View style={styles.climateHeader}>
-        <Text style={styles.climateHeaderText}>
-          CLIMA — {(FINCA_COORDS[finca as keyof typeof FINCA_COORDS]?.label ?? finca).toUpperCase()}
-        </Text>
-        <Text style={styles.climateUpdated}>
-          {clima._cached ? 'hace <30 min' : 'ahora'}
-        </Text>
-      </View>
-
-      <View style={styles.climateBigRow}>
-        <WeatherIcon size={44} color={colors.blanco} strokeWidth={1.5} />
+    <View style={[styles.climateCard, { height: CLIMATE_CARD_HEIGHT, backgroundColor: bg, borderColor: bg }]}>
+      <WeatherIcon size={30} color={colors.blanco} strokeWidth={1.5} />
+      <View style={styles.climateLeft}>
         <Text style={styles.climateTemp}>{temp}°</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.climateDesc}>
-            {wmoDescriptionMini(clima.current.weather_code)}
-            {feels !== temp ? ` · Sensación ${feels}°` : ''}
-          </Text>
-          {max !== null && min !== null && (
-            <Text style={styles.climateMaxMin}>Máx {max}° · Mín {min}°</Text>
-          )}
-        </View>
+        <Text style={styles.climateDesc} numberOfLines={1}>
+          {wmoDescriptionMini(clima.current.weather_code)}
+        </Text>
       </View>
-
-      <View style={styles.climateStatsRow}>
-        <View style={styles.climateStatCol}>
-          <ICONS.viento size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
-          <Text style={styles.climateStatValue}>{wind} km/h</Text>
-          <Text style={styles.climateStatLabel}>{windDir}</Text>
-        </View>
-        <View style={styles.climateStatCol}>
-          <ICONS.humedad size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
-          <Text style={styles.climateStatValue}>{humidity}%</Text>
-          <Text style={styles.climateStatLabel}>Humedad</Text>
-        </View>
-        <View style={styles.climateStatCol}>
-          <ICONS.uv size={15} color={colors.blanco} strokeWidth={ICON_STROKE} />
-          <Text style={styles.climateStatValue}>UV {uv}</Text>
-          <Text style={styles.climateStatLabel}>{uvInfo?.label}</Text>
-        </View>
-      </View>
+      <Text style={styles.climateRight} numberOfLines={3}>
+        {maxMin ? `${maxMin}\n` : ''}{wind} km/h {windDir} · {humidity}% hum.
+      </Text>
     </View>
   )
 }
@@ -377,6 +390,9 @@ export default function InicioScreen() {
 
   function onRefresh() { setRefreshing(true); loadFenologia() }
 
+  const verMaquinaria = puedeVerMaquinaria(user?.role)
+  const averiadas = useMaquinasAveriadas(verMaquinaria)
+
   const firstName = user?.full_name?.split(' ')[0] ?? ''
 
   return (
@@ -407,13 +423,26 @@ export default function InicioScreen() {
       </View>
 
       {/* ── Action buttons ── */}
-      <View style={styles.actionsGrid}>
+      {verMaquinaria && (
+        <AveriadasBanner averiadas={averiadas} onPress={() => router.push('/maquinaria')} />
+      )}
+      <View style={[styles.actionsGrid, verMaquinaria && styles.actionsRow]}>
         <ActionButton
           label="Ciclo Campaña"
           icon="campana"
           bg={colors.burdeos[600]}
+          compact={verMaquinaria}
           onPress={() => router.push('/(tabs)/campana')}
         />
+        {verMaquinaria && (
+          <ActionButton
+            label="Reportar falla"
+            icon="alerta"
+            bg={COLOR_REPORTAR}
+            compact
+            onPress={() => router.push('/maquinaria/reportar')}
+          />
+        )}
       </View>
 
       {/* ── Climate mini ── */}
@@ -436,6 +465,13 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 24, color: colors.ink },
   subGreeting: { fontSize: 16, color: colors.ink60, marginTop: 2 },
   actionsGrid: { gap: 10, marginBottom: 16 },
+  actionsRow: { flexDirection: 'row' },
+  averiadasBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48,
+    backgroundColor: colors.sangre, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    marginBottom: 10,
+  },
+  averiadasText: { flex: 1, color: colors.blanco, fontSize: 13, fontWeight: '700' },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     borderRadius: 14, paddingVertical: 18, paddingHorizontal: 20,
@@ -443,34 +479,28 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
   },
   actionBtnText: { color: colors.blanco, fontSize: 16, fontWeight: '700', flex: 1 },
+  actionBtnCompact: {
+    flex: 1, flexDirection: 'column', justifyContent: 'center', gap: 6,
+    paddingVertical: 14, paddingHorizontal: 8,
+  },
+  actionBtnTextCompact: { flex: 0, fontSize: 14, textAlign: 'center' },
 
   climateCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 14,
-    marginBottom: 24,
+    paddingHorizontal: 14,
+    marginBottom: 16,
     borderWidth: 1,
     shadowColor: colors.ink,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, elevation: 4,
   },
-  climateHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10,
+  climateLeft: { justifyContent: 'center' },
+  climateTemp: { fontSize: 28, fontWeight: '800', color: colors.blanco, lineHeight: 32 },
+  climateDesc: { fontSize: 12, color: colors.blanco, fontWeight: '600', maxWidth: 120 },
+  climateRight: {
+    flex: 1, textAlign: 'right', fontSize: 12, lineHeight: 17, fontWeight: '600',
+    color: 'rgba(255,255,255,0.92)',
   },
-  climateHeaderText: {
-    fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 0.6,
-  },
-  climateBigRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  climateTemp: { fontSize: 40, fontWeight: '800', color: colors.blanco, lineHeight: 44 },
-  climateDesc: { fontSize: 13, color: colors.blanco, fontWeight: '600', marginBottom: 2 },
-  climateMaxMin: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
-  climateStatsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  climateStatCol: {
-    alignItems: 'center', gap: 3, flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 10, paddingVertical: 8,
-  },
-  climateStatValue: { fontSize: 13, fontWeight: '700', color: colors.blanco },
-  climateStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.78)' },
-  climateUpdated: { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
   pronCard: {
     backgroundColor: colors.blanco, borderRadius: 16, padding: 14, marginBottom: 24,
     borderWidth: 1, borderColor: colors.borde,

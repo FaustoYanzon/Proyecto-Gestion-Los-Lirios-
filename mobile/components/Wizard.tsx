@@ -6,6 +6,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { ICONS, ICON_STROKE } from '../lib/icons';
 import { colors, space, radius, text, tapTarget } from '../lib/theme';
+import { FormHeader } from './FormHeader';
 
 export interface WizardStep<T> {
   /** Título grande arriba del paso, en formato "¿pregunta?" */
@@ -80,13 +81,7 @@ export function Wizard<T>({
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.headerBack} hitSlop={12}>
-          <ICONS.atras size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{headerTitle}</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <FormHeader title={headerTitle} onBack={handleBack} />
 
       {/* Stepper */}
       <View style={styles.stepper}>
@@ -154,13 +149,6 @@ export function Wizard<T>({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.blanco },
-  header: {
-    height: 48, backgroundColor: colors.burdeos[600],
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: space.s4,
-  },
-  headerBack: { padding: space.s1 },
-  headerTitle: { ...text.h3, color: colors.blanco },
   stepper: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: space.s4, gap: space.s2,

@@ -189,7 +189,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             style={{ borderColor: '#e2dbcc', backgroundColor: '#ffffff' }}
           >
             {subNav.items.map((tab, i) => {
-              const active = pathname.startsWith(tab.href)
+              // Longest matching href wins so a nested tab (…/maquinaria/ordenes) does not
+              // also light up its parent tab (…/maquinaria).
+              const activeHref = subNav.items
+                .filter((t) => pathname.startsWith(t.href))
+                .sort((a, b) => b.href.length - a.href.length)[0]?.href
+              const active = tab.href === activeHref
               const nuevoGrupo = tab.group && tab.group !== subNav.items[i - 1]?.group
               return (
                 <Fragment key={tab.href}>

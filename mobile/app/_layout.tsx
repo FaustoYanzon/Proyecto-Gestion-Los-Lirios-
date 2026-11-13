@@ -1,5 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { Platform } from 'react-native'
 import { Stack, useRouter, useSegments } from 'expo-router'
+import * as Notifications from 'expo-notifications'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useFonts } from 'expo-font'
 import {
@@ -13,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useAuthStore } from '../store/authStore'
 import { registerForPushNotifications } from '../lib/notifications'
 import { initOfflineSync } from '../lib/offlineSync'
+import { puedeVerMaquinaria } from '../lib/maquinaria'
 import { colors } from '../lib/theme'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
@@ -33,6 +36,65 @@ function AuthGuard() {
       router.replace('/(tabs)')
     }
   }, [user, isLoading, segments])
+
+  return null
+}
+
+// Opens the order when the user taps a maquinaria push. Data keys come from
+// backend services/maquinaria.py _notificar: { tipo: 'maquinaria_orden', orden_id, estado }.
+// Other pushes are ignored. Navigation waits until the tabs are mounted so a
+// cold start from a notification does not race the AuthGuard redirect.
+function ordenIdFromResponse(response: Notifications.NotificationResponse | null): string | null {
+  const data = response?.notification.request.content.data as Record<string, unknown> | undefined
+  if (!data || data.tipo !== 'maquinaria_orden') return null
+  return typeof data.orden_id === 'string' && data.orden_id ? data.orden_id : null
+}
+
+function PushNavigator() {
+  const user = useAuthStore((s) => s.user)
+  const segments = useSegments()
+  const router = useRouter()
+  const pendingOrden = useRef<string | null>(null)
+  const handled = useRef<Set<string>>(new Set())
+  const readyRef = useRef(false)
+  const flushRef = useRef<(() => void) | null>(null)
+
+  // Ready once AuthGuard has moved the user out of the login stack; from then
+  // on a tap navigates immediately, even from a stack screen.
+  const ready = !!user && segments[0] !== '(auth)'
+
+  useEffect(() => {
+    // Logout: drop any pending order so another user is never sent to it.
+    if (!user) { pendingOrden.current = null; return }
+    // expo-notifications response APIs do not exist on web (browser testing).
+    if (Platform.OS === 'web') return
+    const consume = (response: Notifications.NotificationResponse | null) => {
+      const ordenId = ordenIdFromResponse(response)
+      const key = response?.notification.request.identifier
+      if (!ordenId || !key || handled.current.has(key)) return
+      handled.current.add(key)
+      pendingOrden.current = ordenId
+      flush()
+    }
+    function flush() {
+      if (!readyRef.current || !pendingOrden.current) return
+      const id = pendingOrden.current
+      pendingOrden.current = null
+      if (puedeVerMaquinaria(useAuthStore.getState().user?.role)) {
+        router.push(`/maquinaria/orden/${id}`)
+      }
+    }
+    flushRef.current = flush
+    // App opened from a killed state by tapping the notification.
+    consume(Notifications.getLastNotificationResponse())
+    const sub = Notifications.addNotificationResponseReceivedListener(consume)
+    return () => { sub.remove(); flushRef.current = null }
+  }, [user, router])
+
+  useEffect(() => {
+    readyRef.current = ready
+    if (ready) flushRef.current?.()
+  }, [ready])
 
   return null
 }
@@ -67,7 +129,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
         <AuthGuard />
-        <Stack screenOptions={{ headerShown: false }}>
+        <PushNavigator />
+        {/* 'minimal' keeps only the arrow: iOS would otherwise show the parent route name, "(tabs)". */}
+        <Stack screenOptions={{ headerShown: false, headerBackButtonDisplayMode: 'minimal' }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
@@ -125,6 +189,36 @@ export default function RootLayout() {
             options={{
               headerShown: true,
               title: 'Entregar pasa',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
+            name="maquinaria/index"
+            options={{
+              headerShown: true,
+              title: 'Maquinaria',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
+            name="maquinaria/reportar"
+            options={{
+              headerShown: true,
+              title: 'Reportar falla',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
+            name="maquinaria/orden/[id]"
+            options={{
+              headerShown: true,
+              title: 'Orden de maquinaria',
               headerStyle: { backgroundColor: colors.burdeos[600] },
               headerTintColor: colors.blanco,
               headerTitleStyle: { fontWeight: 'bold' },
