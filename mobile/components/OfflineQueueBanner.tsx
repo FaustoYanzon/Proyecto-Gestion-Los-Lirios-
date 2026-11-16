@@ -27,7 +27,13 @@ export function OfflineQueueBanner() {
     }, [refresh])
   )
 
-  if (pending === 0 && failed === 0) return null
+  const sheet = (
+    <FailedQueueSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onChanged={refresh} />
+  )
+
+  // The sheet stays mounted when the banner hides (last failed item handled),
+  // so it closes through its own state instead of reopening later by itself.
+  if (pending === 0 && failed === 0) return sheet
 
   return (
     <View style={styles.container}>
@@ -47,7 +53,7 @@ export function OfflineQueueBanner() {
           </Text>
         </Pressable>
       )}
-      <FailedQueueSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onChanged={refresh} />
+      {sheet}
     </View>
   )
 }

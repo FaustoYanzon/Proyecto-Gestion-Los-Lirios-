@@ -32,8 +32,7 @@ export const useFincaStore = create<FincaState>((set) => ({
 export async function loadFinca(role: string | undefined): Promise<void> {
   if (role !== 'gerencial' && role !== 'super_admin') return
   const stored = await AsyncStorage.getItem(STORAGE_KEY).catch(() => null)
-  if (stored) {
-    const finca = FINCAS.find((f) => f.key === stored)
-    if (finca) useFincaStore.setState({ active: finca })
-  }
+  // Nothing stored: reset so a previous user's finca (shared phone) is not inherited.
+  const finca = FINCAS.find((f) => f.key === stored) ?? FINCAS[0]
+  useFincaStore.setState({ active: finca })
 }

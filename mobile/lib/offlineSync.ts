@@ -4,6 +4,9 @@ import api from './api'
 import { getQueue, removeFromQueue, incrementRetry, markFailed, type OfflineQueueItem } from './offlineQueue'
 
 let syncing = false
+// A call made while a sync is running (e.g. manual retry) must not be dropped:
+// the in-flight loop works on an older snapshot of the queue.
+let rerun = false
 
 const TRANSIENT_STATUS = new Set([408, 429, 502, 503, 504])
 
@@ -32,15 +35,21 @@ async function processItem(item: OfflineQueueItem): Promise<void> {
 }
 
 export async function processQueue(): Promise<void> {
-  if (syncing) return
+  if (syncing) {
+    rerun = true
+    return
+  }
   syncing = true
   try {
-    const queue = await getQueue()
-    const pending = queue.filter((item) => item.status === 'pending')
-    // FIFO: uno a la vez, en el orden en que se encolaron.
-    for (const item of pending) {
-      await processItem(item)
-    }
+    do {
+      rerun = false
+      const queue = await getQueue()
+      const pending = queue.filter((item) => item.status === 'pending')
+      // FIFO: uno a la vez, en el orden en que se encolaron.
+      for (const item of pending) {
+        await processItem(item)
+      }
+    } while (rerun)
   } finally {
     syncing = false
   }
