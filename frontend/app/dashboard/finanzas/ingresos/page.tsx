@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Download } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
 import {
   getIngresos,
   deleteIngreso,
@@ -17,54 +17,7 @@ import IngresosTable from '@/components/finanzas/IngresosTable'
 import IngresoForm from '@/components/finanzas/IngresoForm'
 import ComprobantesArcaPanel from '@/components/finanzas/ComprobantesArcaPanel'
 import { useContextStore } from '@/store/contextStore'
-
-// ─── Sheet ────────────────────────────────────────────────────────────────────
-
-interface SheetProps {
-  open: boolean
-  onClose: () => void
-  title: string
-  children: React.ReactNode
-}
-
-function Sheet({ open, onClose, title, children }: SheetProps) {
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    },
-    [onClose]
-  )
-
-  useEffect(() => {
-    if (!open) return
-    document.addEventListener('keydown', handleKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', handleKey)
-      document.body.style.overflow = ''
-    }
-  }, [open, handleKey])
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative ml-auto w-full max-w-[480px] bg-white shadow-xl flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
-      </div>
-    </div>
-  )
-}
+import Drawer from '@/components/maquinaria/Drawer'
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
@@ -315,8 +268,8 @@ export default function IngresosPage() {
         onRefresh={() => queryClient.invalidateQueries({ queryKey: ['ingresos'] })}
       />
 
-      {/* Sheet drawer */}
-      <Sheet
+      {/* Drawer (shared, portaled to body) */}
+      <Drawer
         open={modalOpen}
         onClose={closeModal}
         title={ingresoEditar ? 'Editar Ingreso' : 'Nuevo Ingreso'}
@@ -326,7 +279,7 @@ export default function IngresosPage() {
           onSuccess={closeModal}
           onCancel={closeModal}
         />
-      </Sheet>
+      </Drawer>
     </div>
   )
 }
