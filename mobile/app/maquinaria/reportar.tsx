@@ -12,7 +12,7 @@ import { ICONS, ICON_STROKE } from '../../lib/icons'
 import { colors } from '../../lib/theme'
 import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
-import { elegirImagenDeGaleria } from '../../lib/imagePicker'
+import { elegirImagen } from '../../lib/imagePicker'
 import { enqueue } from '../../lib/offlineQueue'
 import { newIdempotencyKey } from '../../lib/idempotency'
 import SelectField from '../../components/SelectField'
@@ -78,7 +78,7 @@ export default function ReportarFallaScreen() {
 
   async function agregarFoto() {
     if (fotos.length >= MAX_FOTOS) return
-    const uri = await elegirImagenDeGaleria()
+    const uri = await elegirImagen()
     if (uri) setFotos((prev) => (prev.length < MAX_FOTOS ? [...prev, uri] : prev))
   }
 

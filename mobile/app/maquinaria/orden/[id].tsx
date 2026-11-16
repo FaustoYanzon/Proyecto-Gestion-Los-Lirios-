@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ICONS, ICON_STROKE } from '../../../lib/icons'
 import { colors, formatARS } from '../../../lib/theme'
 import { useAuthStore } from '../../../store/authStore'
-import { elegirImagenDeGaleria } from '../../../lib/imagePicker'
+import { elegirImagen } from '../../../lib/imagePicker'
 import EmptyState from '../../../components/ui/EmptyState'
 import MaquinaIcon from '../../../components/MaquinaIcon'
 import {
@@ -137,7 +137,7 @@ export default function OrdenDetalleScreen() {
 
   async function agregarFoto() {
     if (!orden) return
-    const uri = await elegirImagenDeGaleria()
+    const uri = await elegirImagen()
     if (!uri) return
     await ejecutar(() => subirFotoOrden(orden.id, uri), 'Foto agregada.')
   }
