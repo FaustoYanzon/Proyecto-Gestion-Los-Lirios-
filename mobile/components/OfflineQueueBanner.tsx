@@ -1,16 +1,18 @@
 import { useCallback, useState } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet, Pressable } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import { getPendingCount, getFailedCount } from '../lib/offlineQueue'
 import { colors } from '../lib/theme'
+import { FailedQueueSheet } from './FailedQueueSheet'
 
-// Solo lectura: muestra cuántos registros quedaron guardados localmente
-// (sin conexión al confirmar) y cuántos ya agotaron los reintentos. No
-// permite editar/borrar desde acá — decisión tomada para mantener esto simple.
+// Shows how many records are saved locally (offline when confirmed) and how
+// many exhausted their retries; tapping the failed row opens a sheet to retry
+// or discard them (no editing: a wrong record is discarded and re-entered).
 export function OfflineQueueBanner() {
   const [pending, setPending] = useState(0)
   const [failed, setFailed] = useState(0)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const refresh = useCallback(() => {
     getPendingCount().then(setPending)
@@ -25,7 +27,13 @@ export function OfflineQueueBanner() {
     }, [refresh])
   )
 
-  if (pending === 0 && failed === 0) return null
+  const sheet = (
+    <FailedQueueSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} onChanged={refresh} />
+  )
+
+  // The sheet stays mounted when the banner hides (last failed item handled),
+  // so it closes through its own state instead of reopening later by itself.
+  if (pending === 0 && failed === 0) return sheet
 
   return (
     <View style={styles.container}>
@@ -38,13 +46,14 @@ export function OfflineQueueBanner() {
         </View>
       )}
       {failed > 0 && (
-        <View style={styles.row}>
+        <Pressable style={styles.row} onPress={() => setSheetOpen(true)} accessibilityRole="button">
           <ICONS.aviso size={16} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
           <Text style={styles.text}>
             {failed} {failed === 1 ? 'registro necesita' : 'registros necesitan'} atención
           </Text>
-        </View>
+        </Pressable>
       )}
+      {sheet}
     </View>
   )
 }

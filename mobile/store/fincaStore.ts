@@ -25,10 +25,14 @@ export const useFincaStore = create<FincaState>((set) => ({
   },
 }))
 
-export async function loadFinca(): Promise<void> {
+// Only gerencial/super_admin pick their own finca; every other role is pinned to
+// User.finca by authStore. Restoring the stored value for them would overwrite
+// that assignment with whatever another user left on a shared phone.
+// The role is a parameter (not read from authStore) to avoid an import cycle.
+export async function loadFinca(role: string | undefined): Promise<void> {
+  if (role !== 'gerencial' && role !== 'super_admin') return
   const stored = await AsyncStorage.getItem(STORAGE_KEY).catch(() => null)
-  if (stored) {
-    const finca = FINCAS.find((f) => f.key === stored)
-    if (finca) useFincaStore.setState({ active: finca })
-  }
+  // Nothing stored: reset so a previous user's finca (shared phone) is not inherited.
+  const finca = FINCAS.find((f) => f.key === stored) ?? FINCAS[0]
+  useFincaStore.setState({ active: finca })
 }

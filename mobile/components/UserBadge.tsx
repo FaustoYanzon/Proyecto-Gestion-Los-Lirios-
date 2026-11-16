@@ -21,8 +21,9 @@ export const UserBadge = forwardRef<UserBadgeHandle>((_props, ref) => {
   const [open, setOpen] = useState(false);
   const [initialView, setInitialView] = useState<DrawerView>('main');
 
-  // Load persisted finca selection on mount
-  useEffect(() => { loadFinca() }, []);
+  // Restore the persisted finca once the role is known (only gerencial+ use it)
+  const role = user?.role;
+  useEffect(() => { loadFinca(role) }, [role]);
 
   useImperativeHandle(ref, () => ({
     open: (view: DrawerView = 'main') => { setInitialView(view); setOpen(true) },
