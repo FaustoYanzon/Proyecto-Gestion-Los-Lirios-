@@ -87,3 +87,24 @@ export async function getFailedCount(): Promise<number> {
   const queue = await readQueue()
   return queue.filter((item) => item.status === 'failed').length
 }
+
+export async function getFailedItems(): Promise<OfflineQueueItem[]> {
+  const queue = await readQueue()
+  return queue.filter((item) => item.status === 'failed')
+}
+
+// Manual retry of an item the server rejected or that aged out. Only acts on
+// failed items so it can never resurrect one that was already processed.
+export async function retryFailed(id: string): Promise<void> {
+  const queue = await readQueue()
+  const idx = queue.findIndex((item) => item.id === id && item.status === 'failed')
+  if (idx === -1) return
+  const { lastError: _lastError, ...rest } = queue[idx]
+  queue[idx] = { ...rest, status: 'pending', retryCount: 0 }
+  await writeQueue(queue)
+}
+
+// Drops an item the user chose not to resend; no-op if it no longer exists.
+export async function discard(id: string): Promise<void> {
+  await removeFromQueue(id)
+}
