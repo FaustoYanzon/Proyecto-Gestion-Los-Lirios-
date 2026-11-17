@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import {
-  LayoutDashboard, Sprout, DollarSign, Settings, BookOpen, Search, Boxes,
+  LayoutDashboard, Sprout, DollarSign, Settings, BookOpen, Search, Boxes, Warehouse,
 } from 'lucide-react'
 import { ALL_NAV, SUB_NAVS, type LucideIcon } from '@/lib/navigation'
+import { useAuthStore } from '@/store/authStore'
+import type { Role } from '@/lib/theme'
 
 type CmdItem = { label: string; href: string; icon: LucideIcon; group: string }
 
@@ -16,23 +18,34 @@ type CmdItem = { label: string; href: string; icon: LucideIcon; group: string }
 const GROUP_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard/produccion':    { label: 'Producción',    icon: Sprout },
   '/dashboard/alta-produccion': { label: 'Alta de producción', icon: Boxes },
+  '/dashboard/inventarios':   { label: 'Inventarios',   icon: Warehouse },
   '/dashboard/finanzas':      { label: 'Finanzas',      icon: DollarSign },
   '/dashboard/admin':         { label: 'Admin',         icon: Settings },
   '/dashboard/documentacion': { label: 'Documentación', icon: BookOpen },
 }
 
-const TOP_LEVEL_ITEMS: CmdItem[] = ALL_NAV
-  .filter((item) => !SUB_NAVS.some((sn) => item.href.startsWith(sn.prefix)))
-  .map((item) => ({ label: item.label, href: item.href, icon: item.icon, group: 'Navegación' }))
+// Same visibility rule as the sidebar/sub-menu: no allowedRoles = everyone.
+function canSee(allowedRoles: Role[] | undefined, role: Role | undefined): boolean {
+  return !allowedRoles || (!!role && allowedRoles.includes(role))
+}
 
-const SUB_NAV_ITEMS: CmdItem[] = SUB_NAVS.flatMap((sn) => {
-  const meta = GROUP_META[sn.prefix] ?? { label: sn.prefix, icon: LayoutDashboard }
-  return sn.items.map((item) => ({ label: item.label, href: item.href, icon: meta.icon, group: meta.label }))
-})
+function buildCmdItems(role: Role | undefined): CmdItem[] {
+  const topLevel: CmdItem[] = ALL_NAV
+    .filter((item) => !SUB_NAVS.some((sn) => item.href.startsWith(sn.prefix)))
+    .filter((item) => canSee(item.allowedRoles, role))
+    .map((item) => ({ label: item.label, href: item.href, icon: item.icon, group: 'Navegación' }))
 
-const CMD_ITEMS: CmdItem[] = [...TOP_LEVEL_ITEMS, ...SUB_NAV_ITEMS]
+  const sub: CmdItem[] = SUB_NAVS.flatMap((sn) => {
+    const meta = GROUP_META[sn.prefix] ?? { label: sn.prefix, icon: LayoutDashboard }
+    return sn.items
+      .filter((item) => canSee(item.allowedRoles, role))
+      .map((item) => ({ label: item.label, href: item.href, icon: meta.icon, group: meta.label }))
+  })
 
-const GROUPS = ['Navegación', 'Producción', 'Alta de producción', 'Finanzas', 'Admin', 'Documentación']
+  return [...topLevel, ...sub]
+}
+
+const GROUPS = ['Navegación', 'Producción', 'Alta de producción', 'Inventarios', 'Finanzas', 'Admin', 'Documentación']
 
 interface Props {
   open: boolean
@@ -41,6 +54,8 @@ interface Props {
 
 export default function CommandPalette({ open, onClose }: Props) {
   const router = useRouter()
+  const role = useAuthStore((s) => s.user?.role) as Role | undefined
+  const cmdItems = useMemo(() => buildCmdItems(role), [role])
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +142,7 @@ export default function CommandPalette({ open, onClose }: Props) {
               </Command.Empty>
 
               {GROUPS.map((group) => {
-                const items = CMD_ITEMS.filter((i) => i.group === group)
+                const items = cmdItems.filter((i) => i.group === group)
                 if (items.length === 0) return null
                 return (
                   <Command.Group key={group} heading={group}>

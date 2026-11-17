@@ -69,12 +69,12 @@ export const ALL_NAV: NavItem[] = [
     allowedRoles: ['super_admin', 'gerencial'],
   },
   {
-    href: '/dashboard/inventarios/insumos',
+    href: '/dashboard/inventarios',
     label: 'Inventarios',
     short: 'Invent.',
     icon: Warehouse,
     matchFn: (p) => p.startsWith('/dashboard/inventarios'),
-    allowedRoles: ['super_admin', 'gerencial'],
+    allowedRoles: ['super_admin', 'gerencial', 'encargado'],
   },
   {
     href: '/dashboard/trazabilidad',
@@ -103,7 +103,9 @@ export const ALL_NAV: NavItem[] = [
 
 // `group` agrupa visualmente las pestañas de un módulo (se dibuja un
 // separador con el nombre del grupo cuando cambia).
-export type SubNavItem = { href: string; label: string; group?: string }
+// `allowedRoles` omitido = visible para todos los roles que ven el módulo.
+// Solo oculta el ítem del menú; no protege la ruta.
+export type SubNavItem = { href: string; label: string; group?: string; allowedRoles?: Role[] }
 export type SubNav = { prefix: string; items: SubNavItem[] }
 
 export const SUB_NAVS: SubNav[] = [
@@ -145,8 +147,9 @@ export const SUB_NAVS: SubNav[] = [
   {
     prefix: '/dashboard/inventarios',
     items: [
-      { href: '/dashboard/inventarios/producto-terminado', label: 'Producto Terminado' },
-      { href: '/dashboard/inventarios/insumos',             label: 'Insumos'            },
+      { href: '/dashboard/inventarios/producto-terminado', label: 'Producto Terminado', allowedRoles: ['super_admin', 'gerencial'] },
+      { href: '/dashboard/inventarios/insumos',             label: 'Insumos',            allowedRoles: ['super_admin', 'gerencial'] },
+      { href: '/dashboard/inventarios/alfalfa',             label: 'Alfalfa',            allowedRoles: ['super_admin', 'gerencial', 'encargado'] },
     ],
   },
   {

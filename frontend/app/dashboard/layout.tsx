@@ -59,6 +59,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     (item) => !item.allowedRoles || (role && item.allowedRoles.includes(role))
   )
 
+  // Hide sub-menu tabs the role cannot use (menu-only; routes are not guarded).
+  const subItems = subNav?.items.filter(
+    (t) => !t.allowedRoles || (role && t.allowedRoles.includes(role))
+  )
+
   function handleLogout() {
     logout()
     clearUser()
@@ -183,19 +188,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Sub-nav tabs — módulos con sub-secciones */}
-        {subNav && (
+        {subNav && subItems && (
           <div
             className="flex items-end gap-1 px-4 border-b flex-shrink-0 overflow-x-auto"
             style={{ borderColor: '#e2dbcc', backgroundColor: '#ffffff' }}
           >
-            {subNav.items.map((tab, i) => {
+            {subItems.map((tab, i) => {
               // Longest matching href wins so a nested tab (…/maquinaria/ordenes) does not
               // also light up its parent tab (…/maquinaria).
-              const activeHref = subNav.items
+              const activeHref = subItems
                 .filter((t) => pathname.startsWith(t.href))
                 .sort((a, b) => b.href.length - a.href.length)[0]?.href
               const active = tab.href === activeHref
-              const nuevoGrupo = tab.group && tab.group !== subNav.items[i - 1]?.group
+              const nuevoGrupo = tab.group && tab.group !== subItems[i - 1]?.group
               return (
                 <Fragment key={tab.href}>
                 {nuevoGrupo && (
