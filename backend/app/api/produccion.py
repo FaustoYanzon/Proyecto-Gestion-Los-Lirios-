@@ -800,6 +800,18 @@ def _validar_manto_sin_fertirriego(data: dict) -> None:
         )
 
 
+def _rechazar_pasero(parcela: Parcela | None, accion: str) -> None:
+    """Block new writes on a pasero (raisin drying yard: no irrigation, no fito).
+
+    Historical records are left alone; only creates and parcela changes call this.
+    """
+    if parcela is not None and parcela.tipo == TipoParcela.pasero:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Los paseros no admiten {accion}.",
+        )
+
+
 async def _normalizar_riego(
     db: AsyncSession, data: dict, riego: RegistroRiego | None = None
 ) -> dict:
@@ -834,6 +846,9 @@ async def _normalizar_riego(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="El riego por goteo necesita cabezal y válvulas.",
             )
+        parcela_id = data.get("parcela_id")
+        if parcela_id:
+            _rechazar_pasero(await db.get(Parcela, parcela_id), "riego por goteo")
         data["n_valvulas_manto"] = None
         return data
 
@@ -1345,6 +1360,7 @@ async def create_fitosanitario(
     parcela = await db.get(Parcela, data["parcela_id"])
     if parcela is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parcela not found")
+    _rechazar_pasero(parcela, "aplicaciones fitosanitarias")
     cantidad_total = _calcular_cantidad_total(data["dosis_por_ha"], parcela)
     data["producto_nombre"] = insumo.nombre
     data["unidad"] = insumo.unidad
@@ -1376,6 +1392,11 @@ async def update_fitosanitario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
 
     update_data = fito_data.model_dump(exclude_unset=True)
+    if update_data.get("parcela_id"):
+        # Checked before any mutation or stock revert so a 422 leaves everything intact.
+        _rechazar_pasero(
+            await db.get(Parcela, update_data["parcela_id"]), "aplicaciones fitosanitarias"
+        )
     recalcular_stock = any(
         campo in update_data for campo in ("insumo_id", "dosis_por_ha", "parcela_id")
     )

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.lotes_pasa import temporada_de
-from app.models.parcela import Parcela, VariedadUva
+from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.produccion import PlanFitosanitario
 from app.models.valvula import Valvula
 from app.services.plan_avance import TOLERANCIA, _ha, dosis_aplicada_por_parcela
@@ -72,6 +72,7 @@ async def calcular_contraste(
                     Parcela.id.in_([e.parcela_id for e in parcelas]),
                     Parcela.is_active.is_(True),
                     Parcela.variedad.is_not(None),
+                    Parcela.tipo != TipoParcela.pasero,
                 )
             )
         ).scalars()
