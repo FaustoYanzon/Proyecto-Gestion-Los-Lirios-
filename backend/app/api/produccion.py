@@ -21,7 +21,12 @@ from app.api.deps import (
 from app.core import ciclo_campana, cumplimiento_riego, fenologia
 from app.api.remitos import remito_response_completo
 from app.models.alta_produccion import Comprador, IngresoPasero, Productor, RemitoLinea
-from app.services.alta_produccion import remitos_por_cosecha, saldo_cosecha, saldos_cosecha
+from app.services.alta_produccion import (
+    get_parametros,
+    remitos_por_cosecha,
+    saldo_cosecha,
+    saldos_cosecha,
+)
 from app.services.aplicaciones import (
     cargar_registro_con_orden_bloqueada,
     eliminar_registro,
@@ -291,14 +296,14 @@ async def dashboard_eficiencia_hidrica(
     )
     parcela_ids = [p.id for p in parcelas]
 
-    # litros_aplicados depends on each record's valve count, which comes from
-    # RegistroRiego.contar_valvulas (n_valvulas_manto when present, else the
-    # `valvula` CSV) and its caudal factor; neither can be summed with func.sum
-    # in SQL, so the raw columns are fetched and the sum is done in Python.
+    # litros_aplicados depends on the tipo: goteo on its valve count
+    # (RegistroRiego.contar_valvulas), manto on the frozen litros_manto. Neither
+    # can be summed with func.sum in SQL, so the raw columns are fetched and the
+    # sum is done in Python.
     litros_rows = (await db.execute(
         select(
             RegistroRiego.parcela_id, RegistroRiego.duracion_horas, RegistroRiego.valvula,
-            RegistroRiego.tipo, RegistroRiego.n_valvulas_manto,
+            RegistroRiego.tipo, RegistroRiego.n_valvulas_manto, RegistroRiego.litros_manto,
         )
         .where(
             RegistroRiego.parcela_id.in_(parcela_ids),
@@ -310,7 +315,7 @@ async def dashboard_eficiencia_hidrica(
     litros_por_parcela: dict[str, float] = defaultdict(float)
     for row in litros_rows:
         litros_por_parcela[row.parcela_id] += cumplimiento_riego.litros_de_registro(
-            row.duracion_horas, row.tipo, row.valvula, row.n_valvulas_manto
+            row.duracion_horas, row.tipo, row.valvula, row.n_valvulas_manto, row.litros_manto
         )
 
     ciclos = list(
@@ -875,10 +880,27 @@ async def _normalizar_riego(
     data["valvula"] = None
     data["n_valvulas_manto"] = RegistroRiego.valvulas_manto_de(parcela.superficie_ha)
     if riego is None:
-        # Pre-manto web clients send mm computed with an old rate; drop it so
-        # RegistroRiego.__init__ recalculates it with the current factor.
+        # Older clients send mm computed with an old rate; drop it: the server
+        # freezes the manto mm itself (_congelar_manto) when the riego finishes.
         data["mm_aplicados"] = None
     return data
+
+
+async def _congelar_manto(db: AsyncSession, riego: RegistroRiego) -> None:
+    """Freeze the litres and mm of a finished manto riego.
+
+    Uses the parcela surface and the mm_riego_manto parameter in force NOW, so later
+    edits of either never rewrite the history. Without a valid surface the litres stay
+    NULL (counted as 0) and mm_aplicados is left untouched.
+    """
+    parcela = await db.get(Parcela, riego.parcela_id)
+    mm = (await get_parametros(db)).mm_riego_manto
+    litros = RegistroRiego.litros_manto_de(
+        float(mm), parcela.superficie_ha if parcela is not None else None
+    )
+    riego.litros_manto = litros
+    if litros is not None:
+        riego.mm_aplicados = float(mm)
 
 
 def _horas_entre(inicio: datetime, fin: datetime) -> float:
@@ -1057,6 +1079,7 @@ async def get_planilla_cumplimiento_riego(
     riegos_stmt = select(
         RegistroRiego.parcela_id, RegistroRiego.fecha, RegistroRiego.duracion_horas,
         RegistroRiego.tipo, RegistroRiego.valvula, RegistroRiego.n_valvulas_manto,
+        RegistroRiego.litros_manto,
     ).where(
         RegistroRiego.parcela_id.in_([p.id for p in parcelas]),
         RegistroRiego.fecha >= desde,
@@ -1066,9 +1089,9 @@ async def get_planilla_cumplimiento_riego(
     if tipo != "ambos":
         riegos_stmt = riegos_stmt.where(RegistroRiego.tipo == TipoRiego(tipo))
     litros_por_parcela_mes: dict[tuple[str, str], float] = defaultdict(float)
-    for pid, fecha, horas, tipo_riego, valvula, n_manto in (await db.execute(riegos_stmt)).all():
+    for pid, fecha, horas, tipo_riego, valvula, n_manto, l_manto in (await db.execute(riegos_stmt)).all():
         litros_por_parcela_mes[(pid, fecha.strftime("%Y-%m"))] += (
-            cumplimiento_riego.litros_de_registro(horas, tipo_riego, valvula, n_manto)
+            cumplimiento_riego.litros_de_registro(horas, tipo_riego, valvula, n_manto, l_manto)
         )
 
     # Expected is the same for every parcela: compute it once per month.
@@ -1199,6 +1222,8 @@ async def create_riego(
     data["created_by"] = current_user.id
     # duracion_horas computed by RegistroRiego.__init__
     riego = RegistroRiego(**data)
+    if riego.tipo == TipoRiego.manto and riego.fin is not None:
+        await _congelar_manto(db, riego)
     db.add(riego)
     await db.flush()
     await db.refresh(riego)
@@ -1226,14 +1251,23 @@ async def update_riego(
     merged["n_valvulas_manto"] = riego.n_valvulas_manto
     merged.update(update_data)
     merged = await _normalizar_riego(db, merged, riego)
+    # Captured before the merge is applied: decides whether a manto must be refrozen.
+    era_manto_terminado = riego.tipo == TipoRiego.manto and riego.fin is not None
+    parcela_anterior = riego.parcela_id
     for field, value in merged.items():
         setattr(riego, field, value)
     if ("inicio" in update_data or "fin" in update_data) and riego.fin is not None:
         riego.duracion_horas = _horas_entre(riego.inicio, riego.fin)
-    # parcela_id matters too: it changes n_valvulas_manto and may move a
-    # historical manto onto the current factor.
+    # recalcular_mm is a no-op for manto (its mm is fixed per riego).
     if ({"inicio", "fin", "tipo", "parcela_id"} & update_data.keys()) and riego.duracion_horas is not None:
         riego.recalcular_mm()
+    if riego.tipo == TipoRiego.manto:
+        # Refreeze only when the riego just finished, became manto or moved parcela;
+        # any other edit (e.g. responsable) keeps the stored litres.
+        if riego.fin is not None and (not era_manto_terminado or riego.parcela_id != parcela_anterior):
+            await _congelar_manto(db, riego)
+    else:
+        riego.litros_manto = None
 
     await db.flush()
     await db.refresh(riego)
@@ -1269,7 +1303,10 @@ async def terminar_riego(
 
     riego.fin = body.fin or datetime.now(timezone.utc)
     riego.duracion_horas = (riego.fin - riego.inicio).total_seconds() / 3600
-    riego.recalcular_mm()
+    if riego.tipo == TipoRiego.manto:
+        await _congelar_manto(db, riego)
+    else:
+        riego.recalcular_mm()
 
     await db.flush()
     await db.refresh(riego)
@@ -1845,7 +1882,7 @@ async def estado_campana_cumplimiento_riego(
         riego_rows = (await db.execute(
             select(
                 RegistroRiego.duracion_horas, RegistroRiego.tipo,
-                RegistroRiego.valvula, RegistroRiego.n_valvulas_manto,
+                RegistroRiego.valvula, RegistroRiego.n_valvulas_manto, RegistroRiego.litros_manto,
             ).where(
                 RegistroRiego.parcela_id == p.id,
                 RegistroRiego.fecha >= estado_info.fecha_inicio,
@@ -1854,7 +1891,9 @@ async def estado_campana_cumplimiento_riego(
             )
         )).all()
         litros = sum(
-            cumplimiento_riego.litros_de_registro(r.duracion_horas, r.tipo, r.valvula, r.n_valvulas_manto)
+            cumplimiento_riego.litros_de_registro(
+                r.duracion_horas, r.tipo, r.valvula, r.n_valvulas_manto, r.litros_manto
+            )
             for r in riego_rows
         )
         esperados = estado_info.riegos_esperados

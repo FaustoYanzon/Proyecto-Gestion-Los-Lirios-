@@ -252,6 +252,10 @@ class RegistroRiego(Base):
     fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duracion_horas: Mapped[float | None] = mapped_column(Float, nullable=True)
     mm_aplicados: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Manto: litres frozen when the riego finishes (mm_riego_manto x superficie x
+    # 10 000). NULL = in progress, or a historical manto whose parcela has no
+    # superficie (counts as 0 litres). Always NULL for goteo.
+    litros_manto: Mapped[float | None] = mapped_column(Float, nullable=True)
     fertilizante_nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)
     fertilizante_dosis_lt_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
     responsable: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -330,7 +334,14 @@ class RegistroRiego(Base):
         fin = kwargs.get("fin")
         if "duracion_horas" not in kwargs and inicio is not None and fin is not None:
             kwargs["duracion_horas"] = (fin - inicio).total_seconds() / 3600
-        if kwargs.get("mm_aplicados") is None and kwargs.get("duracion_horas") is not None:
+        # Manto mm is fixed per riego (set by the endpoint when it finishes), never
+        # derived from the duration.
+        es_manto = kwargs.get("tipo") in (TipoRiego.manto, TipoRiego.manto.value)
+        if (
+            not es_manto
+            and kwargs.get("mm_aplicados") is None
+            and kwargs.get("duracion_horas") is not None
+        ):
             kwargs["mm_aplicados"] = round(
                 kwargs["duracion_horas"] * self.MM_POR_HORA
                 * self.factor_caudal(kwargs.get("tipo"), kwargs.get("n_valvulas_manto")),
@@ -339,7 +350,12 @@ class RegistroRiego(Base):
         super().__init__(**kwargs)
 
     def recalcular_mm(self) -> None:
-        """Recalcula mm_aplicados desde duracion_horas y el tipo de riego."""
+        """Recalcula mm_aplicados desde duracion_horas (solo goteo).
+
+        El manto entrega un mm fijo por riego, congelado por el endpoint: aca no se toca.
+        """
+        if self.tipo == TipoRiego.manto:
+            return
         self.mm_aplicados = round(self.duracion_horas * self.MM_POR_HORA * self.factor_aplicado, 2)
 
     @property
@@ -357,19 +373,30 @@ class RegistroRiego(Base):
         return self.factor_caudal(self.tipo, self.n_valvulas_manto)
 
     @staticmethod
+    def litros_manto_de(mm: float, superficie_ha: float | None) -> float | None:
+        """Litres of one manto riego: mm over the whole parcela; None without superficie."""
+        if superficie_ha is None or superficie_ha <= 0:
+            return None
+        return mm * superficie_ha * 10_000
+
+    @staticmethod
     def litros_de(
         horas: float | None,
         tipo: TipoRiego | str | None,
         valvula: str | None,
         n_valvulas_manto: int | None,
+        litros_manto: float | None = None,
     ) -> float:
         """Single source of truth for the litres formula (unrounded).
 
-        horas * litros/h/valvula * caudal factor * number of valves; 0.0 while the
-        riego is still in progress (horas is None).
+        Goteo: horas * litros/h/valvula * number of valves. Manto: the litres frozen
+        at finish (`litros_manto`), independent of the duration. Both are 0.0 while
+        the riego is still in progress (horas is None).
         """
         if horas is None:
             return 0.0
+        if tipo in (TipoRiego.manto, TipoRiego.manto.value):
+            return litros_manto or 0.0
         return (
             horas
             * RegistroRiego.LITROS_POR_HORA_VALVULA
@@ -385,7 +412,10 @@ class RegistroRiego(Base):
         se completa recién al terminar.
         """
         return round(
-            self.litros_de(self.duracion_horas, self.tipo, self.valvula, self.n_valvulas_manto), 2
+            self.litros_de(
+                self.duracion_horas, self.tipo, self.valvula, self.n_valvulas_manto, self.litros_manto
+            ),
+            2,
         )
 
     parcela: Mapped[Parcela] = relationship(

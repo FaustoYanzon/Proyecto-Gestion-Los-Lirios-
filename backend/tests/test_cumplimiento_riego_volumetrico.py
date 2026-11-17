@@ -26,8 +26,9 @@ from app.models.user import UserRole
 
 def test_litros_de_registro_goteo_manto_y_en_curso():
     assert cumplimiento_riego.litros_de_registro(24, TipoRiego.goteo, "1,2", None) == 768_000
-    # manto: factor 4 * n_valvulas_manto (2) -> 8 h * 16 000 * 4 * 2
-    assert cumplimiento_riego.litros_de_registro(8, TipoRiego.manto, None, 2) == 1_024_000
+    # manto: the litres frozen at finish (60 mm), whatever the hours
+    assert cumplimiento_riego.litros_de_registro(8, TipoRiego.manto, None, 2, 1_200_000.0) == 1_200_000
+    assert cumplimiento_riego.litros_de_registro(8, TipoRiego.manto, None, 2) == 0.0
     assert cumplimiento_riego.litros_de_registro(None, TipoRiego.goteo, "1", None) == 0.0
 
 
@@ -65,13 +66,14 @@ async def _auth(client, create_user, role: UserRole = UserRole.gerencial) -> tup
 def _riego(
     parcela_id: str, user_id: str, dia: date, horas: float | None, *,
     tipo: TipoRiego = TipoRiego.goteo, valvula: str | None = "1", n_manto: int | None = None,
+    litros_manto: float | None = None,
 ) -> RegistroRiego:
     inicio = datetime(dia.year, dia.month, dia.day, 8, tzinfo=timezone.utc)
     return RegistroRiego(
         fecha=dia, parcela_id=parcela_id, tipo=tipo,
         cabezal="1" if tipo == TipoRiego.goteo else None,
         valvula=valvula if tipo == TipoRiego.goteo else None,
-        n_valvulas_manto=n_manto, inicio=inicio,
+        n_valvulas_manto=n_manto, litros_manto=litros_manto, inicio=inicio,
         fin=None if horas is None else inicio + timedelta(hours=horas),
         duracion_horas=horas, responsable="Juan", created_by=user_id,
     )
@@ -123,20 +125,22 @@ async def test_estado_una_valvula_de_dos_es_medio_riego(
     assert item["cumplimiento_pct"] == pytest.approx(round(50 / esperados, 1))
 
 
-async def test_estado_manto_8h_en_2ha_con_2_valvulas_supera_un_riego(
+async def test_estado_manto_60mm_en_2ha_equivale_a_1_56_riegos(
     client, create_user, create_parcela, db_session
 ):
     headers, uid = await _auth(client, create_user)
     p = await create_parcela(nombre="Parral 2", superficie_ha=2.0, variedad=VariedadUva.syrah)
-    db_session.add(_riego(p.id, uid, date.today(), 8, tipo=TipoRiego.manto, n_manto=2))
+    db_session.add(_riego(
+        p.id, uid, date.today(), 8, tipo=TipoRiego.manto, n_manto=2, litros_manto=1_200_000.0
+    ))
     await db_session.commit()
     esperados = ciclo_campana.riegos_esperados(ciclo_campana.calcular_estado_actual())
 
     item = await _item(client, headers, p.id)
 
-    assert item["litros_aplicados"] == pytest.approx(1_024_000)
-    assert item["riegos_equivalentes"] == pytest.approx(1.33)
-    assert item["cumplimiento_pct"] == pytest.approx(round(133.33 / esperados, 1), abs=0.1)
+    assert item["litros_aplicados"] == pytest.approx(1_200_000)
+    assert item["riegos_equivalentes"] == pytest.approx(1.56)
+    assert item["cumplimiento_pct"] == pytest.approx(round(156.25 / esperados, 1), abs=0.1)
 
 
 async def test_estado_ignora_riego_en_curso_y_parcela_sin_superficie_no_rompe(
@@ -301,20 +305,21 @@ async def test_resumen_publico_mm_riego_total_es_lamina(
 
 
 @pytest.mark.parametrize(
-    ("horas", "tipo", "valvula", "n_manto"),
+    ("horas", "tipo", "valvula", "n_manto", "l_manto"),
     [
-        (24, TipoRiego.goteo, "1,2", None),
-        (8, TipoRiego.manto, None, 2),  # manto new: n_valvulas_manto
-        (8, TipoRiego.manto, "1,2,3", None),  # manto historical: n NULL
-        (None, TipoRiego.goteo, "1", None),  # en curso
-        (1.37, TipoRiego.goteo, "1", None),  # rounding must stay per record
+        (24, TipoRiego.goteo, "1,2", None, None),
+        (8, TipoRiego.manto, None, 2, 1_200_000.0),  # manto new: frozen litres
+        (8, TipoRiego.manto, "1,2,3", None, 600_000.0),  # manto historical: n NULL
+        (8, TipoRiego.manto, None, None, None),  # manto without frozen litres -> 0
+        (None, TipoRiego.goteo, "1", None, None),  # en curso
+        (1.37, TipoRiego.goteo, "1", None, None),  # rounding must stay per record
     ],
 )
-def test_litros_aplicados_y_helper_comparten_formula(horas, tipo, valvula, n_manto):
+def test_litros_aplicados_y_helper_comparten_formula(horas, tipo, valvula, n_manto, l_manto):
     registro = RegistroRiego(
         parcela_id="p", created_by="u", fecha=date(2026, 6, 15), tipo=tipo,
-        valvula=valvula, n_valvulas_manto=n_manto, duracion_horas=horas,
+        valvula=valvula, n_valvulas_manto=n_manto, duracion_horas=horas, litros_manto=l_manto,
     )
-    helper = cumplimiento_riego.litros_de_registro(horas, tipo, valvula, n_manto)
+    helper = cumplimiento_riego.litros_de_registro(horas, tipo, valvula, n_manto, l_manto)
     assert registro.litros_aplicados == pytest.approx(helper, abs=0.005)
-    assert helper == RegistroRiego.litros_de(horas, tipo, valvula, n_manto)
+    assert helper == RegistroRiego.litros_de(horas, tipo, valvula, n_manto, l_manto)

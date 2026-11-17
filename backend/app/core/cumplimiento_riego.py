@@ -1,7 +1,6 @@
 """Volumetric irrigation compliance, shared by every endpoint that reports it.
 
-Why volumes: each RegistroRiego stores `mm_aplicados` = hours x 1.6 (x manto
-factor) as the depth over the ONE hectare of that valve, not over the whole
+Why volumes: each goteo RegistroRiego stores `mm_aplicados` = hours x 1.6 as the depth over the ONE hectare of that valve, not over the whole
 parcela. Summing it across the valves of a parcela inflates compliance (4 valves
 x 24 h = 153.6 "mm" vs 38.4 expected = 400 %) although it is physically ONE
 standard riego. Comparing litres (applied) against litres (expected for the
@@ -23,13 +22,14 @@ def litros_de_registro(
     tipo: TipoRiego | str | None,
     valvula: str | None,
     n_valvulas_manto: int | None,
+    litros_manto: float | None = None,
 ) -> float:
     """Litres delivered by one riego record (0.0 while it is still in progress).
 
     Delegates to RegistroRiego.litros_de (one formula), usable on raw columns so SQL
     rows do not need to be hydrated into ORM objects.
     """
-    return RegistroRiego.litros_de(duracion_horas, tipo, valvula, n_valvulas_manto)
+    return RegistroRiego.litros_de(duracion_horas, tipo, valvula, n_valvulas_manto, litros_manto)
 
 
 def _superficie_valida(superficie_ha: float | None) -> bool:
