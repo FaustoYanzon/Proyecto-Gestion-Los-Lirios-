@@ -1,6 +1,8 @@
 # Riego a manto: 60 mm fijos por riego — diseño
 
-Fecha: 2026-11-17 · Estado: borrador para aprobación · Tamaño: proyecto mediano (backend + migración con recálculo de datos + web + mobile por OTA). Paso 2 de la serie paseros → **manto** → alfalfa → anulación de pasa → mobile.
+Fecha: 2026-11-17 · Estado: **implementado y desplegado** (2026-11-17, PR #11, merge `25ab7f0`; migración `c9b5b6bebbfd` en producción) · Tamaño: proyecto mediano (backend + migración con recálculo de datos + web + mobile por OTA). Paso 2 de la serie paseros → **manto** → alfalfa → anulación de pasa → mobile.
+
+Decisión registrada en `docs/sistema/Decisiones/2026-11-17-riego-manto-60mm.md`. Desviaciones respecto de este diseño al final del documento.
 
 ## Intención
 El ingeniero considera que un riego a manto entrega **60 mm a la parcela completa, sin importar el tiempo**. Hoy el manto se calcula como `horas × 1,6 mm × 4` por válvula, es decir, depende del tiempo. Debe pasar a un valor fijo por riego.
@@ -63,3 +65,16 @@ Textos exactos de los formularios, nombres de las columnas de reporte del script
 - El recálculo cambia números que Fausto ya vio (manto ×4 del 5/11): comunicarlo y mostrar el antes/después por parcela.
 - Parcelas con manto histórico y sin superficie cargada: quedarían en 0 litros hasta cargar la superficie (el script lo lista antes).
 - Ventana entre migrar el backend y publicar el OTA: el preview del celular es el viejo; no afecta los datos.
+
+## Estado final y desviaciones
+
+**Estado:** implementado y desplegado el 2026-11-17 (PR #11, merge `25ab7f0`). Migración `c9b5b6bebbfd` aplicada en producción con `scripts/migracion/_alembic_prod.py` antes del merge, con `pg_dump` previo. Web en Vercel (`frontend-six-jade-79`). OTA desde `main`.
+
+**Desviaciones respecto de este diseño:**
+
+- **Mobile no lee el parámetro.** Muestra 60 mm fijos (`MM_RIEGO_MANTO_DEFAULT`), no el valor de `mm_riego_manto`. La spec pedía leerlo si el rol puede. Pendiente.
+- **OTA solo a runtimes nuevos.** Un OTA desde `main` llega a `bc733f64` (Android) y `10cc6f4a` (iOS). Los binarios en `1ccf455d` / `07054827` conservan el preview viejo («válvulas × factor»); el servidor guarda bien.
+- **PUT más estricto de lo especificado.** Un riego terminado no se reabre (422 «Un riego terminado no se puede reabrir.», antes 500) y el PUT no pisa el mm del manto. No estaba en la spec.
+- **Vista KPI sin filtro de duración.** `vw_kpi_produccion_parcela` usa `COALESCE(litros_manto, 0)` para el manto sin mirar `duracion_horas`. Los endpoints Python no lo cuentan. Follow-up pendiente.
+- **Orden de despliegue.** Migración en prod antes del merge (no en el arranque de Railway). `Modelo de Datos.md` quedó pendiente: lo regenera Fausto.
+- **Reporte de solo lectura.** `scripts/migracion/reporte_manto_60mm.py` se corrió contra producción antes de migrar: 6 mantos terminados, todos con superficie. Litros 170.239.773 → 14.676.000.

@@ -4,7 +4,7 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-11-12 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-11-17 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
 **53 tablas** · **9 vistas** · **39 enums** · **102 relaciones**
 
@@ -311,6 +311,7 @@ erDiagram
         varchar(36) responsable_id FK
         tiporiego tipo
         integer n_valvulas_manto
+        float8 litros_manto
     }
     registros_cosecha {
         varchar(36) id PK
@@ -449,6 +450,7 @@ erDiagram
 | `responsable_id` | varchar(36) |  | FK → `trabajadores.id` |
 | `tipo` | tiporiego | NOT NULL |  |
 | `n_valvulas_manto` | integer |  |  |
+| `litros_manto` | float8 |  |  |
 
 ### `registros_cosecha`
 

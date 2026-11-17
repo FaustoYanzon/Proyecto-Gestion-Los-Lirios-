@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-11-16 (deuda previa de mobile y cámara en reportes — ver [[2026-11-16-camara-y-deuda-mobile]])
+> Última revisión: 2026-11-17 (paseros fuera de riego/fito y riego a manto de 60 mm — ver [[2026-11-17-paseros-y-manto-60mm]]; antes, 2026-11-16: deuda previa de mobile y cámara en reportes — ver [[2026-11-16-camara-y-deuda-mobile]])
 
 ---
 
@@ -35,10 +35,26 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **`eas-cli` falla con `ECONNRESET` por IPv6 desde esta PC** (red de Fausto). Workaround en PowerShell: `$env:NODE_OPTIONS="--dns-result-order=ipv4first"` (`set` no sirve en PowerShell). Aplica a `eas build`, `eas update` y `eas submit`. Ver [[2026-11-16-camara-y-deuda-mobile]].
 - **Órdenes multiproducto (2026-10-27, desplegado en prod el mismo día):** (a) un registro de parcela completa en una parcela que además tiene filas de válvula: Eliminar saca el ítem pero no revierte los registros de las válvulas. (b) ~~El texto de confirmación de Deshacer en mobile sigue en singular~~ — corregido en la misma rama (habla de todos los productos de la válvula; llega con el OTA). (c) Un cliente web viejo con caché que edite una orden multilínea recibe 409 (el PUT legacy no puede representar varias líneas). (d) `scripts/generate_modelo_datos.py` lee el esquema de PRODUCCIÓN (`.env.prod`) sin avisar: no usarlo antes de migrar prod. Ver [[2026-10-27-ordenes-multiproducto]].
 - **Posible glitch visual en el formulario "Nueva orden" (2026-10-27, sin reproducir de forma fiable):** al hacer scroll dentro del modal con una ronda del plan precargada, una vez se vio el campo de producto de una línea ("Oponente QA · existente") montado por encima del encabezado fijo del modal; en otras capturas del mismo scroll el encabezado se veía bien. Sospecha: un `z-index` o `position: relative` del combobox de producto que gana al encabezado `sticky`. Revisar `frontend/components/produccion/NuevaOrdenAplicacion.tsx` si vuelve a aparecer. No bloquea.
+- **Manto de 60 mm: los binarios viejos muestran el preview viejo.** Los runtimes `1ccf455d` (Android) y `07054827` (iOS) no reciben el OTA de 2026-11-17 (ver [[2026-11-16-camara-y-deuda-mobile]]). En esos celulares el resumen del manto dice «válvulas × factor», pero el servidor guarda `litros_manto` con la regla nueva. Revisar qué binarios siguen activos en Play y TestFlight antes de decidir.
+- **Mobile muestra 60 mm fijos en el manto** (`MM_RIEGO_MANTO_DEFAULT`), no el parámetro `mm_riego_manto`. Si Fausto cambia el parámetro en Documentación, el preview del celular no se entera; el valor guardado sí es el vigente.
+- **Vista `vw_kpi_produccion_parcela` cuenta `COALESCE(litros_manto, 0)` para el manto sin mirar `duracion_horas`.** Un manto terminado sin duración suma en el KPI de la vista y no en los endpoints Python. Follow-up de review pendiente; No se verificó si hay mantos terminados sin duración en producción.
+- **Ventana de deploy de Railway:** corre `alembic upgrade head` al arrancar, así que unos minutos código viejo corre sobre el esquema nuevo. Mitigado en la migración del 2026-11-17 con backfill idempotente y chequeo posterior. Para futuras migraciones, aplicarlas en prod antes del merge.
+- **4 mantos en curso en producción** (2026-11-17). Pueden ser riegos olvidados. Cada uno suma 60 mm al terminarse; revisarlos antes de que se cierre la campaña.
+- **Paseros en mobile todavía se ofrecen para riego y fito.** Web y backend ya los excluyen (el backend responde 422). El mapa de paseros en mobile y los selectores quedan para el paso 5 (OTA).
+- **Una orden de aplicación vieja que ya incluye un pasero no se puede guardar** hasta quitar el pasero (422 de `_resolve_parcelas_orden`). Decidir si se limpia la orden o se permite quitarlo sin error.
+- **`Modelo de Datos.md` está desactualizado** hasta que Fausto regenere con `scripts/generate_modelo_datos.py` (lee producción; no lo corrió el agente). Faltan `registros_riego.litros_manto` y el parámetro `mm_riego_manto`.
+- **Vercel falló dos veces con `next/font/google queries have exactly one entry`**, incluso con `--force`, mientras CI y el build local pasaban. El mismo código desde `main` pasó al primer intento: transitorio de Vercel o de Google Fonts. Antes de tocar código, reintentar el deploy. Si el error aparece en local, `frontend/.next` está viejo: borrarlo y rebuild. Nunca correr dev server y build a la vez (comparten `.next`).
 
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-11-17** (ver [[2026-11-17-paseros-y-manto-60mm]]):
+- **Riego a manto con litros inflados por el tiempo — resuelto.** El manto era horas × factor × válvulas, y un riego dejado abierto días inflaba el número (Parral 8: 317 h = 60,8 M L). Ahora cada manto terminado vale 60 mm × superficie, congelado en `registros_riego.litros_manto`. Producción recalculada: 170.239.773 L → 14.676.000 L. Decisión en [[2026-11-17-riego-manto-60mm]].
+- **`PUT` de un riego terminado daba 500 al reabrirlo — resuelto.** Ahora responde 422 «Un riego terminado no se puede reabrir.», y el PUT no pisa el mm de un manto.
+- **Paseros tratados como parral en el panel del mapa y en los selectores de riego/fito/órdenes/plan — resuelto (web y backend).** El panel muestra tareas, costo laboral y uva fresca en kg; los modos cumplimiento y fito lo pintan gris. Riego, fito, órdenes y plan rechazan paseros con 422.
+- **Red Globe y Flame con el mismo color en el mapa — resuelto.** Red Globe pasó a `#9f1239`.
+- **Editar un registro histórico de pasero sin cambiar de parcela daba 422** (introducido en el mismo PR #10) — resuelto en `ad8636f`.
 
 **Sesión del 2026-11-16** (ver [[2026-11-16-camara-y-deuda-mobile]]):
 - **Finca de un encargado/regador/obrero pisada por otro usuario del mismo teléfono compartido — resuelto.** `loadFinca(role)` en `mobile/store/fincaStore.ts` restaura la finca guardada solo para `gerencial` y `super_admin`. Estaba como preexistente en [[2026-11-11-modulo-maquinaria]].
@@ -186,6 +202,8 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-11-17-paseros-y-manto-60mm]]
+- [[2026-11-17-riego-manto-60mm]]
 - [[2026-11-16-camara-y-deuda-mobile]]
 - [[2026-09-01-ios-primer-build-play-store-14-dias]]
 - [[2026-08-28-play-store-produccion-ios-fix-parcelas]]

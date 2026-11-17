@@ -104,3 +104,5 @@ Se reutiliza el selector de tipo existente movido al primer paso. Sin cambios en
 
 - Recalcular los riegos a manto ya cargados.
 - Alertas o metas de riego por tipo.
+
+> **Superado (2026-11-17).** La regla de cálculo del manto de este documento (factor 0.25 × válvulas × horas) ya no aplica. Desde el 2026-11-17 cada riego a manto terminado vale 60 mm sobre la superficie, congelado en `registros_riego.litros_manto`. Ver `docs/sistema/Decisiones/2026-11-17-riego-manto-60mm.md` y `docs/superpowers/specs/2026-11-17-riego-manto-60mm-design.md`.
