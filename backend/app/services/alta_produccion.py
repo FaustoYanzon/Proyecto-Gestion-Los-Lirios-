@@ -43,6 +43,9 @@ PARAMETROS_DEFAULT: dict[str, Decimal | None] = {
     "tope_bines_lote": Decimal("10"),
     # mm delivered by ONE manto riego over the whole parcela, whatever its duration.
     "mm_riego_manto": Decimal("60"),
+    # Alfalfa: kg frozen per fardo / rollo when a document is loaded.
+    "kg_fardo": Decimal("20"),
+    "kg_rollo": Decimal("300"),
 }
 
 # Depósito único de la pasa: no se elige, el lote se asigna solo (resuelto por
@@ -66,6 +69,8 @@ class Parametros:
     tara_carro: Decimal
     tope_bines_lote: int | None
     mm_riego_manto: Decimal
+    kg_fardo: Decimal
+    kg_rollo: Decimal
 
 
 async def get_parametros(db: AsyncSession) -> Parametros:
@@ -83,6 +88,8 @@ async def get_parametros(db: AsyncSession) -> Parametros:
         tara_carro=valores["tara_carro"],  # type: ignore[arg-type]
         tope_bines_lote=int(tope) if tope is not None else None,
         mm_riego_manto=valores["mm_riego_manto"],  # type: ignore[arg-type]
+        kg_fardo=valores["kg_fardo"],  # type: ignore[arg-type]
+        kg_rollo=valores["kg_rollo"],  # type: ignore[arg-type]
     )
 
 

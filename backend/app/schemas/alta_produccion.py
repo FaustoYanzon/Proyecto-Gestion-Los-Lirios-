@@ -96,6 +96,8 @@ class ParametrosResponse(BaseModel):
     tara_carro: Decimal
     tope_bines_lote: int | None
     mm_riego_manto: Decimal
+    kg_fardo: Decimal
+    kg_rollo: Decimal
 
 
 class ParametrosUpdate(BaseModel):
@@ -108,6 +110,8 @@ class ParametrosUpdate(BaseModel):
     tara_carro: ParametroDecimal | None = None
     tope_bines_lote: int | None = Field(default=None, gt=0)
     mm_riego_manto: ParametroDecimal | None = None
+    kg_fardo: ParametroDecimal | None = None
+    kg_rollo: ParametroDecimal | None = None
 
 
 # ── Pasero ───────────────────────────────────────────────────────────────────

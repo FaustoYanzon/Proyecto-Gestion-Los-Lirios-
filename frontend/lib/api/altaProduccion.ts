@@ -129,6 +129,8 @@ export interface ParametrosProduccion {
   kg_nominal_bin: number
   tara_carro: number
   mm_riego_manto: number
+  kg_fardo: number
+  kg_rollo: number
   tope_bines_lote: number | null
 }
 
@@ -143,6 +145,8 @@ function parseParametros(d: Record<string, unknown>): ParametrosProduccion {
     tara_carro: num(d.tara_carro),
     // Older servers may not send it yet: fall back to the fixed 60 mm.
     mm_riego_manto: d.mm_riego_manto == null ? 60 : num(d.mm_riego_manto),
+    kg_fardo: d.kg_fardo == null ? 20 : num(d.kg_fardo),
+    kg_rollo: d.kg_rollo == null ? 300 : num(d.kg_rollo),
     tope_bines_lote: numOrNull(d.tope_bines_lote),
   }
 }
