@@ -1,7 +1,7 @@
 ---
 fecha: 2026-11-11
 tags: [sistema, decision, maquinaria, roles, finanzas, mobile]
-estado: implementada en rama, pendiente de deploy
+estado: desplegada el 2026-11-12 (PR #6; migraciones 60332c8268d5 y 07acdb0d401f en producción)
 ---
 
 # Decisión: Módulo de Maquinaria
@@ -38,13 +38,14 @@ No hay área de mantenimiento propia: todas las reparaciones las hace un taller 
 
 - Los egresos de maquinaria aparecen en Finanzas con `fuente=maquinaria`; el registro de pago es la única vía de carga.
 - El encargado depende de la finca snapshot: si una máquina cambia de finca, sus órdenes viejas siguen en la finca original.
-- Un teléfono compartido puede cambiar la finca asignada a un encargado (`loadFinca`, preexistente). Sin resolver.
-- Los drawers de maquinaria se renderizan con portal a body (`7ddeba1`). El `Sheet` de `finanzas/ingresos` tiene el mismo problema de z-index/portal y sigue sin corregir.
-- Cámara en mobile requiere build nativo: `expo-image-picker` no tiene config plugin en `app.json`. Hoy solo galería.
-- Deploy: la migración `60332c8268d5` requiere confirmación explícita antes de aplicarse en producción. `Modelo de Datos.md` se regenera después de ese deploy.
+- Un teléfono compartido puede cambiar la finca asignada a un encargado (`loadFinca`, preexistente). **Resuelto 2026-11-16 (PR #7):** `loadFinca` restaura la finca guardada solo para gerencial y super_admin. Ver [[2026-11-16-camara-y-deuda-mobile]].
+- Los drawers de maquinaria se renderizan con portal a body (`7ddeba1`). El `Sheet` de `finanzas/ingresos` tenía el mismo problema de z-index/portal. **Resuelto 2026-11-16 (PR #7):** ingresos usa el mismo `Drawer`.
+- Cámara en mobile requería build nativo (`expo-image-picker` sin config plugin). **Resuelto 2026-11-16 (PR #8):** plugin en `app.json` y `elegirImagen()` con «Tomar foto / Galería». Llega solo con builds nuevos (`b81d292`), no por OTA.
+- Deploy: la migración `60332c8268d5` requería confirmación explícita antes de aplicarse en producción. **Hecho el 2026-11-12** (junto con `07acdb0d401f`); `Modelo de Datos.md` se regeneró después.
 
 ## Ver también
 
 - [[2026-11-11-modulo-maquinaria]]
+- [[2026-11-16-camara-y-deuda-mobile]]
 - [[Arquitectura]]
 - [[Bugs Conocidos]]

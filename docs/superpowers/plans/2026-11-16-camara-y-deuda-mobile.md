@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-16-camara-y-deuda-mobile-design.md`
 
+**Estado:** ejecutado el 2026-11-16 (PR #7 fase 1, PR #8 fase 2). Desvíos respecto del plan: el `Sheet` de Ingresos se reemplazó por el `Drawer` compartido en vez de agregarle un portal; `clearStoredFinca` no hizo falta; el `versionCode` de `app.json` se ignora (`appVersionSource: remote`). Ver la bitácora `2026-11-16-camara-y-deuda-mobile`.
+
 ## Global Constraints
 - Mobile no tiene test runner (sin jest): la verificación es `npx tsc --noEmit` en `mobile/` + prueba manual. No se inventa infraestructura de tests.
 - Fase 1: NO tocar `mobile/app.json` ni `mobile/eas.json` (fingerprint).
