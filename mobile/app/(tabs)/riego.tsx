@@ -27,7 +27,8 @@ import type {
   Parcela, RegistroRiego, RiegoEnCurso, RiegoIniciarPayload, RiegoPayload, Trabajador as TrabajadorDb, ValvulaReal,
 } from '../../lib/types'
 import {
-  calcRiegoTotales, FACTOR_MANTO_SUPERFICIE, superficieManto, valvulasManto, type TipoRiego,
+  calcRiegoTotales, calcMantoResumen, MM_RIEGO_MANTO_DEFAULT, FACTOR_MANTO_SUPERFICIE,
+  superficieManto, valvulasManto, type TipoRiego,
 } from '../../lib/types'
 
 // El backend guarda inicio/fin en UTC (timestamptz). Todo lo que se muestre
@@ -57,6 +58,11 @@ function formatHa(ha: number) {
 }
 function plural(n: number, singular: string, pluralForm: string) {
   return `${n} ${n === 1 ? singular : pluralForm}`
+}
+// New manto summary: fixed depth over the whole parcel, e.g. "60 mm · 2,5 ha · 1.500.000 L".
+function mantoResumenTexto(ha: number) {
+  const r = calcMantoResumen(MM_RIEGO_MANTO_DEFAULT, ha)
+  return `${r.mm.toLocaleString('es-AR')} mm · ${formatHa(ha)} ha · ${r.litros.toLocaleString('es-AR')} L`
 }
 function formatDatetime(iso: string) {
   try {
@@ -452,8 +458,7 @@ function StepParcelaManto({
 
         {haSel != null && (
           <Text style={styles.hintText}>
-            {plural(valvulasManto(haSel), 'válvula', 'válvulas')} · {formatHa(haSel)} ha
-            {` · litros a ${FACTOR_MANTO_SUPERFICIE}x el caudal`}
+            {mantoResumenTexto(haSel)}
           </Text>
         )}
 
@@ -918,7 +923,7 @@ function ubicacionRows(d: DraftUbicacion): { label: string; value: string }[] {
   if (d.tipo === 'manto') {
     return [
       { label: 'Parcela', value: d.parcela.nombre },
-      { label: 'Tipo de riego', value: `Manto · ${plural(caudalDraft(d).nValvulas, 'válvula', 'válvulas')}` },
+      { label: 'Tipo de riego', value: `Manto · ${MM_RIEGO_MANTO_DEFAULT} mm` },
     ]
   }
   return [
@@ -997,7 +1002,9 @@ function StepConfirmar({
     { label: 'Inicio', value: formatDatetime(inicioISO) },
     { label: 'Fin', value: formatDatetime(finISO) },
     { label: 'Duración', value: totales ? `${totales.horas} h` : '—' },
-    { label: 'Litros totales', value: totales ? `${totales.litros.toLocaleString('es-AR')} L` : '—', highlight: true },
+    draft.tipo === 'manto'
+      ? { label: 'Aplicado', value: mantoResumenTexto(superficieManto(draft.parcela) ?? 0), highlight: true }
+      : { label: 'Litros totales', value: totales ? `${totales.litros.toLocaleString('es-AR')} L` : '—', highlight: true },
     ...fertirriegoRows(draft),
     { label: 'Responsable', value: draft.responsable },
   ]
@@ -1183,7 +1190,7 @@ function RecentRiegos({
   refreshing: boolean
   onRefresh: () => void
   riegosEnCurso: RiegoEnCurso[]
-  onTerminar: (r: RiegoEnCurso, horas: number, litros: number) => void
+  onTerminar: (r: RiegoEnCurso, horas: number, litros: number | null) => void
   terminandoId: string | null
 }) {
   const [tab, setTab] = useState<'curso' | 'realizados'>('curso')
@@ -1228,8 +1235,10 @@ function RecentRiegos({
           {riegosEnCurso.map((r) => {
             // factor_aplicado comes from the server (4 / 1), so the
             // chronometer matches what the backend will store on "Terminar".
+            // Manto: only elapsed hours; the 60 mm are credited by the server on finish.
             const totales = calcRiegoTotales(r.inicio, new Date().toISOString(), r.n_valvulas, r.factor_aplicado)
               ?? { horas: 0, litros: 0 }
+            const litrosGoteo = r.tipo === 'manto' ? null : totales.litros
             return (
               <View key={r.id} style={styles.enCursoCard}>
                 <View style={{ flex: 1 }}>
@@ -1245,7 +1254,7 @@ function RecentRiegos({
                 </View>
                 <TouchableOpacity
                   style={styles.terminarBtn}
-                  onPress={() => onTerminar(r, totales.horas, totales.litros)}
+                  onPress={() => onTerminar(r, totales.horas, litrosGoteo)}
                   disabled={terminandoId === r.id}
                 >
                   <Text style={styles.terminarBtnText}>Terminar</Text>
@@ -1413,10 +1422,12 @@ export default function RiegoScreen() {
 
   function onRefresh() { setRefreshing(true); loadData(); loadRiegosEnCurso() }
 
-  async function handleTerminar(r: RiegoEnCurso, horas: number, litros: number) {
+  async function handleTerminar(r: RiegoEnCurso, horas: number, litros: number | null) {
     Alert.alert(
       'Terminar riego',
-      `Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados. ¿Confirmás?`,
+      litros == null
+        ? `Se va a registrar ${formatTranscurrido(horas)} de riego a manto (${MM_RIEGO_MANTO_DEFAULT} mm). ¿Confirmás?`
+        : `Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados. ¿Confirmás?`,
       [
         { text: 'Seguir regando', style: 'cancel' },
         {

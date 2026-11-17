@@ -486,6 +486,19 @@ export function superficieManto(p: Parcela): number | null {
   return p.superficie_ha != null && Number.isFinite(ha) && ha > 0 ? ha : null
 }
 
+// New manto riegos are worth a fixed depth over the whole parcel, regardless
+// of time (backend parameter `mm_riego_manto`, default 60). The role-restricted
+// parameter is not read here: the server stores the real value on finish.
+export const MM_RIEGO_MANTO_DEFAULT = 60
+
+// litros = mm * ha * 10 000 (1 mm over 1 ha). Mirror of the web helper.
+export function calcMantoResumen(
+  mm: number, superficieHa: number,
+): { mm: number; litros: number } {
+  return { mm, litros: Math.round(mm * superficieHa * LITROS_POR_MM_HA) }
+}
+
+// Kept for goteo and historical manto riegos (time-based calculation).
 export function calcRiegoTotales(
   inicioISO: string, finISO: string, nValvulas: number, factor: number,
 ): { horas: number; mm: number; litros: number } | null {
