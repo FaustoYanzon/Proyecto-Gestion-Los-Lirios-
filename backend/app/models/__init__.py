@@ -81,6 +81,12 @@ from app.models.alta_produccion import (
     TipoRemito,
     UbicacionPasero,
 )
+from app.models.alfalfa import (
+    DocumentoAlfalfa,
+    DocumentoAlfalfaLinea,
+    ProductoAlfalfa,
+    TipoDocumentoAlfalfa,
+)
 from app.models.maquinaria import (
     EstadoOrdenMaquinaria,
     EstadoPresupuestoMaquinaria,
@@ -95,6 +101,10 @@ from app.models.maquinaria import (
 )
 
 __all__ = [
+    "DocumentoAlfalfa",
+    "DocumentoAlfalfaLinea",
+    "ProductoAlfalfa",
+    "TipoDocumentoAlfalfa",
     "PushToken",
     "ClimaCache",
     "AlertaDescartada",
