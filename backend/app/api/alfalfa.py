@@ -1,9 +1,10 @@
 """Alfalfa inventory: derived stock plus alta/salida documents.
 
 Business rules live in `app.services.alfalfa`; this router only translates
-HTTP. It never commits: `get_db` does. The PDF route is added separately.
+HTTP. It never commits: `get_db` does.
 """
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
@@ -12,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_estricto
-from app.models.alfalfa import DocumentoAlfalfa, TipoDocumentoAlfalfa
+from app.core.pdf_alfalfa import DatosAlfalfaPdf, generar_pdf_alfalfa
+from app.models.alfalfa import DocumentoAlfalfa, ProductoAlfalfa, TipoDocumentoAlfalfa
+from app.models.alta_produccion import Comprador
+from app.models.parcela import Parcela
 from app.models.user import User
 from app.schemas.alfalfa import (
     DocumentoAlfalfaCreate,
@@ -22,6 +26,13 @@ from app.schemas.alfalfa import (
 from app.services.alfalfa import crear_documento, stock_alfalfa
 
 router = APIRouter(prefix="/alfalfa", tags=["Alfalfa"])
+
+# Spanish PDF labels; fardo/rollo are counted in units, semilla in kg.
+_PRODUCTO_PDF_LABEL = {
+    ProductoAlfalfa.fardo: "Fardo (unidades)",
+    ProductoAlfalfa.rollo: "Rollo (unidades)",
+    ProductoAlfalfa.semilla: "Semilla (kg)",
+}
 
 
 @router.get("/stock", response_model=list[StockProductoOut])
@@ -107,3 +118,53 @@ async def get_documento(
     if documento is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento not found")
     return DocumentoAlfalfaOut.model_validate(documento)
+
+
+@router.get("/documentos/{documento_id}/pdf")
+async def get_documento_pdf(
+    documento_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_estricto),
+) -> Response:
+    documento = (
+        await db.execute(
+            select(DocumentoAlfalfa)
+            .options(selectinload(DocumentoAlfalfa.lineas))
+            .where(DocumentoAlfalfa.id == documento_id)
+        )
+    ).scalars().first()
+    if documento is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento not found")
+
+    # DocumentoAlfalfaOut is ids-only, so resolve the counterpart name here.
+    if documento.tipo == TipoDocumentoAlfalfa.alta:
+        titulo, label = "Alta de alfalfa", "Potrero"
+        potrero = await db.get(Parcela, documento.potrero_id) if documento.potrero_id else None
+        nombre = potrero.nombre if potrero else "—"
+    else:
+        titulo, label = "Entrega de alfalfa", "Comprador"
+        comprador = await db.get(Comprador, documento.comprador_id) if documento.comprador_id else None
+        nombre = comprador.nombre if comprador else "—"
+
+    lineas = [(_PRODUCTO_PDF_LABEL[ln.producto], ln.cantidad, ln.kg) for ln in documento.lineas]
+    pdf = generar_pdf_alfalfa(
+        DatosAlfalfaPdf(
+            titulo=titulo,
+            numero=documento.numero,
+            fecha=documento.fecha,
+            contraparte_label=label,
+            contraparte_nombre=nombre,
+            vehiculo_patente=documento.vehiculo_patente,
+            observaciones=documento.observaciones,
+            lineas=lineas,
+            kg_total=sum((ln.kg for ln in documento.lineas), Decimal("0")),
+        )
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="alfalfa-{documento.numero}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
