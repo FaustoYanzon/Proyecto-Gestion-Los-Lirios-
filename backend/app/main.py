@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import alertas, arca, auth, clima, finanzas, insumos, kpis, lotes_pasa, maestros_produccion, maquinaria, notificaciones, ordenes_aplicacion, parcelas, pasero, plan_fitosanitario, precios_tarea, presupuestos, produccion, remitos, telefonos_whatsapp, termografo, trabajadores, trazabilidad, users, whatsapp, whatsapp_webhook
+from app.api import alertas, alfalfa, arca, auth, clima, finanzas, insumos, kpis, lotes_pasa, maestros_produccion, maquinaria, notificaciones, ordenes_aplicacion, parcelas, pasero, plan_fitosanitario, precios_tarea, presupuestos, produccion, remitos, telefonos_whatsapp, termografo, trabajadores, trazabilidad, users, whatsapp, whatsapp_webhook
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import configure_logging
@@ -108,6 +108,7 @@ app.include_router(maestros_produccion.router)
 app.include_router(pasero.router)
 app.include_router(lotes_pasa.router)
 app.include_router(remitos.router)
+app.include_router(alfalfa.router)
 app.include_router(termografo.router)
 app.include_router(trabajadores.router)
 app.include_router(insumos.router)
