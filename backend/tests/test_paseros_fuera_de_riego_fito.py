@@ -264,3 +264,65 @@ async def test_contraste_ignora_pasero(client, db_session, create_user, create_p
         [LineaContraste(insumo_id=insumo.id, dosis_por_ha=Decimal("2"))],
     )
     assert resultado.variedades == []
+
+
+async def _registros_historicos_en_pasero(db_session, create_user, create_parcela, create_insumo):
+    """A fito and a drip riego recorded on a pasero before the rule existed."""
+    user = await create_user(email="gerencial@test.com", password="Password123!", role=UserRole.gerencial)
+    pasero = await create_parcela(nombre="Pasero 1", tipo=TipoParcela.pasero, superficie_ha=2.0)
+    insumo = await create_insumo()
+    fito = RegistroFitosanitario(
+        fecha=date(2026, 9, 8), parcela_id=pasero.id, insumo_id=insumo.id,
+        producto_nombre=insumo.nombre, unidad=insumo.unidad, dosis_por_ha=2.0,
+        cantidad_total=4.0, motivo="Historico", dias_carencia=7, dias_reingreso=2,
+        responsable="Juan Perez", created_by=user.id,
+    )
+    riego = RegistroRiego(
+        fecha=date(2026, 10, 5), parcela_id=pasero.id, cabezal="1", valvula="1,2",
+        inicio=datetime(2026, 10, 5, 8, 0), fin=datetime(2026, 10, 5, 18, 0),
+        responsable="Juan Perez", created_by=user.id,
+    )
+    db_session.add_all([fito, riego])
+    await db_session.commit()
+    return pasero, fito, riego
+
+
+async def test_editar_riego_historico_en_pasero_sin_cambiar_parcela_no_da_422(
+    client, create_user, create_parcela, create_insumo, db_session
+):
+    pasero, _fito, riego = await _registros_historicos_en_pasero(
+        db_session, create_user, create_parcela, create_insumo
+    )
+    login = await client.post(
+        "/auth/login", data={"username": "gerencial@test.com", "password": "Password123!"}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = await client.put(
+        f"/produccion/riego/{riego.id}", json={"responsable": "Otro Operario"}, headers=headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["responsable"] == "Otro Operario"
+    assert resp.json()["parcela_id"] == pasero.id
+
+
+async def test_editar_fito_historico_en_pasero_con_la_misma_parcela_no_da_422(
+    client, create_user, create_parcela, create_insumo, db_session
+):
+    pasero, fito, _riego = await _registros_historicos_en_pasero(
+        db_session, create_user, create_parcela, create_insumo
+    )
+    login = await client.post(
+        "/auth/login", data={"username": "gerencial@test.com", "password": "Password123!"}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = await client.put(
+        f"/produccion/fitosanitarios/{fito.id}",
+        json={"parcela_id": pasero.id, "responsable": "Otro Operario"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["responsable"] == "Otro Operario"

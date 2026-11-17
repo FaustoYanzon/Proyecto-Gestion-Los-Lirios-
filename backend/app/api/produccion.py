@@ -847,7 +847,12 @@ async def _normalizar_riego(
                 detail="El riego por goteo necesita cabezal y válvulas.",
             )
         parcela_id = data.get("parcela_id")
-        if parcela_id:
+        # A stored goteo record that is already on a pasero may keep being edited
+        # (e.g. fixing the responsable); only creating one or moving it there fails.
+        ya_en_su_parcela = (
+            riego is not None and riego.tipo == TipoRiego.goteo and riego.parcela_id == parcela_id
+        )
+        if parcela_id and not ya_en_su_parcela:
             _rechazar_pasero(await db.get(Parcela, parcela_id), "riego por goteo")
         data["n_valvulas_manto"] = None
         return data
@@ -1392,7 +1397,7 @@ async def update_fitosanitario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro not found")
 
     update_data = fito_data.model_dump(exclude_unset=True)
-    if update_data.get("parcela_id"):
+    if update_data.get("parcela_id") and update_data["parcela_id"] != fito.parcela_id:
         # Checked before any mutation or stock revert so a 422 leaves everything intact.
         _rechazar_pasero(
             await db.get(Parcela, update_data["parcela_id"]), "aplicaciones fitosanitarias"
