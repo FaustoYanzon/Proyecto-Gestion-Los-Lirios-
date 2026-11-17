@@ -41,6 +41,8 @@ PARAMETROS_DEFAULT: dict[str, Decimal | None] = {
     # - tara_carro x carros.
     "tara_carro": Decimal("400"),
     "tope_bines_lote": Decimal("10"),
+    # mm delivered by ONE manto riego over the whole parcela, whatever its duration.
+    "mm_riego_manto": Decimal("60"),
 }
 
 # Depósito único de la pasa: no se elige, el lote se asigna solo (resuelto por
@@ -63,6 +65,7 @@ class Parametros:
     kg_nominal_bin: Decimal
     tara_carro: Decimal
     tope_bines_lote: int | None
+    mm_riego_manto: Decimal
 
 
 async def get_parametros(db: AsyncSession) -> Parametros:
@@ -79,6 +82,7 @@ async def get_parametros(db: AsyncSession) -> Parametros:
         kg_nominal_bin=valores["kg_nominal_bin"],  # type: ignore[arg-type]
         tara_carro=valores["tara_carro"],  # type: ignore[arg-type]
         tope_bines_lote=int(tope) if tope is not None else None,
+        mm_riego_manto=valores["mm_riego_manto"],  # type: ignore[arg-type]
     )
 
 

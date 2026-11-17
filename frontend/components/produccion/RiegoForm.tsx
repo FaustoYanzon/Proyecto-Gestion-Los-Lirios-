@@ -15,8 +15,6 @@ import {
   formatHoraLocal,
   hoyArgentina,
   LITROS_POR_HORA_VALVULA,
-  FACTOR_MANTO_SUPERFICIE,
-  valvulasManto,
   riegoErrorDetail,
   type RiegoResponse,
   type TipoRiego,
@@ -166,10 +164,9 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
         (p.tipo === 'parral' || p.tipo === 'potrero') && Number(p.superficie_ha) > 0))
     .sort((a, b) => a.nombre.localeCompare(b.nombre))
   const parcelaManto = modoManto ? parcelasManto.find((p) => p.id === parcelaIdW) : undefined
-  const nValvulasPreview = modoManto
-    ? (parcelaManto ? valvulasManto(Number(parcelaManto.superficie_ha)) : 1)
-    : historico ? riego.n_valvulas : selectedValvulas.size || 1
-  const factor = modoManto ? FACTOR_MANTO_SUPERFICIE : historico ? riego.factor_aplicado : 1
+  // New manto has no valves x factor: mm/litros are fixed by the server.
+  const nValvulasPreview = historico ? riego.n_valvulas : selectedValvulas.size || 1
+  const factor = historico ? riego.factor_aplicado : 1
   const preview = calcMm(
     fechaInicioW, horaInicioW, fechaFinW, horaFinW,
     nValvulasPreview, factor,
@@ -243,7 +240,7 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       tipo,
       inicio,
       fin,
-      ...(historico ? {} : { mm_aplicados: mm }),
+      ...(historico || modoManto ? {} : { mm_aplicados: mm }),
       responsable: data.responsable,
       responsable_id: data.responsable_id,
       ...(modoManto || historico ? {} : {
@@ -332,7 +329,12 @@ export default function RiegoForm({ riego, parcelas, onSuccess, onCancel }: Prop
       </div>
 
       {/* Preview duración + mm + litros totales */}
-      {preview ? (
+      {preview && modoManto ? (
+        <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
+          <Droplets size={18} className="text-blue-500 flex-shrink-0" />
+          <span className="text-sm text-blue-700 font-medium">{preview.horas}h</span>
+        </div>
+      ) : preview ? (
         <div className="flex items-center gap-3 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
           <Droplets size={18} className="text-blue-500 flex-shrink-0" />
           <div className="text-sm">

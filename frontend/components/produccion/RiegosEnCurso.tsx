@@ -19,14 +19,18 @@ interface FilaProps {
   conBoton: boolean
   parcelaNombre: (id: string) => string
   terminandoId: string | null
-  onTerminar: (id: string, horas: number, litros: number) => void
+  onTerminar: (id: string, horas: number, litros: number | null) => void
 }
 
 // Definido a nivel de módulo (no dentro de RiegosEnCurso) -- una función
 // componente declarada dentro del render de otro componente crea una
 // identidad nueva en cada render, forzando remounts innecesarios.
 function Fila({ r, conBoton, parcelaNombre, terminandoId, onTerminar }: FilaProps) {
-  const { horas, litros } = calcEnCurso(r.inicio, r.n_valvulas, r.factor_aplicado)
+  const { horas, litros: litrosCalc } = calcEnCurso(r.inicio, r.n_valvulas, r.factor_aplicado)
+  // Every manto (even one started with the old valve rule): the server credits its
+  // fixed mm when it finishes, so no litros are estimated from the elapsed time.
+  const esManto = r.tipo === 'manto'
+  const litros = esManto ? null : litrosCalc
   return (
     <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -111,9 +115,11 @@ export default function RiegosEnCurso({
     )
   }
 
-  async function handleTerminar(id: string, horas: number, litros: number) {
+  async function handleTerminar(id: string, horas: number, litros: number | null) {
     if (!window.confirm(
-      `¿Terminar este riego? Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados.`
+      litros == null
+        ? `¿Terminar este riego? Se va a registrar ${formatTranscurrido(horas)} de riego.`
+        : `¿Terminar este riego? Se va a registrar ${formatTranscurrido(horas)} y ${litros.toLocaleString('es-AR')} L aplicados.`
     )) return
     setTerminandoId(id)
     setError(null)

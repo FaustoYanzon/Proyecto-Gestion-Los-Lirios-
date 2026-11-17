@@ -52,6 +52,8 @@ async def _riego(
             cabezal="1" if tipo == TipoRiego.goteo else None,
             valvula="1" if tipo == TipoRiego.goteo else None,
             n_valvulas_manto=1 if tipo == TipoRiego.manto else None,
+            # Manto frozen at finish: 60 mm over the 0.5 ha test parcela.
+            litros_manto=300_000.0 if tipo == TipoRiego.manto and horas is not None else None,
             inicio=inicio,
             fin=None if horas is None else inicio + timedelta(hours=horas),
             duracion_horas=horas,
@@ -178,7 +180,7 @@ async def test_filtra_por_tipo(client, create_user, create_parcela, db_session, 
 
     goteo, manto, ambos = await m3("goteo"), await m3("manto"), await m3("ambos")
     assert goteo == 160.0  # 10 h * 16 m3/h * 1 valve
-    assert manto == 512.0  # 8 h * 16 m3/h * 4 (manto factor) * 1 valve
+    assert manto == 300.0  # 60 mm * 0.5 ha, whatever the hours
     assert ambos == pytest.approx(goteo + manto)
 
 
@@ -334,7 +336,7 @@ async def test_una_sola_valvula_de_dos_es_medio_riego(
     assert celda["cumplimiento_pct"] == "47.8"  # 0.5 / 1.044944
 
 
-async def test_manto_8h_en_2ha_con_2_valvulas_es_133_por_ciento_de_un_riego(
+async def test_manto_60mm_en_2ha_es_156_riegos(
     client, create_user, create_parcela, db_session, fijar_hoy
 ):
     fijar_hoy(date(2027, 6, 10))
@@ -343,17 +345,17 @@ async def test_manto_8h_en_2ha_con_2_valvulas_es_133_por_ciento_de_un_riego(
     inicio = datetime(2027, 3, 10, 8, tzinfo=timezone.utc)
     db_session.add(RegistroRiego(
         fecha=date(2027, 3, 10), parcela_id=p.id, tipo=TipoRiego.manto, n_valvulas_manto=2,
-        inicio=inicio, fin=inicio + timedelta(hours=8), duracion_horas=8,
+        litros_manto=1_200_000.0, mm_aplicados=60.0, inicio=inicio, fin=inicio + timedelta(hours=8), duracion_horas=8,
         responsable="Juan", created_by=uid,
     ))
     await db_session.commit()
 
     celda = await _celda_marzo(client, headers, p.id)
 
-    assert celda["m3_aplicados"] == "1024.00"  # 8 h * 16 m3/h * 4 * 2 valves
-    assert celda["lamina_aplicada_mm"] == "51.20"
-    assert celda["riegos_equivalentes"] == "1.33"  # 1 024 000 / 768 000
-    assert celda["cumplimiento_pct"] == "127.6"  # 1.3333 / 1.044944
+    assert celda["m3_aplicados"] == "1200.00"  # 60 mm * 2 ha
+    assert celda["lamina_aplicada_mm"] == "60.00"
+    assert celda["riegos_equivalentes"] == "1.56"  # 1 200 000 / 768 000
+    assert celda["cumplimiento_pct"] == "149.5"  # 1.5625 / 1.044944
 
 
 async def test_parcela_sin_superficie_no_rompe_y_no_da_porcentaje(

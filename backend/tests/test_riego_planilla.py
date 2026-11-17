@@ -37,6 +37,9 @@ async def _riego(
             cabezal="1" if tipo == TipoRiego.goteo else None,
             valvula="1" if tipo == TipoRiego.goteo else None,
             n_valvulas_manto=1 if tipo == TipoRiego.manto else None,
+            # Manto frozen at finish: 60 mm over the 0.5 ha test parcela.
+            litros_manto=300_000.0 if tipo == TipoRiego.manto and horas is not None else None,
+            mm_aplicados=60.0 if tipo == TipoRiego.manto and horas is not None else None,
             inicio=inicio,
             fin=fin,
             duracion_horas=horas,
@@ -115,7 +118,7 @@ async def test_planilla_riego_en_curso_sin_mm(client, create_user, create_parcel
     assert celda["en_curso"] is True
 
 
-async def test_planilla_mm_manto_usa_factor_4(client, create_user, create_parcela, db_session):
+async def test_planilla_mm_manto_es_60_fijos(client, create_user, create_parcela, db_session):
     headers, uid = await _auth(client, create_user)
     p = await create_parcela(nombre="Parral 2", superficie_ha=0.5)
     await _riego(db_session, p.id, uid, _utc(2026, 10, 5), 8)
@@ -123,7 +126,7 @@ async def test_planilla_mm_manto_usa_factor_4(client, create_user, create_parcel
     resp = await client.get(URL, params=RANGO, headers=headers)
 
     celda = resp.json()["filas"][0]["celdas"]["2026-10"][0]
-    assert celda["mm"] == "51.20"
+    assert celda["mm"] == "60.00"
     assert celda["horas"] == "8.00"
     assert celda["en_curso"] is False
 
