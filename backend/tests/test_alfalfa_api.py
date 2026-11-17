@@ -159,3 +159,27 @@ async def test_matriz_de_roles(client, create_user, ctx):
         r = await client.request(metodo, url, json=body)
         assert r.status_code == 401, (metodo, url, r.status_code)
 
+
+
+async def test_salida_reintento_idempotente_200_mismo_id(client, ctx):
+    h = ctx["h_enc"]
+    await client.post("/alfalfa/documentos", json=_alta(ctx), headers=h)
+    body = _salida(ctx, idempotency_key=str(uuid.uuid4()))
+    r1 = await client.post("/alfalfa/documentos", json=body, headers=h)
+    r2 = await client.post("/alfalfa/documentos", json=body, headers=h)
+    assert r1.status_code == 201, r1.text
+    assert r2.status_code == 200, r2.text
+    assert r1.json()["id"] == r2.json()["id"]
+
+
+@pytest.mark.parametrize(
+    "producto,cantidad",
+    [("semilla", "0.001"), ("fardo", "1e15"), ("semilla", "1e15")],
+)
+async def test_cantidades_invalidas_422_nunca_500(client, ctx, producto, cantidad):
+    r = await client.post(
+        "/alfalfa/documentos",
+        json=_alta(ctx, lineas=[{"producto": producto, "cantidad": cantidad}]),
+        headers=ctx["h_enc"],
+    )
+    assert r.status_code == 422, r.text

@@ -178,6 +178,20 @@ async def _validar_stock(db: AsyncSession, data: DocumentoAlfalfaCreate) -> None
             )
 
 
+# Constraint names (Postgres reports them; SQLite reports "table.column").
+_UNIQUE_MARKERS = (
+    "uq_documento_alfalfa_idempotency_key",
+    "uq_documento_alfalfa_tipo_numero",
+    "documentos_alfalfa.idempotency_key",
+    "documentos_alfalfa.tipo, documentos_alfalfa.numero",
+)
+
+
+def _es_violacion_unica_documento(exc: IntegrityError) -> bool:
+    mensaje = str(exc.orig)
+    return any(marker in mensaje for marker in _UNIQUE_MARKERS)
+
+
 async def crear_documento(
     db: AsyncSession, data: DocumentoAlfalfaCreate, user_id: str
 ) -> tuple[DocumentoAlfalfa, bool]:
@@ -198,6 +212,12 @@ async def crear_documento(
         await _validar_comprador(db, data.comprador_id)
         # Lock first, then read stock: concurrent salidas cannot both pass.
         deposito = await get_deposito_alfa(db, for_update=True)
+        # A concurrent retry may have committed while we waited on the lock;
+        # re-check so it replays instead of failing the stock validation.
+        if data.idempotency_key and (
+            prev := await _buscar_por_key(db, data.idempotency_key)
+        ):
+            return prev, False
         await _validar_stock(db, data)
 
     parametros = await get_parametros(db)
@@ -229,6 +249,8 @@ async def crear_documento(
             db.add(documento)
             await db.flush()
     except IntegrityError as exc:
+        if not _es_violacion_unica_documento(exc):
+            raise  # e.g. an FK failure must not be masked as a retry hint
         existente = await _buscar_por_key(db, data.idempotency_key) if data.idempotency_key else None
         if existente is None:
             raise HTTPException(

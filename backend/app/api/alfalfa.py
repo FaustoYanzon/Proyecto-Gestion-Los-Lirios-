@@ -7,7 +7,6 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -87,15 +86,7 @@ async def create_documento(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_estricto),
 ) -> DocumentoAlfalfaOut:
-    try:
-        documento, creado = await crear_documento(db, data, current_user.id)
-    except ValidationError as exc:
-        # Defensive: any schema violation raised below the request layer is
-        # a client error, never a 500. HTTPException (404/409/422) passes through.
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=exc.errors(include_url=False, include_context=False, include_input=False),
-        ) from exc
+    documento, creado = await crear_documento(db, data, current_user.id)
     if not creado:
         # Idempotent replay of an earlier request with the same key.
         response.status_code = status.HTTP_200_OK

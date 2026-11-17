@@ -315,3 +315,62 @@ async def test_idempotency_key_reintento_devuelve_original(db_session, refs):
     assert reintento.id == original.id
     assert [l.producto for l in reintento.lineas] == [ProductoAlfalfa.fardo]
     assert await _count_documentos(db_session) == 1
+
+
+async def test_salida_idempotency_replay_no_409_aunque_falte_stock(db_session, refs):
+    await crear_documento(db_session, _alta(refs, [("fardo", "10")]), refs["user"])
+    key = "7a1d0c52-3b9e-4f0a-8e6d-5c2b9a4e1f33"
+    original, creado = await crear_documento(
+        db_session, _salida(refs, [("fardo", "8")], idempotency_key=key), refs["user"]
+    )
+    assert creado is True
+    antes = await _count_documentos(db_session)
+
+    # Same key, payload now exceeds the remaining stock (2): replay wins, no 409.
+    reintento, creado_2 = await crear_documento(
+        db_session, _salida(refs, [("fardo", "8")], idempotency_key=key), refs["user"]
+    )
+
+    assert creado_2 is False
+    assert reintento.id == original.id
+    assert await _count_documentos(db_session) == antes
+
+
+async def test_salida_replay_tras_lock_no_409(db_session, refs, monkeypatch):
+    """Simulates request B: its pre-lock lookup misses (A had not committed),
+    but A's document is visible once B holds the depot lock."""
+    from app.services import alfalfa as svc
+
+    await crear_documento(db_session, _alta(refs, [("fardo", "10")]), refs["user"])
+    key = "9b2e1d63-4c0f-4a1b-9f7e-6d3c0b5f2a44"
+    original, _ = await crear_documento(
+        db_session, _salida(refs, [("fardo", "8")], idempotency_key=key), refs["user"]
+    )
+
+    real = svc._buscar_por_key
+    calls = {"n": 0}
+
+    async def miss_first(db, k):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else await real(db, k)
+
+    monkeypatch.setattr(svc, "_buscar_por_key", miss_first)
+    reintento, creado = await crear_documento(
+        db_session, _salida(refs, [("fardo", "8")], idempotency_key=key), refs["user"]
+    )
+
+    assert creado is False
+    assert reintento.id == original.id
+
+
+async def test_integrity_error_ajeno_se_propaga(db_session, refs, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services import alfalfa as svc
+
+    async def boom(*args, **kwargs):
+        raise IntegrityError("INSERT", {}, Exception("FOREIGN KEY constraint failed"))
+
+    monkeypatch.setattr(db_session, "flush", boom)
+    with pytest.raises(IntegrityError):
+        await svc.crear_documento(db_session, _alta(refs, [("fardo", "1")]), refs["user"])
