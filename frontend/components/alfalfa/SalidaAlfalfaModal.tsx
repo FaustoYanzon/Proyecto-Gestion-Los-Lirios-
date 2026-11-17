@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import axios from 'axios'
+import { useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import {
   crearDocumentoAlfalfa, PRODUCTO_LABELS, type ProductoAlfalfa, type StockAlfalfa,
@@ -20,6 +22,7 @@ export default function SalidaAlfalfaModal({
   onClose: () => void
   onCreated: () => Promise<void>
 }) {
+  const qc = useQueryClient()
   const [compradorId, setCompradorId] = useState('')
   const [fecha, setFecha] = useState(hoyLocal)
   const [patente, setPatente] = useState('')
@@ -71,6 +74,10 @@ export default function SalidaAlfalfaModal({
       await onCreated()
     } catch (e) {
       if (esErrorDefinitivo(e)) keyRef.current = null
+      // 409 means stock changed under us: refresh so "Disponible" is not stale.
+      if (axios.isAxiosError(e) && e.response?.status === 409) {
+        void qc.invalidateQueries({ queryKey: ['alfalfa-stock'] })
+      }
       setError(errorDetail(e))
       setConfirmando(false)
     } finally {

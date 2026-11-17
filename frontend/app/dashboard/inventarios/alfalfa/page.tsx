@@ -63,7 +63,8 @@ export default function AlfalfaPage() {
   const { data: parcelas = [] } = useQuery({ queryKey: ['parcelas-admin'], queryFn: listParcelasAdmin, staleTime: 60_000 })
   const { data: compradores = [] } = useQuery({ queryKey: ['ap-compradores'], queryFn: () => getCompradores(), staleTime: 60_000 })
 
-  // Only active potreros can receive an alta; the table resolves names over all of them.
+  // Only active potreros can receive an alta; GET /parcelas/ returns only active parcelas,
+  // so the table resolves names only for active potreros (a deactivated potrero shows "–").
   const potreros = parcelas.filter((p) => p.tipo === 'potrero')
   const potrerosActivos = potreros.filter((p) => p.is_active)
 
