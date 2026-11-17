@@ -1,6 +1,6 @@
 # Paseros en el mapa y fuera de riego/fito — diseño corto
 
-Fecha: 2026-11-16 · Estado: aprobado por Fausto (alcance y decisiones P1/P2) · Tamaño: cambio chico, web + backend. Primero de una serie (ver "Contexto").
+Fecha: 2026-11-16 · Estado: **implementado y desplegado** (2026-11-17, PR #10, merge `55c4acf`; backend en Railway, web en Vercel). Aprobado por Fausto (alcance y decisiones P1/P2) · Tamaño: cambio chico, web + backend. Primero de una serie (ver "Contexto"). Desviaciones al final del documento.
 
 ## Contexto
 Serie acordada con Fausto: 1) paseros en el mapa (este doc) → 2) riego a manto 60 mm → 3) alfalfa → 4) anulación de pasa (solo super_admin) → 5) mobile (paseros y entregas de pasa/alfalfa). Este doc cubre solo el 1, web primero; mobile después por OTA.
@@ -49,3 +49,15 @@ Textos exactos, estilo de la tarjeta y de la barra, nombres de queries.
 
 ## Verificación
 pytest (backend), `npm run lint && npm run build` (frontend), y click real en local con un pasero con ingresos de dos variedades: panel, modos del mapa y selectores. Backend en Railway por push a `main`; web a Vercel manual.
+
+## Estado final y desviaciones
+
+**Estado:** implementado y desplegado el 2026-11-17 (PR #10, merge `55c4acf`). Backend en Railway, web en Vercel. Mobile queda para el paso 5 (fuera de este diseño).
+
+**Desviaciones respecto de este diseño:**
+
+- **Colores de variedad.** `VAR_COLORS` pasó a `components/map/varColors.ts`. La spec decía reusar el de la variedad del mapa.
+- **Red Globe.** Cambió a `#9f1239` para distinguirlo de Flame (commit `114ee1f`). No estaba en la spec.
+- **Bug del mismo PR corregido.** Editar un registro histórico de pasero sin cambiar de parcela daba 422. Corregido en `ad8636f`.
+- **Consecuencia no prevista.** Una orden de aplicación vieja que ya incluye un pasero no se puede guardar hasta quitar el pasero (422 en `_resolve_parcelas_orden`).
+- **Mobile.** El backend ya rechaza paseros en riego y fito, pero el mapa y los selectores de mobile todavía los ofrecen. Pendiente del paso 5.

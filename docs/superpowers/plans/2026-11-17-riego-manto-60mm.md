@@ -1,5 +1,7 @@
 # Riego a manto: 60 mm fijos — Implementation Plan
 
+> **Estado: implementado y desplegado (2026-11-17).** PR #11, merge `25ab7f0`; migración `c9b5b6bebbfd` aplicada en producción antes del merge; web en Vercel; OTA desde `main`. Los checkboxes de abajo no se marcaron uno por uno: el estado real es esta nota y la lista de desviaciones al final. `Modelo de Datos.md` sigue pendiente de regenerar (Fausto).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que cada riego a manto entregue `mm_riego_manto` (60) mm sobre la parcela completa, sin importar el tiempo, congelado en el registro, con recálculo de los mantos históricos.
@@ -134,3 +136,14 @@
 ## Self-Review
 - Spec: parámetro (T1,T5), congelado (T1,T2), migración/vista/backfill (T3), reporte previo (T4), web (T5), mobile (T6), verificación (T7), producción (T8). `n_valvulas_manto` no se toca.
 - Review Focus: en curso (T2), superficie/parámetro posteriores (T2), sin superficie (T2,T3), PUT (T2), goteo (T1), cliente viejo (T2).
+
+## Estado final y desviaciones
+
+**Estado:** implementado y desplegado el 2026-11-17 (PR #11, merge `25ab7f0`). Tareas 1 a 8 ejecutadas.
+
+**Desviaciones respecto de este plan:**
+
+- **Task 6 (mobile):** 60 mm fijos (`MM_RIEGO_MANTO_DEFAULT`), no la lectura del parámetro que pedía el plan. Pendiente.
+- **Task 2 (PUT):** además de congelar al cambiar parcela, se agregaron las guardas de riego terminado (422) y de mm no sobrescribible.
+- **Task 3 (vista):** la rama manto usa `COALESCE(litros_manto, 0)` sin filtrar `duracion_horas`. Follow-up de review pendiente.
+- **Task 8 (orden):** migración antes del merge, con backup. El paso de `Modelo de Datos.md` quedó pendiente de Fausto.

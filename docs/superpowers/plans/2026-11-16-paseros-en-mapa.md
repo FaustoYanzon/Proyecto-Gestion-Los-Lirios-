@@ -1,5 +1,7 @@
 # Paseros en el mapa y fuera de riego/fito Implementation Plan
 
+> **Estado: implementado y desplegado (2026-11-17).** PR #10, merge `55c4acf`; backend en Railway, web en Vercel. Mobile queda para el paso 5 (fuera de este plan). Los checkboxes no se marcaron uno por uno; el estado real es esta nota y la lista de desviaciones al final.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que los paseros no entren a riego, fito, órdenes de aplicación ni plan fitosanitario, y que su panel del mapa muestre tareas, gasto y uva fresca (kg) con barra por variedad.
@@ -93,3 +95,12 @@
 ## Self-Review
 - Spec: guardas backend (T1-T2), panel (T3), selectores (T4), verificación (T5). Mobile queda fuera por spec.
 - Review Focus: cada línea tiene test (T1 listados históricos y PUT; T2 por variedad) o verificación manual (T3 403/vacío).
+
+## Estado final y desviaciones
+
+**Estado:** implementado y desplegado el 2026-11-17 (PR #10, merge `55c4acf`). Tareas 1 a 5 ejecutadas en backend y web; mobile fuera de alcance.
+
+**Desviaciones respecto de este plan:**
+
+- **Task 3:** colores en `components/map/varColors.ts`; Red Globe cambió de color (`114ee1f`) y se corrigió un 422 en la edición de registros históricos de pasero (`ad8636f`).
+- **Task 5:** el deploy (Railway y Vercel) se hizo con Fausto. No consta en la sesión de cierre la prueba de click real en local; el detalle está en `docs/sistema/Bitácora/2026-11-17-paseros-y-manto-60mm.md`.
