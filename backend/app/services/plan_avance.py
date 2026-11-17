@@ -24,7 +24,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.lotes_pasa import temporada_de
 from app.models.insumo import Insumo
-from app.models.parcela import Parcela, VariedadUva
+from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.produccion import OrdenAplicacion, PlanFitosanitario, RegistroFitosanitario
 from app.models.valvula import Valvula
 
@@ -155,7 +155,12 @@ async def dosis_aplicada_por_parcela(
     if not ids:
         return {}
     parcelas = {
-        p.id: p for p in (await db.execute(select(Parcela).where(Parcela.id.in_(ids)))).scalars()
+        p.id: p
+        for p in (
+            await db.execute(
+                select(Parcela).where(Parcela.id.in_(ids), Parcela.tipo != TipoParcela.pasero)
+            )
+        ).scalars()
     }
     desde, hasta = rango_mes(temporada, mes)
     grupos = await _dosis_por_grupo(db, desde, hasta, parcelas)
@@ -230,7 +235,11 @@ async def calcular_avance(
         objetivo[(plan.variedad, plan.mes, plan.insumo_id)] += Decimal(str(plan.dosis_por_ha))
         nombres[plan.insumo_id] = (plan.insumo.nombre, getattr(plan.insumo.unidad, "value", plan.insumo.unidad))
 
-    parcelas_stmt = select(Parcela).where(Parcela.is_active.is_(True), Parcela.variedad.is_not(None))
+    parcelas_stmt = select(Parcela).where(
+        Parcela.is_active.is_(True),
+        Parcela.variedad.is_not(None),
+        Parcela.tipo != TipoParcela.pasero,
+    )
     if variedad is not None:
         parcelas_stmt = parcelas_stmt.where(Parcela.variedad == variedad)
     if parcela_id is not None:

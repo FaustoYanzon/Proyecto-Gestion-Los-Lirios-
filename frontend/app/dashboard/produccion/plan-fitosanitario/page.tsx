@@ -291,7 +291,7 @@ export default function PlanFitosanitarioPage() {
 
   const variedadesDisponibles = useMemo(() => {
     const set = new Set<string>()
-    for (const p of parcelas) if (p.is_active && p.variedad) set.add(p.variedad)
+    for (const p of parcelas) if (p.is_active && p.tipo !== 'pasero' && p.variedad) set.add(p.variedad)
     for (const pl of planes) set.add(pl.variedad)
     return Array.from(set).sort((a, b) => (VARIEDAD_LABELS[a] ?? a).localeCompare(VARIEDAD_LABELS[b] ?? b))
   }, [parcelas, planes])

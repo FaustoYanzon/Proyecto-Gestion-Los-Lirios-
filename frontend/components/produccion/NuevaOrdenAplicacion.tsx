@@ -482,7 +482,7 @@ function FormularioOrden({
     () =>
       variedadesSel.map((v) => {
         const lista = Array.from(parcelaById.values())
-          .filter((p) => (p.variedad ?? SIN_VARIEDAD) === v && (p.is_active || ordenParcelaIds.has(p.id)))
+          .filter((p) => p.tipo !== 'pasero' && (p.variedad ?? SIN_VARIEDAD) === v && (p.is_active || ordenParcelaIds.has(p.id)))
           .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }))
         return { variedad: v, parcelas: lista }
       }),
@@ -490,7 +490,7 @@ function FormularioOrden({
   )
 
   function parcelasPorDefecto(v: string): string[] {
-    return parcelas.filter((p) => p.is_active && (p.variedad ?? SIN_VARIEDAD) === v).map((p) => p.id)
+    return parcelas.filter((p) => p.is_active && p.tipo !== 'pasero' && (p.variedad ?? SIN_VARIEDAD) === v).map((p) => p.id)
   }
 
   function toggleVariedad(v: string) {

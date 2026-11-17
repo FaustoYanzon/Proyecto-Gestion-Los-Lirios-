@@ -16,7 +16,7 @@ from app.api.produccion import (
 from app.core.cloudinary_client import upload_foto_orden_aplicacion
 from app.core.push import lanzar_aviso, notificar_tokens
 from app.models.insumo import Insumo
-from app.models.parcela import Parcela, VariedadUva
+from app.models.parcela import Parcela, TipoParcela, VariedadUva
 from app.models.valvula import Valvula
 from app.models.produccion import (
     EstadoOrdenAplicacion,
@@ -168,6 +168,12 @@ async def _resolve_parcelas_orden(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Estas parcelas están inactivas: {', '.join(inactivas)}",
             )
+        paseros = [p.nombre for p in parcelas if p.tipo == TipoParcela.pasero]
+        if paseros:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Los paseros no admiten aplicaciones: {', '.join(paseros)}",
+            )
         if variedad is not None:
             fuera_de_variedad = [p.nombre for p in parcelas if p.variedad != variedad]
             if fuera_de_variedad:
@@ -191,7 +197,12 @@ async def _resolve_parcelas_orden(
     parcelas = list(
         (
             await db.execute(
-                select(Parcela).where(Parcela.is_active.is_(True), Parcela.variedad == variedad)
+                select(Parcela).where(
+                    Parcela.is_active.is_(True),
+                    Parcela.variedad == variedad,
+                    # Paseros are drying yards: never sprayed, even if a variety is stored.
+                    Parcela.tipo != TipoParcela.pasero,
+                )
             )
         ).scalars().all()
     )
