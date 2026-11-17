@@ -8,11 +8,9 @@ import {
 import { errorDetail } from '@/lib/api/altaProduccion'
 import FormError from '@/components/ui/FormError'
 import {
-  PRODUCTOS, LINEAS_VACIAS, parseCantidad, cantidadInvalida, huboRespuesta,
+  PRODUCTOS, LINEAS_VACIAS, hoyLocal, claveParaPayload, parseCantidad, cantidadInvalida, esErrorDefinitivo,
   fmtNum, fmtFecha, inputCls, labelCls, btnPrimary, btnSecondary, type LineasInput,
 } from './shared'
-
-const TODAY = new Date().toISOString().split('T')[0]
 
 export default function SalidaAlfalfaModal({
   compradores, stock, onClose, onCreated,
@@ -23,15 +21,15 @@ export default function SalidaAlfalfaModal({
   onCreated: () => Promise<void>
 }) {
   const [compradorId, setCompradorId] = useState('')
-  const [fecha, setFecha] = useState(TODAY)
+  const [fecha, setFecha] = useState(hoyLocal)
   const [patente, setPatente] = useState('')
   const [lineas, setLineas] = useState<LineasInput>(LINEAS_VACIAS)
   const [obs, setObs] = useState('')
   const [confirmando, setConfirmando] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // One key per save attempt: kept across network-error retries, rotated once the server answered.
-  const keyRef = useRef(crypto.randomUUID())
+  // Key + payload signature of the last attempt: reused on retry only if the payload is unchanged.
+  const keyRef = useRef<{ key: string; sig: string } | null>(null)
 
   // Stock is in units for fardo/rollo and in kg for semilla (kg == unidades there is not
   // guaranteed), so the comparable balance depends on the product.
@@ -58,6 +56,8 @@ export default function SalidaAlfalfaModal({
   async function guardar() {
     setSaving(true)
     setError(null)
+    const sig = JSON.stringify([compradorId, fecha, patente.trim(), obs.trim(), items])
+    keyRef.current = claveParaPayload(keyRef.current, sig)
     try {
       await crearDocumentoAlfalfa({
         tipo: 'salida',
@@ -65,12 +65,12 @@ export default function SalidaAlfalfaModal({
         comprador_id: compradorId,
         vehiculo_patente: patente.trim() || null,
         observaciones: obs.trim() || null,
-        idempotency_key: keyRef.current,
+        idempotency_key: keyRef.current.key,
         lineas: items.map((i) => ({ producto: i.producto, cantidad: String(i.cantidad) })),
       })
       await onCreated()
     } catch (e) {
-      if (huboRespuesta(e)) keyRef.current = crypto.randomUUID()
+      if (esErrorDefinitivo(e)) keyRef.current = null
       setError(errorDetail(e))
       setConfirmando(false)
     } finally {

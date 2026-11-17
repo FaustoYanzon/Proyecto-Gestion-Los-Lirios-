@@ -6,11 +6,9 @@ import { crearDocumentoAlfalfa, PRODUCTO_LABELS, type ProductoAlfalfa } from '@/
 import { errorDetail } from '@/lib/api/altaProduccion'
 import FormError from '@/components/ui/FormError'
 import {
-  PRODUCTOS, LINEAS_VACIAS, parseCantidad, cantidadInvalida, huboRespuesta,
+  PRODUCTOS, LINEAS_VACIAS, hoyLocal, claveParaPayload, parseCantidad, cantidadInvalida, esErrorDefinitivo,
   fmtNum, fmtFecha, inputCls, labelCls, btnPrimary, btnSecondary, type LineasInput,
 } from './shared'
-
-const TODAY = new Date().toISOString().split('T')[0]
 
 export default function AltaAlfalfaModal({
   potreros, onClose, onCreated,
@@ -20,14 +18,14 @@ export default function AltaAlfalfaModal({
   onCreated: () => Promise<void>
 }) {
   const [potreroId, setPotreroId] = useState('')
-  const [fecha, setFecha] = useState(TODAY)
+  const [fecha, setFecha] = useState(hoyLocal)
   const [lineas, setLineas] = useState<LineasInput>(LINEAS_VACIAS)
   const [obs, setObs] = useState('')
   const [confirmando, setConfirmando] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // One key per save attempt: kept across network-error retries, rotated once the server answered.
-  const keyRef = useRef(crypto.randomUUID())
+  // Key + payload signature of the last attempt: reused on retry only if the payload is unchanged.
+  const keyRef = useRef<{ key: string; sig: string } | null>(null)
 
   const items = PRODUCTOS.flatMap((p) => {
     const cantidad = parseCantidad(p, lineas[p])
@@ -40,18 +38,20 @@ export default function AltaAlfalfaModal({
   async function guardar() {
     setSaving(true)
     setError(null)
+    const sig = JSON.stringify([potreroId, fecha, obs.trim(), items])
+    keyRef.current = claveParaPayload(keyRef.current, sig)
     try {
       await crearDocumentoAlfalfa({
         tipo: 'alta',
         fecha,
         potrero_id: potreroId,
         observaciones: obs.trim() || null,
-        idempotency_key: keyRef.current,
+        idempotency_key: keyRef.current.key,
         lineas: items.map((i) => ({ producto: i.producto, cantidad: String(i.cantidad) })),
       })
       await onCreated()
     } catch (e) {
-      if (huboRespuesta(e)) keyRef.current = crypto.randomUUID()
+      if (esErrorDefinitivo(e)) keyRef.current = null
       setError(errorDetail(e))
       setConfirmando(false)
     } finally {

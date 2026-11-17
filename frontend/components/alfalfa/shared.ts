@@ -1,3 +1,4 @@
+import axios from 'axios'
 import type { ProductoAlfalfa } from '@/lib/api/alfalfa'
 
 export const PRODUCTOS: ProductoAlfalfa[] = ['fardo', 'rollo', 'semilla']
@@ -31,6 +32,32 @@ export function parseCantidad(producto: ProductoAlfalfa, raw: string): number | 
 export const cantidadInvalida = (producto: ProductoAlfalfa, raw: string) =>
   raw.trim() !== '' && parseCantidad(producto, raw) === null
 
-/** Whether an axios error carries an HTTP response (definite server answer) vs. a network failure. */
-export const huboRespuesta = (e: unknown): boolean =>
-  !!(e as { response?: unknown })?.response
+/**
+ * True when the server definitively rejected the request (4xx except 408/429), so nothing was
+ * created and the idempotency key can be rotated. Network errors, 5xx, 408 and 429 are ambiguous:
+ * the document may already be committed, so the same key must be kept for the retry.
+ */
+export function esErrorDefinitivo(e: unknown): boolean {
+  if (!axios.isAxiosError(e) || !e.response) return false
+  const status = e.response.status
+  return status >= 400 && status < 500 && status !== 408 && status !== 429
+}
+
+/** Today as YYYY-MM-DD from local date getters (toISOString would give the UTC day). */
+export function hoyLocal(): string {
+  const d = new Date()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+/**
+ * Idempotency key tied to a payload signature: reused on retry only if the payload is unchanged
+ * (the backend replays the ORIGINAL document for a known key, so an edited retry would be lost).
+ */
+export function claveParaPayload(
+  actual: { key: string; sig: string } | null,
+  sig: string,
+): { key: string; sig: string } {
+  return actual && actual.sig === sig ? actual : { key: crypto.randomUUID(), sig }
+}
