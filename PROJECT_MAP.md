@@ -26,11 +26,12 @@ repo/
 
 ## Backend (`backend/`)
 
-**Modelos:** 17 archivos, 50 clases ORM
+**Modelos:** 18 archivos, 52 clases ORM
 
 | Archivo | Clases |
 |---|---|
 | `alerta_descartada.py` | AlertaDescartada |
+| `alfalfa.py` | DocumentoAlfalfa, DocumentoAlfalfaLinea |
 | `alta_produccion.py` | Productor, Comprador, Deposito, ParametroProduccion, UbicacionPasero, IngresoPasero, Lote, Bin, Remito, RemitoLinea, ComprobanteBodega |
 | `arca.py` | LoteImportacionArca, ComprobanteArcaImportado |
 | `clima_cache.py` | ClimaCache |
@@ -48,11 +49,12 @@ repo/
 | `valvula.py` | Valvula |
 | `whatsapp.py` | TelefonoUsuarioWhatsapp, MensajeWhatsappPendiente |
 
-**Routers:** 26
+**Routers:** 27
 
 | Archivo | Prefix | Tags |
 |---|---|---|
 | `alertas.py` | `/alertas` | "alertas" |
+| `alfalfa.py` | `/alfalfa` | "Alfalfa" |
 | `arca.py` | `/finanzas/arca` | "Finanzas - ARCA" |
 | `auth.py` | `/auth` | "Authentication" |
 | `clima.py` | `/clima` | "clima" |
@@ -79,7 +81,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 66 (head: `c9b5b6bebbfd_riego_manto_60mm.py`)
+**Migraciones de Alembic:** 67 (head: `a1fa1fa00001_alfalfa_documentos.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -92,7 +94,7 @@ repo/
 
 ## Frontend (`frontend/`)
 
-**Rutas (54):**
+**Rutas (56):**
 
 - `/dashboard/admin/notificaciones`
 - `/dashboard/admin/usuarios`
@@ -123,7 +125,9 @@ repo/
 - `/dashboard/finanzas/ingresos`
 - `/dashboard/finanzas/mano-de-obra`
 - `/dashboard/finanzas/presupuesto`
+- `/dashboard/inventarios/alfalfa`
 - `/dashboard/inventarios/insumos`
+- `/dashboard/inventarios`
 - `/dashboard/inventarios/producto-terminado`
 - `/dashboard/mapa`
 - `/dashboard/maquinaria/[id]`
@@ -149,10 +153,11 @@ repo/
 - `/privacy`
 - `/trazabilidad/publica/[token]`
 
-**Módulos de API client** (`frontend/lib/api/`, 27): `alertas.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `maquinaria.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
+**Módulos de API client** (`frontend/lib/api/`, 28): `alertas.ts` · `alfalfa.ts` · `altaProduccion.ts` · `arca.ts` · `clima.ts` · `cosecha.ts` · `egresos.ts` · `fitosanitarios.ts` · `flujo.ts` · `ingresos.ts` · `insumos.ts` · `kpis.ts` · `maquinaria.ts` · `metas.ts` · `notificaciones.ts` · `ordenesAplicacion.ts` · `parcelas.ts` · `planFitosanitario.ts` · `preciosTarea.ts` · `presupuestos.ts` · `produccion.ts` · `riego.ts` · `telefonosWhatsapp.ts` · `termografo.ts` · `trabajadores.ts` · `trazabilidad.ts` · `usuarios.ts` · `whatsapp.ts`
 
 **Componentes por carpeta:**
 
+- `alfalfa/`: AltaAlfalfaModal.tsx · SalidaAlfalfaModal.tsx
 - `alta-produccion/`: ComprobanteBodegaModal.tsx · LoteDetalleModal.tsx · MaestroCrud.tsx
 - `finanzas/`: ComprobantesArcaPanel.tsx · EgresoForm.tsx · EgresosTable.tsx · IngresoForm.tsx · IngresosTable.tsx · MensajesWhatsappTable.tsx · MesRangeQuickButtons.tsx
 - `landing/`: Reveal.tsx · VarietyMap.tsx
