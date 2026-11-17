@@ -106,7 +106,7 @@ export default function RiegoTable({ riegos, isLoading, parcelaNombre, onEdit, o
                     {r.mm_aplicados != null ? `${r.mm_aplicados} mm` : '—'}
                   </td>
                   <td className="px-3 py-3 text-right whitespace-nowrap font-mono text-blue-700">
-                    {r.litros_aplicados.toLocaleString('es-AR')} L
+                    {r.litros_aplicados != null ? `${Number(r.litros_aplicados).toLocaleString('es-AR')} L` : '—'}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                     {r.fertilizante_nombre

@@ -128,6 +128,7 @@ export interface ParametrosProduccion {
   ratio_uva_pasa: number
   kg_nominal_bin: number
   tara_carro: number
+  mm_riego_manto: number
   tope_bines_lote: number | null
 }
 
@@ -140,6 +141,8 @@ function parseParametros(d: Record<string, unknown>): ParametrosProduccion {
     ratio_uva_pasa: num(d.ratio_uva_pasa),
     kg_nominal_bin: num(d.kg_nominal_bin),
     tara_carro: num(d.tara_carro),
+    // Older servers may not send it yet: fall back to the fixed 60 mm.
+    mm_riego_manto: d.mm_riego_manto == null ? 60 : num(d.mm_riego_manto),
     tope_bines_lote: numOrNull(d.tope_bines_lote),
   }
 }

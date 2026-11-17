@@ -21,6 +21,7 @@ const CAMPOS: { clave: Clave; label: string; ayuda: string; entero?: boolean; op
   { clave: 'ratio_uva_pasa', label: 'Ratio uva/pasa', ayuda: 'Kg de uva fresca necesarios por kg de pasa (4 = 4:1).' },
   { clave: 'kg_nominal_bin', label: 'Kg nominal por bin', ayuda: 'Peso de referencia de un bin de pasa.' },
   { clave: 'tara_carro', label: 'Tara del carro (kg)', ayuda: 'Peso del carro vacío. Kg de uva = peso en báscula − tara × carros. Valor provisorio.' },
+  { clave: 'mm_riego_manto', label: 'mm por riego a manto', ayuda: 'Lámina fija de cada riego a manto. Litros = mm × superficie de la parcela × 10.000. Los mantos ya terminados conservan su valor.' },
   {
     clave: 'tope_bines_lote', label: 'Tope de bines por lote', entero: true, opcional: true,
     ayuda: 'El lote se cierra solo al llegar a este número. Vacío = sin tope.',
@@ -34,6 +35,7 @@ function aTexto(p: ParametrosProduccion): Record<Clave, string> {
     ratio_uva_pasa: String(p.ratio_uva_pasa),
     kg_nominal_bin: String(p.kg_nominal_bin),
     tara_carro: String(p.tara_carro),
+    mm_riego_manto: String(p.mm_riego_manto),
     tope_bines_lote: p.tope_bines_lote == null ? '' : String(p.tope_bines_lote),
   }
 }

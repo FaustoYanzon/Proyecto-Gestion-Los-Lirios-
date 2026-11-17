@@ -34,9 +34,9 @@ export const LITROS_POR_HORA_VALVULA = 16_000
 export const LITROS_OBJETIVO_ANUAL_POR_HA = 6_000_000
 
 // Riego a manto por superficie: se riega la parcela completa (parral o
-// potrero), sin elegir válvulas. Cuenta como ceil(ha) válvulas a 4 veces el
-// caudal de goteo (litros y mm). Mismo criterio que el backend. Los manto
-// históricos (con válvulas) usan el mismo factor 4 y vienen en `factor_aplicado`.
+// potrero), sin elegir válvulas. Los manto nuevos aplican una lámina fija en mm
+// (ver calcMantoResumen). Los manto históricos (con válvulas) usan el factor 4
+// y vienen en `factor_aplicado`.
 export type TipoRiego = 'goteo' | 'manto'
 export const FACTOR_MANTO_SUPERFICIE = 4
 export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = { goteo: 'Goteo', manto: 'Manto' }
@@ -44,6 +44,15 @@ export const TIPO_RIEGO_LABELS: Record<TipoRiego, string> = { goteo: 'Goteo', ma
 // Rounding to 4 decimals avoids ceil() bumping 1.00000001 ha to 2 valves.
 export function valvulasManto(superficieHa: number): number {
   return Math.max(1, Math.ceil(Math.round(superficieHa * 10_000) / 10_000))
+}
+
+// Manto nuevo: lámina fija (parámetro `mm_riego_manto`, 60 por defecto) sobre
+// toda la parcela. litros = mm × ha × 10.000 (1 mm sobre 1 ha = 10.000 L).
+// Se usa de fallback cuando el rol no puede leer el parámetro.
+export const MM_MANTO_DEFAULT = 60
+
+export function calcMantoResumen(mm: number, superficieHa: number): { mm: number; litros: number } {
+  return { mm, litros: Math.round(mm * superficieHa * 10_000) }
 }
 
 // Catálogo real de válvulas (nombre físico del GeoJSON, ej. "21", "SU1"),
