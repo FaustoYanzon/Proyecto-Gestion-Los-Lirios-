@@ -1,6 +1,6 @@
 # Cámara en mobile y deuda previa — diseño corto
 
-Fecha: 2026-11-16 · Estado: aprobado por Fausto · Tamaño: cambio chico/mediano, dos fases.
+Fecha: 2026-11-16 · Estado: implementado y desplegado el 2026-11-16 (PR #7 y #8) · Tamaño: cambio chico/mediano, dos fases.
 
 ## Intención
 Permitir sacar fotos con la cámara (hoy solo galería) en reportes y órdenes, y cerrar cuatro deudas previas conocidas. Motivo: los operarios reportan fallas en el campo; la galería obliga a salir de la app.

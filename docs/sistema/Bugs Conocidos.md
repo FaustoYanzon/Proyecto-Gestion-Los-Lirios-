@@ -4,7 +4,7 @@ tags: [sistema, bugs]
 
 # Bugs Conocidos
 
-> Última revisión: 2026-09-08 (unificación de estados fenológicos — ver [[2026-09-08-inicio-reorden-y-unificacion-fenologia]])
+> Última revisión: 2026-11-16 (deuda previa de mobile y cámara en reportes — ver [[2026-11-16-camara-y-deuda-mobile]])
 
 ---
 
@@ -18,7 +18,7 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 
 - **Vercel NO auto-despliega en este proyecto.** Railway sí redespliega el backend solo en cada push a `main` (y corre `alembic upgrade head`), pero el frontend se quedó pegado en un deploy de 4 días hasta que se corrió `vercel --prod` a mano el 2026-07-14 — ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. **Acordarse de correr `vercel --prod` (o `npx vercel --prod --yes` desde `frontend/`) después de cualquier push que toque `frontend/`.** `vercel ls` muestra el último deploy y su antigüedad si hay dudas.
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
-- **Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).
+- ~~**Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).~~ **Resuelto el 2026-08-05**, ver la sección Resueltos.
 - ~~Backup automático de producción configurado pero sin activar~~ — **activado 2026-07-27**: `install_backup_task.ps1` corrido, tarea `LosLirios-PG-Backup` registrada (diaria 21:00), probada con `Start-ScheduledTask` (dump real creado y copiado a OneDrive). **Sigue pendiente:** el test de restore que pide `scripts/BACKUP.md` (requiere un Postgres local corriendo, no se hizo todavía) — un backup no está "verificado" hasta que se prueba restaurarlo al menos una vez. También sigue siendo un backup que depende de que la PC de Fausto esté prendida a las 21:00 — si el piloto se vuelve permanente, migrar a un cron de Railway o GitHub Actions (ya anotado en `BACKUP.md` § Known limitations).
 - ~~Lint del frontend no pasa~~ — **resuelto 2026-09-22**: 18 errores (React Compiler: `setState` en `useEffect`, funciones impuras en render, componentes creados en render). El patrón de paginación (`setPage(1)` en un efecto al cambiar la lista) se centralizó en `lib/usePaginatedList.ts`/`lib/useChanged.ts` (usado en 7 tablas + Cheques + Cosecha) en vez de repetirse; 3 acumuladores de dashboard (`let acum` mutado dentro de `.map()`) pasados a `for`; `RiegosEnCurso.tsx` con un componente `Fila` definido adentro del render, hoisteado afuera. `npm run lint` ahora en el gate de CI.
 - ~~Responsividad mobile del frontend web limitada~~ — **resuelta 2026-08-12**: headers de las 13 páginas de `finanzas/`/`producción/`/`admin` corregidos para apilar en mobile, y el panel de detalle de parcela en el mapa (ancho fijo de 288px) corregido a full-width por debajo de `sm`.
@@ -32,12 +32,18 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 - **`uvicorn --reload` en Windows deja procesos worker huérfanos si se mata solo el proceso reloader** — `Stop-Process -Id <PID del reloader>` no mata al worker hijo que WatchFiles spawnea; el worker viejo se queda vivo en el puerto 8000 sirviendo código desactualizado, aunque el proceso nuevo loguee "Application startup complete" sin errores (causó ~30 min de confusión real el 2026-08-26, ver [[2026-08-26-costo-por-kg-avatar-cumpleanos]]). Antes de reiniciar el backend local en este entorno, matar el árbol completo: `taskkill /F /IM python.exe /T`.
 - **Google Play "quema" un `versionCode` apenas se sube el `.aab` a un borrador, aunque ese borrador nunca se guarde ni se publique.** El 2026-09-01, un primer intento de subir `los-lirios-v1.0.0-5.aab` (versionCode 5) a Prueba cerrada quedó a medio camino — se subió el archivo pero nunca se hizo click en "Siguiente", y la sesión del navegador se cerró antes de guardar el borrador. Al volver, el editor mostraba el borrador vacío (sin archivo) como si nada se hubiera subido — pero un reintento con el mismo `.aab` dio error real: *"Ya se usó el código de la versión 5. Prueba con otro código."* Hubo que generar un build nuevo completo (`eas build` de nuevo, versionCode 6) solo para poder reintentar. **Lección:** el flujo de "Crear versión" de Play Console (Subir → Siguiente → Revisar → Guardar → Enviar a revisión) hay que completarlo de punta a punta en la misma pasada — dejarlo a medias no es gratis, cuesta un build nuevo entero. Ver [[2026-09-01-ios-primer-build-play-store-14-dias]].
 - **En Play Console, "estar en la lista de verificadores" no es lo mismo que "haber aceptado participar".** El checklist real de elegibilidad para Producción (Panel de la app → sección "Producción") lo distingue explícitamente: agregar 12 emails a la lista de verificadores de un segmento de Prueba cerrada dejaba, el 2026-09-01, "0 verificadores aceptaron participar" — cada persona tiene que abrir el link de opt-in (`https://play.google.com/apps/testing/<package>`) desde el celular, logueada con esa cuenta de Gmail exacta, y tocar "Convertirme en probador". Recién ahí arrancan a contar los 14 días corridos exigidos. No asumir que mandar el link alcanza — hay que confirmar la aceptación real en ese mismo panel antes de dar el requisito por cumplido.
+- **`eas-cli` falla con `ECONNRESET` por IPv6 desde esta PC** (red de Fausto). Workaround en PowerShell: `$env:NODE_OPTIONS="--dns-result-order=ipv4first"` (`set` no sirve en PowerShell). Aplica a `eas build`, `eas update` y `eas submit`. Ver [[2026-11-16-camara-y-deuda-mobile]].
 - **Órdenes multiproducto (2026-10-27, desplegado en prod el mismo día):** (a) un registro de parcela completa en una parcela que además tiene filas de válvula: Eliminar saca el ítem pero no revierte los registros de las válvulas. (b) ~~El texto de confirmación de Deshacer en mobile sigue en singular~~ — corregido en la misma rama (habla de todos los productos de la válvula; llega con el OTA). (c) Un cliente web viejo con caché que edite una orden multilínea recibe 409 (el PUT legacy no puede representar varias líneas). (d) `scripts/generate_modelo_datos.py` lee el esquema de PRODUCCIÓN (`.env.prod`) sin avisar: no usarlo antes de migrar prod. Ver [[2026-10-27-ordenes-multiproducto]].
 - **Posible glitch visual en el formulario "Nueva orden" (2026-10-27, sin reproducir de forma fiable):** al hacer scroll dentro del modal con una ronda del plan precargada, una vez se vio el campo de producto de una línea ("Oponente QA · existente") montado por encima del encabezado fijo del modal; en otras capturas del mismo scroll el encabezado se veía bien. Sospecha: un `z-index` o `position: relative` del combobox de producto que gana al encabezado `sticky`. Revisar `frontend/components/produccion/NuevaOrdenAplicacion.tsx` si vuelve a aparecer. No bloquea.
 
 ---
 
 ## ✅ Resueltos
+
+**Sesión del 2026-11-16** (ver [[2026-11-16-camara-y-deuda-mobile]]):
+- **Finca de un encargado/regador/obrero pisada por otro usuario del mismo teléfono compartido — resuelto.** `loadFinca(role)` en `mobile/store/fincaStore.ts` restaura la finca guardada solo para `gerencial` y `super_admin`. Estaba como preexistente en [[2026-11-11-modulo-maquinaria]].
+- **Items `failed` de la cola offline (mobile) no se podían reintentar ni descartar — resuelto.** `getFailedItems`/`retryFailed`/`discard` en `mobile/lib/offlineQueue.ts`, con un lock de promesas para que una acción manual no pise al loop de sync; hoja `FailedQueueSheet` abierta desde el banner. `processQueue` vuelve a correr si se llamó mientras sincronizaba.
+- **Sheet de Ingresos (web) con problema de z-index/portal — resuelto.** `finanzas/ingresos` usa `components/maquinaria/Drawer` (portal a body) y se eliminó el `Sheet` duplicado.
 
 **Sesión del 2026-09-08, segunda tanda** (ver [[2026-09-08-inicio-reorden-y-unificacion-fenologia]]):
 - **Estados fenológicos unificados con los del mapa.** Fenología/Ciclo de Campaña tenían 10 fases finas por variedad (Reposo invernal, Lloro, Grano de arveja, Madurez...) distintas de los 7 estados que ya pintaba el mapa (Cierre de Racimo, Post-Cosecha...). Migración de DB en 2 pasos sobre el enum `estadofenologico` (agregar valores nuevos, migrar filas viejas), motor de fenología reescrito para delegar el calendario a `ciclo_campana.py` y conservar solo tareas recomendadas + riesgo de oídio por variedad. Ver detalle completo en la bitácora — cambio de modelo de datos, no un bugfix simple.
@@ -180,6 +186,7 @@ Efecto colateral de la limpieza de duplicados del día anterior — `limpiar_dup
 
 ## Ver también
 
+- [[2026-11-16-camara-y-deuda-mobile]]
 - [[2026-09-01-ios-primer-build-play-store-14-dias]]
 - [[2026-08-28-play-store-produccion-ios-fix-parcelas]]
 - [[2026-08-28-estetica-v1-rediseno-web-mobile]]
