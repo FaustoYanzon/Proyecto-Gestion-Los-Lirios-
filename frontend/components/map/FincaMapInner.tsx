@@ -14,6 +14,8 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 import LayerControl, { type LayerVisibility } from './LayerControl'
+import UvaPaseroCard from './UvaPaseroCard'
+import { VAR_COLORS } from './varColors'
 
 type ColorMode = 'type' | 'variedad' | 'cosecha' | 'costo' | 'fito' | 'cumplimiento' | 'fenologia'
 
@@ -39,11 +41,6 @@ const TYPE_STYLES: Record<string, { color: string; fillColor: string }> = {
   pipeline: { color: '#c47e2a', fillColor: '#c47e2a' },
 }
 
-const VAR_COLORS: Record<string, string> = {
-  flame: '#ef4444', red_globe: '#dc2626', fiesta: '#22c55e',
-  bonarda: '#8b5cf6', sultanina: '#f59e0b', syrah: '#6366f1',
-  aspirant: '#06b6d4', alfalfa: '#84cc16', otro: '#94a3b8',
-}
 
 function formatARS(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
@@ -147,6 +144,15 @@ function getPolyStyle(
       fillOpacity: selected ? 0.75 : 0.6,
     }
   }
+  // Paseros have no irrigation/fito plan: paint them neutral in those modes.
+  if ((mode === 'cumplimiento' || mode === 'fito') && f.type === 'pasero') {
+    return {
+      color: '#9ca3af',
+      weight: selected ? 3 : 1.5,
+      fillColor: '#d1d5db',
+      fillOpacity: selected ? 0.75 : 0.6,
+    }
+  }
   if (mode === 'fito') {
     const n = (p?.id != null && fitoByParcelaId?.[p.id]) ? fitoByParcelaId[p.id] : 0
     const fill = fitoColor(n, maxFito ?? 0)
@@ -220,6 +226,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
   const qc = useQueryClient()
   const user = useAuthStore(s => s.user)
   const parcela = parcelas.find(p => p.nombre === name)
+  const esPasero = parcela?.tipo === 'pasero'
   const estadoCampana = parcela?.variedad != null ? estadoCampanaByVariedad?.[parcela.variedad] : undefined
   const [editing, setEditing] = useState(false)
   const [editVariedad, setEditVariedad] = useState(parcela?.variedad ?? '')
@@ -255,7 +262,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
       )
       return data
     },
-    enabled: !!parcela?.id,
+    enabled: !!parcela?.id && !esPasero,
     staleTime: 60_000,
   })
 
@@ -267,7 +274,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
       )
       return data
     },
-    enabled: !!parcela?.id,
+    enabled: !!parcela?.id && !esPasero,
     staleTime: 60_000,
   })
 
@@ -392,14 +399,18 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                   <p className="text-xs text-gray-400 mb-0.5">Superficie</p>
                   <p className="text-sm font-semibold text-gray-800">{parcela.superficie_ha ? `${parcela.superficie_ha} ha` : '—'}</p>
                 </div>
-                <div className="bg-gray-50 rounded-md p-2.5">
-                  <p className="text-xs text-gray-400 mb-0.5">Cabezal</p>
-                  <p className="text-sm font-semibold text-gray-800">{parcela.cabezal_riego ?? '—'}</p>
-                </div>
+                {!esPasero && (
+                  <div className="bg-gray-50 rounded-md p-2.5">
+                    <p className="text-xs text-gray-400 mb-0.5">Cabezal</p>
+                    <p className="text-sm font-semibold text-gray-800">{parcela.cabezal_riego ?? '—'}</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {cosechaByParcelaId && parcela?.id && cosechaByParcelaId[parcela.id] != null && (
+            {esPasero && <UvaPaseroCard paseroId={parcela.id} />}
+
+            {!esPasero && cosechaByParcelaId && parcela?.id && cosechaByParcelaId[parcela.id] != null && (
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                   <ShoppingBasket size={13} /> Cosecha — {campanaLabelPanel}
@@ -415,7 +426,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
               </div>
             )}
 
-            {estadoCampana && (
+            {!esPasero && estadoCampana && (
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                   <Sprout size={13} /> Ciclo de Campaña
@@ -439,7 +450,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
               </div>
             )}
 
-            {parcela?.variedad && fenologiaByVariedad?.[parcela.variedad] && (
+            {!esPasero && parcela?.variedad && fenologiaByVariedad?.[parcela.variedad] && (
               <div className="bg-purple-50 border border-purple-200 rounded-md px-3 py-2">
                 <div className="flex items-center gap-2 mb-1">
                   <Sprout size={14} className="text-purple-600 flex-shrink-0" />
@@ -462,6 +473,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
               </div>
             )}
 
+            {!esPasero && (
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                 <Droplets size={13} /> Agua — {campanaLabelPanel}
@@ -508,7 +520,9 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                 </>
               )}
             </div>
+            )}
 
+            {!esPasero && (
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
                 <FlaskConical size={13} /> Aplicaciones fito — {campanaLabelPanel}
@@ -530,6 +544,7 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
                 </div>
               )}
             </div>
+            )}
 
             <div>
               <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
@@ -576,7 +591,9 @@ function ParcelPanel({ name, parcelas, anio, esTemporadaActual, estadoCampanaByV
             { key: 'riego', label: '+ Riego' },
             { key: 'tarea', label: '+ Tarea' },
             { key: 'fito',  label: '+ Fito'  },
-          ] as { key: 'riego' | 'tarea' | 'fito'; label: string }[]).map(({ key, label }) => (
+          ] as { key: 'riego' | 'tarea' | 'fito'; label: string }[])
+            .filter(({ key }) => !esPasero || key === 'tarea')
+            .map(({ key, label }) => (
             <button
               key={key}
               onClick={() => onQuickAction(key)}
