@@ -12,7 +12,7 @@ import {
   Switch,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../../lib/icons'
-import { elegirImagenDeGaleria } from '../../lib/imagePicker'
+import { elegirImagen } from '../../lib/imagePicker'
 import { useRouter } from 'expo-router'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
@@ -86,7 +86,7 @@ export default function PerfilScreen() {
   }
 
   async function pickAvatar() {
-    const uri = await elegirImagenDeGaleria({ aspect: [1, 1] })
+    const uri = await elegirImagen({ aspect: [1, 1] })
     if (!uri) return
 
     setAvatarError(null)

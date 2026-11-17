@@ -34,7 +34,7 @@
         "USE_BIOMETRIC",
         "USE_FINGERPRINT"
       ],
-      "versionCode": 5
+      "versionCode": 6
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -43,6 +43,14 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Los Lirios SA necesita acceso a tus fotos para adjuntarlas a reportes y órdenes.",
+          "cameraPermission": "Los Lirios SA usa la cámara para sacar fotos de fallas y aplicaciones.",
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-local-authentication",
         {

@@ -16,7 +16,7 @@ import api, {
 import { getCache, setCache, CACHE_TTL } from '../lib/cache'
 import TrabajadorPicker from './TrabajadorPicker'
 import { useAuthStore } from '../store/authStore'
-import { elegirImagenDeGaleria } from '../lib/imagePicker'
+import { elegirImagen } from '../lib/imagePicker'
 import { colors } from '../lib/theme'
 import type {
   OrdenAplicacion, OrdenAplicacionParcelaItem, OrdenAplicacionValvulaItem,
@@ -72,7 +72,7 @@ function ConfirmarModal({
   }, [visible])
 
   async function handleElegirFoto() {
-    const uri = await elegirImagenDeGaleria()
+    const uri = await elegirImagen()
     if (uri) setFotoUri(uri)
   }
 
@@ -210,7 +210,7 @@ function ConfirmarValvulaModal({
   }, [visible, user?.full_name])
 
   async function handleElegirFoto() {
-    const uri = await elegirImagenDeGaleria()
+    const uri = await elegirImagen()
     if (uri) setFotoUri(uri)
   }
 
