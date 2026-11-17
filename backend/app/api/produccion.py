@@ -1243,6 +1243,12 @@ async def update_riego(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Riego not found")
 
     update_data = riego_data.model_dump(exclude_unset=True)
+    if "fin" in update_data and update_data["fin"] is None and riego.fin is not None:
+        # The response model needs `fin`, so reopening used to end in a 500.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Un riego terminado no se puede reabrir.",
+        )
     # Validate the resulting state, not just the patch: a goteo<->manto switch
     # depends on fields the client may not have re-sent.
     merged = {
@@ -1254,6 +1260,7 @@ async def update_riego(
     # Captured before the merge is applied: decides whether a manto must be refrozen.
     era_manto_terminado = riego.tipo == TipoRiego.manto and riego.fin is not None
     parcela_anterior = riego.parcela_id
+    mm_anterior = riego.mm_aplicados
     for field, value in merged.items():
         setattr(riego, field, value)
     if ("inicio" in update_data or "fin" in update_data) and riego.fin is not None:
@@ -1266,6 +1273,9 @@ async def update_riego(
         # any other edit (e.g. responsable) keeps the stored litres.
         if riego.fin is not None and (not era_manto_terminado or riego.parcela_id != parcela_anterior):
             await _congelar_manto(db, riego)
+        else:
+            # The server owns the manto mm: a client-sent value must not diverge from litros_manto.
+            riego.mm_aplicados = mm_anterior
     else:
         riego.litros_manto = None
 

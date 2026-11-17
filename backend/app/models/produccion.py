@@ -241,8 +241,9 @@ class RegistroRiego(Base):
     # Cantidad de valvulas equivalentes (ceil de la superficie) en manto nuevo.
     # NULL = registro historico (goteo, o manto viejo que cuenta las valvulas del CSV).
     n_valvulas_manto: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Goteo o manto. En manto el caudal es FACTOR_MANTO veces el de goteo, tanto
-    # en registros nuevos como historicos (estos cuentan valvulas por el CSV).
+    # Goteo o manto. Goteo: litros por horas y valvulas. Manto: un mm fijo por riego
+    # sobre la parcela completa (parametro mm_riego_manto), congelado en litros_manto
+    # al terminar; no depende del tiempo (FACTOR_MANTO queda solo para compatibilidad).
     tipo: Mapped[TipoRiego] = mapped_column(
         SAEnum(TipoRiego), default=TipoRiego.goteo, server_default=TipoRiego.goteo.value, nullable=False
     )

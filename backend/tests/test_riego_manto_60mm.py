@@ -302,3 +302,36 @@ async def test_eficiencia_hidrica_usa_litros_congelados(client, create_user, cre
     fila = next(r for r in resp.json() if r["parcela_id"] == parcela.id)
     assert fila["litros_totales"] == 60 * 2 * 10_000
     assert fila["mm_aplicados_total"] == pytest.approx(60)
+
+
+# --- Review fixes ----------------------------------------------------------------
+
+
+async def test_put_no_deja_pisar_el_mm_de_un_manto_terminado(client, create_user, create_parcela):
+    headers, _ = await _login(client, create_user)
+    parcela = await create_parcela(superficie_ha=3.0)
+    creado = (await client.post("/produccion/riego/", json=_manto(parcela.id), headers=headers)).json()
+
+    resp = await client.put(
+        f"/produccion/riego/{creado['id']}", json={"mm_aplicados": 5}, headers=headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    # The server owns the manto mm: a client value must never diverge from litros_manto.
+    assert resp.json()["mm_aplicados"] == 60
+    assert resp.json()["litros_aplicados"] == 1_800_000
+
+
+async def test_no_se_puede_reabrir_un_riego_terminado(client, create_user, create_parcela):
+    headers, _ = await _login(client, create_user)
+    parcela = await create_parcela(superficie_ha=3.0)
+    creado = (await client.post("/produccion/riego/", json=_manto(parcela.id), headers=headers)).json()
+
+    resp = await client.put(f"/produccion/riego/{creado['id']}", json={"fin": None}, headers=headers)
+
+    # Reopening used to fail with a 500 (the response model needs `fin`); it is a clean 422 now
+    # and the frozen litres stay untouched.
+    assert resp.status_code == 422, resp.text
+    assert "reabrir" in resp.json()["detail"].lower()
+    detalle = await client.get(f"/produccion/riego/{creado['id']}", headers=headers)
+    assert detalle.json()["litros_aplicados"] == 1_800_000

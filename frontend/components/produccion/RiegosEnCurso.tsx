@@ -27,9 +27,10 @@ interface FilaProps {
 // identidad nueva en cada render, forzando remounts innecesarios.
 function Fila({ r, conBoton, parcelaNombre, terminandoId, onTerminar }: FilaProps) {
   const { horas, litros: litrosCalc } = calcEnCurso(r.inicio, r.n_valvulas, r.factor_aplicado)
-  // New manto (no cabezal): litros/mm are fixed by the server at finish time.
-  const mantoNuevo = r.tipo === 'manto' && r.cabezal == null
-  const litros = mantoNuevo ? null : litrosCalc
+  // Every manto (even one started with the old valve rule): the server credits its
+  // fixed mm when it finishes, so no litros are estimated from the elapsed time.
+  const esManto = r.tipo === 'manto'
+  const litros = esManto ? null : litrosCalc
   return (
     <div className="flex items-center justify-between gap-4 bg-[#faf6ec] border border-[#e2dbcc] rounded-md px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">

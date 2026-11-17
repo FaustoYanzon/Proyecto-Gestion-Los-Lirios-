@@ -1,7 +1,7 @@
 """Volumetric irrigation compliance, shared by every endpoint that reports it.
 
-Why volumes: each goteo RegistroRiego stores `mm_aplicados` = hours x 1.6 as the depth over the ONE hectare of that valve, not over the whole
-parcela. Summing it across the valves of a parcela inflates compliance (4 valves
+Why volumes: each goteo RegistroRiego stores `mm_aplicados` = hours x 1.6 as the
+depth over the ONE hectare of that valve, not over the whole parcela. Summing it across the valves of a parcela inflates compliance (4 valves
 x 24 h = 153.6 "mm" vs 38.4 expected = 400 %) although it is physically ONE
 standard riego. Comparing litres (applied) against litres (expected for the
 parcela surface) removes that distortion.
