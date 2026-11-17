@@ -538,7 +538,7 @@ export async function cargarComprobanteBodega(
  * síncrona (dentro del click) y recién después se le asigna la URL, para no
  * caer en el bloqueador de pop-ups. Llamar directo desde un onClick.
  */
-async function abrirPdf(path: string, filename: string): Promise<void> {
+export async function abrirPdf(path: string, filename: string): Promise<void> {
   const win = window.open('', '_blank')
   try {
     const { data } = await api.get<Blob>(path, { responseType: 'blob' })
