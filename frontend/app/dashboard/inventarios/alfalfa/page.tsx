@@ -2,15 +2,17 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Printer, Ban, ChevronLeft, ChevronRight } from 'lucide-react'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { listParcelasAdmin } from '@/lib/api/parcelas'
 import { getCompradores, errorDetail } from '@/lib/api/altaProduccion'
 import {
-  getStockAlfalfa, listarDocumentosAlfalfa, abrirPdfAlfalfa, PRODUCTO_LABELS, TIPO_DOC_LABELS,
+  getStockAlfalfa, listarDocumentosAlfalfa, abrirPdfAlfalfa, anularDocumentoAlfalfa, PRODUCTO_LABELS, TIPO_DOC_LABELS,
   type DocumentoAlfalfa, type ProductoAlfalfa, type TipoDocumentoAlfalfa,
 } from '@/lib/api/alfalfa'
 import FormError from '@/components/ui/FormError'
+import AnularDocumentoModal from '@/components/AnularDocumentoModal'
+import { useAuthStore } from '@/store/authStore'
 import AltaAlfalfaModal from '@/components/alfalfa/AltaAlfalfaModal'
 import SalidaAlfalfaModal from '@/components/alfalfa/SalidaAlfalfaModal'
 import { fmtNum, fmtFecha } from '@/components/alfalfa/shared'
@@ -49,6 +51,8 @@ export default function AlfalfaPage() {
   const [hasta, setHasta] = useState('')
   const [modal, setModal] = useState<null | 'alta' | 'salida'>(null)
   const [pdfError, setPdfError] = useState<string | null>(null)
+  const [anularDe, setAnularDe] = useState<DocumentoAlfalfa | null>(null)
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === 'super_admin')
 
   const { data: stock = [], error: stockError } = useQuery({
     queryKey: ['alfalfa-stock'], queryFn: getStockAlfalfa, staleTime: 30_000,
@@ -174,18 +178,42 @@ export default function AlfalfaPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {paged.map((d) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
+                  <tr key={d.id} className={d.anulado ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtFecha(d.fecha)}</td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${TIPO_BADGE[d.tipo]}`}>
                         {TIPO_DOC_LABELS[d.tipo]}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-gray-900">{d.numero}</td>
+                    <td className="px-4 py-2.5 font-mono text-gray-900">
+                      <span className={d.anulado ? 'line-through' : ''}>{d.numero}</span>
+                      {d.anulado && (
+                        <span
+                          className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
+                          title={d.motivo_anulacion ? `Motivo: ${d.motivo_anulacion}` : 'Anulado'}
+                        >
+                          Anulado
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-700">{destino(d)}</td>
-                    <td className="px-4 py-2.5 text-gray-600 text-xs">{resumenLineas(d)}</td>
+                    <td className="px-4 py-2.5 text-gray-600 text-xs">
+                      {resumenLineas(d)}
+                      {d.anulado && d.motivo_anulacion && (
+                        <span className="block text-red-700 mt-0.5">Motivo: {d.motivo_anulacion}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtNum(d.kg_total)}</td>
-                    <td className="px-2 py-2.5 text-right">
+                    <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                      {isSuperAdmin && !d.anulado && (
+                        <button
+                          onClick={() => setAnularDe(d)}
+                          title="Anular documento"
+                          className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Ban size={14} />
+                        </button>
+                      )}
                       <button
                         onClick={() => imprimir(d)}
                         title="Imprimir documento"
@@ -223,6 +251,18 @@ export default function AlfalfaPage() {
         )}
       </div>
 
+      {anularDe && (
+        <AnularDocumentoModal
+          titulo={`Anular ${TIPO_DOC_LABELS[anularDe.tipo].toLowerCase()} de alfalfa`}
+          numero={anularDe.numero}
+          onClose={() => setAnularDe(null)}
+          onConfirm={async (motivo) => {
+            await anularDocumentoAlfalfa(anularDe.id, motivo)
+            await refrescar()
+            setAnularDe(null)
+          }}
+        />
+      )}
       {modal === 'alta' && (
         <AltaAlfalfaModal
           potreros={potrerosActivos}

@@ -412,6 +412,9 @@ export interface Remito {
   created_at: string
   lineas: RemitoLinea[]
   comprobante_bodega: ComprobanteBodega | null
+  anulado: boolean
+  anulado_at: string | null
+  motivo_anulacion: string | null
 }
 
 export interface RemitoCreate {
@@ -522,6 +525,12 @@ export async function getConciliacionBodega(params?: {
 
 export async function createRemito(payload: RemitoCreate): Promise<Remito> {
   const { data } = await api.post<Record<string, unknown>>('/remitos/', payload)
+  return parseRemito(data)
+}
+
+/** super_admin only. 409/422 carry a readable `detail` (see errorDetail). */
+export async function anularRemito(remitoId: string, motivo: string): Promise<Remito> {
+  const { data } = await api.post<Record<string, unknown>>(`/remitos/${remitoId}/anular`, { motivo })
   return parseRemito(data)
 }
 

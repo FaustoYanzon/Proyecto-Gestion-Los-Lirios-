@@ -2,15 +2,17 @@
 
 import { Fragment, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, ChevronDown, ChevronRight, ChevronLeft, FileCheck, Printer } from 'lucide-react'
+import { Plus, X, ChevronDown, ChevronRight, ChevronLeft, FileCheck, Printer, Ban } from 'lucide-react'
 import { usePaginatedList } from '@/lib/usePaginatedList'
 import { VARIEDAD_LABELS } from '@/lib/api/parcelas'
 import {
   getRemitos, createRemito, getCompradores, getLotesPasa, getLotePasa,
-  TIPO_REMITO_LABELS, errorDetail, abrirRemitoPdf,
+  TIPO_REMITO_LABELS, errorDetail, abrirRemitoPdf, anularRemito,
   type Remito, type TipoRemito,
 } from '@/lib/api/altaProduccion'
 import FormError from '@/components/ui/FormError'
+import AnularDocumentoModal from '@/components/AnularDocumentoModal'
+import { useAuthStore } from '@/store/authStore'
 import ComprobanteBodegaModal from '@/components/alta-produccion/ComprobanteBodegaModal'
 
 const PAGE_SIZE = 10
@@ -40,6 +42,8 @@ export default function RemitosPage() {
   const [showNuevo, setShowNuevo] = useState(false)
   const [abiertoId, setAbiertoId] = useState<string | null>(null)
   const [comprobanteDe, setComprobanteDe] = useState<Remito | null>(null)
+  const [anularDe, setAnularDe] = useState<Remito | null>(null)
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === 'super_admin')
 
   const { data: remitos = [], isLoading, error: loadError } = useQuery({
     queryKey: ['ap-remitos', tipo],
@@ -128,7 +132,7 @@ export default function RemitosPage() {
                   const abierto = abiertoId === r.id
                   return (
                     <Fragment key={r.id}>
-                      <tr className="hover:bg-gray-50">
+                      <tr className={r.anulado ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'}>
                         <td className="px-2 py-2.5">
                           <button onClick={() => setAbiertoId(abierto ? null : r.id)} className="p-1 text-gray-400 hover:text-gray-700" title="Ver líneas">
                             {abierto ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -140,12 +144,22 @@ export default function RemitosPage() {
                             {TIPO_REMITO_LABELS[r.tipo]}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-gray-900">{r.numero}</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-900">
+                          <span className={r.anulado ? 'line-through' : ''}>{r.numero}</span>
+                          {r.anulado && (
+                            <span
+                              className="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 no-underline"
+                              title={r.motivo_anulacion ? `Motivo: ${r.motivo_anulacion}` : 'Anulado'}
+                            >
+                              Anulado
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5 text-gray-700">{nombreDestino(r)}</td>
                         <td className="px-4 py-2.5 text-gray-500">{r.vehiculo_patente ?? '–'}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtKg(r.kg_total)}</td>
                         <td className="px-4 py-2.5">
-                          {r.tipo !== 'salida_bodega' ? (
+                          {r.tipo !== 'salida_bodega' || r.anulado ? (
                             <span className="text-gray-300">–</span>
                           ) : r.comprobante_bodega ? (
                             <span className={`text-xs font-mono ${r.comprobante_bodega.diferencia_kg < 0 ? 'text-red-600' : 'text-gray-700'}`}>
@@ -164,7 +178,16 @@ export default function RemitosPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-2 py-2.5 text-right">
+                        <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                          {isSuperAdmin && !r.anulado && r.tipo !== 'traslado_pasero' && (
+                            <button
+                              onClick={() => setAnularDe(r)}
+                              title="Anular remito"
+                              className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Ban size={14} />
+                            </button>
+                          )}
                           <button
                             onClick={() => imprimir(r.id)}
                             title="Imprimir remito"
@@ -195,6 +218,12 @@ export default function RemitosPage() {
                               </p>
                             )}
                             {r.observaciones && <p className="text-xs text-gray-500 mt-1">{r.observaciones}</p>}
+                            {r.anulado && (
+                              <p className="text-xs text-red-700 mt-1">
+                                Anulado{r.anulado_at ? ` el ${fmtFecha(r.anulado_at.split('T')[0])}` : ''}
+                                {r.motivo_anulacion ? `: ${r.motivo_anulacion}` : ''}
+                              </p>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -233,6 +262,18 @@ export default function RemitosPage() {
           compradores={compradores.filter((c) => c.is_active)}
           onClose={() => setShowNuevo(false)}
           onCreated={async () => { await refrescar(); setShowNuevo(false) }}
+        />
+      )}
+      {anularDe && (
+        <AnularDocumentoModal
+          titulo="Anular remito"
+          numero={anularDe.numero}
+          onClose={() => setAnularDe(null)}
+          onConfirm={async (motivo) => {
+            await anularRemito(anularDe.id, motivo)
+            await refrescar()
+            setAnularDe(null)
+          }}
         />
       )}
       {comprobanteDe && (

@@ -45,6 +45,9 @@ export interface DocumentoAlfalfa {
   created_at: string
   kg_total: number
   lineas: LineaAlfalfa[]
+  anulado: boolean
+  anulado_at: string | null
+  motivo_anulacion: string | null
 }
 
 export interface FiltrosDocumentosAlfalfa {
@@ -103,6 +106,12 @@ export async function listarDocumentosAlfalfa(
 export async function crearDocumentoAlfalfa(payload: DocumentoAlfalfaCreate): Promise<DocumentoAlfalfa> {
   const body = { ...payload, idempotency_key: payload.idempotency_key ?? crypto.randomUUID() }
   const { data } = await api.post<Record<string, unknown>>('/alfalfa/documentos', body)
+  return parseDocumento(data)
+}
+
+/** super_admin only. 409/422 carry a readable `detail` (see errorDetail). */
+export async function anularDocumentoAlfalfa(id: string, motivo: string): Promise<DocumentoAlfalfa> {
+  const { data } = await api.post<Record<string, unknown>>(`/alfalfa/documentos/${id}/anular`, { motivo })
   return parseDocumento(data)
 }
 
