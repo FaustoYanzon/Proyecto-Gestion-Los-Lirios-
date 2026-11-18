@@ -21,4 +21,4 @@ Opción A: el alta y la entrega de alfalfa en mobile **requieren conexión**. No
 
 ## Por qué
 
-Es el flujo más simple y sin riesgo de duplicados. La cola offline agrega estados (pendiente, fallido, reintento) y conflictos de stock que hoy no se justifican sin evidencia de mala señal.
+Es el flujo más simple. Los reintentos sin cambios los absorbe `idempotency_key` (la clave está atada al contenido del documento); reenviar un documento editado es un documento nuevo por diseño. La cola offline agrega estados (pendiente, fallido, reintento) y conflictos de stock que hoy no se justifican sin evidencia de mala señal.

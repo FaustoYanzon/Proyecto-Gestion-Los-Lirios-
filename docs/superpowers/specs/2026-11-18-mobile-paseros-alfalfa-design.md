@@ -1,6 +1,6 @@
 # Mobile: paseros en el mapa y alfalfa — diseño corto
 
-Fecha: 2026-11-18 · Estado: para aprobación · Tamaño: cambio mediano (1 endpoint backend + app Expo, por OTA). Paso 5 de la serie paseros → manto → alfalfa → anulación → **mobile**.
+Fecha: 2026-11-18 · Estado: aprobado e implementado en feat/mobile-alfalfa (sin desplegar) · Tamaño: cambio mediano (1 endpoint backend + app Expo, por OTA). Paso 5 de la serie paseros → manto → alfalfa → anulación → **mobile**.
 
 ## Intención
 Fausto quiere que el encargado o el ingeniero carguen alfalfa desde el celular, en el potrero o al depositar fardos/rollos/semilla en el depósito, y que el pasero tenga en el mapa del celular el mismo tratamiento que ya tiene en web. La entrega de pasa del celular **no se toca** (decisión de Fausto, 2026-11-18).

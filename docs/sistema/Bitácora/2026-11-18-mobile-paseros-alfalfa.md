@@ -33,7 +33,8 @@ Rama `feat/mobile-alfalfa`, **sin mergear, sin push, sin OTA**. Decisión: [[202
 
 ## Abierto
 
-- Menores diferidos: fecha solo validada por regex (`2026-13-45` llega al backend y da 422); sin `KeyboardAvoidingView` en el modal en iOS chicos; `fetchData` corre para roles sin acceso (403 inocuo); "Volver y corregir" siempre regenera la clave, así que volver sin editar tras un POST guardado pero con timeout duplicaría (trade-off aceptado); `fechaValida` no acota el año; `getPotreros` duplica `getParcelasActivas`; el validador reimplementa la regex de `kgValido` y acepta `007`; `loadingExtra` ante falla de fetch sin cambios.
-- `url` del pdf-link se arma con `request.base_url` (igual que remitos y lotes de pasa). Detrás del proxy de Railway podría salir `http://`. Mobile usa `data.url` en los cuatro pdf-link; los remitos ya funcionan así en producción, pero no se verificó el esquema real. No se cambió.
+- Menores diferidos: sin `KeyboardAvoidingView` en el modal en iOS chicos; `fetchData` corre para roles sin acceso (403 inocuo); `fechaValida` no acota el año; `getPotreros` duplica `getParcelasActivas`; el validador reimplementa la regex de `kgValido` y acepta `007`; `loadingExtra` ante falla de fetch sin cambios.
+- `url` del pdf-link se arma con `request.base_url` (igual que remitos y lotes de pasa). `backend/railway.json` arranca uvicorn con `--proxy-headers --forwarded-allow-ips='*'`, así que detrás de Railway `base_url` debería ser `https`; falta verificarlo en producción tras el deploy. Mobile usa `data.url` en los cuatro pdf-link; los remitos ya funcionan así en producción, pero no se verificó el esquema real. No se cambió.
+- La clave de idempotencia del modal de alfalfa está atada al contenido (`sentPayloadRef`): reintentar sin cambios reusa la clave; editar y reenviar genera una nueva.
 - El OTA debe publicarse con `EXPO_PUBLIC_API_URL=<url prod>` (ver `mobile/AGENTS.md`) y verificar el bundle (URL de producción presente, sin `192.168.*`).
 - Pendiente con confirmación de Fausto, en orden: push a `main` (Railway despliega el endpoint), verificar el endpoint en producción, y recién después `eas update`.

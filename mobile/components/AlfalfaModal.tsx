@@ -48,6 +48,8 @@ export default function AlfalfaModal({ tipo, potreros, compradores, onClose, onS
   // Retries after an error reuse it; the backend absorbs duplicates.
   const idempotencyKeyRef = useRef<string>(newIdempotencyKey())
   const submittingRef = useRef(false)
+  // JSON of the payload (without key) the current key was last sent with.
+  const sentPayloadRef = useRef<string | null>(null)
 
   const [paso, setPaso] = useState<'form' | 'revision'>('form')
   const [potreroId, setPotreroId] = useState('')
@@ -92,16 +94,23 @@ export default function AlfalfaModal({ tipo, potreros, compradores, onClose, onS
     setSaving(true)
     setError(null)
     try {
-      const doc = await createDocumentoAlfalfa({
+      const payload = {
         tipo,
         fecha: fecha.trim(),
         potrero_id: esAlta ? potreroId : null,
         comprador_id: esAlta ? null : compradorId,
         vehiculo_patente: esAlta ? null : patente.trim() || null,
         observaciones: obs.trim() || null,
-        idempotency_key: idempotencyKeyRef.current,
         lineas: lineasCargadas.map((p) => ({ producto: p, cantidad: kgToString(cantidades[p]) })),
-      })
+      }
+      // Key is bound to content: an unchanged retry replays the same document,
+      // an edited one is a new document and needs a new key.
+      const json = JSON.stringify(payload)
+      if (sentPayloadRef.current !== null && sentPayloadRef.current !== json) {
+        idempotencyKeyRef.current = newIdempotencyKey()
+      }
+      sentPayloadRef.current = json
+      const doc = await createDocumentoAlfalfa({ ...payload, idempotency_key: idempotencyKeyRef.current })
       setSaved(doc)
       try {
         await onSaved(doc)
@@ -278,8 +287,7 @@ export default function AlfalfaModal({ tipo, potreros, compradores, onClose, onS
             <TouchableOpacity
               style={[styles.cancelBtn, { marginTop: 10 }, saving && { opacity: 0.5 }]}
               onPress={() => {
-                // Edited content is a new attempt: reusing the key would replay the original document.
-                idempotencyKeyRef.current = newIdempotencyKey()
+                // Key is kept: guardar() rotates it only if the content changed.
                 setError(null)
                 setPaso('form')
               }}

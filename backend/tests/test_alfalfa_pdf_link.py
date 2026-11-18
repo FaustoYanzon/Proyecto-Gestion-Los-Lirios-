@@ -62,6 +62,17 @@ async def test_token_de_acceso_no_abre_alfalfa(client, ctx):
     assert (await client.get(f"/alfalfa/descarga/{bearer}")).status_code == 401
 
 
+async def test_token_de_alfalfa_no_abre_remito(client, ctx):
+    token = create_alfalfa_pdf_token(ctx["doc_id"])
+    assert (await client.get(f"/remitos/descarga/{token}")).status_code == 401
+
+
+async def test_token_de_alfalfa_no_sirve_como_bearer(client, ctx):
+    token = create_alfalfa_pdf_token(ctx["doc_id"])
+    r = await client.get("/alfalfa/stock", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+
+
 async def test_token_vencido_da_401(client, ctx):
     token = create_alfalfa_pdf_token(ctx["doc_id"], ttl_seconds=-1)
     assert (await client.get(f"/alfalfa/descarga/{token}")).status_code == 401
