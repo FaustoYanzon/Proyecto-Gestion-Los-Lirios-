@@ -1,6 +1,6 @@
 # Mobile: Depósitos (stock + ingreso de insumos) — diseño corto
 
-Fecha: 2026-11-18 · Estado: pendiente de aprobación · Tamaño: cambio mediano (solo app Expo, por OTA; sin backend nuevo salvo que bodega lo exija, ver abajo).
+Fecha: 2026-11-18 · Estado: aprobado e implementado en feat/mobile-depositos (sin desplegar) · Tamaño: cambio mediano (solo app Expo, por OTA; sin backend nuevo salvo que bodega lo exija, ver abajo).
 
 ## Intención
 Fausto quiere una sola pantalla en el celular donde ver el stock de todos los depósitos y, para fitosanitarios e insumos varios, registrar el ingreso cuando llega mercadería. Lo cargan el encargado o el ingeniero.
@@ -32,7 +32,7 @@ Fausto quiere una sola pantalla en el celular donde ver el stock de todos los de
 - Fitosanitarios / Insumos varios: `GET /insumos/?is_active=true` (require_encargado_up), separados por `Insumo.tipo` (`fitosanitario` | `vario`; `riego` queda fuera, es mi supuesto). La tarjeta muestra cantidad de productos, y los productos con su `stock_actual` y `unidad` (lista corta, la más baja primero o por nombre, a definir por el builder).
 - Paseros: `getStockPasero()` de `lib/altaProduccion.ts` (`GET /pasero/stock`), total y por variedad.
 - Alfalfa: `getStockAlfalfa()` de `lib/alfalfa.ts`.
-- Bodega (bines de pasa): saldo de pasa en depósito. **A cargo del builder verificar** si `GET /lotes-pasa` ya da lo necesario para sumar bines y kg en el cliente; si no alcanza, agregar un endpoint de solo lectura (`GET /lotes-pasa/stock`, estático antes de `/{lote_id}`) con test.
+- Bodega (pasa): `GET /lotes-pasa/?con_saldo=true` (`getLotesPasa(undefined, true)`); la tarjeta muestra la suma de `saldo_kg` y la cantidad de lotes con saldo. No hay endpoint nuevo ni conteo de bines sueltos.
 
 ### Ingreso
 - `POST /insumos/{id}/movimientos` con `tipo: "ingreso"` (existe; require_encargado_up). Campos del modal: insumo (del tipo de la tarjeta), cantidad (> 0, decimal como string), fecha (hoy por defecto, validada como en alfalfa), observaciones.

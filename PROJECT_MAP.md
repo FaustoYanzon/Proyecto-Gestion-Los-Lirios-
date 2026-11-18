@@ -171,7 +171,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (19):**
+**Pantallas (20):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -187,6 +187,7 @@ repo/
 - `alta-produccion/levantada.tsx`
 - `alta-produccion/lotes.tsx`
 - `alta-produccion/pasero.tsx`
+- `depositos/index.tsx`
 - `estado-campana.tsx`
 - `fito.tsx`
 - `maquinaria/index.tsx`
