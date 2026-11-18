@@ -17,6 +17,8 @@ import { GEO_LAYERS, type GeoLayerData } from '../../lib/geoLayers'
 import { useAuthStore } from '../../store/authStore'
 import { useFincaStore } from '../../store/fincaStore'
 import { filtrarPorFinca } from '../../lib/finca'
+import { getStockPasero, puedeAltaProduccion, fmtKg } from '../../lib/altaProduccion'
+import { VARIEDAD_LABELS } from '../../lib/types'
 
 // Único polígono que no es una fila de `parcelas` (es el contorno de toda la
 // finca) — extraído una vez del KML real (frontend/public/Los Lirios 2026.kml,
@@ -79,6 +81,8 @@ interface ParcelPanel {
   riegoCount: number | null
   tareas: { tarea: string; fecha: string }[]
   fitos: { id: string; fecha: string; producto_nombre: string; dosis_lt_ha: number }[]
+  // Pasero only: null = card hidden (role too low, request failed or still loading)
+  uvaStock: { variedad: string; kg: number }[] | null
   loadingExtra: boolean
 }
 
@@ -286,6 +290,9 @@ function getStyle(f, selected) {
   if (colorMode === 'cosecha') {
     const kg = (p && COSECHA_BY_PARCELA[p.id]) || 0;
     stroke = '#166534'; fill = cosechaColor(kg, MAX_KG);
+  } else if ((colorMode === 'cumplimiento' || colorMode === 'fenologia') && f.type === 'pasero') {
+    // Paseros have no riego compliance nor ciclo de campaña: neutral grey.
+    stroke = '#6b7280'; fill = '#d1d5db';
   } else if (colorMode === 'cumplimiento') {
     const pct = p ? CUMPLIMIENTO_BY_PARCELA[p.id] : null;
     stroke = '#2d5468'; fill = riegoColor(pct == null ? null : pct);
@@ -557,6 +564,8 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
   const role = useAuthStore((s) => s.user?.role)
   const puedeVerTareas = role !== 'regador' && role !== 'obrero'
   const p = panel.parcela
+  const esPasero = p.tipo === 'pasero'
+  const uvaTotal = panel.uvaStock?.reduce((s, u) => s + u.kg, 0) ?? 0
   // Ciclo de Campaña (calendario único, nuevo) — separado del motor de
   // fenología automática (panel.fenologia, viejo, alimenta "tareas
   // recomendadas" más abajo, no el estado que se muestra acá).
@@ -589,7 +598,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
               <Text style={panelStyles.statValue}>{p.superficie_ha.toFixed(2)} ha</Text>
             </View>
           )}
-          {p.cabezal_riego != null && (
+          {!esPasero && p.cabezal_riego != null && (
             <View style={panelStyles.statCard}>
               <Text style={panelStyles.statLabel}>CABEZAL</Text>
               <Text style={panelStyles.statValue}>{p.cabezal_riego}</Text>
@@ -598,7 +607,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
         </View>
 
         {/* Ciclo de Campaña */}
-        {estadoLabel && estadoColor && (
+        {!esPasero && estadoLabel && estadoColor && (
           <View style={panelStyles.section}>
             <Text style={panelStyles.sectionTitle}>CICLO DE CAMPAÑA</Text>
             <View style={[panelStyles.estadoBadge, { backgroundColor: `${estadoColor}18`, borderColor: `${estadoColor}40` }]}>
@@ -634,8 +643,37 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           </View>
         )}
 
+        {/* Uva fresca (pasero, encargado+) */}
+        {esPasero && panel.uvaStock && (
+          <View style={panelStyles.section}>
+            <Text style={panelStyles.sectionTitle}>UVA FRESCA</Text>
+            {uvaTotal <= 0 ? (
+              <Text style={panelStyles.emptyText}>Sin uva ingresada</Text>
+            ) : (
+              <>
+                <Text style={panelStyles.mmValue}>{fmtKg(uvaTotal)} kg</Text>
+                <View style={panelStyles.uvaBar}>
+                  {panel.uvaStock.filter((u) => u.kg > 0).map((u) => (
+                    <View
+                      key={u.variedad}
+                      style={{ flex: u.kg, backgroundColor: VAR_COLORS[u.variedad] ?? VAR_COLORS.otro }}
+                    />
+                  ))}
+                </View>
+                {panel.uvaStock.filter((u) => u.kg > 0).map((u) => (
+                  <View key={u.variedad} style={panelStyles.uvaLegendRow}>
+                    <View style={[panelStyles.estadoDot, { backgroundColor: VAR_COLORS[u.variedad] ?? VAR_COLORS.otro }]} />
+                    <Text style={panelStyles.tareaName}>{VARIEDAD_LABELS[u.variedad] ?? u.variedad}</Text>
+                    <Text style={panelStyles.tareaFecha}>{fmtKg(u.kg)} kg</Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Riego */}
-        {!panel.loadingExtra && (
+        {!esPasero && !panel.loadingExtra && (
           <View style={panelStyles.section}>
             <Text style={panelStyles.sectionTitle}>RIEGO — CAMPAÑA</Text>
             {panel.m3Total === null ? (
@@ -679,7 +717,7 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
         )}
 
         {/* Aplicaciones Fito */}
-        {!panel.loadingExtra && (
+        {!esPasero && !panel.loadingExtra && (
           <View style={panelStyles.section}>
             <Text style={panelStyles.sectionTitle}>APLICACIONES FITO</Text>
             {panel.fitos.length === 0 ? (
@@ -725,7 +763,9 @@ function ParcelPanelView({ panel, onClose }: { panel: ParcelPanel; onClose: () =
           { key: 'riego', label: '+ Riego', route: '/(tabs)/riego'  },
           { key: 'tarea', label: '+ Tarea', route: '/(tabs)/tareas' },
           { key: 'fito',  label: 'Fito',    route: '/(tabs)/fitosanitario' },
-        ] as const).filter(({ key }) => key !== 'tarea' || puedeVerTareas).map(({ key, label, route }) => (
+        ] as const).filter(({ key }) =>
+          esPasero ? key === 'tarea' && puedeVerTareas : key !== 'tarea' || puedeVerTareas,
+        ).map(({ key, label, route }) => (
           <TouchableOpacity
             key={key}
             style={panelStyles.actionBtn}
@@ -785,6 +825,8 @@ const panelStyles = StyleSheet.create({
   riegoRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   mmValue: { fontSize: 18, fontWeight: '800', color: '#1d4ed8' },
   riegoSub: { fontSize: 12, color: '#9ca3af' },
+  uvaBar: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: '#f3f4f6', marginVertical: 8 },
+  uvaLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
   objetivoWrap: { marginTop: 6 },
   progressBarBg: { width: '100%', height: 6, borderRadius: 3, backgroundColor: '#f3f4f6', overflow: 'hidden', marginBottom: 4 },
   progressBarFill: { height: '100%', borderRadius: 3 },
@@ -805,6 +847,7 @@ const panelStyles = StyleSheet.create({
 export default function MapaScreen() {
   const [todasParcelas, setParcelas] = useState<Parcela[]>([])
   const fincaKey = useFincaStore((s) => s.active.key)
+  const role = useAuthStore((s) => s.user?.role)
   const parcelas = useMemo(() => filtrarPorFinca(todasParcelas, fincaKey), [todasParcelas, fincaKey])
   const [estadoCampana, setEstadoCampana] = useState<EstadoActualVariedad[]>([])
   const [fenologia, setFenologia] = useState<FaseVariedad[]>([])
@@ -880,6 +923,7 @@ export default function MapaScreen() {
 
   async function fetchPanelExtras(
     parcelaId: string, superficieHa: number | null, fechaInicioEstado: string | null,
+    esPasero = false,
   ): Promise<{
     mmTotal: number | null; m3Total: number; riegoCount: number; riegosEquivalentes: number | null;
     tareas: { tarea: string; fecha: string }[];
@@ -890,6 +934,19 @@ export default function MapaScreen() {
     const desde = `${year}-05-01`
     const today = now.toISOString().split('T')[0]
     try {
+      if (esPasero) {
+        // Paseros have no riego/fito (backend answers 422): only tareas.
+        const tareasRes = await api.get<{ tarea: string; fecha: string }[]>('/produccion/trabajo/', {
+          params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
+        })
+        const tareaMap = new Map<string, string>()
+        for (const t of tareasRes.data) {
+          if (!tareaMap.has(t.tarea) || t.fecha > tareaMap.get(t.tarea)!) tareaMap.set(t.tarea, t.fecha)
+        }
+        const tareas = Array.from(tareaMap.entries()).map(([tarea, fecha]) => ({ tarea, fecha }))
+          .sort((a, b) => b.fecha.localeCompare(a.fecha))
+        return { mmTotal: null, m3Total: 0, riegoCount: 0, riegosEquivalentes: null, tareas, fitos: [] }
+      }
       const [riegosRes, tareasRes, fitosRes] = await Promise.all([
         api.get<{ fecha: string; litros_aplicados: number | null }[]>('/produccion/riego/', {
           params: { parcela_id: parcelaId, fecha_desde: desde, fecha_hasta: today, limit: 200 },
@@ -937,13 +994,29 @@ export default function MapaScreen() {
       : null
     setPanel({
       parcela, estadoCampana: estadoInfo, fenologia: fase,
-      mmTotal: null, m3Total: null, riegoCount: null, riegosEquivalentes: null, tareas: [], fitos: [], loadingExtra: true,
+      mmTotal: null, m3Total: null, riegoCount: null, riegosEquivalentes: null, tareas: [], fitos: [],
+      uvaStock: null, loadingExtra: true,
     })
     const ha = Number(parcela.superficie_ha)
-    const { mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos } = await fetchPanelExtras(
-      parcela.id, Number.isFinite(ha) && ha > 0 ? ha : null, estadoInfo?.fecha_inicio ?? null,
-    )
-    setPanel((prev) => prev ? { ...prev, mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos, loadingExtra: false } : null)
+    const esPasero = parcela.tipo === 'pasero'
+    // Uva card is best-effort: /pasero/stock needs encargado+, and any failure
+    // just leaves the card hidden (no visible error).
+    const uvaPromise: Promise<{ variedad: string; kg: number }[] | null> =
+      esPasero && puedeAltaProduccion(role)
+        ? getStockPasero(parcela.id)
+            .then((items) => items.map((i) => ({ variedad: i.variedad, kg: i.uva_disponible_kg })))
+            .catch(() => null)
+        : Promise.resolve(null)
+    const [extras, uvaStock] = await Promise.all([
+      fetchPanelExtras(
+        parcela.id, Number.isFinite(ha) && ha > 0 ? ha : null, estadoInfo?.fecha_inicio ?? null, esPasero,
+      ),
+      uvaPromise,
+    ])
+    const { mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos } = extras
+    setPanel((prev) => prev && prev.parcela.id === parcela.id
+      ? { ...prev, mmTotal, m3Total, riegoCount, riegosEquivalentes, tareas, fitos, uvaStock, loadingExtra: false }
+      : prev)
   }
 
   function handleMessage(event: WebViewMessageEvent) {

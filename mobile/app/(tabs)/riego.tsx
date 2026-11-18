@@ -412,7 +412,8 @@ function StepParcelaManto({
 
   // Only parrales/potreros with a known area: the backend rejects the rest
   // (the valve count for manto is derived from superficie_ha).
-  const elegibles = parcelas.filter((p) => p.is_active && superficieManto(p) != null)
+  // Paseros are excluded too (backend answers 422 for riego on paseros).
+  const elegibles = parcelas.filter((p) => p.is_active && p.tipo !== 'pasero' && superficieManto(p) != null)
   const grupos = [
     { label: 'PARRALES', items: elegibles.filter((p) => p.tipo === 'parral') },
     { label: 'POTREROS', items: elegibles.filter((p) => p.tipo === 'potrero') },
@@ -503,7 +504,7 @@ function StepUbicacion({
     ? new Set(valvulasReales.filter((v) => String(v.cabezal) === cabezal).map((v) => v.parcela_id))
     : new Set<string>()
   const parralesDelCabezal = cabezal
-    ? parcelas.filter((p) => p.is_active && parcelaIdsDelCabezal.has(p.id))
+    ? parcelas.filter((p) => p.is_active && p.tipo !== 'pasero' && parcelaIdsDelCabezal.has(p.id))
     : []
 
   const parcelaSel = parcelas.find((p) => p.id === parcelaId) ?? null
