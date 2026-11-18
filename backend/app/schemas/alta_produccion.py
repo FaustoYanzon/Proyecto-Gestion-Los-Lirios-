@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.models.alta_produccion import EstadoLote, TipoProductor, TipoRemito
 from app.models.parcela import VariedadUva
@@ -313,6 +313,14 @@ class RemitoResponse(BaseModel):
     created_at: datetime
     lineas: list[RemitoLineaResponse]
     comprobante_bodega: ComprobanteBodegaResponse | None = None
+    anulado: bool = False
+    anulado_at: datetime | None = None
+    motivo_anulacion: str | None = None
+
+
+class AnularRequest(BaseModel):
+    # Strip first so "    ab   " does not pass as a 5+ char reason.
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=500)]
 
 
 # ── Conciliación remito BOD vs comprobante de bodega ─────────────────────────

@@ -142,7 +142,11 @@ async def saldos_cosecha(db: AsyncSession, cosechas: Sequence[RegistroCosecha]) 
     filas = await db.execute(
         select(RemitoLinea.cosecha_id, func.coalesce(func.sum(RemitoLinea.kg), 0))
         .join(Remito, Remito.id == RemitoLinea.remito_id)
-        .where(RemitoLinea.cosecha_id.in_(ids), Remito.tipo != TipoRemito.traslado_pasero)
+        .where(
+            RemitoLinea.cosecha_id.in_(ids),
+            Remito.tipo != TipoRemito.traslado_pasero,
+            Remito.anulado_at.is_(None),
+        )
         .group_by(RemitoLinea.cosecha_id)
     )
     despachado = {cid: Decimal(kg) for cid, kg in filas.all()}
@@ -172,7 +176,7 @@ async def remitos_por_cosecha(
     filas = await db.execute(
         select(RemitoLinea.cosecha_id, Remito.id, Remito.numero)
         .join(Remito, Remito.id == RemitoLinea.remito_id)
-        .where(RemitoLinea.cosecha_id.in_([c.id for c in cosechas]))
+        .where(RemitoLinea.cosecha_id.in_([c.id for c in cosechas]), Remito.anulado_at.is_(None))
         .order_by(Remito.created_at.asc(), Remito.id.asc())
     )
     # Orden ascendente: la última fila de cada cosecha es el remito más reciente.

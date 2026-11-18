@@ -138,7 +138,7 @@ async def _resultado_existente(
         await db.execute(
             select(Remito)
             .join(RemitoLinea, RemitoLinea.remito_id == Remito.id)
-            .where(RemitoLinea.cosecha_id == cosecha.id)
+            .where(RemitoLinea.cosecha_id == cosecha.id, Remito.anulado_at.is_(None))
             .order_by(Remito.created_at)
         )
     ).scalars().first()

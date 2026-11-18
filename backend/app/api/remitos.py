@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, require_encargado_estricto
+from app.api.deps import get_db, require_encargado_estricto, require_super_admin
 from app.core.pdf_remito import DatosRemitoPdf, generar_pdf_remito
 from app.core.security import (
     REMITO_PDF_TOKEN_TTL_SECONDS,
@@ -45,12 +45,14 @@ from app.schemas.alta_produccion import (
     ConciliacionBodegaFila,
     ConciliacionBodegaResponse,
     ConciliacionBodegaTotales,
+    AnularRequest,
     RemitoCreate,
     RemitoLineaResponse,
     RemitoPdfLinkResponse,
     RemitoResponse,
 )
 from app.services.alta_produccion import siguiente_numero_remito
+from app.services.anulacion import anular_remito
 
 router = APIRouter(prefix="/remitos", tags=["Remitos"])
 
@@ -162,6 +164,9 @@ def _remito_response(
         created_at=remito.created_at,
         lineas=[_linea_response(linea, origenes) for linea in remito.lineas],
         comprobante_bodega=_comprobante_response(comprobante, remito) if comprobante else None,
+        anulado=remito.anulado_at is not None,
+        anulado_at=remito.anulado_at,
+        motivo_anulacion=remito.motivo_anulacion,
     )
 
 
@@ -265,7 +270,9 @@ async def create_remito(
         lotes[lote_id] = lote
 
     ya_entregados = (
-        await db.execute(select(RemitoLinea.bin_id).where(RemitoLinea.bin_id.in_(bin_ids)))
+        await db.execute(select(RemitoLinea.bin_id).where(
+                RemitoLinea.bin_id.in_(bin_ids), RemitoLinea.anulada.is_(False)
+            ))
     ).scalars().all()
     if ya_entregados:
         raise HTTPException(
@@ -332,7 +339,7 @@ async def conciliacion_bodega(
     stmt = (
         select(Remito)
         .options(selectinload(Remito.comprobante_bodega))
-        .where(Remito.tipo == TipoRemito.salida_bodega)
+        .where(Remito.tipo == TipoRemito.salida_bodega, Remito.anulado_at.is_(None))
         .order_by(Remito.fecha.desc(), Remito.created_at.desc())
     )
     if desde:
@@ -553,6 +560,17 @@ async def cargar_comprobante_bodega(
         ) from exc
     await db.refresh(comprobante)
     return _comprobante_response(comprobante, remito)
+
+
+@router.post("/{remito_id}/anular", response_model=RemitoResponse)
+async def anular_remito_endpoint(
+    remito_id: str,
+    data: AnularRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> RemitoResponse:
+    await anular_remito(db, remito_id, data.motivo, current_user.id)
+    return await remito_response_completo(db, remito_id)
 
 
 @router.get("/{remito_id}/pdf")

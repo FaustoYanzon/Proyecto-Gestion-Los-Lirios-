@@ -276,7 +276,7 @@ async def _entregas_de(db: AsyncSession, bin_ids: list[str]) -> dict[str, str]:
         await db.execute(
             select(RemitoLinea.bin_id, Remito.numero)
             .join(Remito, Remito.id == RemitoLinea.remito_id)
-            .where(RemitoLinea.bin_id.in_(bin_ids))
+            .where(RemitoLinea.bin_id.in_(bin_ids), Remito.anulado_at.is_(None))
         )
     ).all()
     return dict(filas)
