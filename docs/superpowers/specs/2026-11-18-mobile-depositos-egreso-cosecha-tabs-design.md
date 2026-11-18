@@ -1,6 +1,6 @@
 # Mobile: pestañas en Depósitos y Cosecha, y egreso de insumos — diseño corto
 
-Fecha: 2026-11-18 · Estado: pendiente de aprobación · Tamaño: cambio mediano (1 migración + endpoint en backend, y app Expo por OTA). Continúa `2026-11-18-mobile-depositos-design.md`.
+Fecha: 2026-11-18 · Estado: aprobado e implementado en feat/mobile-depositos (sin desplegar) · Tamaño: cambio mediano (1 migración + endpoint en backend, y app Expo por OTA). Continúa `2026-11-18-mobile-depositos-design.md`.
 
 ## Intención
 Fausto probó Depósitos y quiere (1) ver un depósito a la vez, (2) registrar **salidas** de insumos varios (combustible, aceite, etc.) con la misma facilidad que los ingresos, y (3) ordenar Cosecha por tipo de producto. Además cargó el motivo por el que no veía los polígonos del mapa: era solo la base local (ya corregido, sin cambio de código).
