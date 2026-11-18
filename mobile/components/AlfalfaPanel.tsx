@@ -1,7 +1,8 @@
 // Alfalfa panel (also the Alfalfa tab of Cosecha): stock por producto, alta (potrero -> deposito), entrega a comprador y
 // los ultimos 20 documentos (tocar uno abre el PDF). Solo encargado o superior.
 // Requiere conexion. No hay anulacion en mobile: se hace desde la web (super admin).
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useFocusEffect } from 'expo-router'
 import {
   View,
   Text,
@@ -51,7 +52,8 @@ export default function AlfalfaPanel() {
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Refetch on every focus: Cosecha stays mounted and an Alta made from Depósitos must show up.
+  useFocusEffect(useCallback(() => { fetchData() }, [fetchData]))
 
   async function abrirPdf(id: string) {
     setPdfError(null)

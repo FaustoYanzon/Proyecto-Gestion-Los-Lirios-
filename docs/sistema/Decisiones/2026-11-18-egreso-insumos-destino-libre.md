@@ -14,3 +14,10 @@ Fecha: 2026-11-18 · Estado: implementado, sin desplegar.
 
 ## Pendiente
 Clasificar destinos por máquina/parcela; detalle e historial de movimientos en web; regenerar `Modelo de Datos.md` después de migrar producción (el generador lee la base de producción).
+
+## Rollback (atención)
+Si después de migrar alguien cargó un egreso y se vuelve a un deploy anterior, el código viejo no conoce `egreso`: `GET /insumos/{id}/movimientos` daría 500 y el stock ya tiene el descuento. Antes de volver atrás hay que convertir o borrar esas filas a mano. El `downgrade` no puede quitar el valor del enum.
+
+## Conocido, fuera de este cambio
+- `stock_actual` se calcula en Python y se escribe como valor fijo: dos movimientos simultáneos sobre el mismo insumo podrían pisarse (anterior a este cambio). Arreglo futuro: `UPDATE ... SET stock_actual = stock_actual + :delta` o `with_for_update()`.
+- La web (`frontend/lib/api/insumos.ts`) no conoce `egreso`, `destino` ni `idempotency_key`; se agregan con el historial web.

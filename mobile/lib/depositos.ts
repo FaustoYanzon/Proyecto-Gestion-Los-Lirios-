@@ -1,8 +1,8 @@
 // Stock summary per depósito (insumos, paseros, bodega, alfalfa) and insumo ingreso.
 // Backend Decimals arrive as JSON strings: converted to number here, in the API layer.
 //
-// Writes need connection (no offline queue). The movimientos endpoint has no
-// idempotency key: the UI guards double submits, see IngresoInsumoModal.
+// Writes need connection (no offline queue). Each movement carries a client-generated
+// idempotency key (see MovimientoInsumoModal): a retry never applies the stock change twice.
 import api from './api'
 import { getStockPasero, getLotesPasa } from './altaProduccion'
 

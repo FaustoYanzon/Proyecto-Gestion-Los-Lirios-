@@ -133,3 +133,17 @@ async def test_destino_se_ignora_en_ingreso(client, create_user, create_insumo):
 
     assert resp.status_code == 201
     assert resp.json()["destino"] is None
+
+
+async def test_clave_reusada_en_otro_insumo_409(client, create_user, create_insumo):
+    headers = await _auth(client, create_user)
+    a = await create_insumo(nombre="Insumo A", stock_actual=10.0)
+    b = await create_insumo(nombre="Insumo B", stock_actual=10.0)
+    body = {"tipo": "ingreso", "cantidad": "5", "fecha": "2026-11-18", "idempotency_key": "key-compartida"}
+
+    r1 = await client.post(f"/insumos/{a.id}/movimientos", json=body, headers=headers)
+    r2 = await client.post(f"/insumos/{b.id}/movimientos", json=body, headers=headers)
+
+    assert r1.status_code == 201
+    assert r2.status_code == 409
+    assert await _stock(client, headers, b.id) == 10.0

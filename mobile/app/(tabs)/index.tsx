@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -356,6 +356,8 @@ export default function InicioScreen() {
   const [notifIdx, setNotifIdx] = useState(0)
   // Quick insumo movements (ingreso/egreso): the list is loaded when the button is pressed.
   const [cargandoInsumos, setCargandoInsumos] = useState<ModoMovimiento | null>(null)
+  // Ref, not state: two taps in the same frame must not both pass the guard.
+  const cargandoRef = useRef(false)
   const [insumosError, setInsumosError] = useState<string | null>(null)
   const [movimiento, setMovimiento] = useState<{ modo: ModoMovimiento; insumos: InsumoStock[] } | null>(null)
 
@@ -401,7 +403,8 @@ export default function InicioScreen() {
   const verInsumos = puedeAltaProduccion(user?.role)
 
   async function abrirMovimiento(modo: ModoMovimiento) {
-    if (cargandoInsumos) return
+    if (cargandoRef.current) return
+    cargandoRef.current = true
     setInsumosError(null)
     setCargandoInsumos(modo)
     try {
@@ -411,6 +414,7 @@ export default function InicioScreen() {
     } catch {
       setInsumosError('No se pudieron cargar los insumos')
     } finally {
+      cargandoRef.current = false
       setCargandoInsumos(null)
     }
   }
@@ -501,6 +505,7 @@ export default function InicioScreen() {
 
       {movimiento && (
         <MovimientoInsumoModal
+          key={movimiento.modo}
           modo={movimiento.modo}
           insumos={movimiento.insumos}
           onClose={() => setMovimiento(null)}
