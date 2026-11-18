@@ -1,7 +1,7 @@
 ---
 fecha: 2026-11-17
 tags: [sistema, decision, produccion, pasa, alfalfa, remitos, anulacion]
-estado: implementada en rama feat/anulacion (sin mergear ni desplegar)
+estado: implementada, alcance v1 = entrega de pasa y alfalfa (sin desplegar)
 ---
 
 # Decisión: anulación de remitos de pasa y documentos de alfalfa
@@ -15,15 +15,13 @@ Un remito o documento mal cargado se **marca como anulado**: no se borra ni se e
 ## Qué se puede anular
 
 - `entrega_pasa`: repone `lote.saldo_kg` (el lote sigue cerrado) y libera los bines.
-- `salida_fresco`: el saldo de cosecha vuelve porque se calcula sumando líneas no anuladas.
-- `salida_bodega`: igual que fresco, siempre que no tenga comprobante de bodega.
 - Documento de alfalfa, salida: devuelve stock; siempre permitido.
 - Documento de alfalfa, alta: permitido solo si ningún producto (unidades o kg) queda en negativo al excluirla.
 
 ## Qué no se puede anular, y por qué
 
+- `salida_fresco` y `salida_bodega` (FRE/BOD): quedan fuera por ahora (409). Anularlos devolvería un saldo de cosecha que no se puede volver a despachar, y la cosecha conserva comprador, kg y n_remito (KPI duplicados al rehacer el despacho). Decisión de Fausto 2026-11-18, ver abierto (a).
 - `traslado_pasero`: va atado a un ingreso al pasero (409).
-- `salida_bodega` con `comprobante_bodega`: ya tiene un comprobante emitido (409).
 - Alta de alfalfa que dejaría stock negativo porque hay salidas que dependen de ella (409 con producto y saldo).
 - Fuera de alcance: bines, ingresos al pasero y cierre de lote.
 - Tampoco: editar, desanular, anulación parcial de líneas.
@@ -40,9 +38,9 @@ Un remito o documento mal cargado se **marca como anulado**: no se borra ni se e
 
 ## Abiertos / decisiones pendientes
 
-a. **Corregir un despacho equivocado genera dos cosechas.** Tras anular un FRE/BOD el saldo de la cosecha vuelve, pero `PUT`/`DELETE` de esa cosecha siguen dando 409 (el guard cuenta líneas anuladas, como pide la spec) y `/cosecha/despacho` crea una cosecha NUEVA. Opción: que `_vinculos_cosecha` (`api/produccion.py`, ~2209-2295) ignore las líneas anuladas solo para PUT/DELETE.
+a. **FRE/BOD no anulables (v1).** Para habilitarlos hay que decidir antes qué pasa con la cosecha. Si se anulara un FRE/BOD el saldo de la cosecha vuelve, pero `PUT`/`DELETE` de esa cosecha siguen dando 409 (el guard cuenta líneas anuladas, como pide la spec) y `/cosecha/despacho` crea una cosecha NUEVA. Opción: que `_vinculos_cosecha` (`api/produccion.py`, ~2209-2295) ignore las líneas anuladas solo para PUT/DELETE.
 b. **El link público firmado del PDF del remito muestra el motivo interno** de la anulación. Opción: mostrar públicamente solo «ANULADO el <fecha>».
-c. **Reenviar un despacho cuyo FRE/BOD fue anulado** devuelve un 409 engañoso («alta de cosecha sin despacho»), en `services/despacho_cosecha.py` (~137-150).
+c. Si se habilita FRE/BOD: reenviar un despacho anulado devolvería un 409 engañoso («alta de cosecha sin despacho»), en `services/despacho_cosecha.py` (~137-150).
 d. **Deriva de kg en alfalfa** si cambian `kg_fardo`/`kg_rollo` (viene de la decisión de alfalfa, ver [[2026-11-17-alfalfa-inventario]]).
 e. **Mobile (paso 5)** no forma parte de esto.
 

@@ -179,7 +179,7 @@ export default function RemitosPage() {
                           )}
                         </td>
                         <td className="px-2 py-2.5 text-right whitespace-nowrap">
-                          {isSuperAdmin && !r.anulado && r.tipo !== 'traslado_pasero' && !(r.tipo === 'salida_bodega' && r.comprobante_bodega) && (
+                          {isSuperAdmin && !r.anulado && r.tipo === 'entrega_pasa' && (
                             <button
                               onClick={() => setAnularDe(r)}
                               title="Anular remito"

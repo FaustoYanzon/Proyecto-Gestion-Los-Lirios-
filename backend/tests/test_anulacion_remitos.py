@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
 
 from app.models.parcela import TipoParcela, VariedadUva
 from app.models.user import UserRole
@@ -131,7 +132,9 @@ async def test_anulado_no_cuenta_en_entregas_del_lote_pero_se_lista(client, crea
     assert all(r["anulado"] is False for r in listado if r["id"] != remito["id"])
 
 
-async def test_anular_fresco_devuelve_saldo_de_la_cosecha(client, create_user, create_parcela, session_factory):
+async def test_fresco_no_se_anula_y_no_cambia_el_saldo_de_la_cosecha(
+    client, create_user, create_parcela, session_factory
+):
     h = await _admin(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
     comprador = await _comprador(client, h, "Mercado Central")
@@ -139,19 +142,17 @@ async def test_anular_fresco_devuelve_saldo_de_la_cosecha(client, create_user, c
     cosecha_id, remito = res["cosecha"]["id"], res["remito"]
     assert remito["numero"] == "FRE-000001"
 
+    resp = await _anular(client, h, remito["id"])
+    assert resp.status_code == 409, resp.text
+    assert (await client.get(f"/remitos/{remito['id']}", headers=h)).json()["anulado"] is False
+
     from app.models.produccion import RegistroCosecha
     async with session_factory() as s:
         cosecha = await s.get(RegistroCosecha, cosecha_id)
         assert await saldo_cosecha(s, cosecha) == Decimal("0.00")
 
-    resp = await _anular(client, h, remito["id"])
-    assert resp.status_code == 200, resp.text
-    async with session_factory() as s:
-        cosecha = await s.get(RegistroCosecha, cosecha_id)
-        assert await saldo_cosecha(s, cosecha) == Decimal("500.00")
 
-
-async def test_anular_bodega_sin_comprobante_ok_y_con_comprobante_409(client, create_user, create_parcela):
+async def test_bodega_no_se_anula_con_ni_sin_comprobante(client, create_user, create_parcela):
     h = await _admin(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
     norte = await _comprador(client, h, "Bodega Norte")
@@ -162,11 +163,11 @@ async def test_anular_bodega_sin_comprobante_ok_y_con_comprobante_409(client, cr
         json={"numero_suv": "SUV-1", "kg_recibidos": "2000"}, headers=h,
     )).status_code == 201
 
+    assert (await _anular(client, h, r1["id"])).status_code == 409
     assert (await _anular(client, h, r2["id"])).status_code == 409
-    assert (await _anular(client, h, r1["id"])).status_code == 200
 
     conc = (await client.get("/remitos/conciliacion-bodega", headers=h)).json()
-    assert [f["remito_id"] for f in conc["filas"]] == [r2["id"]]
+    assert {f["remito_id"] for f in conc["filas"]} == {r1["id"], r2["id"]}
 
 
 async def test_traslado_pasero_no_se_anula(client, create_user, create_parcela):
@@ -248,12 +249,24 @@ async def test_numero_anulado_se_conserva_y_no_se_reutiliza(client, create_user,
     assert got["anulado"] is True
 
 
-async def test_comprobante_sobre_bodega_anulado_da_409(client, create_user, create_parcela):
+async def test_comprobante_sobre_bodega_anulado_da_409(client, create_user, create_parcela, session_factory):
     h = await _admin(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
     norte = await _comprador(client, h, "Bodega Norte")
     remito = (await _despachar(client, h, parral.id, "bodega", norte, kg="1000"))["remito"]
-    assert (await _anular(client, h, remito["id"])).status_code == 200
+    # BOD is not annullable through the API anymore; mark it directly to keep
+    # covering the guard in cargar_comprobante_bodega.
+    from datetime import datetime, timezone
+
+    from app.models.alta_produccion import Remito
+    from app.models.user import User
+    async with session_factory() as s:
+        admin = (await s.execute(select(User))).scalars().first()
+        row = await s.get(Remito, remito["id"])
+        row.anulado_at = datetime.now(timezone.utc)
+        row.anulado_by = admin.id
+        row.motivo_anulacion = MOTIVO
+        await s.commit()
     resp = await client.post(
         f"/remitos/{remito['id']}/comprobante-bodega",
         json={"numero_suv": "SUV-9", "kg_recibidos": "1000"}, headers=h,

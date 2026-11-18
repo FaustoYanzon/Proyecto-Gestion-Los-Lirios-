@@ -6,6 +6,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from pypdf import PdfReader
+from sqlalchemy import select
 
 from app.core.pdf_alfalfa import DatosAlfalfaPdf, generar_pdf_alfalfa, render_alfalfa_html
 from app.core.pdf_remito import DatosRemitoPdf, anulado_el_local, generar_pdf_remito, render_remito_html
@@ -80,7 +81,7 @@ async def _login(client, create_user) -> dict[str, str]:
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
-async def test_endpoint_pdf_remito_anulado_sigue_abriendo(client, create_user, create_parcela):
+async def test_endpoint_pdf_remito_anulado_sigue_abriendo(client, create_user, create_parcela, db_session):
     h = await _login(client, create_user)
     parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.flame)
     comprador = (await client.post("/alta-produccion/compradores", json={"nombre": "Mercado"}, headers=h)).json()
@@ -92,7 +93,15 @@ async def test_endpoint_pdf_remito_anulado_sigue_abriendo(client, create_user, c
     )
     assert res.status_code == 201, res.text
     remito_id = res.json()["remito"]["id"]
-    assert (await client.post(f"/remitos/{remito_id}/anular", json={"motivo": "Error"}, headers=h)).status_code == 200
+    # FRE is not annullable through the API; mark it directly to exercise the PDF.
+    from app.models.alta_produccion import Remito
+    from app.models.user import User
+    admin = (await db_session.execute(select(User))).scalars().first()
+    row = await db_session.get(Remito, remito_id)
+    row.anulado_at = datetime.now(timezone.utc)
+    row.anulado_by = admin.id
+    row.motivo_anulacion = "Error"
+    await db_session.commit()
 
     r = await client.get(f"/remitos/{remito_id}/pdf", headers=h)
     assert r.status_code == 200, r.text

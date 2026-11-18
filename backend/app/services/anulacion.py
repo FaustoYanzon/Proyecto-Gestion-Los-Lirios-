@@ -13,7 +13,9 @@ from app.models.alfalfa import DocumentoAlfalfa, TipoDocumentoAlfalfa
 from app.models.alta_produccion import Lote, Remito, TipoRemito
 from app.services.alfalfa import get_deposito_alfa, stock_alfalfa
 
-_ANULABLES = (TipoRemito.entrega_pasa, TipoRemito.salida_fresco, TipoRemito.salida_bodega)
+# Only pasa deliveries for now: annulling FRE/BOD would free a cosecha balance
+# that cannot be re-dispatched, and the cosecha keeps its comprador/kg/n_remito.
+_ANULABLES = (TipoRemito.entrega_pasa,)
 
 
 async def anular_remito(db: AsyncSession, remito_id: str, motivo: str, user_id: str) -> Remito:
@@ -23,7 +25,7 @@ async def anular_remito(db: AsyncSession, remito_id: str, motivo: str, user_id: 
     remito = (
         await db.execute(
             select(Remito)
-            .options(selectinload(Remito.lineas), selectinload(Remito.comprobante_bodega))
+            .options(selectinload(Remito.lineas))
             .where(Remito.id == remito_id)
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -36,12 +38,7 @@ async def anular_remito(db: AsyncSession, remito_id: str, motivo: str, user_id: 
     if remito.tipo not in _ANULABLES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Los traslados a pasero no se pueden anular",
-        )
-    if remito.tipo == TipoRemito.salida_bodega and remito.comprobante_bodega is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="El remito tiene un comprobante de bodega cargado y no se puede anular",
+            detail="Solo se pueden anular las entregas de pasa",
         )
 
     if remito.tipo == TipoRemito.entrega_pasa:
