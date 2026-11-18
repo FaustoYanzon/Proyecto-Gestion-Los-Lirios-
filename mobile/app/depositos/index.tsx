@@ -3,16 +3,27 @@
 // registrar un ingreso. Solo encargado o superior. Requiere conexión.
 import { useState, useCallback } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, StyleSheet } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { useAuthStore } from '../../store/authStore'
-import IngresoInsumoModal from '../../components/IngresoInsumoModal'
+import MovimientoInsumoModal, { type ModoMovimiento } from '../../components/MovimientoInsumoModal'
+import TabsBar from '../../components/TabsBar'
 import { puedeAltaProduccion, fmtKg } from '../../lib/altaProduccion'
 import { PRODUCTO_LABELS, PRODUCTO_UNIDAD, getStockAlfalfa, type StockAlfalfa } from '../../lib/alfalfa'
 import {
   getInsumosStock, getResumenBodega, getResumenPaseros,
-  type InsumoStock, type ResumenBodega, type ResumenPasero, type TipoInsumoDeposito,
+  type InsumoStock, type ResumenBodega, type ResumenPasero,
 } from '../../lib/depositos'
+
+type TabKey = 'fito' | 'varios' | 'paseros' | 'bodega' | 'alfalfa'
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'fito', label: 'Fitosanitarios' },
+  { key: 'varios', label: 'Insumos' },
+  { key: 'paseros', label: 'Paseros' },
+  { key: 'bodega', label: 'Bodega' },
+  { key: 'alfalfa', label: 'Alfalfa' },
+]
 
 // Each card loads on its own: one failing source must not blank the others.
 type Carga<T> = { estado: 'cargando' } | { estado: 'error' } | { estado: 'ok'; datos: T }
@@ -30,6 +41,8 @@ async function cargar<T>(fn: () => Promise<T>): Promise<Carga<T>> {
 
 export default function DepositosScreen() {
   const role = useAuthStore((s) => s.user?.role)
+  const router = useRouter()
+  const [tab, setTab] = useState<TabKey>('fito')
 
   const [fito, setFito] = useState<Carga<InsumoStock[]>>(CARGANDO)
   const [varios, setVarios] = useState<Carga<InsumoStock[]>>(CARGANDO)
@@ -39,7 +52,7 @@ export default function DepositosScreen() {
   const [refreshing, setRefreshing] = useState(false)
   // Snapshot taken when the modal opens: the post-save refresh (which can fail on a weak
   // signal) must not unmount the modal and hide the "ingreso registrado" result.
-  const [ingreso, setIngreso] = useState<{ tipo: TipoInsumoDeposito; insumos: InsumoStock[] } | null>(null)
+  const [movimiento, setMovimiento] = useState<{ modo: ModoMovimiento; insumos: InsumoStock[] } | null>(null)
 
   const fetchData = useCallback(async () => {
     await Promise.all([
@@ -64,73 +77,93 @@ export default function DepositosScreen() {
 
   return (
     <View style={styles.container}>
+      <TabsBar tabs={TABS} active={tab} onChange={setTab} />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData() }} tintColor={colors.tierra} />
         }
       >
-        <InsumosCard
-          titulo="Fitosanitarios"
-          carga={fito}
-          vacio="No hay fitosanitarios cargados"
-          onIngreso={() => fito.estado === 'ok' && setIngreso({ tipo: 'fitosanitario', insumos: fito.datos })}
-        />
-        <InsumosCard
-          titulo="Insumos varios"
-          carga={varios}
-          vacio="No hay insumos varios cargados"
-          onIngreso={() => varios.estado === 'ok' && setIngreso({ tipo: 'vario', insumos: varios.datos })}
-        />
+        {tab === 'fito' && (
+          <InsumosCard
+            titulo="Fitosanitarios"
+            carga={fito}
+            vacio="No hay fitosanitarios cargados"
+            onIngreso={() => fito.estado === 'ok' && setMovimiento({ modo: 'ingreso', insumos: fito.datos })}
+          />
+        )}
+        {tab === 'varios' && (
+          <InsumosCard
+            titulo="Insumos varios"
+            carga={varios}
+            vacio="No hay insumos varios cargados"
+            onIngreso={() => varios.estado === 'ok' && setMovimiento({ modo: 'ingreso', insumos: varios.datos })}
+            onEgreso={() => varios.estado === 'ok' && setMovimiento({ modo: 'egreso', insumos: varios.datos })}
+          />
+        )}
 
-        <Card titulo="Paseros" carga={paseros}>
-          {(d) => (
-            <>
-              <Text style={styles.kgText}>{fmtKg(d.kgTotal)} kg de uva fresca</Text>
-              {d.porVariedad.length === 0 && <Text style={styles.muted}>Sin uva en los paseros</Text>}
-              {d.porVariedad.map((v) => (
-                <Fila key={v.variedad} label={v.variedad} valor={`${fmtKg(v.kg)} kg`} />
-              ))}
-            </>
-          )}
-        </Card>
+        {tab === 'paseros' && (
+          <Card titulo="Paseros" carga={paseros}>
+            {(d) => (
+              <>
+                <Text style={styles.kgText}>{fmtKg(d.kgTotal)} kg de uva fresca</Text>
+                {d.porVariedad.length === 0 && <Text style={styles.muted}>Sin uva en los paseros</Text>}
+                {d.porVariedad.map((v) => (
+                  <Fila key={v.variedad} label={v.variedad} valor={`${fmtKg(v.kg)} kg`} />
+                ))}
+              </>
+            )}
+          </Card>
+        )}
 
-        <Card titulo="Bodega (pasa)" carga={bodega}>
-          {(d) => (
-            <>
-              <Text style={styles.kgText}>{fmtKg(d.kgSaldo)} kg de pasa</Text>
-              <Text style={styles.metaText}>
-                {d.lotes === 1 ? '1 lote con saldo' : `${d.lotes} lotes con saldo`}
-              </Text>
-            </>
-          )}
-        </Card>
+        {tab === 'bodega' && (
+          <Card titulo="Bodega (pasa)" carga={bodega}>
+            {(d) => (
+              <>
+                <Text style={styles.kgText}>{fmtKg(d.kgSaldo)} kg de pasa</Text>
+                <Text style={styles.metaText}>
+                  {d.lotes === 1 ? '1 lote con saldo' : `${d.lotes} lotes con saldo`}
+                </Text>
+              </>
+            )}
+          </Card>
+        )}
 
-        <Card titulo="Alfalfa" carga={alfalfa}>
-          {(d) => (
-            <>
-              {d.length === 0 && <Text style={styles.muted}>Sin stock de alfalfa</Text>}
-              {d.map((s) => (
-                <Fila
-                  key={s.producto}
-                  label={PRODUCTO_LABELS[s.producto]}
-                  valor={
-                    PRODUCTO_UNIDAD[s.producto] === 'unidades'
-                      ? `${fmtKg(s.unidades)} u. · ${fmtKg(s.kg)} kg`
-                      : `${fmtKg(s.kg)} kg`
-                  }
-                />
-              ))}
-            </>
-          )}
-        </Card>
+        {tab === 'alfalfa' && (
+          <Card
+            titulo="Alfalfa"
+            carga={alfalfa}
+            accion={
+              <TouchableOpacity style={styles.ingresoBtn} onPress={() => router.push('/alta-produccion/alfalfa')} activeOpacity={0.85}>
+                <Text style={styles.ingresoBtnText}>Abrir</Text>
+              </TouchableOpacity>
+            }
+          >
+            {(d) => (
+              <>
+                {d.length === 0 && <Text style={styles.muted}>Sin stock de alfalfa</Text>}
+                {d.map((s) => (
+                  <Fila
+                    key={s.producto}
+                    label={PRODUCTO_LABELS[s.producto]}
+                    valor={
+                      PRODUCTO_UNIDAD[s.producto] === 'unidades'
+                        ? `${fmtKg(s.unidades)} u. · ${fmtKg(s.kg)} kg`
+                        : `${fmtKg(s.kg)} kg`
+                    }
+                  />
+                ))}
+              </>
+            )}
+          </Card>
+        )}
       </ScrollView>
 
-      {ingreso && (
-        <IngresoInsumoModal
-          tipo={ingreso.tipo}
-          insumos={ingreso.insumos}
-          onClose={() => setIngreso(null)}
+      {movimiento && (
+        <MovimientoInsumoModal
+          modo={movimiento.modo}
+          insumos={movimiento.insumos}
+          onClose={() => setMovimiento(null)}
           onSaved={fetchData}
         />
       )}
@@ -170,12 +203,14 @@ function Card<T>({
 }
 
 function InsumosCard({
-  titulo, carga, vacio, onIngreso,
+  titulo, carga, vacio, onIngreso, onEgreso,
 }: {
   titulo: string
   carga: Carga<InsumoStock[]>
   vacio: string
   onIngreso: () => void
+  /** Only insumos varios have a manual egreso (fitosanitarios leave by aplicación). */
+  onEgreso?: () => void
 }) {
   const [verTodos, setVerTodos] = useState(false)
   return (
@@ -184,9 +219,16 @@ function InsumosCard({
       carga={carga}
       accion={
         carga.estado === 'ok' ? (
-          <TouchableOpacity style={styles.ingresoBtn} onPress={onIngreso} activeOpacity={0.85}>
-            <Text style={styles.ingresoBtnText}>+ Ingreso</Text>
-          </TouchableOpacity>
+          <View style={styles.accionesRow}>
+            {onEgreso && (
+              <TouchableOpacity style={[styles.ingresoBtn, styles.egresoBtn]} onPress={onEgreso} activeOpacity={0.85}>
+                <Text style={styles.egresoBtnText}>− Egreso</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.ingresoBtn} onPress={onIngreso} activeOpacity={0.85}>
+              <Text style={styles.ingresoBtnText}>+ Ingreso</Text>
+            </TouchableOpacity>
+          </View>
         ) : null
       }
     >
@@ -234,6 +276,9 @@ const styles = StyleSheet.create({
 
   ingresoBtn: { height: 36, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.burdeos[600], justifyContent: 'center' },
   ingresoBtnText: { fontSize: 13, fontWeight: '700', color: colors.blanco },
+  accionesRow: { flexDirection: 'row', gap: 8 },
+  egresoBtn: { backgroundColor: colors.blanco, borderWidth: 1.5, borderColor: colors.burdeos[600] },
+  egresoBtnText: { fontSize: 13, fontWeight: '700', color: colors.burdeos[600] },
   verTodos: { paddingVertical: 8 },
   verTodosText: { fontSize: 13, fontWeight: '800', color: colors.burdeos[600] },
 })

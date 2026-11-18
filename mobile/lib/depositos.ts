@@ -43,17 +43,33 @@ export function cantidadInsumoValida(texto: string): boolean {
 
 export const cantidadInsumoToString = (texto: string): string => texto.trim().replace(',', '.')
 
-export async function registrarIngresoInsumo(
-  insumoId: string,
-  p: { cantidad: string; fecha: string; observacion?: string },
-): Promise<void> {
+export interface MovimientoInsumoPayload {
+  tipo: 'ingreso' | 'egreso'
+  cantidad: string
+  fecha: string
+  observacion?: string
+  /** Free text (máquina, tractor or parcela); required by the server for egreso. */
+  destino?: string
+  /** One per attempt: a retry with the same key never applies the movement twice. */
+  idempotencyKey: string
+}
+
+export async function registrarMovimientoInsumo(insumoId: string, p: MovimientoInsumoPayload): Promise<void> {
   const observacion = p.observacion?.trim()
+  const destino = p.destino?.trim()
   await api.post(`/insumos/${insumoId}/movimientos`, {
-    tipo: 'ingreso',
+    tipo: p.tipo,
     cantidad: cantidadInsumoToString(p.cantidad),
     fecha: p.fecha,
+    idempotency_key: p.idempotencyKey,
     ...(observacion ? { observacion } : {}),
+    ...(p.tipo === 'egreso' && destino ? { destino } : {}),
   })
+}
+
+export async function getInsumosPorTipos(tipos: TipoInsumoDeposito[]): Promise<InsumoStock[]> {
+  const listas = await Promise.all(tipos.map((t) => getInsumosStock(t)))
+  return listas.flat().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
 export interface ResumenBodega {

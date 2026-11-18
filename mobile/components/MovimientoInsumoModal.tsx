@@ -1,34 +1,42 @@
-// Ingreso de stock de un insumo (fitosanitario o vario) cuando llega mercadería.
-// Dos pasos: formulario -> confirmación -> guardar. Requiere conexión.
-// El endpoint de movimientos no tiene idempotency key: el doble toque se frena acá
-// (submittingRef + botón deshabilitado) y un error de red no se reintenta solo.
+// Ingreso o egreso de stock de un insumo. Dos pasos: formulario -> confirmación -> guardar.
+// Requiere conexión. El servidor repite el movimiento original si llega la misma
+// idempotency key: la clave se ata al contenido enviado (igual que AlfalfaModal), así un
+// reintento idéntico no suma ni resta dos veces y una corrección usa una clave nueva.
 import { useState, useRef } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, StyleSheet,
 } from 'react-native'
 import { ICONS, ICON_STROKE } from '../lib/icons'
 import { colors } from '../lib/theme'
+import { newIdempotencyKey } from '../lib/idempotency'
 import SelectField, { type SelectOption } from './SelectField'
 import { hoyISO, fmtFecha, fmtKg, errorDetail } from '../lib/altaProduccion'
 import { fechaValida } from '../lib/fecha'
 import {
-  cantidadInsumoValida, cantidadInsumoToString, registrarIngresoInsumo, type InsumoStock, type TipoInsumoDeposito,
+  cantidadInsumoValida, cantidadInsumoToString, registrarMovimientoInsumo, type InsumoStock,
 } from '../lib/depositos'
 
+export type ModoMovimiento = 'ingreso' | 'egreso'
+
 interface Props {
-  tipo: TipoInsumoDeposito
+  modo: ModoMovimiento
   insumos: InsumoStock[]
   onClose: () => void
   onSaved: () => void | Promise<void>
 }
 
-export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: Props) {
+export default function MovimientoInsumoModal({ modo, insumos, onClose, onSaved }: Props) {
+  const esEgreso = modo === 'egreso'
   const submittingRef = useRef(false)
+  // One key per attempt; rotated only when the sent content changes.
+  const idempotencyKeyRef = useRef<string>(newIdempotencyKey())
+  const sentPayloadRef = useRef<string | null>(null)
 
   const [paso, setPaso] = useState<'form' | 'confirmar'>('form')
   const [insumoId, setInsumoId] = useState('')
   const [cantidad, setCantidad] = useState('')
   const [fecha, setFecha] = useState(hoyISO())
+  const [destino, setDestino] = useState('')
   const [obs, setObs] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +48,9 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
     label: i.nombre,
     sub: `Stock: ${fmtKg(i.stock_actual)} ${i.unidad}`,
   }))
-  const titulo = tipo === 'fitosanitario' ? 'Ingreso de fitosanitario' : 'Ingreso de insumo'
+  const titulo = esEgreso ? 'Egreso de insumo' : 'Ingreso de insumo'
+  const cantidadNum = Number(cantidadInsumoToString(cantidad))
+  const quedan = insumo ? insumo.stock_actual - (esEgreso ? cantidadNum : -cantidadNum) : 0
 
   function avanzar() {
     setError(null)
@@ -49,6 +59,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
       return setError('Ingresá una cantidad mayor a cero, con hasta 2 decimales')
     }
     if (!fechaValida(fecha.trim())) return setError('La fecha no es válida (formato AAAA-MM-DD)')
+    if (esEgreso && destino.trim() === '') return setError('Indicá dónde se usó (máquina, tractor o parcela)')
     setPaso('confirmar')
   }
 
@@ -58,20 +69,32 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
     setSaving(true)
     setError(null)
     try {
-      await registrarIngresoInsumo(insumo.id, { cantidad, fecha: fecha.trim(), observacion: obs })
+      const payload = {
+        tipo: modo,
+        cantidad,
+        fecha: fecha.trim(),
+        observacion: obs,
+        destino: esEgreso ? destino : undefined,
+      }
+      const json = JSON.stringify({ insumoId: insumo.id, ...payload })
+      if (sentPayloadRef.current !== null && sentPayloadRef.current !== json) {
+        idempotencyKeyRef.current = newIdempotencyKey()
+      }
+      sentPayloadRef.current = json
+      await registrarMovimientoInsumo(insumo.id, { ...payload, idempotencyKey: idempotencyKeyRef.current })
       setGuardado(true)
       try {
         await onSaved()
       } catch {
-        // The ingreso is already saved; a failed refresh is recovered by pull-to-refresh.
+        // The movement is already saved; a failed refresh is recovered by pull-to-refresh.
       }
     } catch (e) {
-      // Without a response the POST may still have reached the server: retrying blindly
-      // would add the stock twice (movimientos has no idempotency key).
+      // Without a response the request may still have reached the server. Retrying the
+      // unchanged form is safe (same key), but the user is told to check first anyway.
       const sinRespuesta = !(e as { response?: unknown })?.response
       setError(
         sinRespuesta
-          ? 'No sabemos si el ingreso se guardó. Cerrá este formulario y revisá el stock en Depósitos antes de volver a cargarlo.'
+          ? 'No sabemos si el movimiento se guardó. Revisá el stock en Depósitos antes de volver a cargarlo, o reintentá con el mismo formulario.'
           : errorDetail(e),
       )
     } finally {
@@ -94,9 +117,9 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
           <ScrollView contentContainerStyle={styles.modalScroll}>
             <View style={styles.okBox}>
               <ICONS.completado size={36} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
-              <Text style={styles.okTitle}>Ingreso registrado</Text>
+              <Text style={styles.okTitle}>{esEgreso ? 'Egreso registrado' : 'Ingreso registrado'}</Text>
               <Text style={styles.okMeta}>
-                {insumo.nombre}: +{cantidadInsumoToString(cantidad)} {insumo.unidad} · {fmtFecha(fecha.trim())}
+                {insumo.nombre}: {esEgreso ? '−' : '+'}{cantidadInsumoToString(cantidad)} {insumo.unidad} · {fmtFecha(fecha.trim())}
               </Text>
             </View>
             <TouchableOpacity style={styles.saveBtn} onPress={onClose} activeOpacity={0.85}>
@@ -109,7 +132,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               label="Insumo *"
               value={insumoId}
               options={opts}
-              placeholder="¿Qué ingresó?"
+              placeholder={esEgreso ? '¿Qué se usó?' : '¿Qué ingresó?'}
               emptyText="No hay insumos de este tipo"
               onChange={setInsumoId}
             />
@@ -136,6 +159,20 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               keyboardType="numbers-and-punctuation"
             />
 
+            {esEgreso && (
+              <>
+                <Text style={styles.fieldLabel}>¿DÓNDE SE USÓ? *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={destino}
+                  onChangeText={setDestino}
+                  placeholder="Tractor, máquina o parcela"
+                  placeholderTextColor={colors.niebla}
+                  maxLength={200}
+                />
+              </>
+            )}
+
             <Text style={styles.fieldLabel}>OBSERVACIONES (OPCIONAL)</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
@@ -144,7 +181,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               multiline
               textAlignVertical="top"
               maxLength={500}
-              placeholder="Proveedor y N° de remito"
+              placeholder={esEgreso ? 'Detalle del uso' : 'Proveedor y N° de remito'}
               placeholderTextColor={colors.niebla}
             />
 
@@ -160,9 +197,17 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               <View style={styles.resumenBox}>
                 <Text style={styles.resumenRow}>{insumo.nombre} · {fmtFecha(fecha.trim())}</Text>
                 <Text style={styles.resumenLinea}>
-                  Se suman {cantidadInsumoToString(cantidad)} {insumo.unidad} a {fmtKg(insumo.stock_actual)} {insumo.unidad} de stock
+                  {esEgreso
+                    ? `Se restan ${cantidadInsumoToString(cantidad)} ${insumo.unidad} de ${fmtKg(insumo.stock_actual)} ${insumo.unidad}; quedan ${fmtKg(quedan)} ${insumo.unidad}`
+                    : `Se suman ${cantidadInsumoToString(cantidad)} ${insumo.unidad} a ${fmtKg(insumo.stock_actual)} ${insumo.unidad} de stock`}
                 </Text>
+                {esEgreso && <Text style={styles.resumenRow}>Dónde se usó: {destino.trim()}</Text>}
                 {obs.trim() !== '' && <Text style={styles.resumenObs}>{obs.trim()}</Text>}
+              </View>
+            )}
+            {esEgreso && quedan < 0 && (
+              <View style={styles.avisoBox}>
+                <Text style={styles.avisoText}>El stock va a quedar en negativo. Si falta cargar stock, hacelo antes.</Text>
               </View>
             )}
 
@@ -223,6 +268,8 @@ const styles = StyleSheet.create({
   resumenRow: { fontSize: 14, fontWeight: '600', color: colors.ink },
   resumenLinea: { fontSize: 17, fontWeight: '800', color: colors.ink },
   resumenObs: { fontSize: 13, color: colors.ink60, fontStyle: 'italic' },
+  avisoBox: { backgroundColor: colors.crema, borderRadius: 10, padding: 12, marginTop: 12 },
+  avisoText: { fontSize: 13, fontWeight: '700', color: colors.ink },
 
   errorBox: { backgroundColor: '#fdf0f1', borderRadius: 10, padding: 12, marginVertical: 8 },
   errorText: { fontSize: 13, color: colors.sangre, fontWeight: '600' },
