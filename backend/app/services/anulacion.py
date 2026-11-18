@@ -9,7 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.alfalfa import DocumentoAlfalfa, TipoDocumentoAlfalfa
 from app.models.alta_produccion import Lote, Remito, TipoRemito
+from app.services.alfalfa import get_deposito_alfa, stock_alfalfa
 
 _ANULABLES = (TipoRemito.entrega_pasa, TipoRemito.salida_fresco, TipoRemito.salida_bodega)
 
@@ -64,3 +66,49 @@ async def anular_remito(db: AsyncSession, remito_id: str, motivo: str, user_id: 
     await db.flush()
     await db.refresh(remito)
     return remito
+
+
+async def anular_documento_alfalfa(
+    db: AsyncSession, documento_id: str, motivo: str, user_id: str
+) -> DocumentoAlfalfa:
+    # Lock the Alfalfa depot BEFORE reading the document: stock is derived (no
+    # row of its own), so this serializes against concurrent salidas and other
+    # annulments, and a second annulment of the same document sees it as done.
+    await get_deposito_alfa(db, for_update=True)
+    documento = (
+        await db.execute(
+            select(DocumentoAlfalfa)
+            .options(selectinload(DocumentoAlfalfa.lineas))
+            .where(DocumentoAlfalfa.id == documento_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if documento is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
+    if documento.anulado_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El documento ya está anulado")
+
+    if documento.tipo == TipoDocumentoAlfalfa.alta:
+        # Current stock already excludes annulled docs; removing this alta must
+        # not leave any product negative in units or kg.
+        stock = {s.producto: s for s in await stock_alfalfa(db)}
+        for linea in documento.lineas:
+            actual = stock[linea.producto]
+            unidades = actual.unidades - linea.cantidad
+            kg = actual.kg - linea.kg
+            if unidades < 0 or kg < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"No se puede anular: el stock de {linea.producto.value} quedaría en "
+                        f"{unidades.normalize():f} unidades y {kg.normalize():f} kg "
+                        "(hay salidas que dependen de este alta)"
+                    ),
+                )
+
+    documento.anulado_at = datetime.now(timezone.utc)
+    documento.anulado_by = user_id
+    documento.motivo_anulacion = motivo
+    await db.flush()
+    await db.refresh(documento)
+    return documento

@@ -98,7 +98,7 @@ async def siguiente_numero(db: AsyncSession, tipo: TipoDocumentoAlfalfa) -> str:
 
 
 async def stock_alfalfa(db: AsyncSession) -> list[StockProducto]:
-    """Altas minus salidas per product; always the three products, in enum order."""
+    """Altas minus salidas (non-annulled) per product; always the three products, in enum order."""
     signo = case((DocumentoAlfalfa.tipo == TipoDocumentoAlfalfa.salida, -1), else_=1)
     filas = (
         await db.execute(
@@ -108,6 +108,7 @@ async def stock_alfalfa(db: AsyncSession) -> list[StockProducto]:
                 func.coalesce(func.sum(DocumentoAlfalfaLinea.kg * signo), 0),
             )
             .join(DocumentoAlfalfa, DocumentoAlfalfa.id == DocumentoAlfalfaLinea.documento_id)
+            .where(DocumentoAlfalfa.anulado_at.is_(None))  # annulled docs never count
             .group_by(DocumentoAlfalfaLinea.producto)
         )
     ).all()

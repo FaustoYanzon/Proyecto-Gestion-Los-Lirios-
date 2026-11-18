@@ -75,9 +75,16 @@ class DocumentoAlfalfaOut(BaseModel):
     idempotency_key: str | None
     created_by: str
     created_at: datetime
+    anulado_at: datetime | None = None
+    motivo_anulacion: str | None = None
     lineas: list[LineaAlfalfaOut]
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def anulado(self) -> bool:
+        return self.anulado_at is not None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

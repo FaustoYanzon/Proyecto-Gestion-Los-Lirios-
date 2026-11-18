@@ -11,18 +11,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, require_encargado_estricto
+from app.api.deps import get_db, require_encargado_estricto, require_super_admin
 from app.core.pdf_alfalfa import DatosAlfalfaPdf, generar_pdf_alfalfa
 from app.models.alfalfa import DocumentoAlfalfa, ProductoAlfalfa, TipoDocumentoAlfalfa
 from app.models.alta_produccion import Comprador
 from app.models.parcela import Parcela
 from app.models.user import User
+from app.schemas.alta_produccion import AnularRequest
 from app.schemas.alfalfa import (
     DocumentoAlfalfaCreate,
     DocumentoAlfalfaOut,
     StockProductoOut,
 )
 from app.services.alfalfa import crear_documento, stock_alfalfa
+from app.services.anulacion import anular_documento_alfalfa
 
 router = APIRouter(prefix="/alfalfa", tags=["Alfalfa"])
 
@@ -108,6 +110,17 @@ async def get_documento(
     ).scalars().first()
     if documento is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento not found")
+    return DocumentoAlfalfaOut.model_validate(documento)
+
+
+@router.post("/documentos/{documento_id}/anular", response_model=DocumentoAlfalfaOut)
+async def anular_documento(
+    documento_id: str,
+    data: AnularRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> DocumentoAlfalfaOut:
+    documento = await anular_documento_alfalfa(db, documento_id, data.motivo, current_user.id)
     return DocumentoAlfalfaOut.model_validate(documento)
 
 
