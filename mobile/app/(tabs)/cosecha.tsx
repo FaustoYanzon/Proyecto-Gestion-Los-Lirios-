@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Modal,
   FlatList,
+  ScrollView,
   TextInput,
 } from 'react-native'
 import { useRouter } from 'expo-router'
@@ -28,6 +29,8 @@ import { useFincaStore } from '../../store/fincaStore'
 import { filtrarPorFinca } from '../../lib/finca'
 import { Wizard, type WizardStep } from '../../components/Wizard'
 import SelectField, { type SelectOption } from '../../components/SelectField'
+import TabsBar from '../../components/TabsBar'
+import AlfalfaPanel from '../../components/AlfalfaPanel'
 import {
   VARIEDADES, puedeAltaProduccion, fmtKg, hoyISO, kgToString, errorDetail,
   getProductores, getCompradores, getParametros, getPaseros, getParrales, getUbicacionesPasero,
@@ -622,11 +625,20 @@ function PasoConfirmar({ value }: StepProps) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
+type CosechaTab = 'uva' | 'pasa' | 'alfalfa'
+
+const TABS: { key: CosechaTab; label: string }[] = [
+  { key: 'uva', label: 'Uva' },
+  { key: 'pasa', label: 'Pasa' },
+  { key: 'alfalfa', label: 'Alfalfa' },
+]
+
 export default function CosechaScreen() {
   const router = useRouter()
   const role = useAuthStore((s) => s.user?.role)
   const puedeDespachar = puedeAltaProduccion(role)
   const fincaKey = useFincaStore((s) => s.active.key)
+  const [tab, setTab] = useState<CosechaTab>('uva')
 
   const [registros, setRegistros] = useState<RegistroCosecha[]>([])
   const [loading, setLoading] = useState(true)
@@ -854,35 +866,16 @@ export default function CosechaScreen() {
 
   const totalKg = registros.reduce((s, r) => s + Number(r.kg_total), 0)
 
+  // Uva tab header: ingresos al pasero + summary. Title, tabs and the Pasa/Alfalfa
+  // panels live outside the FlatList so switching tabs keeps the loaded remitos.
   const ListHeader = (
     <View style={styles.listHeader}>
-      <Text style={styles.screenTitle}>Cosecha</Text>
-
-      {/* Alta de producción */}
-      <TouchableOpacity style={styles.accesoPrincipal} onPress={() => router.push('/alta-produccion/levantada')} activeOpacity={0.85}>
-        <ICONS.capas size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
-        <Text style={styles.accesoPrincipalText}>Levantar pasa</Text>
-      </TouchableOpacity>
-      <View style={styles.accesos}>
+      <View style={[styles.accesos, { marginTop: 4 }]}>
         <TouchableOpacity style={styles.acceso} onPress={() => router.push('/alta-produccion/pasero')} activeOpacity={0.85}>
           <ICONS.cosecha size={22} color={colors.tierra} strokeWidth={ICON_STROKE} />
           <Text style={styles.accesoText}>Ingresos al pasero</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.acceso} onPress={() => router.push('/alta-produccion/lotes')} activeOpacity={0.85}>
-          <ICONS.capas size={22} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
-          <Text style={styles.accesoText}>Lotes de pasa</Text>
-        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={[styles.acceso, { flex: 0, marginBottom: 12 }]} onPress={() => router.push('/alta-produccion/entrega')} activeOpacity={0.85}>
-        <ICONS.completado size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
-        <Text style={styles.accesoText}>Entregar pasa a un comprador</Text>
-      </TouchableOpacity>
-      {puedeAltaProduccion(role) && (
-        <TouchableOpacity style={[styles.acceso, { flex: 0, marginBottom: 12 }]} onPress={() => router.push('/alta-produccion/alfalfa')} activeOpacity={0.85}>
-          <ICONS.capas size={22} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
-          <Text style={styles.accesoText}>Alfalfa</Text>
-        </TouchableOpacity>
-      )}
 
       {registros.length > 0 && (
         <View style={styles.summaryStrip}>
@@ -925,22 +918,49 @@ export default function CosechaScreen() {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.screenTitle}>Cosecha</Text>
+      <TabsBar tabs={TABS} active={tab} onChange={setTab} />
 
-      <FlatList
-        data={registros}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={EmptyState}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />
-        }
-      />
+      {tab === 'uva' && (
+        <>
+          <FlatList
+            data={registros}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={EmptyState}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />
+            }
+          />
 
-      <TouchableOpacity style={styles.fab} onPress={() => abrirWizard(emptyForm())}>
-        <ICONS.agregar size={28} color="#fff" strokeWidth={ICON_STROKE} />
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.fab} onPress={() => abrirWizard(emptyForm())}>
+            <ICONS.agregar size={28} color="#fff" strokeWidth={ICON_STROKE} />
+          </TouchableOpacity>
+        </>
+      )}
+
+      {tab === 'pasa' && (
+        <ScrollView contentContainerStyle={[styles.listContent, { paddingTop: 8 }]}>
+          <TouchableOpacity style={styles.accesoPrincipal} onPress={() => router.push('/alta-produccion/levantada')} activeOpacity={0.85}>
+            <ICONS.capas size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
+            <Text style={styles.accesoPrincipalText}>Levantar pasa</Text>
+          </TouchableOpacity>
+          <View style={styles.accesos}>
+            <TouchableOpacity style={styles.acceso} onPress={() => router.push('/alta-produccion/lotes')} activeOpacity={0.85}>
+              <ICONS.capas size={22} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
+              <Text style={styles.accesoText}>Lotes de pasa</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.acceso} onPress={() => router.push('/alta-produccion/entrega')} activeOpacity={0.85}>
+              <ICONS.completado size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
+              <Text style={styles.accesoText}>Entregar pasa</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {tab === 'alfalfa' && <AlfalfaPanel />}
 
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal}>
         {resultado ? (
