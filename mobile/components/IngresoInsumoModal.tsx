@@ -12,7 +12,7 @@ import SelectField, { type SelectOption } from './SelectField'
 import { hoyISO, fmtFecha, fmtKg, errorDetail } from '../lib/altaProduccion'
 import { fechaValida } from '../lib/fecha'
 import {
-  cantidadInsumoValida, registrarIngresoInsumo, type InsumoStock, type TipoInsumoDeposito,
+  cantidadInsumoValida, cantidadInsumoToString, registrarIngresoInsumo, type InsumoStock, type TipoInsumoDeposito,
 } from '../lib/depositos'
 
 interface Props {
@@ -46,7 +46,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
     setError(null)
     if (!insumo) return setError('Elegí el insumo')
     if (!cantidadInsumoValida(cantidad)) {
-      return setError('Ingresá una cantidad mayor a cero, con punto y hasta 2 decimales')
+      return setError('Ingresá una cantidad mayor a cero, con hasta 2 decimales')
     }
     if (!fechaValida(fecha.trim())) return setError('La fecha no es válida (formato AAAA-MM-DD)')
     setPaso('confirmar')
@@ -66,7 +66,14 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
         // The ingreso is already saved; a failed refresh is recovered by pull-to-refresh.
       }
     } catch (e) {
-      setError(errorDetail(e))
+      // Without a response the POST may still have reached the server: retrying blindly
+      // would add the stock twice (movimientos has no idempotency key).
+      const sinRespuesta = !(e as { response?: unknown })?.response
+      setError(
+        sinRespuesta
+          ? 'No sabemos si el ingreso se guardó. Cerrá este formulario y revisá el stock en Depósitos antes de volver a cargarlo.'
+          : errorDetail(e),
+      )
     } finally {
       submittingRef.current = false
       setSaving(false)
@@ -89,7 +96,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               <ICONS.completado size={36} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
               <Text style={styles.okTitle}>Ingreso registrado</Text>
               <Text style={styles.okMeta}>
-                {insumo.nombre}: +{cantidad.trim()} {insumo.unidad} · {fmtFecha(fecha.trim())}
+                {insumo.nombre}: +{cantidadInsumoToString(cantidad)} {insumo.unidad} · {fmtFecha(fecha.trim())}
               </Text>
             </View>
             <TouchableOpacity style={styles.saveBtn} onPress={onClose} activeOpacity={0.85}>
@@ -153,7 +160,7 @@ export default function IngresoInsumoModal({ tipo, insumos, onClose, onSaved }: 
               <View style={styles.resumenBox}>
                 <Text style={styles.resumenRow}>{insumo.nombre} · {fmtFecha(fecha.trim())}</Text>
                 <Text style={styles.resumenLinea}>
-                  Se suman {cantidad.trim()} {insumo.unidad} a {fmtKg(insumo.stock_actual)} {insumo.unidad} de stock
+                  Se suman {cantidadInsumoToString(cantidad)} {insumo.unidad} a {fmtKg(insumo.stock_actual)} {insumo.unidad} de stock
                 </Text>
                 {obs.trim() !== '' && <Text style={styles.resumenObs}>{obs.trim()}</Text>}
               </View>

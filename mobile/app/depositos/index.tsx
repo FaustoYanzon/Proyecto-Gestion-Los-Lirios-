@@ -37,7 +37,9 @@ export default function DepositosScreen() {
   const [bodega, setBodega] = useState<Carga<ResumenBodega>>(CARGANDO)
   const [alfalfa, setAlfalfa] = useState<Carga<StockAlfalfa[]>>(CARGANDO)
   const [refreshing, setRefreshing] = useState(false)
-  const [ingresoTipo, setIngresoTipo] = useState<TipoInsumoDeposito | null>(null)
+  // Snapshot taken when the modal opens: the post-save refresh (which can fail on a weak
+  // signal) must not unmount the modal and hide the "ingreso registrado" result.
+  const [ingreso, setIngreso] = useState<{ tipo: TipoInsumoDeposito; insumos: InsumoStock[] } | null>(null)
 
   const fetchData = useCallback(async () => {
     await Promise.all([
@@ -60,8 +62,6 @@ export default function DepositosScreen() {
     )
   }
 
-  const insumosDelModal = ingresoTipo === 'fitosanitario' ? fito : varios
-
   return (
     <View style={styles.container}>
       <ScrollView
@@ -74,13 +74,13 @@ export default function DepositosScreen() {
           titulo="Fitosanitarios"
           carga={fito}
           vacio="No hay fitosanitarios cargados"
-          onIngreso={() => setIngresoTipo('fitosanitario')}
+          onIngreso={() => fito.estado === 'ok' && setIngreso({ tipo: 'fitosanitario', insumos: fito.datos })}
         />
         <InsumosCard
           titulo="Insumos varios"
           carga={varios}
           vacio="No hay insumos varios cargados"
-          onIngreso={() => setIngresoTipo('vario')}
+          onIngreso={() => varios.estado === 'ok' && setIngreso({ tipo: 'vario', insumos: varios.datos })}
         />
 
         <Card titulo="Paseros" carga={paseros}>
@@ -126,11 +126,11 @@ export default function DepositosScreen() {
         </Card>
       </ScrollView>
 
-      {ingresoTipo && insumosDelModal.estado === 'ok' && (
+      {ingreso && (
         <IngresoInsumoModal
-          tipo={ingresoTipo}
-          insumos={insumosDelModal.datos}
-          onClose={() => setIngresoTipo(null)}
+          tipo={ingreso.tipo}
+          insumos={ingreso.insumos}
+          onClose={() => setIngreso(null)}
           onSaved={fetchData}
         />
       )}

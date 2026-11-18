@@ -34,11 +34,14 @@ export async function getInsumosStock(tipo: TipoInsumoDeposito): Promise<InsumoS
 }
 
 // Column is Numeric(10,2): up to 8 integer digits, 2 decimals, strictly positive.
-// Comma is rejected on purpose (the server expects a dot).
+// Comma is accepted because the iOS decimal-pad of an Argentine locale only offers it;
+// it is normalized to a dot before sending (see cantidadInsumoToString).
 export function cantidadInsumoValida(texto: string): boolean {
   const t = texto.trim()
-  return /^\d{1,8}(\.\d{1,2})?$/.test(t) && Number(t) > 0
+  return /^\d{1,8}([.,]\d{1,2})?$/.test(t) && Number(t.replace(',', '.')) > 0
 }
+
+export const cantidadInsumoToString = (texto: string): string => texto.trim().replace(',', '.')
 
 export async function registrarIngresoInsumo(
   insumoId: string,
@@ -47,7 +50,7 @@ export async function registrarIngresoInsumo(
   const observacion = p.observacion?.trim()
   await api.post(`/insumos/${insumoId}/movimientos`, {
     tipo: 'ingreso',
-    cantidad: p.cantidad.trim(),
+    cantidad: cantidadInsumoToString(p.cantidad),
     fecha: p.fecha,
     ...(observacion ? { observacion } : {}),
   })
