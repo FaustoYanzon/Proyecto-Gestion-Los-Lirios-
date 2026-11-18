@@ -6,7 +6,7 @@ HTTP. It never commits: `get_db` does.
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,12 +14,18 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db, require_encargado_estricto, require_super_admin
 from app.core.pdf_alfalfa import DatosAlfalfaPdf, generar_pdf_alfalfa
 from app.core.pdf_remito import anulado_el_local
+from app.core.security import (
+    ALFALFA_PDF_TOKEN_TTL_SECONDS,
+    create_alfalfa_pdf_token,
+    decode_alfalfa_pdf_token,
+)
 from app.models.alfalfa import DocumentoAlfalfa, ProductoAlfalfa, TipoDocumentoAlfalfa
 from app.models.alta_produccion import Comprador
 from app.models.parcela import Parcela
 from app.models.user import User
 from app.schemas.alta_produccion import AnularRequest
 from app.schemas.alfalfa import (
+    AlfalfaPdfLinkResponse,
     DocumentoAlfalfaCreate,
     DocumentoAlfalfaOut,
     StockProductoOut,
@@ -96,6 +102,15 @@ async def create_documento(
     return DocumentoAlfalfaOut.model_validate(documento)
 
 
+# Static route BEFORE /documentos/{documento_id}. No Authorization: the signed token is the auth.
+@router.get("/descarga/{token}")
+async def descargar_pdf_firmado(token: str, db: AsyncSession = Depends(get_db)) -> Response:
+    documento_id = decode_alfalfa_pdf_token(token)
+    if documento_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Link inválido o vencido")
+    return await _pdf_response(db, documento_id)
+
+
 @router.get("/documentos/{documento_id}", response_model=DocumentoAlfalfaOut)
 async def get_documento(
     documento_id: str,
@@ -131,6 +146,28 @@ async def get_documento_pdf(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_encargado_estricto),
 ) -> Response:
+    return await _pdf_response(db, documento_id)
+
+
+@router.post("/documentos/{documento_id}/pdf-link", response_model=AlfalfaPdfLinkResponse)
+async def pdf_link_documento(
+    documento_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_encargado_estricto),
+) -> AlfalfaPdfLinkResponse:
+    """5-minute read-only signed link so mobile can open the PDF without Authorization."""
+    if await db.get(DocumentoAlfalfa, documento_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento not found")
+    path = f"/alfalfa/descarga/{create_alfalfa_pdf_token(documento_id)}"
+    return AlfalfaPdfLinkResponse(
+        path=path,
+        url=f"{str(request.base_url).rstrip('/')}{path}",
+        expires_in=ALFALFA_PDF_TOKEN_TTL_SECONDS,
+    )
+
+
+async def _pdf_response(db: AsyncSession, documento_id: str) -> Response:
     documento = (
         await db.execute(
             select(DocumentoAlfalfa)

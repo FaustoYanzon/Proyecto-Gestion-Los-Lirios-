@@ -96,6 +96,44 @@ def decode_remito_pdf_token(token: str) -> str | None:
     return payload["rid"]
 
 
+# Link firmado de vida corta para el PDF de un documento de alfalfa. Mismo
+# esquema que el del remito: claims `typ`/`aud` propios (un token de remito o de
+# acceso no pasa), 5 min, solo lectura de ese documento (claim `did`).
+ALFALFA_PDF_SCOPE = "alfalfa_pdf"
+ALFALFA_PDF_TOKEN_TTL_SECONDS = 300
+
+
+def create_alfalfa_pdf_token(
+    documento_id: str, ttl_seconds: int = ALFALFA_PDF_TOKEN_TTL_SECONDS
+) -> str:
+    payload = {
+        "typ": ALFALFA_PDF_SCOPE,
+        "aud": ALFALFA_PDF_SCOPE,
+        "scope": ALFALFA_PDF_SCOPE,
+        "did": documento_id,
+        "exp": datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_alfalfa_pdf_token(token: str) -> str | None:
+    """Devuelve el documento_id del token, o None si vence, está adulterado o
+    no es un token de PDF de alfalfa."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            audience=ALFALFA_PDF_SCOPE,
+            options={"require": ["exp", "aud"]},
+        )
+    except PyJWTError:
+        return None
+    if payload.get("typ") != ALFALFA_PDF_SCOPE or not isinstance(payload.get("did"), str):
+        return None
+    return payload["did"]
+
+
 # Link firmado de vida corta para abrir el PDF de un lote (hoja del lote) o de la
 # tarja de un bin desde mobile con Linking (sin header Authorization). Mismo
 # esquema que el del remito: claims `typ`/`aud` propios, 5 min, solo lectura.

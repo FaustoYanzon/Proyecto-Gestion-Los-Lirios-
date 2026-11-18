@@ -98,3 +98,9 @@ class StockProductoOut(BaseModel):
     kg: Decimal
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AlfalfaPdfLinkResponse(BaseModel):
+    path: str
+    url: str
+    expires_in: int
