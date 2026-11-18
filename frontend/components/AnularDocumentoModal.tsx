@@ -48,7 +48,7 @@ export default function AnularDocumentoModal({ titulo, numero, onConfirm, onClos
         </div>
         <div className="p-6 space-y-3">
           <p className="text-sm text-gray-600">
-            El documento queda marcado como anulado y su efecto en el stock se revierte. No se puede deshacer.
+            Se revertirán sus saldos y el documento seguirá visible como Anulado, con el motivo. No se puede deshacer.
           </p>
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">

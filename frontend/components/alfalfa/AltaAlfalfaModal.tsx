@@ -74,7 +74,7 @@ export default function AltaAlfalfaModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {confirmando ? (
             <div className="space-y-3 text-sm text-gray-700">
-              <p>Revisá el documento. Una vez guardado no se puede anular.</p>
+              <p>Revisá bien el documento antes de guardar: una vez guardado, solo un super admin puede anularlo.</p>
               <div className="rounded border border-gray-200 divide-y divide-gray-100">
                 <div className="px-3 py-2 flex justify-between"><span>Potrero</span><b>{potreroNombre}</b></div>
                 <div className="px-3 py-2 flex justify-between"><span>Fecha</span><b>{fmtFecha(fecha)}</b></div>
