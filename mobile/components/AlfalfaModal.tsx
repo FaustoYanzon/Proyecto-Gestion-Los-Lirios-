@@ -27,6 +27,14 @@ import type { Parcela } from '../lib/types'
 const PRODUCTOS: ProductoAlfalfa[] = ['fardo', 'rollo', 'semilla']
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
+// Rejects impossible dates such as 2026-13-45 or 2026-02-30 (Date would roll them over).
+function fechaValida(s: string): boolean {
+  if (!FECHA_REGEX.test(s)) return false
+  const [y, m, d] = s.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+}
+
 interface Props {
   tipo: TipoDocumentoAlfalfa
   potreros: Parcela[]
@@ -64,7 +72,7 @@ export default function AlfalfaModal({ tipo, potreros, compradores, onClose, onS
     setError(null)
     if (esAlta && !potreroId) return setError('Elegí el potrero de origen')
     if (!esAlta && !compradorId) return setError('Elegí el comprador')
-    if (!FECHA_REGEX.test(fecha.trim())) return setError('La fecha debe tener formato AAAA-MM-DD')
+    if (!fechaValida(fecha.trim())) return setError('La fecha no es válida (formato AAAA-MM-DD)')
     if (lineasCargadas.length === 0) return setError('Cargá la cantidad de al menos un producto')
     for (const p of lineasCargadas) {
       if (!cantidadAlfalfaValida(p, cantidades[p])) {
@@ -269,7 +277,12 @@ export default function AlfalfaModal({ tipo, potreros, compradores, onClose, onS
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.cancelBtn, { marginTop: 10 }, saving && { opacity: 0.5 }]}
-              onPress={() => { setError(null); setPaso('form') }}
+              onPress={() => {
+                // Edited content is a new attempt: reusing the key would replay the original document.
+                idempotencyKeyRef.current = newIdempotencyKey()
+                setError(null)
+                setPaso('form')
+              }}
               disabled={saving}
               activeOpacity={0.85}
             >
