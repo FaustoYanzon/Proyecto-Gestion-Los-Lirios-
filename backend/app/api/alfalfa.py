@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_estricto, require_super_admin
 from app.core.pdf_alfalfa import DatosAlfalfaPdf, generar_pdf_alfalfa
+from app.core.pdf_remito import anulado_el_local
 from app.models.alfalfa import DocumentoAlfalfa, ProductoAlfalfa, TipoDocumentoAlfalfa
 from app.models.alta_produccion import Comprador
 from app.models.parcela import Parcela
@@ -162,6 +163,8 @@ async def get_documento_pdf(
             observaciones=documento.observaciones,
             lineas=lineas,
             kg_total=sum((ln.kg for ln in documento.lineas), Decimal("0")),
+            anulado_el=anulado_el_local(documento.anulado_at) if documento.anulado_at else None,
+            motivo_anulacion=documento.motivo_anulacion,
         )
     )
     return Response(

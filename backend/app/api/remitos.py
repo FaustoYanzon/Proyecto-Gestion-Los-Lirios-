@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_encargado_estricto, require_super_admin
-from app.core.pdf_remito import DatosRemitoPdf, generar_pdf_remito
+from app.core.pdf_remito import DatosRemitoPdf, anulado_el_local, generar_pdf_remito
 from app.core.security import (
     REMITO_PDF_TOKEN_TTL_SECONDS,
     create_remito_pdf_token,
@@ -488,6 +488,8 @@ async def _datos_pdf(db: AsyncSession, remito: Remito) -> DatosRemitoPdf:
         acarreo=extra["acarreo"],
         n_ciu=extra["n_ciu"],
         observaciones=remito.observaciones,
+        anulado_el=anulado_el_local(remito.anulado_at) if remito.anulado_at else None,
+        motivo_anulacion=remito.motivo_anulacion,
     )
 
 

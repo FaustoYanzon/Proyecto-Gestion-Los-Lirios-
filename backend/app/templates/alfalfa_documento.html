@@ -79,9 +79,21 @@
     color: #5a544c;
     text-align: center;
   }
+  .anulado-box {
+    border: 2pt solid #b00020;
+    background-color: #fdecea;
+    color: #b00020;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    font-size: 11pt;
+    font-weight: bold;
+  }
 </style>
 </head>
 <body>
+  {% if anulado %}
+  <div class="anulado-box">ANULADO el {{ anulado.fecha }} &mdash; {{ anulado.motivo }}</div>
+  {% endif %}
 
   <table class="header-table">
     <tr>

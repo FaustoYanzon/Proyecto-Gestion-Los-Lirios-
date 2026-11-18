@@ -29,6 +29,9 @@ class DatosAlfalfaPdf:
     # (product label, quantity, kg)
     lineas: list[tuple[str, Decimal, Decimal]]
     kg_total: Decimal
+    # Set when the document is annulled; rendered as an ANULADO block on top.
+    anulado_el: date | None = None
+    motivo_anulacion: str | None = None
 
 
 def _fmt_cantidad(cantidad: Decimal) -> str:
@@ -38,7 +41,7 @@ def _fmt_cantidad(cantidad: Decimal) -> str:
     return _fmt_kg(cantidad)
 
 
-def generar_pdf_alfalfa(d: DatosAlfalfaPdf) -> bytes:
+def render_alfalfa_html(d: DatosAlfalfaPdf) -> str:
     context = {
         "empresa": {
             "razon_social": EMPRESA_RAZON_SOCIAL,
@@ -57,9 +60,19 @@ def generar_pdf_alfalfa(d: DatosAlfalfaPdf) -> bytes:
             for producto, cantidad, kg in d.lineas
         ],
         "kg_total": _fmt_kg(d.kg_total),
+        "anulado": (
+            {"fecha": _fmt_fecha(d.anulado_el), "motivo": d.motivo_anulacion}
+            if d.anulado_el is not None
+            else None
+        ),
     }
+    # Autoescape stays ON: motivo_anulacion is free text.
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
-    html = env.get_template("alfalfa_documento.html").render(**context)
+    return env.get_template("alfalfa_documento.html").render(**context)
+
+
+def generar_pdf_alfalfa(d: DatosAlfalfaPdf) -> bytes:
+    html = render_alfalfa_html(d)
 
     result = BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=result, link_callback=_link_callback)

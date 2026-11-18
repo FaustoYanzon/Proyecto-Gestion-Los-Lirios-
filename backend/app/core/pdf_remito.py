@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
@@ -16,6 +17,7 @@ from app.core.empresa import EMPRESA_CUIT, EMPRESA_DOMICILIO, EMPRESA_RAZON_SOCI
 from app.core.pdf_carta import _link_callback
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+_TZ_LOCAL = ZoneInfo("America/Argentina/Mendoza")
 
 
 @dataclass
@@ -43,6 +45,16 @@ class DatosRemitoPdf:
     acarreo: str | None = None
     n_ciu: str | None = None
     observaciones: str | None = None
+    # Set when the remito is annulled; rendered as an ANULADO block on top.
+    anulado_el: date | None = None
+    motivo_anulacion: str | None = None
+
+
+def anulado_el_local(anulado_at: datetime) -> date:
+    # DB stores UTC; naive values (SQLite) are assumed UTC. Show the Mendoza calendar date.
+    if anulado_at.tzinfo is None:
+        anulado_at = anulado_at.replace(tzinfo=timezone.utc)
+    return anulado_at.astimezone(_TZ_LOCAL).date()
 
 
 def _fmt_fecha(d: date) -> str:
@@ -54,7 +66,7 @@ def _fmt_kg(kg: Decimal) -> str:
     return f"{kg:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def generar_pdf_remito(d: DatosRemitoPdf) -> bytes:
+def render_remito_html(d: DatosRemitoPdf) -> str:
     context = {
         "empresa": {
             "razon_social": EMPRESA_RAZON_SOCIAL,
@@ -87,9 +99,19 @@ def generar_pdf_remito(d: DatosRemitoPdf) -> bytes:
             "n_ciu": d.n_ciu,
             "observaciones": d.observaciones,
         },
+        "anulado": (
+            {"fecha": _fmt_fecha(d.anulado_el), "motivo": d.motivo_anulacion}
+            if d.anulado_el is not None
+            else None
+        ),
     }
+    # Autoescape stays ON: motivo_anulacion is free text.
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
-    html = env.get_template("remito_entrega.html").render(**context)
+    return env.get_template("remito_entrega.html").render(**context)
+
+
+def generar_pdf_remito(d: DatosRemitoPdf) -> bytes:
+    html = render_remito_html(d)
 
     result = BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=result, link_callback=_link_callback)
