@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -110,6 +110,7 @@ async def update_insumo(
 async def registrar_movimiento(
     insumo_id: str,
     data: MovimientoStockCreate,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_up),
 ) -> MovimientoStock:
@@ -117,6 +118,12 @@ async def registrar_movimiento(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="El egreso por aplicación se genera automáticamente al registrar un Fitosanitario, no se carga a mano.",
+        )
+    if data.tipo == TipoMovimientoStock.egreso and current_user.role == UserRole.regador:
+        # require_encargado_up still lets regador in (legacy); manual egreso is encargado+.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El egreso de insumos requiere rol encargado o superior.",
         )
     if data.tipo == TipoMovimientoStock.ajuste and current_user.role not in (
         UserRole.super_admin,
@@ -131,6 +138,34 @@ async def registrar_movimiento(
     if insumo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insumo not found")
 
+    if data.tipo == TipoMovimientoStock.egreso:
+        if insumo.tipo == TipoInsumo.fitosanitario:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Los fitosanitarios salen por aplicación, no por egreso manual.",
+            )
+        if not data.destino:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Indicá dónde se usó (máquina, tractor o parcela).",
+            )
+        if data.cantidad <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La cantidad del egreso debe ser mayor a cero.",
+            )
+
+    if data.idempotency_key:
+        existente = (
+            await db.execute(
+                select(MovimientoStock).where(MovimientoStock.idempotency_key == data.idempotency_key)
+            )
+        ).scalar_one_or_none()
+        if existente is not None:
+            # Retry of an already applied movement: replay it, stock untouched.
+            response.status_code = status.HTTP_200_OK
+            return existente
+
     signo = 1 if data.tipo in (TipoMovimientoStock.ingreso, TipoMovimientoStock.ajuste) else -1
     insumo.stock_actual = insumo.stock_actual + (signo * data.cantidad)
 
@@ -140,6 +175,8 @@ async def registrar_movimiento(
         cantidad=data.cantidad,
         fecha=data.fecha,
         observacion=data.observacion,
+        destino=data.destino if data.tipo == TipoMovimientoStock.egreso else None,
+        idempotency_key=data.idempotency_key or None,
         created_by=current_user.id,
     )
     db.add(movimiento)

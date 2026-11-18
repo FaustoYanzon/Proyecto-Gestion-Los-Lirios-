@@ -30,6 +30,7 @@ class TipoMovimientoStock(str, enum.Enum):
     ingreso = "ingreso"
     egreso_aplicacion = "egreso_aplicacion"
     ajuste = "ajuste"
+    egreso = "egreso"
 
 
 class Insumo(Base):
@@ -77,6 +78,12 @@ class MovimientoStock(Base):
     cantidad: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     observacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Free text for now (máquina, tractor or parcela): classified later, once every
+    # insumo is loaded. Only set on manual egresos.
+    destino: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Client-generated per attempt: a retry returns the stored movement instead of
+    # applying the stock change twice.
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Único cuando no es null: un egreso automático por aplicación tiene siempre
     # un solo movimiento asociado, fácil de encontrar y revertir en update/delete
     # del RegistroFitosanitario (ver app/api/produccion.py).
@@ -97,6 +104,13 @@ class MovimientoStock(Base):
             "registro_fitosanitario_id",
             unique=True,
             postgresql_where=text("registro_fitosanitario_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_movimientos_stock_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+            sqlite_where=text("idempotency_key IS NOT NULL"),
         ),
     )
 
