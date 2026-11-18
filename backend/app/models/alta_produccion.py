@@ -231,6 +231,12 @@ class Remito(Base):
             "OR (tipo <> 'traslado_pasero' AND comprador_id IS NOT NULL AND pasero_id IS NULL)",
             name="ck_remito_destinatario_segun_tipo",
         ),
+        # Annulment is all-or-nothing: timestamp, author and reason together.
+        CheckConstraint(
+            "(anulado_at IS NULL AND anulado_by IS NULL AND motivo_anulacion IS NULL) "
+            "OR (anulado_at IS NOT NULL AND anulado_by IS NOT NULL AND motivo_anulacion IS NOT NULL)",
+            name="ck_remito_anulacion_completa",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
@@ -249,6 +255,12 @@ class Remito(Base):
     observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    # Soft annulment: "anulado" means anulado_at IS NOT NULL.
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    anulado_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", name="fk_remitos_anulado_by_users"), nullable=True
+    )
+    motivo_anulacion: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     lineas: Mapped[list["RemitoLinea"]] = relationship(
         "RemitoLinea", back_populates="remito", cascade="all, delete-orphan"
@@ -265,12 +277,13 @@ class RemitoLinea(Base):
     __tablename__ = "remito_lineas"
     __table_args__ = (
         # Un bin sale una sola vez: garantizado en la base, no solo en el endpoint.
+        # Lines of annulled remitos are excluded so the bin can be delivered again.
         Index(
             "uq_remito_linea_bin",
             "bin_id",
             unique=True,
-            postgresql_where=text("bin_id IS NOT NULL"),
-            sqlite_where=text("bin_id IS NOT NULL"),
+            postgresql_where=text("bin_id IS NOT NULL AND anulada = false"),
+            sqlite_where=text("bin_id IS NOT NULL AND anulada = false"),
         ),
     )
 
@@ -285,6 +298,10 @@ class RemitoLinea(Base):
         String(36), ForeignKey("bines_pasa.id"), nullable=True
     )
     kg: Mapped[Decimal] = mapped_column(KG, nullable=False)
+    # Set when the parent remito is annulled; the line keeps its bin for audit.
+    anulada: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     remito: Mapped["Remito"] = relationship("Remito", back_populates="lineas")
     lote: Mapped["Lote | None"] = relationship("Lote")

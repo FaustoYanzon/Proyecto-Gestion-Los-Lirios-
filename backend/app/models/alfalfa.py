@@ -59,6 +59,12 @@ class DocumentoAlfalfa(Base):
             "OR (tipo = 'salida' AND comprador_id IS NOT NULL AND potrero_id IS NULL)",
             name="ck_documento_alfalfa_destinatario_segun_tipo",
         ),
+        # Annulment is all-or-nothing: timestamp, author and reason together.
+        CheckConstraint(
+            "(anulado_at IS NULL AND anulado_by IS NULL AND motivo_anulacion IS NULL) "
+            "OR (anulado_at IS NOT NULL AND anulado_by IS NOT NULL AND motivo_anulacion IS NOT NULL)",
+            name="ck_documento_alfalfa_anulacion_completa",
+        ),
         # Retries with the same key must not create a second document.
         Index(
             "uq_documento_alfalfa_idempotency_key",
@@ -92,6 +98,12 @@ class DocumentoAlfalfa(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    # Soft annulment: "anulado" means anulado_at IS NOT NULL.
+    anulado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    anulado_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", name="fk_documentos_alfalfa_anulado_by_users"), nullable=True
+    )
+    motivo_anulacion: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     lineas: Mapped[list["DocumentoAlfalfaLinea"]] = relationship(
         "DocumentoAlfalfaLinea",
