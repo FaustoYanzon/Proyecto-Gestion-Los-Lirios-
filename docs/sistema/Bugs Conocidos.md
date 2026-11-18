@@ -16,6 +16,7 @@ Ninguno al cierre del 2026-08-10 — el backup (único punto abierto desde el 08
 
 ## 🟡 Riesgos conocidos, aceptables para una prueba corta (no bloquean, documentar)
 
+- **Anulación de remitos (2026-11-17), abiertos.** (a) Tras anular un FRE/BOD, PUT/DELETE de la cosecha siguen dando 409 y reenviar el despacho crea una cosecha nueva; (b) el link público firmado del PDF muestra el motivo interno; (c) reenviar un despacho con FRE/BOD anulado da un 409 engañoso. Ver [[2026-11-17-anulacion-pasa-alfalfa]].
 - **Vercel NO auto-despliega en este proyecto.** Railway sí redespliega el backend solo en cada push a `main` (y corre `alembic upgrade head`), pero el frontend se quedó pegado en un deploy de 4 días hasta que se corrió `vercel --prod` a mano el 2026-07-14 — ver [[2026-07-14-finanzas-ingresos-y-fixes-piloto]]. **Acordarse de correr `vercel --prod` (o `npx vercel --prod --yes` desde `frontend/`) después de cualquier push que toque `frontend/`.** `vercel ls` muestra el último deploy y su antigüedad si hay dudas.
 - **Rate limiting en memoria de un solo proceso** (`login_throttle.py`, slowapi): correcto mientras el deploy corra con 1 worker uvicorn (hoy así, `railway.json` no fija `--workers`). Si se escala a multi-worker, hay que respaldar con Redis.
 - ~~**Sin refresh token**: al expirar el JWT, el usuario es deslogueado abruptamente sin aviso previo (`lib/api.ts`, interceptor 401).~~ **Resuelto el 2026-08-05**, ver la sección Resueltos.
