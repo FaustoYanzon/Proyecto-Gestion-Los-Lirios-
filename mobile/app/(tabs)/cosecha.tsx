@@ -877,6 +877,12 @@ export default function CosechaScreen() {
         <ICONS.completado size={22} color={colors.burdeos[600]} strokeWidth={ICON_STROKE} />
         <Text style={styles.accesoText}>Entregar pasa a un comprador</Text>
       </TouchableOpacity>
+      {puedeAltaProduccion(role) && (
+        <TouchableOpacity style={[styles.acceso, { flex: 0, marginBottom: 12 }]} onPress={() => router.push('/alta-produccion/alfalfa')} activeOpacity={0.85}>
+          <ICONS.capas size={22} color={colors.verdeCampo} strokeWidth={ICON_STROKE} />
+          <Text style={styles.accesoText}>Alfalfa</Text>
+        </TouchableOpacity>
+      )}
 
       {registros.length > 0 && (
         <View style={styles.summaryStrip}>

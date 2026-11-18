@@ -195,6 +195,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="alta-produccion/alfalfa"
+            options={{
+              headerShown: true,
+              title: 'Alfalfa',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
             name="maquinaria/index"
             options={{
               headerShown: true,
