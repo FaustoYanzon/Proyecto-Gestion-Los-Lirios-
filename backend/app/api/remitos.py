@@ -533,7 +533,11 @@ async def cargar_comprobante_bodega(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_encargado_estricto),
 ) -> ComprobanteBodegaResponse:
+    # Lock the row first so this check is serialized against a concurrent annulment.
+    await db.execute(select(Remito.id).where(Remito.id == remito_id).with_for_update())
     remito = await _get_remito(db, remito_id)
+    if remito.anulado_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El remito está anulado")
     if remito.tipo != TipoRemito.salida_bodega:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

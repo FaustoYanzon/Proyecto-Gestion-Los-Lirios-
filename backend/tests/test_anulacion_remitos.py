@@ -246,3 +246,16 @@ async def test_numero_anulado_se_conserva_y_no_se_reutiliza(client, create_user,
     got = (await client.get(f"/remitos/{r1['id']}", headers=h)).json()
     assert got["numero"] == "PAS-000001"
     assert got["anulado"] is True
+
+
+async def test_comprobante_sobre_bodega_anulado_da_409(client, create_user, create_parcela):
+    h = await _admin(client, create_user)
+    parral = await create_parcela(nombre="Parral 1", tipo=TipoParcela.parral, variedad=VariedadUva.syrah)
+    norte = await _comprador(client, h, "Bodega Norte")
+    remito = (await _despachar(client, h, parral.id, "bodega", norte, kg="1000"))["remito"]
+    assert (await _anular(client, h, remito["id"])).status_code == 200
+    resp = await client.post(
+        f"/remitos/{remito['id']}/comprobante-bodega",
+        json={"numero_suv": "SUV-9", "kg_recibidos": "1000"}, headers=h,
+    )
+    assert resp.status_code == 409
