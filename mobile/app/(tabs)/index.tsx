@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { colors, fonts, FINCA_COORDS, fenologiaColors, withAlpha } from '../../l
 import type { FaseVariedad } from '../../lib/types'
 import { VARIEDAD_LABELS } from '../../lib/types'
 import { puedeVerMaquinaria, resumenFlota, type MaquinaAveriada } from '../../lib/maquinaria'
+import { puedeAltaProduccion } from '../../lib/altaProduccion'
+import { getInsumosPorTipos, type InsumoStock } from '../../lib/depositos'
+import MovimientoInsumoModal, { type ModoMovimiento } from '../../components/MovimientoInsumoModal'
 import { readFlotaCache, fetchFlota, nombreMaquina, alcanceMaquinaria, COLOR_REPORTAR } from '../../lib/maquinariaUi'
 
 const NOTIF_ROTATION_KEY = 'fenologia_notif'
@@ -351,6 +354,12 @@ export default function InicioScreen() {
   const [fases, setFases] = useState<FaseVariedad[]>([])
   const [loadingFases, setLoadingFases] = useState(true)
   const [notifIdx, setNotifIdx] = useState(0)
+  // Quick insumo movements (ingreso/egreso): the list is loaded when the button is pressed.
+  const [cargandoInsumos, setCargandoInsumos] = useState<ModoMovimiento | null>(null)
+  // Ref, not state: two taps in the same frame must not both pass the guard.
+  const cargandoRef = useRef(false)
+  const [insumosError, setInsumosError] = useState<string | null>(null)
+  const [movimiento, setMovimiento] = useState<{ modo: ModoMovimiento; insumos: InsumoStock[] } | null>(null)
 
   const loadFenologia = useCallback(async () => {
     const cached = await getCache<FaseVariedad[]>('fenologia', CACHE_TTL.fenologia)
@@ -391,6 +400,24 @@ export default function InicioScreen() {
   function onRefresh() { setRefreshing(true); loadFenologia() }
 
   const verMaquinaria = puedeVerMaquinaria(user?.role)
+  const verInsumos = puedeAltaProduccion(user?.role)
+
+  async function abrirMovimiento(modo: ModoMovimiento) {
+    if (cargandoRef.current) return
+    cargandoRef.current = true
+    setInsumosError(null)
+    setCargandoInsumos(modo)
+    try {
+      // Manual egreso is only for insumos varios; fitosanitarios leave by aplicación.
+      const insumos = await getInsumosPorTipos(modo === 'ingreso' ? ['fitosanitario', 'vario'] : ['vario'])
+      setMovimiento({ modo, insumos })
+    } catch {
+      setInsumosError('No se pudieron cargar los insumos')
+    } finally {
+      cargandoRef.current = false
+      setCargandoInsumos(null)
+    }
+  }
   const averiadas = useMaquinasAveriadas(verMaquinaria)
 
   const firstName = user?.full_name?.split(' ')[0] ?? ''
@@ -445,6 +472,28 @@ export default function InicioScreen() {
         )}
       </View>
 
+      {verInsumos && (
+        <View style={styles.insumosBlock}>
+          <View style={styles.actionsRow}>
+            <ActionButton
+              label={cargandoInsumos === 'ingreso' ? 'Cargando…' : 'Ingreso de insumos'}
+              icon="agregar"
+              bg={colors.verdeCampo}
+              compact
+              onPress={() => abrirMovimiento('ingreso')}
+            />
+            <ActionButton
+              label={cargandoInsumos === 'egreso' ? 'Cargando…' : 'Egreso de insumos'}
+              icon="quitar"
+              bg={colors.tierra}
+              compact
+              onPress={() => abrirMovimiento('egreso')}
+            />
+          </View>
+          {insumosError && <Text style={styles.insumosError}>{insumosError}</Text>}
+        </View>
+      )}
+
       {/* ── Climate mini ── */}
       <ClimateCardMini />
 
@@ -453,6 +502,16 @@ export default function InicioScreen() {
 
       {/* ── Tareas recomendadas (fenología automática) ── */}
       <FenologiaNotificaciones fases={fases} loading={loadingFases} idx={notifIdx} />
+
+      {movimiento && (
+        <MovimientoInsumoModal
+          key={movimiento.modo}
+          modo={movimiento.modo}
+          insumos={movimiento.insumos}
+          onClose={() => setMovimiento(null)}
+          onSaved={() => {}}
+        />
+      )}
     </ScrollView>
   )
 }
@@ -465,7 +524,9 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 24, color: colors.ink },
   subGreeting: { fontSize: 16, color: colors.ink60, marginTop: 2 },
   actionsGrid: { gap: 10, marginBottom: 16 },
-  actionsRow: { flexDirection: 'row' },
+  actionsRow: { flexDirection: 'row', gap: 10 },
+  insumosBlock: { marginBottom: 16 },
+  insumosError: { marginTop: 6, fontSize: 13, fontWeight: '600', color: colors.sangre },
   averiadasBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48,
     backgroundColor: colors.sangre, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,

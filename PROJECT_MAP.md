@@ -81,7 +81,7 @@ repo/
 | `whatsapp.py` | `/finanzas/whatsapp` | "Finanzas - WhatsApp" |
 | `whatsapp_webhook.py` | `/whatsapp` | "WhatsApp Webhook" |
 
-**Migraciones de Alembic:** 68 (head: `a2a2a2a00001_anulacion_documentos.py`)
+**Migraciones de Alembic:** 69 (head: `b3e9a1d4c7f2_insumo_egreso_destino_idempotencia.py`)
 
 **Reglas críticas:**
 - Todos los IDs son UUID strings (`String(36)`), nunca int
@@ -171,7 +171,7 @@ repo/
 
 ## Mobile (`mobile/`)
 
-**Pantallas (19):**
+**Pantallas (20):**
 
 - `(auth)/login.tsx`
 - `(tabs)/campana.tsx`
@@ -187,6 +187,7 @@ repo/
 - `alta-produccion/levantada.tsx`
 - `alta-produccion/lotes.tsx`
 - `alta-produccion/pasero.tsx`
+- `depositos/index.tsx`
 - `estado-campana.tsx`
 - `fito.tsx`
 - `maquinaria/index.tsx`

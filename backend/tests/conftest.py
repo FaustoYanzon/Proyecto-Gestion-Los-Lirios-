@@ -40,7 +40,7 @@ from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.finanzas import Finca  # noqa: E402
-from app.models.insumo import Insumo, UnidadInsumo  # noqa: E402
+from app.models.insumo import Insumo, TipoInsumo, UnidadInsumo  # noqa: E402
 from app.models.parcela import Parcela, TipoParcela, VariedadUva  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.models.valvula import Valvula  # noqa: E402
@@ -170,9 +170,10 @@ async def create_insumo():
         nombre: str = "Cobre",
         unidad: UnidadInsumo = UnidadInsumo.lt,
         stock_actual: float = 100.0,
+        tipo: TipoInsumo = TipoInsumo.fitosanitario,
     ) -> Insumo:
         async with TestSessionLocal() as session:
-            insumo = Insumo(nombre=nombre, unidad=unidad, stock_actual=stock_actual)
+            insumo = Insumo(nombre=nombre, unidad=unidad, stock_actual=stock_actual, tipo=tipo)
             session.add(insumo)
             await session.commit()
             await session.refresh(insumo)

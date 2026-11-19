@@ -9,17 +9,18 @@ import { colors, space, radius, text } from '../lib/theme'
 import { useAuthStore } from '../store/authStore'
 import { useFincaStore } from '../store/fincaStore'
 import { puedeVerMaquinaria } from '../lib/maquinaria'
+import { puedeAltaProduccion } from '../lib/altaProduccion'
 import { alcanceMaquinaria, contarOrdenesPendientesDeAccion } from '../lib/maquinariaUi'
 
 // Header grape glyph. For roles with access to at least one module (hoy:
-// Maquinaria) it opens the modules drawer from the left; for the rest it is
+// Maquinaria, Depósitos) it opens the modules drawer from the left; for the rest it is
 // just the logo.
 export function ModulosButton() {
   const role = useAuthStore((s) => s.user?.role)
   const [open, setOpen] = useState(false)
   const glifo = <Image source={require('../assets/logo-glifo.png')} style={styles.glifo} resizeMode="contain" />
 
-  if (!puedeVerMaquinaria(role)) return glifo
+  if (!puedeVerMaquinaria(role) && !puedeAltaProduccion(role)) return glifo
 
   return (
     <>
@@ -61,16 +62,29 @@ function ModulosDrawer({ open, onClose }: { open: boolean; onClose: () => void }
           <Image source={require('../assets/logo-glifo.png')} style={styles.titleGlifo} resizeMode="contain" />
           <Text style={styles.title}>Módulos</Text>
         </View>
-        <TouchableOpacity
-          style={styles.moduleItem}
-          activeOpacity={0.7}
-          onPress={() => { onClose(); router.push('/maquinaria') }}
-        >
-          <ICONS.tractor size={20} color={colors.ink60} strokeWidth={ICON_STROKE} />
-          <Text style={styles.moduleLabel}>Maquinaria</Text>
-          {pendientes > 0 && <Badge variant="count" value={pendientes} />}
-          <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
-        </TouchableOpacity>
+        {puedeVerMaquinaria(role) && (
+          <TouchableOpacity
+            style={styles.moduleItem}
+            activeOpacity={0.7}
+            onPress={() => { onClose(); router.push('/maquinaria') }}
+          >
+            <ICONS.tractor size={20} color={colors.ink60} strokeWidth={ICON_STROKE} />
+            <Text style={styles.moduleLabel}>Maquinaria</Text>
+            {pendientes > 0 && <Badge variant="count" value={pendientes} />}
+            <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
+          </TouchableOpacity>
+        )}
+        {puedeAltaProduccion(role) && (
+          <TouchableOpacity
+            style={[styles.moduleItem, { marginTop: space.s2 }]}
+            activeOpacity={0.7}
+            onPress={() => { onClose(); router.push('/depositos') }}
+          >
+            <ICONS.capas size={20} color={colors.ink60} strokeWidth={ICON_STROKE} />
+            <Text style={styles.moduleLabel}>Depósitos</Text>
+            <ICONS.avance size={18} color={colors.niebla} strokeWidth={ICON_STROKE} />
+          </TouchableOpacity>
+        )}
       </View>
     </SideDrawer>
   )

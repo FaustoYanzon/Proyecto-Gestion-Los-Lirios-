@@ -205,6 +205,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="depositos/index"
+            options={{
+              headerShown: true,
+              title: 'Depósitos',
+              headerStyle: { backgroundColor: colors.burdeos[600] },
+              headerTintColor: colors.blanco,
+              headerTitleStyle: { fontWeight: 'bold' },
+            }}
+          />
+          <Stack.Screen
             name="maquinaria/index"
             options={{
               headerShown: true,
