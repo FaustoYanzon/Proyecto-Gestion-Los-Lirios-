@@ -52,3 +52,11 @@ Hacer estas cuatro primero, en la sesión nueva, sobre `feat/mobile-depositos`:
 - Backend local: `uvicorn app.main:app --host 0.0.0.0 --port 8000` sin `--reload` (reiniciar tras cambios de código).
 - Regla de firewall de Windows creada: `Lirios dev 8000 8081` (entrada TCP, cualquier perfil). Quitar cuando no se necesite: `Remove-NetFirewallRule -DisplayName 'Lirios dev 8000 8081'` (PowerShell administrador).
 - Al cerrar la sesión se detuvieron Metro y el backend local.
+
+## 7. Actualización 2026-11-19: publicado
+- Las 4 correcciones quedaron hechas (commit `4f23f93`) y aprobadas por Fausto en el iPhone.
+- Merge a `main` (`55a8a68`), backup previo `pg_backups/loslirios_prod_20261119_102914.dump`, 768 tests OK, push a `main`; Railway aplicó `b3e9a1d4c7f2` (`alembic current` en producción = head).
+- Verificación en producción (solo lectura): enum con `egreso`, columnas `destino`/`idempotency_key` e índice único presentes; egreso sobre fitosanitario → 422; GET movimientos → 200; sin cambios en `movimientos_stock`. **El egreso real NO se probó**: producción solo tiene 17 insumos fitosanitarios, ningún `vario`. Probar con el primer insumo vario que se cargue.
+- OTA único publicado en `production` (iOS 3d4e69b8…, Android 515a0c1c…, commit `55a8a68`); bundle verificado con la URL de producción y sin IPs de la LAN.
+- Modelo de Datos y PROJECT_MAP regenerados; workspaces `.superpowers/sdd/2026-11-18-*` borrados.
+- Pendiente: confirmar `pdf-link` https en uso real, deploy web (Vercel, manual) de la anulación si no se hizo, y los pendientes de producto de la sección 5.

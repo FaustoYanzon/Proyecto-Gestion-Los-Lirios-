@@ -4,7 +4,7 @@ tags: [sistema, modelo-datos]
 
 # Modelo de Datos
 
-> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-11-18 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
+> ⚠️ Generado automáticamente por `scripts/generate_modelo_datos.py` el 2026-11-19 desde el esquema real de producción. **No editar a mano** -- correr el script de nuevo después de cualquier migración de Alembic.
 
 **55 tablas** · **9 vistas** · **41 enums** · **109 relaciones**
 
@@ -1050,6 +1050,8 @@ erDiagram
         varchar(36) registro_fitosanitario_id FK
         varchar(36) created_by FK
         timestamptz created_at
+        varchar(200) destino
+        varchar(64) idempotency_key
     }
     fotos_registros_fitosanitarios {
         varchar(36) id PK
@@ -1191,6 +1193,8 @@ erDiagram
 | `registro_fitosanitario_id` | varchar(36) |  | FK → `registros_fitosanitarios.id` |
 | `created_by` | varchar(36) | NOT NULL | FK → `users.id` |
 | `created_at` | timestamptz | NOT NULL |  |
+| `destino` | varchar(200) |  |  |
+| `idempotency_key` | varchar(64) |  |  |
 
 ### `fotos_registros_fitosanitarios`
 
@@ -1911,7 +1915,7 @@ erDiagram
 | `tipoenvase` | caja, bin, chasis, ficha, vin, bolsa, otro |
 | `tipoinsumo` | fitosanitario, vario, riego |
 | `tipomaquina` | tractor, cosechadora, enfardadora, implemento |
-| `tipomovimientostock` | ingreso, egreso_aplicacion, ajuste |
+| `tipomovimientostock` | ingreso, egreso_aplicacion, ajuste, egreso |
 | `tipoparcela` | parral, potrero, pasero, cabezal |
 | `tipoproductor` | propio, externo |
 | `tiporemito` | salida_fresco, salida_bodega, entrega_pasa, traslado_pasero |
