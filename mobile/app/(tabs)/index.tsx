@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 24, color: colors.ink },
   subGreeting: { fontSize: 16, color: colors.ink60, marginTop: 2 },
   actionsGrid: { gap: 10, marginBottom: 16 },
-  actionsRow: { flexDirection: 'row' },
+  actionsRow: { flexDirection: 'row', gap: 10 },
   insumosBlock: { marginBottom: 16 },
   insumosError: { marginTop: 6, fontSize: 13, fontWeight: '600', color: colors.sangre },
   averiadasBanner: {

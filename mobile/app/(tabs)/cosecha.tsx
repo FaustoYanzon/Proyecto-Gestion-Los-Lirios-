@@ -960,7 +960,7 @@ export default function CosechaScreen() {
         </ScrollView>
       )}
 
-      {tab === 'alfalfa' && <AlfalfaPanel />}
+      {tab === 'alfalfa' && <AlfalfaPanel mostrarStock={false} />}
 
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal}>
         {resultado ? (

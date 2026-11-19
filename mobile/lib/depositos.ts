@@ -4,7 +4,7 @@
 // Writes need connection (no offline queue). Each movement carries a client-generated
 // idempotency key (see MovimientoInsumoModal): a retry never applies the stock change twice.
 import api from './api'
-import { getStockPasero, getLotesPasa } from './altaProduccion'
+import { getStockPasero, getLotesPasa, getPaseros } from './altaProduccion'
 
 const num = (v: unknown): number => Number(v)
 
@@ -83,21 +83,32 @@ export async function getResumenBodega(): Promise<ResumenBodega> {
   return { kgSaldo: lotes.reduce((acc, l) => acc + l.saldo_kg, 0), lotes: lotes.length }
 }
 
-export interface ResumenPasero {
-  kgTotal: number
+export interface PaseroResumen {
+  id: string
+  nombre: string
+  kg: number
   porVariedad: { variedad: string; kg: number }[]
 }
 
+export interface ResumenPasero {
+  kgTotal: number
+  /** Every active pasero in natural numeric order, including the empty ones. */
+  paseros: PaseroResumen[]
+}
+
 export async function getResumenPaseros(): Promise<ResumenPasero> {
-  const items = await getStockPasero()
-  const porVariedad = new Map<string, number>()
+  const [paseros, items] = await Promise.all([getPaseros(), getStockPasero()])
+  const resumen = new Map<string, PaseroResumen>(
+    paseros.map((p) => [p.id, { id: p.id, nombre: p.nombre, kg: 0, porVariedad: [] }]),
+  )
   for (const it of items) {
-    porVariedad.set(it.variedad, (porVariedad.get(it.variedad) ?? 0) + it.uva_disponible_kg)
+    // A pasero with stock but no longer active still has to show its uva.
+    const r = resumen.get(it.pasero_id) ?? { id: it.pasero_id, nombre: it.pasero_nombre, kg: 0, porVariedad: [] }
+    r.kg += it.uva_disponible_kg
+    r.porVariedad.push({ variedad: it.variedad, kg: it.uva_disponible_kg })
+    resumen.set(r.id, r)
   }
-  return {
-    kgTotal: items.reduce((acc, it) => acc + it.uva_disponible_kg, 0),
-    porVariedad: [...porVariedad.entries()]
-      .map(([variedad, kg]) => ({ variedad, kg }))
-      .sort((a, b) => a.variedad.localeCompare(b.variedad, 'es')),
-  }
+  const lista = [...resumen.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true }))
+  for (const r of lista) r.porVariedad.sort((a, b) => a.variedad.localeCompare(b.variedad, 'es'))
+  return { kgTotal: lista.reduce((acc, r) => acc + r.kg, 0), paseros: lista }
 }

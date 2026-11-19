@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, StyleSheet } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { colors } from '../../lib/theme'
+import { VARIEDAD_LABELS } from '../../lib/types'
 import { useAuthStore } from '../../store/authStore'
 import MovimientoInsumoModal, { type ModoMovimiento } from '../../components/MovimientoInsumoModal'
 import TabsBar from '../../components/TabsBar'
@@ -107,9 +108,14 @@ export default function DepositosScreen() {
             {(d) => (
               <>
                 <Text style={styles.kgText}>{fmtKg(d.kgTotal)} kg de uva fresca</Text>
-                {d.porVariedad.length === 0 && <Text style={styles.muted}>Sin uva en los paseros</Text>}
-                {d.porVariedad.map((v) => (
-                  <Fila key={v.variedad} label={v.variedad} valor={`${fmtKg(v.kg)} kg`} />
+                {d.paseros.length === 0 && <Text style={styles.muted}>No hay paseros cargados</Text>}
+                {d.paseros.map((p) => (
+                  <View key={p.id} style={styles.paseroBloque}>
+                    <Fila label={p.nombre} valor={p.kg > 0 ? `${fmtKg(p.kg)} kg` : 'Vacío'} />
+                    {p.porVariedad.map((v) => (
+                      <Text key={v.variedad} style={styles.paseroVariedad}>{VARIEDAD_LABELS[v.variedad] ?? v.variedad} · {fmtKg(v.kg)} kg</Text>
+                    ))}
+                  </View>
                 ))}
               </>
             )}
@@ -217,26 +223,22 @@ function InsumosCard({
     <Card
       titulo={titulo}
       carga={carga}
-      accion={
-        carga.estado === 'ok' ? (
-          <View style={styles.accionesRow}>
-            {onEgreso && (
-              <TouchableOpacity style={[styles.ingresoBtn, styles.egresoBtn]} onPress={onEgreso} activeOpacity={0.85}>
-                <Text style={styles.egresoBtnText}>− Egreso</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.ingresoBtn} onPress={onIngreso} activeOpacity={0.85}>
-              <Text style={styles.ingresoBtnText}>+ Ingreso</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null
-      }
     >
       {(items) => {
-        if (items.length === 0) return <Text style={styles.muted}>{vacio}</Text>
         const visibles = verTodos ? items : items.slice(0, PREVIEW)
         return (
           <>
+            <View style={styles.accionesRow}>
+              {onEgreso && (
+                <TouchableOpacity style={[styles.ingresoBtn, styles.egresoBtn]} onPress={onEgreso} activeOpacity={0.85}>
+                  <Text style={styles.egresoBtnText}>− Egreso</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.ingresoBtn} onPress={onIngreso} activeOpacity={0.85}>
+                <Text style={styles.ingresoBtnText}>+ Ingreso</Text>
+              </TouchableOpacity>
+            </View>
+            {items.length === 0 && <Text style={styles.muted}>{vacio}</Text>}
             <Text style={styles.metaText}>{items.length === 1 ? '1 producto' : `${items.length} productos`}</Text>
             {visibles.map((i) => (
               <Fila key={i.id} label={i.nombre} valor={`${fmtKg(i.stock_actual)} ${i.unidad}`} />
@@ -274,11 +276,13 @@ const styles = StyleSheet.create({
   filaLabel: { flex: 1, fontSize: 14, color: colors.ink },
   filaValor: { fontSize: 14, fontWeight: '700', color: colors.ink },
 
-  ingresoBtn: { height: 36, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.burdeos[600], justifyContent: 'center' },
+  ingresoBtn: { flex: 1, height: 40, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.burdeos[600], justifyContent: 'center', alignItems: 'center' },
   ingresoBtnText: { fontSize: 13, fontWeight: '700', color: colors.blanco },
-  accionesRow: { flexDirection: 'row', gap: 8 },
+  accionesRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   egresoBtn: { backgroundColor: colors.blanco, borderWidth: 1.5, borderColor: colors.burdeos[600] },
   egresoBtnText: { fontSize: 13, fontWeight: '700', color: colors.burdeos[600] },
+  paseroBloque: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.ink60, paddingTop: 4, marginTop: 4 },
+  paseroVariedad: { fontSize: 12, color: colors.ink60, paddingLeft: 8 },
   verTodos: { paddingVertical: 8 },
   verTodosText: { fontSize: 13, fontWeight: '800', color: colors.burdeos[600] },
 })

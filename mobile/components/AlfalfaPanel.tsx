@@ -13,6 +13,7 @@ import {
   StyleSheet,
 } from 'react-native'
 import { colors } from '../lib/theme'
+import { ICONS, ICON_STROKE } from '../lib/icons'
 import AlfalfaModal from './AlfalfaModal'
 import {
   fmtKg, fmtFecha, errorDetail, getCompradores, type Comprador,
@@ -23,7 +24,7 @@ import {
 } from '../lib/alfalfa'
 import type { Parcela } from '../lib/types'
 
-export default function AlfalfaPanel() {
+export default function AlfalfaPanel({ mostrarStock = true }: { /** Cosecha hides it: the stock lives in Depósitos. */ mostrarStock?: boolean }) {
   const [stock, setStock] = useState<StockAlfalfa[]>([])
   const [docs, setDocs] = useState<DocumentoAlfalfa[]>([])
   const [potreros, setPotreros] = useState<Parcela[]>([])
@@ -83,29 +84,29 @@ export default function AlfalfaPanel() {
           <ActivityIndicator color={colors.tierra} style={{ marginTop: 24 }} />
         ) : (
           <>
-            <Text style={styles.sectionLabel}>STOCK</Text>
-            {stock.map((s) => (
-              <View key={s.producto} style={styles.card}>
-                <Text style={styles.cardTitle}>{PRODUCTO_LABELS[s.producto]}</Text>
-                <View style={styles.cardFooter}>
-                  <Text style={styles.metaText}>Disponible</Text>
-                  <Text style={styles.kgText}>
-                    {PRODUCTO_UNIDAD[s.producto] === 'unidades'
-                      ? `${fmtKg(s.unidades)} u. · ${fmtKg(s.kg)} kg`
-                      : `${fmtKg(s.kg)} kg`}
-                  </Text>
-                </View>
-              </View>
-            ))}
+            {mostrarStock && (
+              <>
+                <Text style={styles.sectionLabel}>STOCK</Text>
+                {stock.map((s) => (
+                  <View key={s.producto} style={styles.card}>
+                    <Text style={styles.cardTitle}>{PRODUCTO_LABELS[s.producto]}</Text>
+                    <View style={styles.cardFooter}>
+                      <Text style={styles.metaText}>Disponible</Text>
+                      <Text style={styles.kgText}>
+                        {PRODUCTO_UNIDAD[s.producto] === 'unidades'
+                          ? `${fmtKg(s.unidades)} u. · ${fmtKg(s.kg)} kg`
+                          : `${fmtKg(s.kg)} kg`}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
 
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setModalTipo('alta')} activeOpacity={0.85}>
-                <Text style={styles.primaryBtnText}>Alta</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setModalTipo('salida')} activeOpacity={0.85}>
-                <Text style={styles.primaryBtnText}>Entrega</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.entregaBtn} onPress={() => setModalTipo('salida')} activeOpacity={0.85}>
+              <ICONS.fardo size={22} color={colors.blanco} strokeWidth={ICON_STROKE} />
+              <Text style={styles.primaryBtnText}>Entrega</Text>
+            </TouchableOpacity>
 
             <Text style={[styles.sectionLabel, { marginTop: 18 }]}>ÚLTIMOS DOCUMENTOS</Text>
             {pdfError && <View style={styles.errorBox}><Text style={styles.errorText}>{pdfError}</Text></View>}
@@ -135,6 +136,13 @@ export default function AlfalfaPanel() {
           </>
         )}
       </ScrollView>
+
+      {/* Alta: floating + (same spot as the Uva FAB in Cosecha) */}
+      {!loading && (
+        <TouchableOpacity style={styles.fab} onPress={() => setModalTipo('alta')} activeOpacity={0.85} accessibilityLabel="Alta de alfalfa">
+          <ICONS.agregar size={28} color={colors.blanco} strokeWidth={ICON_STROKE} />
+        </TouchableOpacity>
+      )}
 
       {modalTipo && (
         <AlfalfaModal
@@ -172,10 +180,14 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 12, color: colors.ink60, marginTop: 2 },
   kgText: { fontSize: 20, fontWeight: '800', color: colors.ink },
 
-  btnRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  primaryBtn: {
-    flex: 1, height: 52, borderRadius: 12, backgroundColor: colors.burdeos[600],
-    justifyContent: 'center', alignItems: 'center',
+  entregaBtn: {
+    height: 52, borderRadius: 12, backgroundColor: colors.burdeos[600], marginTop: 6,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
+  },
+  fab: {
+    position: 'absolute', bottom: 24, right: 24, width: 58, height: 58, borderRadius: 29,
+    backgroundColor: colors.burdeos[600], justifyContent: 'center', alignItems: 'center',
+    shadowColor: colors.ink, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6,
   },
   primaryBtnText: { fontSize: 15, fontWeight: '700', color: colors.blanco },
 
